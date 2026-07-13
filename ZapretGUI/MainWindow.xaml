@@ -2,61 +2,50 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
-        Title="Запрет для СДВГ" Height="550" Width="400"
-        Background="{ui:ThemeResource ApplicationBackgroundBrush}" WindowStartupLocation="CenterScreen"
-        Closing="Window_Closing">
+        Title="Zapret for ADHD" Height="650" Width="1000"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        WindowStartupLocation="CenterScreen">
 
-    <Grid Margin="20">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <!-- Заголовок -->
-            <RowDefinition Height="Auto"/>
-            <!-- Статус -->
-            <RowDefinition Height="Auto"/>
-            <!-- Комбобокс -->
-            <RowDefinition Height="Auto"/>
-            <!-- Переключатель -->
-            <RowDefinition Height="*"/>
-            <!-- Окно логов -->
-            <RowDefinition Height="Auto"/>
-            <!-- Подвал с кнопками -->
-        </Grid.RowDefinitions>
-
-        <!-- 1. Зона статуса -->
-        <TextBlock Grid.Row="0" Text="Запрет для СДВГ" Foreground="White" FontSize="32"
-                   FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,10,0,5"/>
-
-        <TextBlock Grid.Row="1" x:Name="StatusText" Text="Остановлен" Foreground="#D13438" 
-                   FontSize="20" HorizontalAlignment="Center" Margin="0,0,0,20"/>
-
-        <!-- 2. Зона управления (Явно указываем выравнивание по центру) -->
-        <ComboBox Grid.Row="2" x:Name="ProfileComboBox" Width="280" Height="35" 
-                  Margin="0,0,0,15" FontSize="14" HorizontalAlignment="Center"/>
-
-        <!-- Используем красивый ползунок из библиотеки WPF-UI -->
-        <ui:ToggleSwitch Grid.Row="3" x:Name="MainToggle" Content="Off" 
-                         HorizontalAlignment="Center" Margin="0,0,0,20" FontSize="16" 
-                         Click="MainToggle_Click"/>
-
-        <!-- 3. Черный квадрат (Логи) -->
-        <TextBox Grid.Row="4" x:Name="LogTextBox" Background="#1E1E1E" Foreground="LightGray" 
-                 IsReadOnly="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto"
-                 Margin="0,0,0,20" FontFamily="Consolas" Text="Ожидание запуска..."/>
-
-        <!-- 4. Зона утилит (Футер) -->
-        <Grid Grid.Row="5">
+    <Border Background="#121212" CornerRadius="12" BorderBrush="#2A2A2A" BorderThickness="1">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="45"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="15"/>
-                <!-- Отступ -->
+                <ColumnDefinition Width="220"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
-            <ui:Button Grid.Column="0" x:Name="BtnOpenFolder" Content="Папка запрета" 
-                       HorizontalAlignment="Stretch" Height="35" FontSize="14" Click="BtnOpenFolder_Click"/>
+            <Grid Grid.Row="0" Grid.ColumnSpan="2" Background="Transparent" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+                <TextBlock Text="Zapret for ADHD" Foreground="#888888" FontSize="14" FontWeight="SemiBold" 
+                           VerticalAlignment="Center" Margin="20,0,0,0"/>
 
-            <ui:Button Grid.Column="2" x:Name="BtnService" Content="Сервис" 
-                       HorizontalAlignment="Stretch" Height="35" FontSize="14" Click="BtnService_Click"/>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,10,0">
+                    <Button Content="—" Width="35" Height="30" FontSize="14" Background="Transparent" 
+                            Foreground="White" BorderThickness="0" Click="BtnMinimize_Click"/>
+                    <Button Content="✕" Width="35" Height="30" FontSize="14" Background="Transparent" 
+                            Foreground="#D13438" BorderThickness="0" Click="BtnClose_Click"/>
+                </StackPanel>
+            </Grid>
+
+            <Border Grid.Row="1" Grid.Column="0" Background="#181818" CornerRadius="0,0,0,12">
+                <StackPanel Margin="10,20,10,0">
+                    <ui:Button Content="Главная" Foreground="White" Background="#2A2A2A" BorderBrush="#107C10" BorderThickness="3,0,0,0" 
+           HorizontalAlignment="Stretch" Margin="0,0,0,10" Height="40" Click="BtnHome_Click"/>
+
+                    <ui:Button Content="Службы" Foreground="White" HorizontalAlignment="Stretch" Margin="0,0,0,10" 
+               Appearance="Transparent" Height="40"/>
+
+                    <ui:Button Content="Модификации" Foreground="White" HorizontalAlignment="Stretch" Margin="0,0,0,10" 
+               Appearance="Transparent" Height="40"/>
+
+                    <ui:Button Content="Настройки" Foreground="White" HorizontalAlignment="Stretch" Margin="0,0,0,10" 
+               Appearance="Transparent" Height="40"/>
+                </StackPanel>
+            </Border>
+
+            <ContentControl Grid.Row="1" Grid.Column="1" x:Name="MainContentContainer" Background="#121212"/>
         </Grid>
-    </Grid>
+    </Border>
 </Window>

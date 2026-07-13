@@ -2,7 +2,6 @@
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
-using System.Windows.Media;
 using ZapretGUI.Core;
 
 namespace ZapretGUI
@@ -15,112 +14,41 @@ namespace ZapretGUI
         public MainWindow()
         {
             InitializeComponent();
-            SetupTrayIcon();
-            LoadProfiles();
+            MainContentContainer.Content = new Views.HomeView();
             _zapretManager = new ZapretManager();
+            SetupTrayIcon();
 
-            if (_zapretManager.IsRunning())
-            {
-                MainToggle.IsChecked = true;
-                UpdateUIState(true);
-                LogTextBox.Text = $"[{DateTime.Now:HH:mm:ss}] Программа запущена. Обход уже работает.\n";
-            }
+            // ВРЕМЕННО ЗАКОММЕНТИРОВАЛИ ДО СОЗДАНИЯ НОВЫХ ВКЛАДОК:
+            // LoadProfiles();
+            // if (_zapretManager.IsRunning())
+            // { ... }
         }
 
-        private void MainToggle_Click(object sender, RoutedEventArgs e)
+
+        private void TitleBar_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
-            var isEnabled = MainToggle.IsChecked ?? false;
-
-            try
+            if (e.ChangedButton == System.Windows.Input.MouseButton.Left)
             {
-                if (isEnabled)
-                {
-                    var selectedProfile = ProfileComboBox.Text;
-
-                    LogTextBox.AppendText($"\n[{DateTime.Now:HH:mm:ss}] Запуск профиля: {selectedProfile}...\n");
-
-                    _zapretManager.Start(selectedProfile);
-
-                    UpdateUIState(true);
-                    LogTextBox.AppendText($"[{DateTime.Now:HH:mm:ss}] Успешно запущено. Трафик фильтруется.\n");
-                }
-                else
-                {
-                    LogTextBox.AppendText($"\n[{DateTime.Now:HH:mm:ss}] Остановка процессов winws...\n");
-
-                    _zapretManager.Stop();
-
-                    UpdateUIState(false);
-                    LogTextBox.AppendText($"[{DateTime.Now:HH:mm:ss}] Остановлено.\n");
-                }
-
-                LogTextBox.ScrollToEnd();
-            }
-            catch (Exception ex)
-            {
-                LogTextBox.AppendText($"\n[{DateTime.Now:HH:mm:ss}] ОШИБКА: {ex.Message}\n");
-                MainToggle.IsChecked = false;
-                UpdateUIState(false);
+                this.DragMove();
             }
         }
 
-        private void UpdateUIState(bool isRunning)
+        private void BtnMinimize_Click(object sender, RoutedEventArgs e)
         {
-            if (isRunning)
-            {
-                StatusText.Text = "Работает";
-                StatusText.Foreground = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#107C10"));
-                MainToggle.Content = "On";
-            }
-            else
-            {
-                StatusText.Text = "Остановлен";
-                StatusText.Foreground = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#D13438"));
-                MainToggle.Content = "Off";
-            }
+            this.WindowState = WindowState.Minimized;
         }
 
-        private void BtnOpenFolder_Click(object sender, RoutedEventArgs e)
+        private void BtnClose_Click(object sender, RoutedEventArgs e)
         {
-            var folderPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ZapretFiles");
-
-            if (Directory.Exists(folderPath))
-                Process.Start("explorer.exe", folderPath);
-            else
-            {
-                System.Windows.MessageBox.Show("Папка ZapretFiles не найдена рядом с исполняемым файлом!",
-                                "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
+            this.Hide();
         }
 
-        private void BtnService_Click(object sender, RoutedEventArgs e)
-        {
-            System.Windows.MessageBox.Show("Функционал работы со службами Windows будет добавлен в следующих версиях.",
-                            "В разработке", MessageBoxButton.OK, MessageBoxImage.Information);
-        }
-
-        private void LoadProfiles()
-        {
-            ProfileComboBox.Items.Clear();
-            var folderPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ZapretFiles");
-
-            if (Directory.Exists(folderPath))
-            {
-                var batFiles = Directory.GetFiles(folderPath, "general*.bat");
-                foreach (var file in batFiles)
-                    ProfileComboBox.Items.Add(Path.GetFileName(file));
-
-                if (ProfileComboBox.Items.Count > 0)
-                    ProfileComboBox.SelectedIndex = 0;
-            }
-        }
 
         private void SetupTrayIcon()
         {
             _notifyIcon = new System.Windows.Forms.NotifyIcon();
-
             _notifyIcon.Icon = System.Drawing.SystemIcons.Shield;
-            _notifyIcon.Text = "Запрет для СДВГ";
+            _notifyIcon.Text = "Zapret for ADHD";
             _notifyIcon.Visible = true;
 
             _notifyIcon.DoubleClick += (s, e) =>
@@ -130,7 +58,6 @@ namespace ZapretGUI
             };
 
             var contextMenu = new System.Windows.Forms.ContextMenuStrip();
-
             var openItem = contextMenu.Items.Add("Развернуть");
             openItem.Click += (s, e) => { this.Show(); this.WindowState = WindowState.Normal; };
 
@@ -138,10 +65,10 @@ namespace ZapretGUI
             closeItem.Click += (s, e) =>
             {
                 if (_zapretManager.IsRunning())
+                {
                     _zapretManager.Stop();
-
+                }
                 _notifyIcon.Dispose();
-
                 System.Windows.Application.Current.Shutdown();
             };
 
@@ -153,5 +80,40 @@ namespace ZapretGUI
             e.Cancel = true;
             this.Hide();
         }
+
+        private void BtnHome_Click(object sender, RoutedEventArgs e)
+        { 
+            MainContentContainer.Content = new Views.HomeView();
+        }
+
+        // =========================================================
+        // ВРЕМЕННО ЗАКОММЕНТИРОВАННЫЙ СТАРЫЙ КОД (ПЕРЕНЕСЕМ ПОЗЖЕ)
+        // =========================================================
+        /*
+        private void MainToggle_Click(object sender, RoutedEventArgs e)
+        {
+            // ... старый код запуска ...
+        }
+
+        private void UpdateUIState(bool isRunning)
+        {
+            // ... старый код смены цветов ...
+        }
+
+        private void BtnOpenFolder_Click(object sender, RoutedEventArgs e)
+        {
+            // ... старый код открытия папки ...
+        }
+
+        private void BtnService_Click(object sender, RoutedEventArgs e)
+        {
+            // ... старый код сервиса ...
+        }
+
+        private void LoadProfiles()
+        {
+            // ... загрузка батников ...
+        }
+        */
     }
 }

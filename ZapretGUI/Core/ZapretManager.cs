@@ -8,25 +8,38 @@ namespace ZapretGUI.Core
     {
         private readonly string _basePath = AppDomain.CurrentDomain.BaseDirectory;
 
-        public void Start(string profileName = "general.bat")
+        public ZapretManager()
+        {
+            _basePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ZapretFiles");
+        }
+
+        public void Start(string profileName)
         {
             Stop();
 
-            var batPath = Path.Combine(_basePath, "ZapretFiles", profileName);
+            var batFilePath = Path.Combine(_basePath, profileName);
 
-            if (!File.Exists(batPath))
-                throw new FileNotFoundException($"Файл профиля не найден: {batPath}");
+            if (!File.Exists(batFilePath))
+                throw new FileNotFoundException($"Профиль {profileName} не найден по пути: {batFilePath}");
 
-            var psi = new ProcessStartInfo
+            var batContent = File.ReadAllText(batFilePath);
+
+            batContent = batContent.Replace("start \"zapret: %~n0\" /min ", "");
+
+            var tempBatPath = Path.Combine(_basePath, "invisible_run.bat");
+            File.WriteAllText(tempBatPath, batContent);
+
+            var startInfo = new ProcessStartInfo
             {
-                FileName = batPath,
+                FileName = "cmd.exe",
+                Arguments = $"/c \"{tempBatPath}\"",
                 UseShellExecute = false,
                 CreateNoWindow = true,
-                WorkingDirectory = Path.Combine(_basePath, "ZapretFiles") 
+                WindowStyle = ProcessWindowStyle.Hidden,
+                WorkingDirectory = _basePath
             };
 
-            var process = new Process { StartInfo = psi };
-            process.Start();
+            Process.Start(startInfo);
         }
 
         public void Stop()

@@ -148,6 +148,9 @@
     <None Update="ZapretFiles\SHA256SUMS.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Update="ZapretFiles\TgWsProxy_windows.exe">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Update="ZapretFiles\utils\check_updates.enabled">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
