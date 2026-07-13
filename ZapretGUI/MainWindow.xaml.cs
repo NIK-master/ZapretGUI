@@ -17,13 +17,24 @@ namespace ZapretGUI
             MainContentContainer.Content = new Views.HomeView();
             _zapretManager = new ZapretManager();
             SetupTrayIcon();
-
-            // ВРЕМЕННО ЗАКОММЕНТИРОВАЛИ ДО СОЗДАНИЯ НОВЫХ ВКЛАДОК:
-            // LoadProfiles();
-            // if (_zapretManager.IsRunning())
-            // { ... }
         }
 
+        public void UpdateIndicators(bool isZapretRunning, bool isProxyRunning)
+        {
+            var green = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#107C10"));
+            var red = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#D13438"));
+
+            ZapretDot.Fill = isZapretRunning ? green : red;
+            TgProxyDot.Fill = isProxyRunning ? green : red;
+        }
+
+        public void UpdateNetworkIndicator(bool isOnline)
+        {
+            var green = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#107C10"));
+            var red = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#D13438"));
+
+            NetworkDot.Fill = isOnline ? green : red;
+        }
 
         private void TitleBar_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
@@ -42,7 +53,6 @@ namespace ZapretGUI
         {
             this.Hide();
         }
-
 
         private void SetupTrayIcon()
         {
@@ -82,38 +92,8 @@ namespace ZapretGUI
         }
 
         private void BtnHome_Click(object sender, RoutedEventArgs e)
-        { 
+        {
             MainContentContainer.Content = new Views.HomeView();
         }
-
-        // =========================================================
-        // ВРЕМЕННО ЗАКОММЕНТИРОВАННЫЙ СТАРЫЙ КОД (ПЕРЕНЕСЕМ ПОЗЖЕ)
-        // =========================================================
-        /*
-        private void MainToggle_Click(object sender, RoutedEventArgs e)
-        {
-            // ... старый код запуска ...
-        }
-
-        private void UpdateUIState(bool isRunning)
-        {
-            // ... старый код смены цветов ...
-        }
-
-        private void BtnOpenFolder_Click(object sender, RoutedEventArgs e)
-        {
-            // ... старый код открытия папки ...
-        }
-
-        private void BtnService_Click(object sender, RoutedEventArgs e)
-        {
-            // ... старый код сервиса ...
-        }
-
-        private void LoadProfiles()
-        {
-            // ... загрузка батников ...
-        }
-        */
     }
 }

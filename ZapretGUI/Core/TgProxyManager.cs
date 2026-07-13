@@ -16,11 +16,12 @@ namespace ZapretGUI.Core
 
         public void Start()
         {
-            if (IsRunning())
-                return;
+            if (IsRunning()) return;
 
             if (!File.Exists(_proxyPath))
-                throw new FileNotFoundException($"Файл прокси не найден! Положите TgWsProxy_windows.exe в папку ZapretFiles.\nОжидаемый путь: {_proxyPath}");
+            {
+                throw new FileNotFoundException($"Файл прокси не найден по пути: {_proxyPath}");
+            }
 
             var startInfo = new ProcessStartInfo
             {
@@ -44,7 +45,6 @@ namespace ZapretGUI.Core
                 }
                 catch
                 {
-
                 }
             }
         }

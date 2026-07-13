@@ -6,46 +6,89 @@
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         WindowStartupLocation="CenterScreen">
 
-    <Border Background="#121212" CornerRadius="12" BorderBrush="#2A2A2A" BorderThickness="1">
+    <Border Background="#0A0A0A" CornerRadius="12" BorderBrush="#2A2A2A" BorderThickness="1" ClipToBounds="True">
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="45"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="220"/>
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
 
-            <Grid Grid.Row="0" Grid.ColumnSpan="2" Background="Transparent" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
-                <TextBlock Text="Zapret for ADHD" Foreground="#888888" FontSize="14" FontWeight="SemiBold" 
-                           VerticalAlignment="Center" Margin="20,0,0,0"/>
+            <Grid Grid.Row="0" Background="#121212" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
 
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,10,0">
+                <ToggleButton x:Name="MenuToggle" Grid.Column="0" IsChecked="True" Width="45" Height="45" 
+                              Background="Transparent" BorderThickness="0" Cursor="Hand">
+                    <TextBlock Text="&#xE700;" FontFamily="Segoe MDL2 Assets" Foreground="White" FontSize="16" 
+                               VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                    <ToggleButton.Triggers>
+                        <EventTrigger RoutedEvent="ToggleButton.Unchecked">
+                            <BeginStoryboard>
+                                <Storyboard>
+                                    <DoubleAnimation Storyboard.TargetName="Sidebar" Storyboard.TargetProperty="Width" 
+                                                     To="0" Duration="0:0:0.2" DecelerationRatio="0.9"/>
+                                </Storyboard>
+                            </BeginStoryboard>
+                        </EventTrigger>
+                        <EventTrigger RoutedEvent="ToggleButton.Checked">
+                            <BeginStoryboard>
+                                <Storyboard>
+                                    <DoubleAnimation Storyboard.TargetName="Sidebar" Storyboard.TargetProperty="Width" 
+                                                     To="220" Duration="0:0:0.2" DecelerationRatio="0.9"/>
+                                </Storyboard>
+                            </BeginStoryboard>
+                        </EventTrigger>
+                    </ToggleButton.Triggers>
+                </ToggleButton>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="10,0,0,0">
+                    <TextBlock Text="Zapret for ADHD" Foreground="#888888" FontSize="14" FontWeight="SemiBold" Margin="0,0,20,0"/>
+
+                    <Ellipse x:Name="NetworkDot" Width="8" Height="8" Fill="#107C10" Margin="0,0,5,0"/>
+                    <TextBlock Text="Сеть" Foreground="#888888" FontSize="12" Margin="0,0,15,0" VerticalAlignment="Center"/>
+
+                    <Ellipse x:Name="ZapretDot" Width="8" Height="8" Fill="#D13438" Margin="0,0,5,0"/>
+                    <TextBlock Text="Zapret" Foreground="#888888" FontSize="12" Margin="0,0,15,0" VerticalAlignment="Center"/>
+
+                    <Ellipse x:Name="TgProxyDot" Width="8" Height="8" Fill="#D13438" Margin="0,0,5,0"/>
+                    <TextBlock Text="TgWsProxy" Foreground="#888888" FontSize="12" VerticalAlignment="Center"/>
+                </StackPanel>
+
+                <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,10,0">
                     <Button Content="—" Width="35" Height="30" FontSize="14" Background="Transparent" 
                             Foreground="White" BorderThickness="0" Click="BtnMinimize_Click"/>
                     <Button Content="✕" Width="35" Height="30" FontSize="14" Background="Transparent" 
                             Foreground="#D13438" BorderThickness="0" Click="BtnClose_Click"/>
                 </StackPanel>
+
+                <Border Grid.ColumnSpan="3" VerticalAlignment="Bottom" Height="1" Background="#2A2A2A"/>
             </Grid>
 
-            <Border Grid.Row="1" Grid.Column="0" Background="#181818" CornerRadius="0,0,0,12">
-                <StackPanel Margin="10,20,10,0">
-                    <ui:Button Content="Главная" Foreground="White" Background="#2A2A2A" BorderBrush="#107C10" BorderThickness="3,0,0,0" 
-           HorizontalAlignment="Stretch" Margin="0,0,0,10" Height="40" Click="BtnHome_Click"/>
+            <Grid Grid.Row="1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
 
-                    <ui:Button Content="Службы" Foreground="White" HorizontalAlignment="Stretch" Margin="0,0,0,10" 
-               Appearance="Transparent" Height="40"/>
+                <Border x:Name="Sidebar" Grid.Column="0" Width="220" Background="#181818" ClipToBounds="True">
+                    <StackPanel Width="220" Margin="10,20,10,0">
+                        <ui:Button Content="Главная" Foreground="White" Background="#2A2A2A" BorderBrush="#107C10" BorderThickness="3,0,0,0" 
+                                   HorizontalAlignment="Stretch" Margin="0,0,0,10" Height="40" Click="BtnHome_Click"/>
+                        <ui:Button Content="Службы" Foreground="White" Appearance="Transparent" BorderThickness="0" 
+                                   HorizontalAlignment="Stretch" Margin="0,0,0,10" Height="40"/>
+                        <ui:Button Content="Модификации" Foreground="White" Appearance="Transparent" BorderThickness="0" 
+                                   HorizontalAlignment="Stretch" Margin="0,0,0,10" Height="40"/>
+                        <ui:Button Content="Настройки" Foreground="White" Appearance="Transparent" BorderThickness="0" 
+                                   HorizontalAlignment="Stretch" Margin="0,0,0,10" Height="40"/>
+                    </StackPanel>
+                </Border>
 
-                    <ui:Button Content="Модификации" Foreground="White" HorizontalAlignment="Stretch" Margin="0,0,0,10" 
-               Appearance="Transparent" Height="40"/>
-
-                    <ui:Button Content="Настройки" Foreground="White" HorizontalAlignment="Stretch" Margin="0,0,0,10" 
-               Appearance="Transparent" Height="40"/>
-                </StackPanel>
-            </Border>
-
-            <ContentControl Grid.Row="1" Grid.Column="1" x:Name="MainContentContainer" Background="#121212"/>
+                <Border Grid.Column="0" HorizontalAlignment="Right" Width="1" Background="#2A2A2A"/>
+                <ContentControl Grid.Column="1" x:Name="MainContentContainer" Background="#121212"/>
+            </Grid>
         </Grid>
     </Border>
 </Window>

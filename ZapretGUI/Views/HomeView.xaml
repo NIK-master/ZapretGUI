@@ -4,33 +4,101 @@
              xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
              Foreground="White">
 
-    <Grid Margin="20">
+    <UserControl.Resources>
+        <!-- Кастомный минималистичный скроллбар (как в современных IDE) -->
+        <Style TargetType="ScrollBar">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Width" Value="6"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollBar">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="3">
+                            <Track x:Name="PART_Track" IsDirectionReversed="true">
+                                <Track.Thumb>
+                                    <Thumb>
+                                        <Thumb.Template>
+                                            <ControlTemplate TargetType="Thumb">
+                                                <Border Background="#444444" CornerRadius="3" Margin="0,2,0,2"/>
+                                            </ControlTemplate>
+                                        </Thumb.Template>
+                                    </Thumb>
+                                </Track.Thumb>
+                            </Track>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <!-- Триггер, который запускает анимацию появления при загрузке вкладки -->
+    <UserControl.Triggers>
+        <EventTrigger RoutedEvent="Loaded">
+            <BeginStoryboard>
+                <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName="MainGrid" Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.4"/>
+                    <!-- Обращаемся к конкретной трансформации по имени -->
+                    <DoubleAnimation Storyboard.TargetName="MainGridTranslate" Storyboard.TargetProperty="Y" From="15" To="0" Duration="0:0:0.4">
+                        <DoubleAnimation.EasingFunction>
+                            <CubicEase EasingMode="EaseOut"/>
+                        </DoubleAnimation.EasingFunction>
+                    </DoubleAnimation>
+                </Storyboard>
+            </BeginStoryboard>
+        </EventTrigger>
+    </UserControl.Triggers>
+
+    <!-- ОСНОВНОЙ GRID (Теперь эффекты висят на всей рабочей зоне!) -->
+    <Grid x:Name="MainGrid" Margin="20" Opacity="0" RenderTransformOrigin="0.5,0.5">
+
+        <!-- Глобальная неоновая тень для расслоения -->
+        <Grid.Effect>
+            <DropShadowEffect x:Name="MainGridGlitchShadow" Color="#00FFFF" BlurRadius="0" ShadowDepth="0" Opacity="0"/>
+        </Grid.Effect>
+
+        <!-- Группа глобальных трансформаций -->
+        <Grid.RenderTransform>
+            <TransformGroup>
+                <TranslateTransform x:Name="MainGridTranslate" X="0" Y="15"/>
+                <SkewTransform x:Name="MainGridSkew" AngleX="0"/>
+            </TransformGroup>
+        </Grid.RenderTransform>
+
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="150"/>
         </Grid.RowDefinitions>
 
+        <!-- Заголовок -->
         <StackPanel Grid.Row="0" HorizontalAlignment="Center" Margin="0,10,0,30">
             <TextBlock Text="⚡ Починить Telegram и Discord" FontSize="28" FontWeight="Bold" HorizontalAlignment="Center"/>
             <TextBlock Text="Одна кнопка — запустит всё необходимое." Foreground="#888888" FontSize="14" HorizontalAlignment="Center" Margin="0,5,0,0"/>
         </StackPanel>
 
+        <!-- Основная рабочая зона -->
         <Grid Grid.Row="1">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="280"/>
             </Grid.ColumnDefinitions>
 
+            <!-- 1. Центральная кнопка с тактильным эффектом -->
             <Grid Grid.Column="0" HorizontalAlignment="Center" VerticalAlignment="Center">
                 <ToggleButton x:Name="MainToggle" Width="200" Height="200" Click="MainToggle_Click" Cursor="Hand" Background="Transparent" BorderThickness="0">
                     <ToggleButton.Template>
                         <ControlTemplate TargetType="ToggleButton">
-                            <Border x:Name="BtnBorder" Background="#121212" BorderBrush="#2A2A2A" BorderThickness="3" CornerRadius="100">
-                                <Border.Effect>
-                                    <DropShadowEffect x:Name="ButtonGlow" Color="#107C10" BlurRadius="20" ShadowDepth="0" Opacity="0"/>
-                                </Border.Effect>
 
+                            <!-- Перенесли RenderTransformOrigin и RenderTransform прямо на Border -->
+                            <Border x:Name="BtnBorder" Background="#121212" BorderBrush="#2A2A2A" BorderThickness="3" CornerRadius="100" RenderTransformOrigin="0.5,0.5">
+                                <Border.RenderTransform>
+                                    <ScaleTransform ScaleX="1" ScaleY="1"/>
+                                </Border.RenderTransform>
+
+                                <Border.Effect>
+                                    <DropShadowEffect Color="#107C10" BlurRadius="20" ShadowDepth="0" Opacity="0"/>
+                                </Border.Effect>
                                 <StackPanel VerticalAlignment="Center">
                                     <TextBlock Text="&#xE7E8;" FontFamily="Segoe MDL2 Assets" FontSize="50" Foreground="White" HorizontalAlignment="Center" Margin="0,0,0,10"/>
                                     <TextBlock x:Name="BtnText" Text="Починить интернет" FontSize="14" FontWeight="SemiBold" Foreground="White" HorizontalAlignment="Center"/>
@@ -38,81 +106,156 @@
                             </Border>
 
                             <ControlTemplate.Triggers>
+                                <!-- Анимация вдавливания (теперь обращаемся к BtnBorder) -->
+                                <EventTrigger RoutedEvent="PreviewMouseDown">
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="BtnBorder" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" To="0.95" Duration="0:0:0.1"/>
+                                            <DoubleAnimation Storyboard.TargetName="BtnBorder" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" To="0.95" Duration="0:0:0.1"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </EventTrigger>
+                                <EventTrigger RoutedEvent="PreviewMouseUp">
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="BtnBorder" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" To="1" Duration="0:0:0.2">
+                                                <DoubleAnimation.EasingFunction>
+                                                    <BackEase Amplitude="0.5" EasingMode="EaseOut"/>
+                                                </DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                            <DoubleAnimation Storyboard.TargetName="BtnBorder" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" To="1" Duration="0:0:0.2">
+                                                <DoubleAnimation.EasingFunction>
+                                                    <BackEase Amplitude="0.5" EasingMode="EaseOut"/>
+                                                </DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </EventTrigger>
+
+                                <!-- Смена состояния и пульсация -->
                                 <Trigger Property="IsChecked" Value="True">
                                     <Setter TargetName="BtnBorder" Property="BorderBrush" Value="#107C10"/>
                                     <Setter TargetName="BtnText" Property="Text" Value="Остановить"/>
+                                    <Trigger.EnterActions>
+                                        <BeginStoryboard Name="PulseStoryboard">
+                                            <Storyboard AutoReverse="True" RepeatBehavior="Forever">
+                                                <DoubleAnimation Storyboard.TargetName="BtnBorder" Storyboard.TargetProperty="(UIElement.Effect).(DropShadowEffect.Opacity)" From="0.3" To="0.9" Duration="0:0:1.5" />
+                                                <DoubleAnimation Storyboard.TargetName="BtnBorder" Storyboard.TargetProperty="(UIElement.Effect).(DropShadowEffect.BlurRadius)" From="30" To="70" Duration="0:0:1.5" />
+                                            </Storyboard>
+                                        </BeginStoryboard>
+                                    </Trigger.EnterActions>
+                                    <Trigger.ExitActions>
+                                        <StopStoryboard BeginStoryboardName="PulseStoryboard" />
+                                        <BeginStoryboard>
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetName="BtnBorder" Storyboard.TargetProperty="(UIElement.Effect).(DropShadowEffect.Opacity)" To="0" Duration="0:0:0.3" />
+                                            </Storyboard>
+                                        </BeginStoryboard>
+                                    </Trigger.ExitActions>
                                 </Trigger>
-
-                                <EventTrigger RoutedEvent="ToggleButton.Checked">
-                                    <BeginStoryboard Name="PulseStoryboard">
-                                        <Storyboard AutoReverse="True" RepeatBehavior="Forever">
-                                            <DoubleAnimation Storyboard.TargetName="ButtonGlow" Storyboard.TargetProperty="Opacity" 
-                                                             From="0.3" To="0.9" Duration="0:0:1.5" />
-                                            <DoubleAnimation Storyboard.TargetName="ButtonGlow" Storyboard.TargetProperty="BlurRadius" 
-                                                             From="30" To="70" Duration="0:0:1.5" />
-                                        </Storyboard>
-                                    </BeginStoryboard>
-                                </EventTrigger>
-
-                                <EventTrigger RoutedEvent="ToggleButton.Unchecked">
-                                    <StopStoryboard BeginStoryboardName="PulseStoryboard" />
-                                    <BeginStoryboard>
-                                        <Storyboard>
-                                            <DoubleAnimation Storyboard.TargetName="ButtonGlow" Storyboard.TargetProperty="Opacity" 
-                                                             To="0" Duration="0:0:0.3" />
-                                        </Storyboard>
-                                    </BeginStoryboard>
-                                </EventTrigger>
-
                             </ControlTemplate.Triggers>
                         </ControlTemplate>
                     </ToggleButton.Template>
                 </ToggleButton>
             </Grid>
+            <!-- 2. Блок статистики -->
+            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="20,0,30,0">
+                <Grid Margin="0,0,0,15">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="&#xE896;" FontFamily="Segoe MDL2 Assets" FontSize="20" Foreground="#888888" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Text="Входящий" Foreground="#555555" FontSize="12" FontWeight="SemiBold"/>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock x:Name="DownloadText" Text="0.0" Foreground="#E0E0E0" FontSize="20" FontWeight="Bold"/>
+                            <TextBlock Text=" Мбит/с" Foreground="#555555" FontSize="12" VerticalAlignment="Bottom" Margin="3,0,0,4"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
 
-            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                <Grid Margin="0,0,0,20">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="&#xE898;" FontFamily="Segoe MDL2 Assets" FontSize="20" Foreground="#888888" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Text="Исходящий" Foreground="#555555" FontSize="12" FontWeight="SemiBold"/>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock x:Name="UploadText" Text="0.0" Foreground="#E0E0E0" FontSize="20" FontWeight="Bold"/>
+                            <TextBlock Text=" Мбит/с" Foreground="#555555" FontSize="12" VerticalAlignment="Bottom" Margin="3,0,0,4"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="&#xE916;" FontFamily="Segoe MDL2 Assets" FontSize="20" Foreground="#888888" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Text="Пинг" Foreground="#555555" FontSize="12" FontWeight="SemiBold"/>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock x:Name="PingText" Text="..." Foreground="#E0E0E0" FontSize="20" FontWeight="Bold"/>
+                            <TextBlock Text=" мс" Foreground="#555555" FontSize="12" VerticalAlignment="Bottom" Margin="3,0,0,4"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <ui:Button Grid.Column="2" x:Name="BtnRefreshPing" Appearance="Transparent" Foreground="#888888" Cursor="Hand" VerticalAlignment="Bottom" Margin="10,0,0,0" Padding="5,5,5,8" Click="BtnRefreshPing_Click">
+                        <!-- Выделили иконку и задали ей центр вращения -->
+                        <TextBlock x:Name="PingIcon" Text="&#xE149;" FontFamily="Segoe MDL2 Assets" FontSize="14" FontWeight="Bold" RenderTransformOrigin="0.5,0.5">
+                            <TextBlock.RenderTransform>
+                                <RotateTransform x:Name="PingIconTransform" Angle="0"/>
+                            </TextBlock.RenderTransform>
+                        </TextBlock>
+                    </ui:Button>
+                </Grid>
+            </StackPanel>
+
+            <!-- 3. Блок карточек -->
+            <StackPanel Grid.Column="2" VerticalAlignment="Center">
                 <Border Background="#181818" CornerRadius="12" BorderBrush="#2A2A2A" BorderThickness="1" Margin="0,0,0,15">
-                    <Border.Effect>
-                        <DropShadowEffect Color="#107C10" BlurRadius="30" ShadowDepth="0" Opacity="0.15"/>
-                    </Border.Effect>
-
                     <StackPanel Margin="20">
                         <Grid Margin="0,0,0,10">
                             <TextBlock Text="Настройки Zapret" FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Left" VerticalAlignment="Center"/>
-                            <ui:ToggleSwitch x:Name="ZapretToggle" IsChecked="True" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                            <ui:ToggleSwitch x:Name="ZapretToggle" IsChecked="True" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Settings_Changed"/>
                         </Grid>
-
                         <TextBlock x:Name="StatusText" Text="Остановлен" Foreground="#D13438" Margin="0,0,0,15"/>
 
                         <TextBlock Text="Конфигурация:" Foreground="#888888" FontSize="12" Margin="0,0,0,5"/>
-                        <ComboBox x:Name="ProfileComboBox" Height="35"/>
+                        <!-- Добавили SelectionChanged для автосохранения -->
+                        <ComboBox x:Name="ProfileComboBox" Height="35" SelectionChanged="Settings_Changed"/>
                     </StackPanel>
                 </Border>
 
                 <Border Background="#181818" CornerRadius="12" BorderBrush="#2A2A2A" BorderThickness="1">
-                    <Border.Effect>
-                        <DropShadowEffect Color="#0088CC" BlurRadius="30" ShadowDepth="0" Opacity="0.15"/>
-                    </Border.Effect>
-
                     <StackPanel Margin="20">
                         <Grid Margin="0,0,0,5">
                             <TextBlock Text="TgWsProxy" FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Left" VerticalAlignment="Center"/>
-                            <ui:ToggleSwitch x:Name="TgProxyToggle" IsChecked="True" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                            <ui:ToggleSwitch x:Name="TgProxyToggle" IsChecked="True" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Settings_Changed"/>
                         </Grid>
                         <TextBlock Text="Прокси для Telegram" Foreground="#888888" FontSize="12" Margin="0,0,0,15"/>
                     </StackPanel>
                 </Border>
-
             </StackPanel>
         </Grid>
 
+        <!-- Полоса загрузки -->
+        <ProgressBar x:Name="LaunchProgressBar" Grid.Row="2" Height="4" VerticalAlignment="Top" Margin="0,5,0,0" Foreground="#107C10" Background="#181818" BorderThickness="0" Value="0" Visibility="Collapsed"/>
+
+        <!-- Логи -->
         <Border Grid.Row="2" Background="#0A0A0A" CornerRadius="8" BorderBrush="#2A2A2A" BorderThickness="1" Margin="0,20,0,0">
             <Grid>
                 <TextBlock Text="Лог событий" Foreground="#555555" Margin="15,10,0,0" FontSize="12" FontWeight="SemiBold"/>
-                <ScrollViewer Margin="15,30,15,10">
-                    <TextBlock x:Name="LogTextBox" Text="[Система] Интерфейс загружен. Ожидание команд..." 
-                               Foreground="#888888" FontFamily="Consolas" FontSize="13" TextWrapping="Wrap"/>
-                </ScrollViewer>
+
+                <!-- Заменили TextBlock на RichTextBox для цветного текста -->
+                <RichTextBox x:Name="LogRichTextBox" Margin="15,30,15,10" Background="Transparent" BorderThickness="0" IsReadOnly="True" VerticalScrollBarVisibility="Auto" FontFamily="Consolas" FontSize="13">
+                    <FlowDocument x:Name="LogDocument" PagePadding="0"/>
+                </RichTextBox>
             </Grid>
         </Border>
     </Grid>
