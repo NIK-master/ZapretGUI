@@ -198,7 +198,7 @@
                     </Grid.ColumnDefinitions>
                     <TextBlock Grid.Column="0" Text="&#xE916;" FontFamily="Segoe MDL2 Assets" FontSize="20" Foreground="#888888" VerticalAlignment="Center" Margin="0,0,10,0"/>
                     <StackPanel Grid.Column="1">
-                        <TextBlock Text="Пинг" Foreground="#555555" FontSize="12" FontWeight="SemiBold"/>
+                        <TextBlock Text="Пинг (EU Frankfurt)" Foreground="#555555" FontSize="12" FontWeight="SemiBold"/>
                         <StackPanel Orientation="Horizontal">
                             <TextBlock x:Name="PingText" Text="..." Foreground="#E0E0E0" FontSize="20" FontWeight="Bold"/>
                             <TextBlock Text=" мс" Foreground="#555555" FontSize="12" VerticalAlignment="Bottom" Margin="3,0,0,4"/>
@@ -206,7 +206,6 @@
                     </StackPanel>
 
                     <ui:Button Grid.Column="2" x:Name="BtnRefreshPing" Appearance="Transparent" Foreground="#888888" Cursor="Hand" VerticalAlignment="Bottom" Margin="10,0,0,0" Padding="5,5,5,8" Click="BtnRefreshPing_Click">
-                        <!-- Выделили иконку и задали ей центр вращения -->
                         <TextBlock x:Name="PingIcon" Text="&#xE149;" FontFamily="Segoe MDL2 Assets" FontSize="14" FontWeight="Bold" RenderTransformOrigin="0.5,0.5">
                             <TextBlock.RenderTransform>
                                 <RotateTransform x:Name="PingIconTransform" Angle="0"/>

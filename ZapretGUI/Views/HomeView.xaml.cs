@@ -112,7 +112,12 @@ namespace ZapretGUI.Views
                 };
                 PingIconTransform.BeginAnimation(System.Windows.Media.RotateTransform.AngleProperty, rotateAnim);
 
-                var pingMs = await TcpPingAsync("gateway.discord.gg", 443);
+                var pingTask = TcpPingAsync("ec2.eu-central-1.amazonaws.com", 443);
+                var delayTask = Task.Delay(600);
+
+                await Task.WhenAll(pingTask, delayTask);
+
+                var pingMs = pingTask.Result;
 
                 if (pingMs >= 0)
                 {
@@ -362,7 +367,6 @@ namespace ZapretGUI.Views
 
         private void TriggerErrorGlitch()
         {
-            // 1. Тряска всего интерфейса по оси X (Screen Shake)
             var shakeAnim = new System.Windows.Media.Animation.DoubleAnimation(0, 10, TimeSpan.FromMilliseconds(40))
             {
                 AutoReverse = true,
@@ -370,7 +374,6 @@ namespace ZapretGUI.Views
             };
             MainGridTranslate.BeginAnimation(TranslateTransform.XProperty, shakeAnim);
 
-            // 2. Искажение (наклон всего экрана, делаем 3 градуса, иначе будет слишком сильно)
             var skewAnim = new System.Windows.Media.Animation.DoubleAnimation(0, -3, TimeSpan.FromMilliseconds(30))
             {
                 AutoReverse = true,
@@ -378,7 +381,6 @@ namespace ZapretGUI.Views
             };
             MainGridSkew.BeginAnimation(SkewTransform.AngleXProperty, skewAnim);
 
-            // 3. Мерцание прозрачности всей рабочей зоны (как сбой питания)
             var opacityAnim = new System.Windows.Media.Animation.DoubleAnimation(1, 0.6, TimeSpan.FromMilliseconds(50))
             {
                 AutoReverse = true,
@@ -386,7 +388,6 @@ namespace ZapretGUI.Views
             };
             MainGrid.BeginAnimation(UIElement.OpacityProperty, opacityAnim);
 
-            // 4. Расслоение цвета (выстреливаем огромную неоновую тень от всех элементов)
             MainGridGlitchShadow.Opacity = 1;
             var shadowAnim = new System.Windows.Media.Animation.DoubleAnimation(0, -15, TimeSpan.FromMilliseconds(40))
             {
@@ -408,17 +409,11 @@ namespace ZapretGUI.Views
                 run.FontWeight = FontWeights.Bold;
             }
             else if (message.Contains("✅") || message.Contains("[OK]"))
-            {
                 run.Foreground = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#55FF55"));
-            }
             else if (message.Contains("[Zapret]") || message.Contains("[TgWsProxy]"))
-            {
                 run.Foreground = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#55AAFF"));
-            }
             else
-            {
                 run.Foreground = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#888888"));
-            }
 
             var paragraph = new System.Windows.Documents.Paragraph(run)
             {
