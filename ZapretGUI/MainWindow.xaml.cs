@@ -101,7 +101,18 @@ namespace ZapretGUI
         private void SetupTrayIcon()
         {
             _notifyIcon = new System.Windows.Forms.NotifyIcon();
-            _notifyIcon.Icon = System.Drawing.SystemIcons.Shield;
+            try
+            {
+                var iconUri = new Uri("pack://application:,,,/Assets/freepik__толстая,_сплошная,_монолитная_буква_z_белого.png");
+                var stream = System.Windows.Application.GetResourceStream(iconUri).Stream;
+                var bitmap = new System.Drawing.Bitmap(stream);
+
+                _notifyIcon.Icon = System.Drawing.Icon.FromHandle(bitmap.GetHicon());
+            }
+            catch
+            {
+                _notifyIcon.Icon = System.Drawing.SystemIcons.Shield;
+            }
             _notifyIcon.Text = "Zapret for ADHD";
             _notifyIcon.Visible = true;
 
