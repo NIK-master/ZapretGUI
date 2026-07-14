@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
+using System.Windows.Media;
 using ZapretGUI.Core;
 
 namespace ZapretGUI
@@ -11,18 +12,63 @@ namespace ZapretGUI
         private readonly ZapretManager _zapretManager;
         private System.Windows.Forms.NotifyIcon? _notifyIcon;
 
+        private Views.HomeView _homeView;
+        private Views.SettingsView _settingsView;
+
         public MainWindow()
         {
             InitializeComponent();
-            MainContentContainer.Content = new Views.HomeView();
+
+            _homeView = new Views.HomeView();
+            _settingsView = new Views.SettingsView();
+
+            MainContentContainer.Content = _homeView;
+
             _zapretManager = new ZapretManager();
             SetupTrayIcon();
         }
 
+        private void BtnHome_Click(object sender, RoutedEventArgs e)
+        {
+            if (MainContentContainer.Content == _homeView)
+                return;
+
+            MainContentContainer.Content = _homeView;
+            SetActiveTab(BtnHome);
+        }
+
+        private void BtnSettings_Click(object sender, RoutedEventArgs e)
+        {
+            if (MainContentContainer.Content == _settingsView)
+                return;
+
+            MainContentContainer.Content = _settingsView;
+            SetActiveTab(BtnSettings);
+        }
+
+        private void SetActiveTab(System.Windows.Controls.Button activeBtn)
+        {
+            var transparent = new SolidColorBrush(System.Windows.Media.Colors.Transparent);
+            var zeroThickness = new Thickness(0);
+
+            BtnHome.Background = transparent;
+            BtnHome.BorderThickness = zeroThickness;
+            BtnServices.Background = transparent;
+            BtnServices.BorderThickness = zeroThickness;
+            BtnMods.Background = transparent;
+            BtnMods.BorderThickness = zeroThickness;
+            BtnSettings.Background = transparent;
+            BtnSettings.BorderThickness = zeroThickness;
+
+            activeBtn.Background = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#2A2A2A"));
+            activeBtn.BorderBrush = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#107C10"));
+            activeBtn.BorderThickness = new Thickness(3, 0, 0, 0);
+        }
+
         public void UpdateIndicators(bool isZapretRunning, bool isProxyRunning)
         {
-            var green = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#107C10"));
-            var red = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#D13438"));
+            var green = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#107C10"));
+            var red = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#D13438"));
 
             ZapretDot.Fill = isZapretRunning ? green : red;
             TgProxyDot.Fill = isProxyRunning ? green : red;
@@ -30,8 +76,8 @@ namespace ZapretGUI
 
         public void UpdateNetworkIndicator(bool isOnline)
         {
-            var green = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#107C10"));
-            var red = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#D13438"));
+            var green = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#107C10"));
+            var red = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#D13438"));
 
             NetworkDot.Fill = isOnline ? green : red;
         }
@@ -39,9 +85,7 @@ namespace ZapretGUI
         private void TitleBar_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
             if (e.ChangedButton == System.Windows.Input.MouseButton.Left)
-            {
                 this.DragMove();
-            }
         }
 
         private void BtnMinimize_Click(object sender, RoutedEventArgs e)
@@ -85,15 +129,37 @@ namespace ZapretGUI
             _notifyIcon.ContextMenuStrip = contextMenu;
         }
 
+        public void ShowNotification(string title, string message, System.Windows.Forms.ToolTipIcon icon = System.Windows.Forms.ToolTipIcon.Info)
+        {
+            var showNotifs = true;
+
+            try
+            {
+                string configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.json");
+                if (File.Exists(configPath))
+                {
+                    using (var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(configPath)))
+                    {
+                        if (doc.RootElement.TryGetProperty("NotificationsEnabled", out var prop))
+                            showNotifs = prop.GetBoolean();
+                    }
+                }
+            }
+            catch { }
+
+            if (showNotifs && _notifyIcon != null && _notifyIcon.Visible)
+                _notifyIcon.ShowBalloonTip(3000, title, message, icon);
+        }
+
         private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
         {
             e.Cancel = true;
             this.Hide();
-        }
 
-        private void BtnHome_Click(object sender, RoutedEventArgs e)
-        {
-            MainContentContainer.Content = new Views.HomeView();
+            ShowNotification(
+                "Программа работает в фоне",
+                "Zapret свернут в системный трей. Дважды кликните по иконке щита, чтобы открыть окно.",
+                System.Windows.Forms.ToolTipIcon.Info);
         }
     }
 }

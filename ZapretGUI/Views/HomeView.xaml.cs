@@ -46,9 +46,7 @@ namespace ZapretGUI.Views
                 Log("Интерфейс загружен. Найдены активные процессы в фоне.");
             }
             else
-            {
                 Log("Интерфейс загружен. Ожидание команд...");
-            }
         }
 
         private void StartNetworkMonitor()
@@ -234,6 +232,14 @@ namespace ZapretGUI.Views
                     SyncMainWindowIndicators();
                     Log("✅ Выбранные модули успешно запущены.");
 
+                    if (System.Windows.Application.Current.MainWindow is MainWindow mainWindowStart)
+                    {
+                        mainWindowStart.ShowNotification(
+                            "Службы запущены",
+                            "Zapret и TgProxy успешно стартовали и работают в фоне.",
+                            System.Windows.Forms.ToolTipIcon.Info);
+                    }
+
                     await Task.Delay(500);
                     LaunchProgressBar.Visibility = Visibility.Collapsed;
                     MainToggle.IsEnabled = true;
@@ -249,6 +255,14 @@ namespace ZapretGUI.Views
                     UpdateUIState(false);
                     SyncMainWindowIndicators();
                     Log("🛑 Все модули остановлены.");
+
+                    if (System.Windows.Application.Current.MainWindow is MainWindow mainWindowStop)
+                    {
+                        mainWindowStop.ShowNotification(
+                            "Службы остановлены",
+                            "Маршрутизация отключена. Трафик идет напрямую.",
+                            System.Windows.Forms.ToolTipIcon.Warning);
+                    }
 
                     _ = PingNetworkAsync();
                 }
@@ -324,7 +338,7 @@ namespace ZapretGUI.Views
             {
                 if (File.Exists(_settingsPath))
                 {
-                    string json = File.ReadAllText(_settingsPath);
+                    var json = File.ReadAllText(_settingsPath);
                     var settings = JsonSerializer.Deserialize<AppSettings>(json);
 
                     if (settings != null)
@@ -333,13 +347,11 @@ namespace ZapretGUI.Views
                         TgProxyToggle.IsChecked = settings.TgProxyEnabled;
 
                         if (settings.SelectedProfileIndex >= 0 && settings.SelectedProfileIndex < ProfileComboBox.Items.Count)
-                        {
                             ProfileComboBox.SelectedIndex = settings.SelectedProfileIndex;
-                        }
                     }
                 }
             }
-            catch {  }
+            catch { }
         }
 
         private void SaveSettings()
@@ -422,6 +434,38 @@ namespace ZapretGUI.Views
 
             LogDocument.Blocks.Add(paragraph);
             LogRichTextBox.ScrollToEnd();
+        }
+
+        private void BtnClearLogs_Click(object sender, RoutedEventArgs e)
+        {
+            LogDocument.Blocks.Clear();
+        }
+
+        private void BtnExportLogs_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var fileName = $"Zapret_Log_{DateTime.Now:yyyyMMdd_HHmmss}.txt";
+
+                var saveFileDialog = new Microsoft.Win32.SaveFileDialog
+                {
+                    Filter = "Текстовые файлы (*.txt)|*.txt|Все файлы (*.*)|*.*",
+                    DefaultExt = ".txt",
+                    FileName = fileName
+                };
+
+                if (saveFileDialog.ShowDialog() == true)
+                {
+                    var textRange = new System.Windows.Documents.TextRange(LogDocument.ContentStart, LogDocument.ContentEnd);
+                    File.WriteAllText(saveFileDialog.FileName, textRange.Text);
+
+                    System.Windows.MessageBox.Show("Лог успешно сохранен!", "Экспорт", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Windows.MessageBox.Show($"Ошибка при экспорте лога: {ex.Message}", "Ошибка", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+            }
         }
     }
 }

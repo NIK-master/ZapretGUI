@@ -67,7 +67,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
-            <RowDefinition Height="150"/>
+            <RowDefinition Height="250"/>
         </Grid.RowDefinitions>
 
         <!-- Заголовок -->
@@ -249,11 +249,38 @@
         <!-- Логи -->
         <Border Grid.Row="2" Background="#0A0A0A" CornerRadius="8" BorderBrush="#2A2A2A" BorderThickness="1" Margin="0,20,0,0">
             <Grid>
-                <TextBlock Text="Лог событий" Foreground="#555555" Margin="15,10,0,0" FontSize="12" FontWeight="SemiBold"/>
+                <!-- Добавляем жесткое разделение на две строки -->
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
 
-                <!-- Заменили TextBlock на RichTextBox для цветного текста -->
-                <RichTextBox x:Name="LogRichTextBox" Margin="15,30,15,10" Background="Transparent" BorderThickness="0" IsReadOnly="True" VerticalScrollBarVisibility="Auto" FontFamily="Consolas" FontSize="13">
-                    <FlowDocument x:Name="LogDocument" PagePadding="0"/>
+                <!-- Заголовок логов и кнопки управления (Grid.Row="0") -->
+                <Grid Grid.Row="0" Margin="15,15,15,5">
+                    <TextBlock Text="Лог событий" Foreground="#888888" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
+
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <!-- Кнопка Очистить -->
+                        <Button Background="Transparent" BorderThickness="0" Cursor="Hand" Click="BtnClearLogs_Click" Margin="0,0,10,0" Padding="5">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE74D;" FontFamily="Segoe MDL2 Assets" Foreground="#888888" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <TextBlock Text="Очистить" Foreground="#888888" FontSize="12" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+
+                        <!-- Кнопка Экспорт -->
+                        <Button Background="Transparent" BorderThickness="0" Cursor="Hand" Click="BtnExportLogs_Click" Padding="5">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE78C;" FontFamily="Segoe MDL2 Assets" Foreground="#888888" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <TextBlock Text="Экспорт" Foreground="#888888" FontSize="12" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+
+                <!-- Сам текст логов (Grid.Row="1") с обновленным верхним отступом -->
+                <RichTextBox x:Name="LogRichTextBox" Grid.Row="1" Margin="15,0,15,10" Background="Transparent" BorderThickness="0" IsReadOnly="True" VerticalScrollBarVisibility="Auto">
+                    <FlowDocument x:Name="LogDocument" PagePadding="0" FontFamily="Consolas" FontSize="13"/>
                 </RichTextBox>
             </Grid>
         </Border>
