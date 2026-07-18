@@ -278,11 +278,11 @@
                 <ui:Button Content="Сбросить все настройки" Appearance="Danger" HorizontalAlignment="Center" Margin="0,0,0,20" Click="BtnResetSettings_Click"/>
 
                 <StackPanel HorizontalAlignment="Center" Margin="0,0,0,40">
-                    <TextBlock Text="Zapret for ADHD v1.0" Foreground="#444444" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                    <TextBlock Text="Zapret for ADHD v2.0" Foreground="#444444" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center"/>
                     <TextBlock Foreground="#444444" FontSize="12" HorizontalAlignment="Center" Margin="0,5,0,0">
                         <Run Text="Разработано с ❤️ | "/>
-                        <Hyperlink NavigateUri="https://github.com/" RequestNavigate="Hyperlink_RequestNavigate" Foreground="#107C10" TextDecorations="None">
-                            Блог и портфолио (В разработке)
+                        <Hyperlink NavigateUri="https://github.com/NIK-master/ZapretGUI" RequestNavigate="Hyperlink_RequestNavigate" Foreground="#107C10" TextDecorations="None">
+                            Страница на GitHub
                         </Hyperlink>
                     </TextBlock>
                 </StackPanel>

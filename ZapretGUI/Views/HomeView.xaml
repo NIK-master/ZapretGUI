@@ -78,7 +78,8 @@
                 <ColumnDefinition Width="280"/>
             </Grid.ColumnDefinitions>
 
-            <Grid Grid.Column="0" HorizontalAlignment="Center" VerticalAlignment="Center">
+            <!-- Обновлено: StackPanel для кнопки и мини-лога -->
+            <StackPanel Grid.Column="0" HorizontalAlignment="Center" VerticalAlignment="Center">
                 <ToggleButton x:Name="MainToggle" Width="200" Height="200" Click="MainToggle_Click" Cursor="Hand" Background="Transparent" BorderThickness="0">
                     <ToggleButton.Template>
                         <ControlTemplate TargetType="ToggleButton">
@@ -147,7 +148,12 @@
                         </ControlTemplate>
                     </ToggleButton.Template>
                 </ToggleButton>
-            </Grid>
+
+                <TextBlock x:Name="MiniLogText" Text="Ждем ваших указаний..." 
+                           Foreground="#888888" FontSize="13" FontWeight="SemiBold" 
+                           HorizontalAlignment="Center" Margin="0,20,0,0" 
+                           MaxWidth="260" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/>
+            </StackPanel>
 
             <StackPanel x:Name="NetworkStatsPanel" Grid.Column="1" VerticalAlignment="Center" Margin="20,0,30,0">
                 <Grid Margin="0,0,0,15">
@@ -215,7 +221,7 @@
                         <TextBlock x:Name="StatusText" Text="Остановлен" Foreground="#D13438" Margin="0,0,0,15"/>
 
                         <TextBlock Text="Конфигурация:" Foreground="#888888" FontSize="12" Margin="0,0,0,5"/>
-                        
+
                         <ComboBox x:Name="ProfileComboBox" Height="35" SelectionChanged="Settings_Changed"/>
                     </StackPanel>
                 </Border>

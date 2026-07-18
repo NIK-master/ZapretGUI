@@ -31,6 +31,9 @@ namespace ZapretGUI.Views
             _zapretManager = new ZapretManager();
             _tgProxyManager = new TgProxyManager();
 
+            _zapretManager.LogMessage += ProcessLogMessage;
+            _tgProxyManager.LogMessage += ProcessLogMessage;
+
             LoadProfiles();
             LoadSettings();
 
@@ -415,6 +418,19 @@ namespace ZapretGUI.Views
 
             LogDocument.Blocks.Add(paragraph);
             LogRichTextBox.ScrollToEnd();
+
+            var cleanMessage = message.Contains("] ")
+                ? message.Substring(message.IndexOf("] ") + 2)
+                : message;
+
+            MiniLogText.Text = cleanMessage;
+
+            if (message.Contains("ОШИБКА") || message.Contains("⚠") || message.Contains("🛑"))
+                MiniLogText.Foreground = GetErrorColor();
+            else if (message.Contains("✅") || message.Contains("[OK]"))
+                MiniLogText.Foreground = GetSuccessColor();
+            else
+                MiniLogText.Foreground = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#888888"));
         }
 
         private void BtnClearLogs_Click(object sender, RoutedEventArgs e)
@@ -457,6 +473,7 @@ namespace ZapretGUI.Views
 
             MainToggle_Click(this, new RoutedEventArgs());
         }
+
         private void ApplyVisualSettings()
         {
             var isCompact = SettingsManager.Current.CompactMode;
@@ -530,6 +547,14 @@ namespace ZapretGUI.Views
             {
                 Log($"ОШИБКА ПРИ ПЕРЕЗАПУСКЕ: {ex.Message}");
             }
+        }
+
+        private void ProcessLogMessage(string message)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                Log(message);
+            });
         }
     }
 }

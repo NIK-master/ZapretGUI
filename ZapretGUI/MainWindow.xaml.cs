@@ -4,7 +4,6 @@ using System.IO;
 using System.Windows;
 using System.Windows.Media;
 using ZapretGUI.Core;
-using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace ZapretGUI
 {
@@ -29,13 +28,28 @@ namespace ZapretGUI
 
             _zapretManager = new ZapretManager();
             SetupTrayIcon();
+
             var configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.json");
             if (!File.Exists(configPath))
             {
                 var wizard = new Views.WizardWindow();
-
-                wizard.ShowDialog(); 
+                wizard.ShowDialog();
             }
+
+            // Запуск фоновых асинхронных проверок обновлений
+            _ = Core.UpdateManager.CheckForUpdatesAsync();
+
+            // Коллбек, который корректно остановит обход через UI-триггер в случае обновления ядер
+            Action stopServicesAction = () =>
+            {
+                if (_homeView.IsRunning)
+                {
+                    _homeView.ToggleFromTray();
+                }
+            };
+
+            _ = Core.UpdateManager.CheckForZapretCoreUpdatesAsync(stopServicesAction);
+            _ = Core.UpdateManager.CheckForTgProxyCoreUpdatesAsync(stopServicesAction);
         }
 
         private void BtnHome_Click(object sender, RoutedEventArgs e)
@@ -141,7 +155,6 @@ namespace ZapretGUI
 
                 trayMenu.Activate();
             };
-
         }
 
         public void ShowNotification(string title, string message, System.Windows.Forms.ToolTipIcon icon = System.Windows.Forms.ToolTipIcon.Info)
@@ -170,6 +183,7 @@ namespace ZapretGUI
         {
             _homeView.ToggleFromTray();
         }
+
         private SolidColorBrush GetSuccessColor()
         {
             var hex = SettingsManager.Current.ColorblindMode ? "#0078D7" : "#107C10";
