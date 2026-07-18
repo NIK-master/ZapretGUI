@@ -1,0 +1,78 @@
+﻿<Window x:Class="ZapretGUI.Views.TrayMenuWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="TrayMenu" Width="260" SizeToContent="Height"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        ShowInTaskbar="False" Topmost="True" Deactivated="Window_Deactivated">
+
+    <Window.Triggers>
+        <EventTrigger RoutedEvent="Window.Loaded">
+            <BeginStoryboard>
+                <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName="MainBorder" Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.2"/>
+                    <DoubleAnimation Storyboard.TargetName="MenuScale" Storyboard.TargetProperty="ScaleY" From="0.8" To="1" Duration="0:0:0.25">
+                        <DoubleAnimation.EasingFunction>
+                            <CubicEase EasingMode="EaseOut"/>
+                        </DoubleAnimation.EasingFunction>
+                    </DoubleAnimation>
+                </Storyboard>
+            </BeginStoryboard>
+        </EventTrigger>
+    </Window.Triggers>
+
+    <Border x:Name="MainBorder" Background="#141414" CornerRadius="12" BorderBrush="#2A2A2A" BorderThickness="1" Margin="10" RenderTransformOrigin="0.5,1">
+        <Border.RenderTransform>
+            <ScaleTransform x:Name="MenuScale" ScaleX="1" ScaleY="1"/>
+        </Border.RenderTransform>
+        <Border.Effect>
+            <DropShadowEffect Color="Black" BlurRadius="15" ShadowDepth="5" Opacity="0.5"/>
+        </Border.Effect>
+
+        <StackPanel Margin="0,15,0,10">
+            <Grid Margin="15,0,15,15">
+                <TextBlock Text="Zapret for ADHD" Foreground="White" FontSize="15" FontWeight="Bold" HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                <TextBlock Text="v2.0" Foreground="#555555" FontSize="12" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+            </Grid>
+
+            <Button x:Name="BtnTogglePower" Background="#1B3320" BorderThickness="1" BorderBrush="#2E5C37" Cursor="Hand" Margin="15,0,15,15" Padding="0,10" HorizontalAlignment="Stretch" Click="BtnTogglePower_Click">
+                <Button.Template>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="8" Padding="{TemplateBinding Padding}">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <TextBlock x:Name="PowerIcon" Text="&#xE7E8;" FontFamily="Segoe MDL2 Assets" FontSize="16" Foreground="#4CAF50" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                <TextBlock x:Name="PowerText" Text="Включить обход" Foreground="White" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Border>
+                    </ControlTemplate>
+                </Button.Template>
+            </Button>
+
+            <Grid Margin="15,0,15,15">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="&#xE916;" FontFamily="Segoe MDL2 Assets" Foreground="#888888" FontSize="14" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                <TextBlock Grid.Column="1" Text="Пинг:" Foreground="#CCCCCC" FontSize="13" VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="2" x:Name="PingText" Text="..." Foreground="#4CAF50" FontSize="13" FontWeight="Bold" VerticalAlignment="Center"/>
+            </Grid>
+
+            <Rectangle Height="1" Fill="#222222" Margin="15,0,15,5"/>
+
+            <Button x:Name="BtnOpenApp" Background="Transparent" BorderThickness="0" HorizontalContentAlignment="Left" Padding="15,10" Cursor="Hand" Click="BtnOpenApp_Click">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="&#xE8A7;" FontFamily="Segoe MDL2 Assets" Foreground="#888888" FontSize="16" Margin="0,0,12,0" VerticalAlignment="Center"/>
+                    <TextBlock Text="Открыть панель управления" Foreground="#E0E0E0" FontSize="13" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
+
+            <Button x:Name="BtnExit" Background="Transparent" BorderThickness="0" HorizontalContentAlignment="Left" Padding="15,10" Cursor="Hand" Click="BtnExit_Click">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="&#xF3B1;" FontFamily="Segoe MDL2 Assets" Foreground="#F44336" FontSize="16" Margin="0,0,12,0" VerticalAlignment="Center"/>
+                    <TextBlock Text="Полностью закрыть" Foreground="#F44336" FontSize="13" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
+        </StackPanel>
+    </Border>
+</Window>

@@ -7,7 +7,7 @@
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         WindowStartupLocation="CenterScreen">
 
-    <Border Background="#0A0A0A" CornerRadius="12" BorderBrush="#2A2A2A" BorderThickness="1" ClipToBounds="True">
+    <Border x:Name="RootBorder" Width="1100" Height="760" Background="#0A0A0A" CornerRadius="12" BorderBrush="#2A2A2A" BorderThickness="1" ClipToBounds="True">
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="45"/>
@@ -76,13 +76,10 @@
 
                 <Border x:Name="Sidebar" Grid.Column="0" Width="220" Background="#181818" ClipToBounds="True">
 					<StackPanel Width="220" Margin="10,20,10,0">
-						<ui:Button x:Name="BtnHome" Content="Главная" Foreground="White" Background="#2A2A2A" BorderBrush="#107C10" BorderThickness="3,0,0,0"
+                        <ui:Button x:Name="BtnHome" Content="Главная" Foreground="White" Background="#2A2A2A" BorderBrush="#107C10" BorderThickness="3,0,0,0"
                                    HorizontalAlignment="Stretch" Margin="0,0,0,10" Height="40" Click="BtnHome_Click"/>
 
-						<ui:Button x:Name="BtnServices" Content="Службы" Foreground="White" Appearance="Transparent" BorderThickness="0"
-                                   HorizontalAlignment="Stretch" Margin="0,0,0,10" Height="40"/>
-
-						<ui:Button x:Name="BtnMods" Content="Модификации" Foreground="White" Appearance="Transparent" BorderThickness="0"
+                        <ui:Button x:Name="BtnMods" Content="Модификации" Foreground="White" Appearance="Transparent" BorderThickness="0"
                                    HorizontalAlignment="Stretch" Margin="0,0,0,10" Height="40"/>
 
 						<ui:Button x:Name="BtnSettings" Content="Настройки" Foreground="White" Appearance="Transparent" BorderThickness="0"

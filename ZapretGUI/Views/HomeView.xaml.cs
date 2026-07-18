@@ -32,6 +32,9 @@ namespace ZapretGUI.Views
             LoadProfiles();
             LoadSettings();
 
+            SettingsManager.SettingsSaved += ApplyVisualSettings;
+            ApplyVisualSettings();
+
             StartNetworkMonitor();
             _ = PingNetworkAsync();
 
@@ -61,8 +64,8 @@ namespace ZapretGUI.Views
 
         private void NetworkTimer_Tick(object? sender, EventArgs e)
         {
-            long currentReceived = 0;
-            long currentSent = 0;
+            var currentReceived = 0L;
+            var currentSent = 0L;
 
             var interfaces = NetworkInterface.GetAllNetworkInterfaces();
             foreach (var netInterface in interfaces)
@@ -110,7 +113,7 @@ namespace ZapretGUI.Views
                 };
                 PingIconTransform.BeginAnimation(System.Windows.Media.RotateTransform.AngleProperty, rotateAnim);
 
-                var pingTask = TcpPingAsync("ec2.eu-central-1.amazonaws.com", 443);
+                var pingTask = Core.NetworkHelper.TcpPingAsync("ec2.eu-central-1.amazonaws.com", 443);
                 var delayTask = Task.Delay(600);
 
                 await Task.WhenAll(pingTask, delayTask);
@@ -141,29 +144,6 @@ namespace ZapretGUI.Views
             }
         }
 
-        private async Task<long> TcpPingAsync(string host, int port)
-        {
-            try
-            {
-                using var client = new TcpClient();
-                var stopwatch = new Stopwatch();
-
-                stopwatch.Start();
-                var connectTask = client.ConnectAsync(host, port);
-
-                if (await Task.WhenAny(connectTask, Task.Delay(2000)) == connectTask)
-                {
-                    stopwatch.Stop();
-                    return client.Connected ? stopwatch.ElapsedMilliseconds : -1;
-                }
-
-                return -1;
-            }
-            catch
-            {
-                return -1;
-            }
-        }
 
         private void SyncMainWindowIndicators()
         {
@@ -296,13 +276,13 @@ namespace ZapretGUI.Views
             if (isRunning)
             {
                 StatusText.Text = "Работает";
-                StatusText.Foreground = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#107C10"));
+                StatusText.Foreground = GetSuccessColor();
                 ProfileComboBox.IsEnabled = false;
             }
             else
             {
                 StatusText.Text = "Остановлен";
-                StatusText.Foreground = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#D13438"));
+                StatusText.Foreground = GetErrorColor();
                 ProfileComboBox.IsEnabled = true;
             }
         }
@@ -323,52 +303,25 @@ namespace ZapretGUI.Views
             }
         }
 
-        private class AppSettings
-        {
-            public bool ZapretEnabled { get; set; } = true;
-            public bool TgProxyEnabled { get; set; } = true;
-            public int SelectedProfileIndex { get; set; } = 0;
-        }
 
         private readonly string _settingsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.json");
 
         private void LoadSettings()
         {
-            try
-            {
-                if (File.Exists(_settingsPath))
-                {
-                    var json = File.ReadAllText(_settingsPath);
-                    var settings = JsonSerializer.Deserialize<AppSettings>(json);
+            ZapretToggle.IsChecked = SettingsManager.Current.ZapretEnabled;
+            TgProxyToggle.IsChecked = SettingsManager.Current.TgProxyEnabled;
 
-                    if (settings != null)
-                    {
-                        ZapretToggle.IsChecked = settings.ZapretEnabled;
-                        TgProxyToggle.IsChecked = settings.TgProxyEnabled;
-
-                        if (settings.SelectedProfileIndex >= 0 && settings.SelectedProfileIndex < ProfileComboBox.Items.Count)
-                            ProfileComboBox.SelectedIndex = settings.SelectedProfileIndex;
-                    }
-                }
-            }
-            catch { }
+            if (SettingsManager.Current.SelectedProfileIndex >= 0 && SettingsManager.Current.SelectedProfileIndex < ProfileComboBox.Items.Count)
+                ProfileComboBox.SelectedIndex = SettingsManager.Current.SelectedProfileIndex;
         }
 
         private void SaveSettings()
         {
-            try
-            {
-                var settings = new AppSettings
-                {
-                    ZapretEnabled = ZapretToggle.IsChecked ?? true,
-                    TgProxyEnabled = TgProxyToggle.IsChecked ?? true,
-                    SelectedProfileIndex = ProfileComboBox.SelectedIndex
-                };
+            SettingsManager.Current.ZapretEnabled = ZapretToggle.IsChecked ?? true;
+            SettingsManager.Current.TgProxyEnabled = TgProxyToggle.IsChecked ?? true;
+            SettingsManager.Current.SelectedProfileIndex = ProfileComboBox.SelectedIndex;
 
-                string json = JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true });
-                File.WriteAllText(_settingsPath, json);
-            }
-            catch { Log("ОШИБКА: Не удалось сохранить конфигурацию."); TriggerErrorGlitch(); }
+            SettingsManager.Save();
         }
 
         private void Settings_Changed(object sender, RoutedEventArgs e)
@@ -379,6 +332,9 @@ namespace ZapretGUI.Views
 
         private void TriggerErrorGlitch()
         {
+            if (SettingsManager.Current.FocusMode)
+                return;
+
             var shakeAnim = new System.Windows.Media.Animation.DoubleAnimation(0, 10, TimeSpan.FromMilliseconds(40))
             {
                 AutoReverse = true,
@@ -417,11 +373,13 @@ namespace ZapretGUI.Views
 
             if (message.Contains("ОШИБКА") || message.Contains("⚠") || message.Contains("🛑"))
             {
-                run.Foreground = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#FF5555"));
+                run.Foreground = GetErrorColor();
                 run.FontWeight = FontWeights.Bold;
             }
             else if (message.Contains("✅") || message.Contains("[OK]"))
-                run.Foreground = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#55FF55"));
+            {
+                run.Foreground = GetSuccessColor();
+            }
             else if (message.Contains("[Zapret]") || message.Contains("[TgWsProxy]"))
                 run.Foreground = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#55AAFF"));
             else
@@ -466,6 +424,66 @@ namespace ZapretGUI.Views
             {
                 System.Windows.MessageBox.Show($"Ошибка при экспорте лога: {ex.Message}", "Ошибка", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
             }
+        }
+
+        public bool IsRunning => _zapretManager.IsRunning() || _tgProxyManager.IsRunning();
+
+        public void ToggleFromTray()
+        {
+            MainToggle.IsChecked = !IsRunning;
+
+            MainToggle_Click(this, new RoutedEventArgs());
+        }
+        private void ApplyVisualSettings()
+        {
+            var isCompact = SettingsManager.Current.CompactMode;
+
+            if (NetworkStatsPanel != null)
+                NetworkStatsPanel.Visibility = isCompact ? Visibility.Collapsed : Visibility.Visible;
+
+            if (LogsPanel != null)
+            {
+                var opacityAnim = new System.Windows.Media.Animation.DoubleAnimation { To = isCompact ? 0 : 1, Duration = TimeSpan.FromSeconds(0.3) };
+
+                var heightAnim = new System.Windows.Media.Animation.DoubleAnimation { To = isCompact ? 0 : 250, Duration = TimeSpan.FromSeconds(0.4), EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut } };
+
+                var marginAnim = new System.Windows.Media.Animation.ThicknessAnimation { To = isCompact ? new Thickness(0) : new Thickness(0, 20, 0, 0), Duration = TimeSpan.FromSeconds(0.4), EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut } };
+
+                LogsPanel.BeginAnimation(UIElement.OpacityProperty, opacityAnim);
+                LogsPanel.BeginAnimation(FrameworkElement.HeightProperty, heightAnim);
+                LogsPanel.BeginAnimation(FrameworkElement.MarginProperty, marginAnim);
+
+                LogsPanel.IsHitTestVisible = !isCompact;
+            }
+
+            var isZapret = _zapretManager != null && _zapretManager.IsRunning();
+            var isProxy = _tgProxyManager != null && _tgProxyManager.IsRunning();
+
+            UpdateUIState(isZapret || isProxy);
+
+            this.Resources["MainBtnColor"] = GetSuccessColor().Color;
+
+            if (System.Windows.Application.Current.MainWindow is MainWindow mainWindow)
+            {
+                mainWindow.UpdateIndicators(isZapret, isProxy);
+
+                var isNetworkOnline = PingText.Text != "—" && PingText.Text != "..." && PingText.Text != "ошибка";
+                mainWindow.UpdateNetworkIndicator(isNetworkOnline);
+
+                mainWindow.AnimateWindowSize(isCompact);
+            }
+        }
+
+        private SolidColorBrush GetSuccessColor()
+        {
+            var hex = SettingsManager.Current.ColorblindMode ? "#0078D7" : "#107C10";
+            return new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(hex));
+        }
+
+        private SolidColorBrush GetErrorColor()
+        {
+            var hex = SettingsManager.Current.ColorblindMode ? "#FF8C00" : "#D13438";
+            return new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(hex));
         }
     }
 }

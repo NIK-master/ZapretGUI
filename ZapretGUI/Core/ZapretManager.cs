@@ -20,14 +20,12 @@ namespace ZapretGUI.Core
             var batFilePath = Path.Combine(_basePath, profileName);
 
             if (!File.Exists(batFilePath))
-            {
                 throw new FileNotFoundException($"Профиль {profileName} не найден по пути: {batFilePath}");
-            }
 
-            string batContent = File.ReadAllText(batFilePath);
+            var batContent = File.ReadAllText(batFilePath);
             batContent = batContent.Replace("start \"zapret: %~n0\" /min ", "");
 
-            string tempBatPath = Path.Combine(_basePath, "invisible_run.bat");
+            var tempBatPath = Path.Combine(_basePath, "invisible_run.bat");
             File.WriteAllText(tempBatPath, batContent);
 
             var startInfo = new ProcessStartInfo
@@ -45,23 +43,10 @@ namespace ZapretGUI.Core
 
         public void Stop()
         {
-            var processes = Process.GetProcessesByName("winws");
-            foreach (var process in processes)
-            {
-                try
-                {
-                    process.Kill();
-                    process.WaitForExit();
-                }
-                catch
-                {
-                }
-            }
+            ProcessHelper.KillProcessesByName("winws");
         }
 
-        public bool IsRunning()
-        {
-            return Process.GetProcessesByName("winws").Length > 0;
-        }
+        public bool IsRunning() 
+            => Process.GetProcessesByName("winws").Length > 0;
     }
 }

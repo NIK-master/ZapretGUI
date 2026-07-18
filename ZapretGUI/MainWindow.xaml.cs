@@ -4,6 +4,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Media;
 using ZapretGUI.Core;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace ZapretGUI
 {
@@ -19,6 +20,8 @@ namespace ZapretGUI
         {
             InitializeComponent();
 
+            SettingsManager.Load();
+
             _homeView = new Views.HomeView();
             _settingsView = new Views.SettingsView();
 
@@ -26,6 +29,13 @@ namespace ZapretGUI
 
             _zapretManager = new ZapretManager();
             SetupTrayIcon();
+            var configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.json");
+            if (!File.Exists(configPath))
+            {
+                var wizard = new Views.WizardWindow();
+
+                wizard.ShowDialog(); 
+            }
         }
 
         private void BtnHome_Click(object sender, RoutedEventArgs e)
@@ -53,8 +63,6 @@ namespace ZapretGUI
 
             BtnHome.Background = transparent;
             BtnHome.BorderThickness = zeroThickness;
-            BtnServices.Background = transparent;
-            BtnServices.BorderThickness = zeroThickness;
             BtnMods.Background = transparent;
             BtnMods.BorderThickness = zeroThickness;
             BtnSettings.Background = transparent;
@@ -67,19 +75,13 @@ namespace ZapretGUI
 
         public void UpdateIndicators(bool isZapretRunning, bool isProxyRunning)
         {
-            var green = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#107C10"));
-            var red = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#D13438"));
-
-            ZapretDot.Fill = isZapretRunning ? green : red;
-            TgProxyDot.Fill = isProxyRunning ? green : red;
+            ZapretDot.Fill = isZapretRunning ? GetSuccessColor() : GetErrorColor();
+            TgProxyDot.Fill = isProxyRunning ? GetSuccessColor() : GetErrorColor();
         }
 
         public void UpdateNetworkIndicator(bool isOnline)
         {
-            var green = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#107C10"));
-            var red = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#D13438"));
-
-            NetworkDot.Fill = isOnline ? green : red;
+            NetworkDot.Fill = isOnline ? GetSuccessColor() : GetErrorColor();
         }
 
         private void TitleBar_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
@@ -122,43 +124,29 @@ namespace ZapretGUI
                 this.WindowState = WindowState.Normal;
             };
 
-            var contextMenu = new System.Windows.Forms.ContextMenuStrip();
-            var openItem = contextMenu.Items.Add("Развернуть");
-            openItem.Click += (s, e) => { this.Show(); this.WindowState = WindowState.Normal; };
-
-            var closeItem = contextMenu.Items.Add("Выход");
-            closeItem.Click += (s, e) =>
+            _notifyIcon.MouseClick += (s, e) =>
             {
-                if (_zapretManager.IsRunning())
-                {
-                    _zapretManager.Stop();
-                }
-                _notifyIcon.Dispose();
-                System.Windows.Application.Current.Shutdown();
+                if (e.Button != System.Windows.Forms.MouseButtons.Left && e.Button != System.Windows.Forms.MouseButtons.Right)
+                    return;
+
+                var trayMenu = new Views.TrayMenuWindow();
+
+                trayMenu.WindowStartupLocation = WindowStartupLocation.Manual;
+                trayMenu.Show();
+
+                var mousePos = System.Windows.Forms.Control.MousePosition;
+
+                trayMenu.Left = mousePos.X - trayMenu.ActualWidth;
+                trayMenu.Top = mousePos.Y - trayMenu.ActualHeight - 20;
+
+                trayMenu.Activate();
             };
 
-            _notifyIcon.ContextMenuStrip = contextMenu;
         }
 
         public void ShowNotification(string title, string message, System.Windows.Forms.ToolTipIcon icon = System.Windows.Forms.ToolTipIcon.Info)
         {
-            var showNotifs = true;
-
-            try
-            {
-                string configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.json");
-                if (File.Exists(configPath))
-                {
-                    using (var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(configPath)))
-                    {
-                        if (doc.RootElement.TryGetProperty("NotificationsEnabled", out var prop))
-                            showNotifs = prop.GetBoolean();
-                    }
-                }
-            }
-            catch { }
-
-            if (showNotifs && _notifyIcon != null && _notifyIcon.Visible)
+            if (SettingsManager.Current.NotificationsEnabled && _notifyIcon != null && _notifyIcon.Visible)
                 _notifyIcon.ShowBalloonTip(3000, title, message, icon);
         }
 
@@ -171,6 +159,53 @@ namespace ZapretGUI
                 "Программа работает в фоне",
                 "Zapret свернут в системный трей. Дважды кликните по иконке щита, чтобы открыть окно.",
                 System.Windows.Forms.ToolTipIcon.Info);
+        }
+
+        public bool IsBypassRunning()
+        {
+            return _homeView.IsRunning;
+        }
+
+        public void ToggleBypass()
+        {
+            _homeView.ToggleFromTray();
+        }
+        private SolidColorBrush GetSuccessColor()
+        {
+            var hex = SettingsManager.Current.ColorblindMode ? "#0078D7" : "#107C10";
+            return new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(hex));
+        }
+
+        private SolidColorBrush GetErrorColor()
+        {
+            var hex = SettingsManager.Current.ColorblindMode ? "#FF8C00" : "#D13438";
+            return new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(hex));
+        }
+
+        public void AnimateWindowSize(bool isCompact)
+        {
+            double normalWidth = 1100;
+            double normalHeight = 760;
+
+            double compactWidth = 850;
+            double compactHeight = 490;
+
+            var widthAnim = new System.Windows.Media.Animation.DoubleAnimation
+            {
+                To = isCompact ? compactWidth : normalWidth,
+                Duration = TimeSpan.FromSeconds(0.4),
+                EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut }
+            };
+
+            var heightAnim = new System.Windows.Media.Animation.DoubleAnimation
+            {
+                To = isCompact ? compactHeight : normalHeight,
+                Duration = TimeSpan.FromSeconds(0.4),
+                EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut }
+            };
+
+            RootBorder.BeginAnimation(FrameworkElement.WidthProperty, widthAnim);
+            RootBorder.BeginAnimation(FrameworkElement.HeightProperty, heightAnim);
         }
     }
 }

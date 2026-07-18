@@ -1,37 +1,16 @@
 ﻿using System;
 using System.Diagnostics;
 using System.IO;
-using System.Text.Json;
 using System.Windows;
 using System.Windows.Interop;
 using Microsoft.Win32;
+using ZapretGUI.Core;
 
 namespace ZapretGUI.Views
 {
     public partial class SettingsView : System.Windows.Controls.UserControl
     {
-        private readonly string _settingsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.json");
         private readonly string _appName = "ZapretForADHD";
-
-        private class AppSettings
-        {
-            public bool ZapretEnabled { get; set; } = true;
-            public bool TgProxyEnabled { get; set; } = true;
-            public int SelectedProfileIndex { get; set; } = 0;
-
-            public bool StartMinimized { get; set; } = false;
-            public bool MinimizeOnClose { get; set; } = true;
-            public bool NotificationsEnabled { get; set; } = true;
-
-            public bool FocusMode { get; set; } = false;
-            public bool CompactMode { get; set; } = false;
-            public bool HardwareAcceleration { get; set; } = true;
-            public bool ColorblindMode { get; set; } = false;
-
-            public string PingUrl { get; set; } = "https://dynamodb.eu-central-1.amazonaws.com";
-            public bool AutoRestartServices { get; set; } = false;
-            public int StatsUpdateInterval { get; set; } = 1;
-        }
 
         public SettingsView()
         {
@@ -43,42 +22,31 @@ namespace ZapretGUI.Views
         {
             try
             {
-                using (RegistryKey? key = Registry.CurrentUser.OpenSubKey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true))
+                using (var key = Registry.CurrentUser.OpenSubKey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true))
                 {
                     if (key != null)
                         ToggleAutoStart.IsChecked = key.GetValue(_appName) != null;
                 }
 
-                if (File.Exists(_settingsPath))
+                var settings = SettingsManager.Current;
+
+                ToggleStartMinimized.IsChecked = settings.StartMinimized;
+                ToggleMinimizeOnClose.IsChecked = settings.MinimizeOnClose;
+                ToggleNotifications.IsChecked = settings.NotificationsEnabled;
+
+                ToggleFocusMode.IsChecked = settings.FocusMode;
+                ToggleCompactMode.IsChecked = settings.CompactMode;
+                ToggleHardwareAccel.IsChecked = settings.HardwareAcceleration;
+                ToggleColorblind.IsChecked = settings.ColorblindMode;
+
+                TxtPingUrl.Text = settings.PingUrl ?? "https://dynamodb.eu-central-1.amazonaws.com";
+                ToggleAutoRestart.IsChecked = settings.AutoRestartServices;
+
+                switch (settings.StatsUpdateInterval)
                 {
-                    var json = File.ReadAllText(_settingsPath);
-                    var settings = JsonSerializer.Deserialize<AppSettings>(json);
-
-                    if (settings != null)
-                    {
-                        ToggleStartMinimized.IsChecked = settings.StartMinimized;
-                        ToggleMinimizeOnClose.IsChecked = settings.MinimizeOnClose;
-                        ToggleNotifications.IsChecked = settings.NotificationsEnabled;
-
-                        ToggleFocusMode.IsChecked = settings.FocusMode;
-                        ToggleCompactMode.IsChecked = settings.CompactMode;
-                        ToggleHardwareAccel.IsChecked = settings.HardwareAcceleration;
-                        ToggleColorblind.IsChecked = settings.ColorblindMode;
-
-                        TxtPingUrl.Text = settings.PingUrl ?? "https://dynamodb.eu-central-1.amazonaws.com";
-                        ToggleAutoRestart.IsChecked = settings.AutoRestartServices;
-
-                        switch (settings.StatsUpdateInterval)
-                        {
-                            case 3: ComboUpdateInterval.SelectedIndex = 1; break;
-                            case 5: ComboUpdateInterval.SelectedIndex = 2; break;
-                            default: ComboUpdateInterval.SelectedIndex = 0; break;
-                        }
-                    }
-                }
-                else
-                {
-                    ToggleHardwareAccel.IsChecked = true;
+                    case 3: ComboUpdateInterval.SelectedIndex = 1; break;
+                    case 5: ComboUpdateInterval.SelectedIndex = 2; break;
+                    default: ComboUpdateInterval.SelectedIndex = 0; break;
                 }
             }
             catch { }
@@ -101,7 +69,7 @@ namespace ZapretGUI.Views
 
             try
             {
-                using (RegistryKey? key = Registry.CurrentUser.OpenSubKey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true))
+                using (var key = Registry.CurrentUser.OpenSubKey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true))
                 {
                     if (key != null)
                     {
@@ -112,44 +80,37 @@ namespace ZapretGUI.Views
                             key.SetValue(_appName, $"\"{exePath}\"");
                         }
                         else
+                        {
                             key.DeleteValue(_appName, false);
+                        }
                     }
                 }
 
                 var useGpu = ToggleHardwareAccel.IsChecked ?? true;
                 System.Windows.Media.RenderOptions.ProcessRenderMode = useGpu ? RenderMode.Default : RenderMode.SoftwareOnly;
 
-                AppSettings currentSettings = new AppSettings();
+                var settings = SettingsManager.Current;
 
-                if (File.Exists(_settingsPath))
-                {
-                    var existingJson = File.ReadAllText(_settingsPath);
-                    var loaded = JsonSerializer.Deserialize<AppSettings>(existingJson);
-                    if (loaded != null)
-                        currentSettings = loaded;
-                }
+                settings.StartMinimized = ToggleStartMinimized.IsChecked ?? false;
+                settings.MinimizeOnClose = ToggleMinimizeOnClose.IsChecked ?? true;
+                settings.NotificationsEnabled = ToggleNotifications.IsChecked ?? true;
 
-                currentSettings.StartMinimized = ToggleStartMinimized.IsChecked ?? false;
-                currentSettings.MinimizeOnClose = ToggleMinimizeOnClose.IsChecked ?? true;
-                currentSettings.NotificationsEnabled = ToggleNotifications.IsChecked ?? true;
+                settings.FocusMode = ToggleFocusMode.IsChecked ?? false;
+                settings.CompactMode = ToggleCompactMode.IsChecked ?? false;
+                settings.HardwareAcceleration = useGpu;
+                settings.ColorblindMode = ToggleColorblind.IsChecked ?? false;
 
-                currentSettings.FocusMode = ToggleFocusMode.IsChecked ?? false;
-                currentSettings.CompactMode = ToggleCompactMode.IsChecked ?? false;
-                currentSettings.HardwareAcceleration = useGpu;
-                currentSettings.ColorblindMode = ToggleColorblind.IsChecked ?? false;
-
-                currentSettings.PingUrl = string.IsNullOrWhiteSpace(TxtPingUrl.Text) ? "https://dynamodb.eu-central-1.amazonaws.com" : TxtPingUrl.Text;
-                currentSettings.AutoRestartServices = ToggleAutoRestart.IsChecked ?? false;
+                settings.PingUrl = string.IsNullOrWhiteSpace(TxtPingUrl.Text) ? "https://dynamodb.eu-central-1.amazonaws.com" : TxtPingUrl.Text;
+                settings.AutoRestartServices = ToggleAutoRestart.IsChecked ?? false;
 
                 var interval = 1;
                 if (ComboUpdateInterval.SelectedIndex == 1)
                     interval = 3;
                 else if (ComboUpdateInterval.SelectedIndex == 2)
                     interval = 5;
-                currentSettings.StatsUpdateInterval = interval;
+                settings.StatsUpdateInterval = interval;
 
-                var newJson = JsonSerializer.Serialize(currentSettings, new JsonSerializerOptions { WriteIndented = true });
-                File.WriteAllText(_settingsPath, newJson);
+                SettingsManager.Save();
             }
             catch (Exception ex)
             {
@@ -186,17 +147,19 @@ namespace ZapretGUI.Views
             {
                 try
                 {
-                    if (File.Exists(_settingsPath))
+                    var settingsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.json");
+                    if (File.Exists(settingsPath))
                     {
-                        File.Delete(_settingsPath);
+                        File.Delete(settingsPath);
                     }
 
-                    using (RegistryKey? key = Registry.CurrentUser.OpenSubKey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true))
+                    using (var key = Registry.CurrentUser.OpenSubKey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true))
                     {
-                        if (key != null) 
+                        if (key != null)
                             key.DeleteValue(_appName, false);
                     }
 
+                    SettingsManager.Load();
                     LoadSettings();
 
                     System.Windows.MessageBox.Show("Настройки успешно сброшены. Некоторые изменения вступят в силу после перезапуска программы.", "Готово", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);

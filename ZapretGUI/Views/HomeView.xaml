@@ -5,7 +5,8 @@
              Foreground="White">
 
     <UserControl.Resources>
-        <!-- Кастомный минималистичный скроллбар (как в современных IDE) -->
+        <Color x:Key="MainBtnColor">#107C10</Color>
+        <SolidColorBrush x:Key="MainBtnBrush" Color="{DynamicResource MainBtnColor}"/>
         <Style TargetType="ScrollBar">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Width" Value="6"/>
@@ -31,13 +32,11 @@
         </Style>
     </UserControl.Resources>
 
-    <!-- Триггер, который запускает анимацию появления при загрузке вкладки -->
     <UserControl.Triggers>
         <EventTrigger RoutedEvent="Loaded">
             <BeginStoryboard>
                 <Storyboard>
                     <DoubleAnimation Storyboard.TargetName="MainGrid" Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.4"/>
-                    <!-- Обращаемся к конкретной трансформации по имени -->
                     <DoubleAnimation Storyboard.TargetName="MainGridTranslate" Storyboard.TargetProperty="Y" From="15" To="0" Duration="0:0:0.4">
                         <DoubleAnimation.EasingFunction>
                             <CubicEase EasingMode="EaseOut"/>
@@ -48,15 +47,12 @@
         </EventTrigger>
     </UserControl.Triggers>
 
-    <!-- ОСНОВНОЙ GRID (Теперь эффекты висят на всей рабочей зоне!) -->
     <Grid x:Name="MainGrid" Margin="20" Opacity="0" RenderTransformOrigin="0.5,0.5">
 
-        <!-- Глобальная неоновая тень для расслоения -->
         <Grid.Effect>
             <DropShadowEffect x:Name="MainGridGlitchShadow" Color="#00FFFF" BlurRadius="0" ShadowDepth="0" Opacity="0"/>
         </Grid.Effect>
 
-        <!-- Группа глобальных трансформаций -->
         <Grid.RenderTransform>
             <TransformGroup>
                 <TranslateTransform x:Name="MainGridTranslate" X="0" Y="15"/>
@@ -67,16 +63,14 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
-            <RowDefinition Height="250"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- Заголовок -->
         <StackPanel Grid.Row="0" HorizontalAlignment="Center" Margin="0,10,0,30">
             <TextBlock Text="⚡ Починить Telegram и Discord" FontSize="28" FontWeight="Bold" HorizontalAlignment="Center"/>
             <TextBlock Text="Одна кнопка — запустит всё необходимое." Foreground="#888888" FontSize="14" HorizontalAlignment="Center" Margin="0,5,0,0"/>
         </StackPanel>
 
-        <!-- Основная рабочая зона -->
         <Grid Grid.Row="1">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
@@ -84,20 +78,18 @@
                 <ColumnDefinition Width="280"/>
             </Grid.ColumnDefinitions>
 
-            <!-- 1. Центральная кнопка с тактильным эффектом -->
             <Grid Grid.Column="0" HorizontalAlignment="Center" VerticalAlignment="Center">
                 <ToggleButton x:Name="MainToggle" Width="200" Height="200" Click="MainToggle_Click" Cursor="Hand" Background="Transparent" BorderThickness="0">
                     <ToggleButton.Template>
                         <ControlTemplate TargetType="ToggleButton">
 
-                            <!-- Перенесли RenderTransformOrigin и RenderTransform прямо на Border -->
                             <Border x:Name="BtnBorder" Background="#121212" BorderBrush="#2A2A2A" BorderThickness="3" CornerRadius="100" RenderTransformOrigin="0.5,0.5">
                                 <Border.RenderTransform>
                                     <ScaleTransform ScaleX="1" ScaleY="1"/>
                                 </Border.RenderTransform>
 
                                 <Border.Effect>
-                                    <DropShadowEffect Color="#107C10" BlurRadius="20" ShadowDepth="0" Opacity="0"/>
+                                    <DropShadowEffect Color="{DynamicResource MainBtnColor}" BlurRadius="20" ShadowDepth="0" Opacity="0"/>
                                 </Border.Effect>
                                 <StackPanel VerticalAlignment="Center">
                                     <TextBlock Text="&#xE7E8;" FontFamily="Segoe MDL2 Assets" FontSize="50" Foreground="White" HorizontalAlignment="Center" Margin="0,0,0,10"/>
@@ -106,7 +98,6 @@
                             </Border>
 
                             <ControlTemplate.Triggers>
-                                <!-- Анимация вдавливания (теперь обращаемся к BtnBorder) -->
                                 <EventTrigger RoutedEvent="PreviewMouseDown">
                                     <BeginStoryboard>
                                         <Storyboard>
@@ -132,9 +123,8 @@
                                     </BeginStoryboard>
                                 </EventTrigger>
 
-                                <!-- Смена состояния и пульсация -->
                                 <Trigger Property="IsChecked" Value="True">
-                                    <Setter TargetName="BtnBorder" Property="BorderBrush" Value="#107C10"/>
+                                    <Setter TargetName="BtnBorder" Property="BorderBrush" Value="{DynamicResource MainBtnBrush}"/>
                                     <Setter TargetName="BtnText" Property="Text" Value="Остановить"/>
                                     <Trigger.EnterActions>
                                         <BeginStoryboard Name="PulseStoryboard">
@@ -158,8 +148,8 @@
                     </ToggleButton.Template>
                 </ToggleButton>
             </Grid>
-            <!-- 2. Блок статистики -->
-            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="20,0,30,0">
+
+            <StackPanel x:Name="NetworkStatsPanel" Grid.Column="1" VerticalAlignment="Center" Margin="20,0,30,0">
                 <Grid Margin="0,0,0,15">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
@@ -215,7 +205,6 @@
                 </Grid>
             </StackPanel>
 
-            <!-- 3. Блок карточек -->
             <StackPanel Grid.Column="2" VerticalAlignment="Center">
                 <Border Background="#181818" CornerRadius="12" BorderBrush="#2A2A2A" BorderThickness="1" Margin="0,0,0,15">
                     <StackPanel Margin="20">
@@ -226,7 +215,7 @@
                         <TextBlock x:Name="StatusText" Text="Остановлен" Foreground="#D13438" Margin="0,0,0,15"/>
 
                         <TextBlock Text="Конфигурация:" Foreground="#888888" FontSize="12" Margin="0,0,0,5"/>
-                        <!-- Добавили SelectionChanged для автосохранения -->
+                        
                         <ComboBox x:Name="ProfileComboBox" Height="35" SelectionChanged="Settings_Changed"/>
                     </StackPanel>
                 </Border>
@@ -243,24 +232,19 @@
             </StackPanel>
         </Grid>
 
-        <!-- Полоса загрузки -->
         <ProgressBar x:Name="LaunchProgressBar" Grid.Row="2" Height="4" VerticalAlignment="Top" Margin="0,5,0,0" Foreground="#107C10" Background="#181818" BorderThickness="0" Value="0" Visibility="Collapsed"/>
 
-        <!-- Логи -->
-        <Border Grid.Row="2" Background="#0A0A0A" CornerRadius="8" BorderBrush="#2A2A2A" BorderThickness="1" Margin="0,20,0,0">
+        <Border x:Name="LogsPanel" Height="250" Grid.Row="2" Background="#0A0A0A" CornerRadius="8" BorderBrush="#2A2A2A" BorderThickness="1" Margin="0,20,0,0">
             <Grid>
-                <!-- Добавляем жесткое разделение на две строки -->
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
 
-                <!-- Заголовок логов и кнопки управления (Grid.Row="0") -->
                 <Grid Grid.Row="0" Margin="15,15,15,5">
                     <TextBlock Text="Лог событий" Foreground="#888888" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
 
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                        <!-- Кнопка Очистить -->
                         <Button Background="Transparent" BorderThickness="0" Cursor="Hand" Click="BtnClearLogs_Click" Margin="0,0,10,0" Padding="5">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="&#xE74D;" FontFamily="Segoe MDL2 Assets" Foreground="#888888" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
@@ -268,7 +252,6 @@
                             </StackPanel>
                         </Button>
 
-                        <!-- Кнопка Экспорт -->
                         <Button Background="Transparent" BorderThickness="0" Cursor="Hand" Click="BtnExportLogs_Click" Padding="5">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="&#xE78C;" FontFamily="Segoe MDL2 Assets" Foreground="#888888" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
@@ -278,7 +261,6 @@
                     </StackPanel>
                 </Grid>
 
-                <!-- Сам текст логов (Grid.Row="1") с обновленным верхним отступом -->
                 <RichTextBox x:Name="LogRichTextBox" Grid.Row="1" Margin="15,0,15,10" Background="Transparent" BorderThickness="0" IsReadOnly="True" VerticalScrollBarVisibility="Auto">
                     <FlowDocument x:Name="LogDocument" PagePadding="0" FontFamily="Consolas" FontSize="13"/>
                 </RichTextBox>

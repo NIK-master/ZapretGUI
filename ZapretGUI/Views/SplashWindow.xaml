@@ -1,0 +1,29 @@
+﻿<Window x:Class="ZapretGUI.Views.SplashWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        WindowStartupLocation="CenterScreen"
+        Width="720" Height="450">
+
+    <Border Background="#0C0C0C" CornerRadius="12" BorderBrush="#2A2A2A" BorderThickness="1">
+        <Grid Margin="25">
+            <Grid.Effect>
+                <DropShadowEffect BlurRadius="6" Color="#39FF14" ShadowDepth="0" Opacity="0.35"/>
+            </Grid.Effect>
+
+            <ScrollViewer x:Name="ConsoleScroll" 
+                          VerticalScrollBarVisibility="Hidden" 
+                          HorizontalScrollBarVisibility="Disabled">
+
+                <TextBlock x:Name="TerminalText" 
+                           FontFamily="Consolas" 
+                           FontSize="13" 
+                           Foreground="#39FF14" 
+                           TextWrapping="Wrap" 
+                           LineHeight="18"/>
+            </ScrollViewer>
+        </Grid>
+    </Border>
+</Window>

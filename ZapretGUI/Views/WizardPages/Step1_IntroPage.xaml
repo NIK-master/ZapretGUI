@@ -1,0 +1,60 @@
+﻿<UserControl x:Class="ZapretGUI.Views.WizardPages.Step1_IntroPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Foreground="White">
+
+    <UserControl.Resources>
+        <Storyboard x:Key="TextCascadeAnimation">
+            <DoubleAnimation Storyboard.TargetName="TxtTitle" Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.6" />
+            <DoubleAnimation Storyboard.TargetName="TxtTitle" Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)" From="20" To="0" Duration="0:0:0.6">
+                <DoubleAnimation.EasingFunction>
+                    <CubicEase EasingMode="EaseOut"/>
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+
+            <DoubleAnimation Storyboard.TargetName="TxtSubtitle" Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.6" BeginTime="0:0:0.2" />
+            <DoubleAnimation Storyboard.TargetName="TxtSubtitle" Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)" From="20" To="0" Duration="0:0:0.6" BeginTime="0:0:0.2">
+                <DoubleAnimation.EasingFunction>
+                    <CubicEase EasingMode="EaseOut"/>
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+
+            <DoubleAnimation Storyboard.TargetName="TxtDesc" Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.6" BeginTime="0:0:0.4" />
+            <DoubleAnimation Storyboard.TargetName="TxtDesc" Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)" From="20" To="0" Duration="0:0:0.6" BeginTime="0:0:0.4">
+                <DoubleAnimation.EasingFunction>
+                    <CubicEase EasingMode="EaseOut"/>
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+        </Storyboard>
+    </UserControl.Resources>
+
+    <UserControl.Triggers>
+        <EventTrigger RoutedEvent="UserControl.Loaded">
+            <BeginStoryboard Storyboard="{StaticResource TextCascadeAnimation}"/>
+        </EventTrigger>
+    </UserControl.Triggers>
+
+    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="500">
+
+        <TextBlock x:Name="TxtTitle" Text="👋 Привет!" FontSize="32" FontWeight="Bold" Foreground="White" HorizontalAlignment="Center" Margin="0,0,0,15" Opacity="0">
+            <TextBlock.RenderTransform>
+                <TranslateTransform Y="20"/>
+            </TextBlock.RenderTransform>
+        </TextBlock>
+
+        <TextBlock x:Name="TxtSubtitle" Text="Для людей, у которых проблемы с интернетом..." 
+                   Foreground="#107C10" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" HorizontalAlignment="Center" TextAlignment="Center" Margin="0,0,0,15" Opacity="0">
+            <TextBlock.RenderTransform>
+                <TranslateTransform Y="20"/>
+            </TextBlock.RenderTransform>
+        </TextBlock>
+
+        <TextBlock x:Name="TxtDesc" Text="Этот мастер поможет установить необходимые компоненты обхода блокировок и настроить систему всего за пару кликов. Мы всё сделаем за вас." 
+                   Foreground="#AAAAAA" FontSize="14" TextWrapping="Wrap" HorizontalAlignment="Center" TextAlignment="Center" LineHeight="20" Opacity="0">
+            <TextBlock.RenderTransform>
+                <TranslateTransform Y="20"/>
+            </TextBlock.RenderTransform>
+        </TextBlock>
+
+    </StackPanel>
+</UserControl>

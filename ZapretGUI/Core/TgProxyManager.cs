@@ -16,12 +16,11 @@ namespace ZapretGUI.Core
 
         public void Start()
         {
-            if (IsRunning()) return;
+            if (IsRunning()) 
+                return;
 
             if (!File.Exists(_proxyPath))
-            {
                 throw new FileNotFoundException($"Файл прокси не найден по пути: {_proxyPath}");
-            }
 
             var startInfo = new ProcessStartInfo
             {
@@ -35,23 +34,10 @@ namespace ZapretGUI.Core
 
         public void Stop()
         {
-            var processes = Process.GetProcessesByName(_processName);
-            foreach (var process in processes)
-            {
-                try
-                {
-                    process.Kill();
-                    process.WaitForExit();
-                }
-                catch
-                {
-                }
-            }
+            ProcessHelper.KillProcessesByName("TgWsProxy_windows");
         }
 
-        public bool IsRunning()
-        {
-            return Process.GetProcessesByName(_processName).Length > 0;
-        }
+        public bool IsRunning() 
+            => Process.GetProcessesByName(_processName).Length > 0;
     }
 }

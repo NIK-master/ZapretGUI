@@ -1,0 +1,37 @@
+﻿<UserControl x:Class="ZapretGUI.Views.WizardPages.Step4_ServicesConfig"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+             Foreground="White">
+    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="500">
+        <TextBlock Text="Какие службы использовать?" FontSize="24" FontWeight="Bold" Foreground="White" HorizontalAlignment="Center" Margin="0,0,0,25"/>
+
+        <Border Background="#181818" CornerRadius="8" BorderBrush="#2A2A2A" BorderThickness="1" Margin="0,0,0,15" Padding="15">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Margin="0,0,20,0">
+                    <TextBlock Text="Zapret (Обход блокировок)" FontSize="16" FontWeight="SemiBold" Foreground="White"/>
+                    <TextBlock Text="Основной модуль для починки YouTube, Discord и других сервисов. Рекомендуется оставить включенным." Foreground="#888888" FontSize="13" TextWrapping="Wrap" Margin="0,5,0,0"/>
+                </StackPanel>
+                <ui:ToggleSwitch x:Name="ToggleZapret" IsChecked="True" Grid.Column="1" VerticalAlignment="Center"/>
+            </Grid>
+        </Border>
+
+        <Border Background="#181818" CornerRadius="8" BorderBrush="#2A2A2A" BorderThickness="1" Padding="15">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Margin="0,0,20,0">
+                    <TextBlock Text="TgWsProxy (Прокси для Telegram)" FontSize="16" FontWeight="SemiBold" Foreground="White"/>
+                    <TextBlock Text="Отдельный модуль для стабилизации работы десктопного клиента Telegram." Foreground="#888888" FontSize="13" TextWrapping="Wrap" Margin="0,5,0,0"/>
+                </StackPanel>
+                <ui:ToggleSwitch x:Name="ToggleTgProxy" IsChecked="True" Grid.Column="1" VerticalAlignment="Center"/>
+            </Grid>
+        </Border>
+    </StackPanel>
+</UserControl>
