@@ -20,21 +20,40 @@ namespace ZapretGUI.Views.WizardPages
             await Task.Delay(delay);
         }
 
-        public async Task RunSetupAsync(bool isAuto, bool useZapret, bool useTgProxy)
+        public async Task RunSetupAsync(bool useZapret, bool useTgProxy, bool autoStart, bool focusMode, bool colorblind)
         {
             ConsoleLog.Text = "";
 
             await AppendLog("Инициализация модуля установки...", 200);
-            await AppendLog("Чтение системных параметров...", 150);
 
             SettingsManager.Current.ZapretEnabled = useZapret;
             SettingsManager.Current.TgProxyEnabled = useTgProxy;
+            SettingsManager.Current.FocusMode = focusMode;
+            SettingsManager.Current.ColorblindMode = colorblind;
 
-            await AppendLog($"[Config] Запись флага ZapretEnabled = {useZapret}", 100);
-            await AppendLog($"[Config] Запись флага TgProxyEnabled = {useTgProxy}", 100);
-
+            await AppendLog("[Config] Сохранение пользовательских настроек UI...", 100);
             SettingsManager.Save();
-            await AppendLog("Конфигурация успешно сохранена в config.json.", 300);
+
+            if (autoStart)
+            {
+                await AppendLog("[System] Регистрация приложения в автозагрузке Windows...", 150);
+                try
+                {
+                    using (var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true))
+                    {
+                        if (key != null)
+                        {
+                            var exePath = System.Reflection.Assembly.GetExecutingAssembly().Location;
+                            exePath = System.IO.Path.ChangeExtension(exePath, ".exe");
+                            key.SetValue("ZapretForADHD", $"\"{exePath}\"");
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    await AppendLog($"[Error] Не удалось добавить в автозагрузку: {ex.Message}", 0);
+                }
+            }
 
             await AppendLog("Проверка директорий...", 150);
             var zapretDir = System.IO.Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, "ZapretFiles");
@@ -44,11 +63,7 @@ namespace ZapretGUI.Views.WizardPages
                 await AppendLog($"[FS] Создание директории: {zapretDir}", 150);
                 System.IO.Directory.CreateDirectory(zapretDir);
             }
-            else
-                await AppendLog("[FS] Директория ZapretFiles найдена.", 100);
 
-            await AppendLog("Генерация профилей маршрутизации...", 200);
-            await AppendLog("Установка параметров автозагрузки...", 150);
             await AppendLog("Сборка завершена.", 400);
 
             ProgBar.IsIndeterminate = false;

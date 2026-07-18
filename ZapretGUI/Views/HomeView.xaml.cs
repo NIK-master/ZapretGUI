@@ -23,6 +23,8 @@ namespace ZapretGUI.Views
         private long _lastBytesReceived = 0;
         private long _lastBytesSent = 0;
 
+        private bool _wasNetworkAvailable = true;
+
         public HomeView()
         {
             InitializeComponent();
@@ -64,6 +66,27 @@ namespace ZapretGUI.Views
 
         private void NetworkTimer_Tick(object? sender, EventArgs e)
         {
+            var isAvailable = NetworkInterface.GetIsNetworkAvailable();
+
+            if (!isAvailable && _wasNetworkAvailable)
+            {
+                _wasNetworkAvailable = false;
+                Log("⚠ Обнаружен обрыв сетевого подключения!");
+                SyncNetworkIndicator(false);
+            }
+            else if (isAvailable && !_wasNetworkAvailable)
+            {
+                _wasNetworkAvailable = true;
+                Log("🌐 Сетевое подключение восстановлено.");
+                SyncNetworkIndicator(true);
+
+                if (SettingsManager.Current.AutoRestartServices && MainToggle.IsChecked == true)
+                {
+                    Log("🔄 Автоматический перезапуск служб...");
+                    RestartServices();
+                }
+            }
+
             var currentReceived = 0L;
             var currentSent = 0L;
 
@@ -484,6 +507,29 @@ namespace ZapretGUI.Views
         {
             var hex = SettingsManager.Current.ColorblindMode ? "#FF8C00" : "#D13438";
             return new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(hex));
+        }
+
+        private async void RestartServices()
+        {
+            try
+            {
+                _zapretManager.Stop();
+                _tgProxyManager.Stop();
+
+                await Task.Delay(1000);
+
+                if (SettingsManager.Current.ZapretEnabled)
+                    _zapretManager.Start(ProfileComboBox.Text);
+
+                if (SettingsManager.Current.TgProxyEnabled)
+                    _tgProxyManager.Start();
+
+                Log("✅ Службы успешно перезапущены.");
+            }
+            catch (Exception ex)
+            {
+                Log($"ОШИБКА ПРИ ПЕРЕЗАПУСКЕ: {ex.Message}");
+            }
         }
     }
 }

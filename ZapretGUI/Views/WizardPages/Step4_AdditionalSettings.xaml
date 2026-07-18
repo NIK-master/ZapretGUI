@@ -1,0 +1,52 @@
+﻿<UserControl x:Class="ZapretGUI.Views.WizardPages.Step4_AdditionalSettings"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+             Foreground="White">
+
+    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="500">
+        <TextBlock Text="Дополнительные настройки" FontSize="24" FontWeight="Bold" Foreground="White" HorizontalAlignment="Center" Margin="0,0,0,20"/>
+
+        <Border Background="#181818" CornerRadius="8" BorderBrush="#2A2A2A" BorderThickness="1" Margin="0,0,0,10" Padding="15,12">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Margin="0,0,20,0">
+                    <TextBlock Text="Автозагрузка Windows" FontSize="16" FontWeight="SemiBold" Foreground="White"/>
+                    <TextBlock Text="Запускать программу при включении компьютера, чтобы сразу чинить интернет." Foreground="#888888" FontSize="13" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                </StackPanel>
+                <ui:ToggleSwitch x:Name="ToggleAutoStart" IsChecked="True" Grid.Column="1" VerticalAlignment="Center"/>
+            </Grid>
+        </Border>
+
+        <Border Background="#181818" CornerRadius="8" BorderBrush="#2A2A2A" BorderThickness="1" Margin="0,0,0,10" Padding="15,12">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Margin="0,0,20,0">
+                    <TextBlock Text="Режим фокусировки" FontSize="16" FontWeight="SemiBold" Foreground="White"/>
+                    <TextBlock Text="Отключить тряску интерфейса и глитчи при ошибках." Foreground="#888888" FontSize="13" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                </StackPanel>
+                <ui:ToggleSwitch x:Name="ToggleFocusMode" IsChecked="False" Grid.Column="1" VerticalAlignment="Center"/>
+            </Grid>
+        </Border>
+
+        <Border Background="#181818" CornerRadius="8" BorderBrush="#2A2A2A" BorderThickness="1" Padding="15,12">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Margin="0,0,20,0">
+                    <TextBlock Text="Режим цветовой слепоты" FontSize="16" FontWeight="SemiBold" Foreground="White"/>
+                    <TextBlock Text="Заменить красно-зеленые индикаторы на сине-оранжевые." Foreground="#888888" FontSize="13" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                </StackPanel>
+                <ui:ToggleSwitch x:Name="ToggleColorblind" IsChecked="False" Grid.Column="1" VerticalAlignment="Center"/>
+            </Grid>
+        </Border>
+    </StackPanel>
+</UserControl>
