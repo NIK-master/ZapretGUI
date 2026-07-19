@@ -64,6 +64,31 @@ namespace ZapretGUI.Views.WizardPages
                 System.IO.Directory.CreateDirectory(zapretDir);
             }
 
+            // НОВОЕ: Запускаем скачивание компонентов, если пользователь их выбрал
+            if (useZapret || useTgProxy)
+            {
+                await AppendLog("=====================================", 0);
+                await AppendLog("Запуск загрузки выбранных ядер...", 100);
+
+                var progress = new Progress<string>(status =>
+                {
+                    // Асинхронно обновляем лог мастера
+                    _ = AppendLog($"[Download] {status}", 0);
+                });
+
+                try
+                {
+                    await UpdateManager.InstallModulesSilentAsync(useZapret, useTgProxy, progress);
+                    await AppendLog("✅ Модули успешно загружены и распакованы.", 200);
+                }
+                catch (Exception ex)
+                {
+                    await AppendLog($"[ERROR] Ошибка при загрузке: {ex.Message}", 0);
+                }
+
+                await AppendLog("=====================================", 0);
+            }
+
             await AppendLog("Сборка завершена.", 400);
 
             ProgBar.IsIndeterminate = false;

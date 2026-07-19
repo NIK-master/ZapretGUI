@@ -176,7 +176,6 @@ using System.IO;
 using System.Windows;
 using System.Windows.Media;
 using ZapretGUI.Core;
-using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace ZapretGUI
 {
@@ -201,13 +200,28 @@ namespace ZapretGUI
 
             _zapretManager = new ZapretManager();
             SetupTrayIcon();
+
             var configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.json");
             if (!File.Exists(configPath))
             {
                 var wizard = new Views.WizardWindow();
-
-                wizard.ShowDialog(); 
+                wizard.ShowDialog();
             }
+
+            // Запуск фоновых асинхронных проверок обновлений
+            _ = Core.UpdateManager.CheckForUpdatesAsync();
+
+            // Коллбек, который корректно остановит обход через UI-триггер в случае обновления ядер
+            Action stopServicesAction = () =>
+            {
+                if (_homeView.IsRunning)
+                {
+                    _homeView.ToggleFromTray();
+                }
+            };
+
+            _ = Core.UpdateManager.CheckForZapretCoreUpdatesAsync(stopServicesAction);
+            _ = Core.UpdateManager.CheckForTgProxyCoreUpdatesAsync(stopServicesAction);
         }
 
         private void BtnHome_Click(object sender, RoutedEventArgs e)
@@ -313,7 +327,6 @@ namespace ZapretGUI
 
                 trayMenu.Activate();
             };
-
         }
 
         public void ShowNotification(string title, string message, System.Windows.Forms.ToolTipIcon icon = System.Windows.Forms.ToolTipIcon.Info)
@@ -342,6 +355,7 @@ namespace ZapretGUI
         {
             _homeView.ToggleFromTray();
         }
+
         private SolidColorBrush GetSuccessColor()
         {
             var hex = SettingsManager.Current.ColorblindMode ? "#0078D7" : "#107C10";
@@ -471,6 +485,9 @@ namespace ZapretGUI.Core
         public string PingUrl { get; set; } = "https://dynamodb.eu-central-1.amazonaws.com";
         public bool AutoRestartServices { get; set; } = false;
         public int StatsUpdateInterval { get; set; } = 1;
+
+        public string ZapretCoreVersion { get; set; } = "0.0.0";
+        public string TgProxyCoreVersion { get; set; } = "0.0.0";
     }
 
     public static class SettingsManager
@@ -524,6 +541,9 @@ namespace ZapretGUI.Core
     {
         private readonly string _proxyPath;
         private readonly string _processName = "TgWsProxy_windows";
+        private Process? _process;
+
+        public event Action<string>? LogMessage;
 
         public TgProxyManager()
         {
@@ -532,29 +552,312 @@ namespace ZapretGUI.Core
 
         public void Start()
         {
-            if (IsRunning()) 
+            if (IsRunning())
                 return;
 
             if (!File.Exists(_proxyPath))
-                throw new FileNotFoundException($"Файл прокси не найден по пути: {_proxyPath}");
+                throw new FileNotFoundException($"Файл прокси не найден: {_proxyPath}");
 
             var startInfo = new ProcessStartInfo
             {
                 FileName = _proxyPath,
                 UseShellExecute = false,
-                CreateNoWindow = true
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
             };
 
-            Process.Start(startInfo);
+            _process = new Process { StartInfo = startInfo };
+
+            _process.OutputDataReceived += (s, e) => { if (!string.IsNullOrEmpty(e.Data)) LogMessage?.Invoke($"[TgWsProxy] {e.Data}"); };
+            _process.ErrorDataReceived += (s, e) => { if (!string.IsNullOrEmpty(e.Data)) LogMessage?.Invoke($"[TgWsProxy ERR] {e.Data}"); };
+
+            _process.Start();
+            _process.BeginOutputReadLine();
+            _process.BeginErrorReadLine();
         }
 
         public void Stop()
         {
-            ProcessHelper.KillProcessesByName("TgWsProxy_windows");
+            try
+            {
+                if (_process != null && !_process.HasExited)
+                {
+                    _process.Kill();
+                    _process.Dispose();
+                    _process = null;
+                }
+            }
+            catch { }
+            ProcessHelper.KillProcessesByName(_processName);
         }
 
-        public bool IsRunning() 
+        public bool IsRunning()
             => Process.GetProcessesByName(_processName).Length > 0;
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// ФАЙЛ: Core\UpdateManager.cs
+////////////////////////////////////////////////////////////////////////////////
+
+using System;
+using System.IO;
+using System.IO.Compression;
+using System.Net.Http;
+using System.Text.Json;
+using System.Threading.Tasks;
+
+namespace ZapretGUI.Core
+{
+    public static class UpdateManager
+    {
+        public const string CurrentVersion = "v2.0";
+
+        // Замени на свой ник, когда выложишь интерфейс в общий доступ
+        private const string RepoOwner = "YourGithubUsername";
+        private const string RepoName = "ZapretForADHD";
+
+        // ИСПРАВЛЕНИЕ: Добавлен модификатор static
+        private static string CleanVersion(string version)
+        {
+            if (string.IsNullOrEmpty(version)) return "0.0.0";
+            return version.Trim().TrimStart('v', 'V');
+        }
+
+        // 1. Проверка обновления самого графического интерфейса
+        public static async Task CheckForUpdatesAsync()
+        {
+            try
+            {
+                using var client = new HttpClient();
+                client.DefaultRequestHeaders.Add("User-Agent", "ZapretForADHD-App");
+
+                var url = $"https://api.github.com/repos/{RepoOwner}/{RepoName}/releases/latest";
+                var response = await client.GetStringAsync(url);
+
+                using var doc = JsonDocument.Parse(response);
+                var latestVersion = doc.RootElement.GetProperty("tag_name").GetString();
+                var releaseUrl = doc.RootElement.GetProperty("html_url").GetString();
+
+                if (latestVersion != null && CleanVersion(latestVersion) != CleanVersion(CurrentVersion))
+                {
+                    System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        var result = System.Windows.MessageBox.Show(
+                            $"Доступна новая версия панели управления {latestVersion}!\n\nХотите скачать обновление?",
+                            "Доступно обновление",
+                            System.Windows.MessageBoxButton.YesNo,
+                            System.Windows.MessageBoxImage.Information);
+
+                        if (result == System.Windows.MessageBoxResult.Yes && !string.IsNullOrEmpty(releaseUrl))
+                        {
+                            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(releaseUrl) { UseShellExecute = true });
+                        }
+                    });
+                }
+            }
+            catch { }
+        }
+
+        // 2. Проверка обновления ядра Zapret (winws.exe) от flowseal
+        public static async Task CheckForZapretCoreUpdatesAsync(Action stopServicesCallback)
+        {
+            try
+            {
+                using var client = new HttpClient();
+                client.DefaultRequestHeaders.Add("User-Agent", "ZapretForADHD-App");
+
+                var url = "https://api.github.com/repos/flowseal/zapret-discord-youtube/releases/latest";
+                var response = await client.GetStringAsync(url);
+                using var doc = JsonDocument.Parse(response);
+
+                var latestVersion = doc.RootElement.GetProperty("tag_name").GetString();
+                var currentVersion = SettingsManager.Current.ZapretCoreVersion;
+
+                if (latestVersion != null && CleanVersion(latestVersion) != CleanVersion(currentVersion))
+                {
+                    // ИСПРАВЛЕНИЕ: Разделяем логику UI и фоновой загрузки для устранения CS4014
+                    bool shouldUpdate = false;
+
+                    System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        var result = System.Windows.MessageBox.Show(
+                            $"Найдено обновление обхода Zapret от flowseal ({latestVersion})!\n\nТекущая версия: {currentVersion}\nОбновить автоматически?",
+                            "Обновление ядра Zapret",
+                            System.Windows.MessageBoxButton.YesNo,
+                            System.Windows.MessageBoxImage.Information);
+
+                        shouldUpdate = (result == System.Windows.MessageBoxResult.Yes);
+                    });
+
+                    // Загрузка происходит вне Invoke (в фоновом потоке), UI не будет зависать
+                    if (shouldUpdate)
+                    {
+                        await DownloadAndInstallCoreAsync(doc.RootElement, latestVersion, "zapret-winws", stopServicesCallback, true);
+                    }
+                }
+            }
+            catch { }
+        }
+
+        // 3. Проверка обновления ядра TgWsProxy от flowseal
+        public static async Task CheckForTgProxyCoreUpdatesAsync(Action stopServicesCallback)
+        {
+            try
+            {
+                using var client = new HttpClient();
+                client.DefaultRequestHeaders.Add("User-Agent", "ZapretForADHD-App");
+
+                var url = "https://api.github.com/repos/flowseal/tg-ws-proxy/releases/latest";
+                var response = await client.GetStringAsync(url);
+                using var doc = JsonDocument.Parse(response);
+
+                var latestVersion = doc.RootElement.GetProperty("tag_name").GetString();
+                var currentVersion = SettingsManager.Current.TgProxyCoreVersion;
+
+                if (latestVersion != null && CleanVersion(latestVersion) != CleanVersion(currentVersion))
+                {
+                    // ИСПРАВЛЕНИЕ: Разделяем логику UI и фоновой загрузки для устранения CS4014
+                    bool shouldUpdate = false;
+
+                    System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        var result = System.Windows.MessageBox.Show(
+                            $"Найдено обновление прокси Telegram от flowseal ({latestVersion})!\n\nТекущая версия: {currentVersion}\nОбновить автоматически?",
+                            "Обновление ядра TgWsProxy",
+                            System.Windows.MessageBoxButton.YesNo,
+                            System.Windows.MessageBoxImage.Information);
+
+                        shouldUpdate = (result == System.Windows.MessageBoxResult.Yes);
+                    });
+
+                    if (shouldUpdate)
+                    {
+                        await DownloadAndInstallCoreAsync(doc.RootElement, latestVersion, "tg-ws-proxy", stopServicesCallback, false);
+                    }
+                }
+            }
+            catch { }
+        }
+
+        // Универсальный метод скачивания и распаковки zip-архивов для обоих репозиториев
+        private static async Task DownloadAndInstallCoreAsync(JsonElement root, string latestVersion, string archivePrefix, Action stopServicesCallback, bool isZapret)
+        {
+            try
+            {
+                string? downloadUrl = null;
+                foreach (var asset in root.GetProperty("assets").EnumerateArray())
+                {
+                    var name = asset.GetProperty("name").GetString();
+                    if (name != null && name.EndsWith(".zip"))
+                    {
+                        downloadUrl = asset.GetProperty("browser_download_url").GetString();
+                        break;
+                    }
+                }
+
+                if (downloadUrl == null) return;
+
+                // Останавливаем службы перед перезаписью бинарников
+                stopServicesCallback?.Invoke();
+
+                var tempZip = Path.Combine(Path.GetTempPath(), $"{archivePrefix}_update.zip");
+                var extractPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ZapretFiles");
+
+                using var client = new HttpClient();
+                var zipBytes = await client.GetByteArrayAsync(downloadUrl);
+                await File.WriteAllBytesAsync(tempZip, zipBytes);
+
+                using (var archive = ZipFile.OpenRead(tempZip))
+                {
+                    foreach (var entry in archive.Entries)
+                    {
+                        var entryName = entry.FullName;
+
+                        // Избавляемся от корневых папок внутри zip-архивов flowseal, чтобы файлы ложились сразу в ZapretFiles
+                        if (entryName.StartsWith("zapret-winws/"))
+                            entryName = entryName.Substring("zapret-winws/".Length);
+                        else if (entryName.StartsWith("tg-ws-proxy/"))
+                            entryName = entryName.Substring("tg-ws-proxy/".Length);
+
+                        if (string.IsNullOrEmpty(entryName)) continue;
+
+                        var destinationPath = Path.GetFullPath(Path.Combine(extractPath, entryName));
+                        Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+
+                        if (!string.IsNullOrEmpty(entry.Name))
+                            entry.ExtractToFile(destinationPath, overwrite: true);
+                    }
+                }
+
+                File.Delete(tempZip);
+
+                // Сохраняем обновленную версию в соответствующее поле конфигурации
+                if (isZapret)
+                    SettingsManager.Current.ZapretCoreVersion = latestVersion;
+                else
+                    SettingsManager.Current.TgProxyCoreVersion = latestVersion;
+
+                SettingsManager.Save();
+
+                System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                {
+                    System.Windows.MessageBox.Show($"Модуль {archivePrefix} успешно обновлен до версии {latestVersion}!", "Успех", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
+                });
+            }
+            catch (Exception ex)
+            {
+                System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                {
+                    System.Windows.MessageBox.Show($"Ошибка при установке обновления {archivePrefix}: {ex.Message}", "Ошибка", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+                });
+            }
+        }
+        private static async Task DownloadFileWithProgressAsync(string downloadUrl, string destinationFilePath, IProgress<string> progress)
+        {
+            using var client = new HttpClient();
+
+            // Запрашиваем только заголовки, чтобы узнать размер файла
+            using var response = await client.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead);
+            response.EnsureSuccessStatusCode();
+
+            var totalBytes = response.Content.Headers.ContentLength ?? -1L;
+            var canReportProgress = totalBytes != -1;
+
+            using var contentStream = await response.Content.ReadAsStreamAsync();
+            using var fileStream = new FileStream(destinationFilePath, FileMode.Create, FileAccess.Write, FileShare.None, 8192, true);
+
+            var buffer = new byte[8192];
+            var isMoreToRead = true;
+            var totalRead = 0L;
+
+            do
+            {
+                var read = await contentStream.ReadAsync(buffer, 0, buffer.Length);
+                if (read == 0)
+                {
+                    isMoreToRead = false;
+                }
+                else
+                {
+                    await fileStream.WriteAsync(buffer, 0, read);
+                    totalRead += read;
+
+                    if (canReportProgress)
+                    {
+                        var percentage = Math.Round((double)totalRead / totalBytes * 100, 1);
+                        progress?.Report($"Скачивание: {percentage}%");
+                    }
+                    else
+                    {
+                        // Если сервер не отдал размер файла
+                        progress?.Report($"Скачано: {totalRead / 1024 / 1024} МБ");
+                    }
+                }
+            }
+            while (isMoreToRead);
+        }
     }
 }
 
@@ -565,12 +868,16 @@ namespace ZapretGUI.Core
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Text.RegularExpressions;
 
 namespace ZapretGUI.Core
 {
     public class ZapretManager
     {
         private readonly string _basePath;
+        private Process? _process;
+
+        public event Action<string>? LogMessage;
 
         public ZapretManager()
         {
@@ -582,35 +889,60 @@ namespace ZapretGUI.Core
             Stop();
 
             var batFilePath = Path.Combine(_basePath, profileName);
-
             if (!File.Exists(batFilePath))
                 throw new FileNotFoundException($"Профиль {profileName} не найден по пути: {batFilePath}");
 
             var batContent = File.ReadAllText(batFilePath);
-            batContent = batContent.Replace("start \"zapret: %~n0\" /min ", "");
 
-            var tempBatPath = Path.Combine(_basePath, "invisible_run.bat");
-            File.WriteAllText(tempBatPath, batContent);
+            var match = Regex.Match(batContent, @"winws(?:\.exe)?[""']?\s+(.+)");
+            if (!match.Success)
+                throw new Exception("Не удалось найти параметры запуска winws в .bat файле.");
+
+            var arguments = match.Groups[1].Value.Trim();
+
+            arguments = arguments.Replace("^\r\n", " ").Replace("^\n", " ").Replace("^", "");
+
+            var exePath = Path.Combine(_basePath, "winws.exe");
 
             var startInfo = new ProcessStartInfo
             {
-                FileName = "cmd.exe",
-                Arguments = $"/c \"{tempBatPath}\"",
-                UseShellExecute = false,
+                FileName = exePath,
+                Arguments = arguments,
+                UseShellExecute = false, 
                 CreateNoWindow = true,
-                WindowStyle = ProcessWindowStyle.Hidden,
+                RedirectStandardOutput = true, 
+                RedirectStandardError = true,  
                 WorkingDirectory = _basePath
             };
 
-            Process.Start(startInfo);
+            _process = new Process { StartInfo = startInfo };
+
+            _process.OutputDataReceived += (s, e) => { if (!string.IsNullOrEmpty(e.Data)) LogMessage?.Invoke($"[Zapret] {e.Data}"); };
+            _process.ErrorDataReceived += (s, e) => { if (!string.IsNullOrEmpty(e.Data)) LogMessage?.Invoke($"[Zapret ERR] {e.Data}"); };
+
+            _process.Start();
+
+            _process.BeginOutputReadLine();
+            _process.BeginErrorReadLine();
         }
 
         public void Stop()
         {
+            try
+            {
+                if (_process != null && !_process.HasExited)
+                {
+                    _process.Kill();
+                    _process.Dispose();
+                    _process = null;
+                }
+            }
+            catch { }
+
             ProcessHelper.KillProcessesByName("winws");
         }
 
-        public bool IsRunning() 
+        public bool IsRunning()
             => Process.GetProcessesByName("winws").Length > 0;
     }
 }
@@ -699,7 +1031,8 @@ namespace ZapretGUI.Core
                 <ColumnDefinition Width="280"/>
             </Grid.ColumnDefinitions>
 
-            <Grid Grid.Column="0" HorizontalAlignment="Center" VerticalAlignment="Center">
+            <!-- Обновлено: StackPanel для кнопки и мини-лога -->
+            <StackPanel Grid.Column="0" HorizontalAlignment="Center" VerticalAlignment="Center">
                 <ToggleButton x:Name="MainToggle" Width="200" Height="200" Click="MainToggle_Click" Cursor="Hand" Background="Transparent" BorderThickness="0">
                     <ToggleButton.Template>
                         <ControlTemplate TargetType="ToggleButton">
@@ -768,7 +1101,12 @@ namespace ZapretGUI.Core
                         </ControlTemplate>
                     </ToggleButton.Template>
                 </ToggleButton>
-            </Grid>
+
+                <TextBlock x:Name="MiniLogText" Text="Ждем ваших указаний..." 
+                           Foreground="#888888" FontSize="13" FontWeight="SemiBold" 
+                           HorizontalAlignment="Center" Margin="0,20,0,0" 
+                           MaxWidth="260" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/>
+            </StackPanel>
 
             <StackPanel x:Name="NetworkStatsPanel" Grid.Column="1" VerticalAlignment="Center" Margin="20,0,30,0">
                 <Grid Margin="0,0,0,15">
@@ -836,7 +1174,7 @@ namespace ZapretGUI.Core
                         <TextBlock x:Name="StatusText" Text="Остановлен" Foreground="#D13438" Margin="0,0,0,15"/>
 
                         <TextBlock Text="Конфигурация:" Foreground="#888888" FontSize="12" Margin="0,0,0,5"/>
-                        
+
                         <ComboBox x:Name="ProfileComboBox" Height="35" SelectionChanged="Settings_Changed"/>
                     </StackPanel>
                 </Border>
@@ -926,6 +1264,9 @@ namespace ZapretGUI.Views
             InitializeComponent();
             _zapretManager = new ZapretManager();
             _tgProxyManager = new TgProxyManager();
+
+            _zapretManager.LogMessage += ProcessLogMessage;
+            _tgProxyManager.LogMessage += ProcessLogMessage;
 
             LoadProfiles();
             LoadSettings();
@@ -1311,6 +1652,19 @@ namespace ZapretGUI.Views
 
             LogDocument.Blocks.Add(paragraph);
             LogRichTextBox.ScrollToEnd();
+
+            var cleanMessage = message.Contains("] ")
+                ? message.Substring(message.IndexOf("] ") + 2)
+                : message;
+
+            MiniLogText.Text = cleanMessage;
+
+            if (message.Contains("ОШИБКА") || message.Contains("⚠") || message.Contains("🛑"))
+                MiniLogText.Foreground = GetErrorColor();
+            else if (message.Contains("✅") || message.Contains("[OK]"))
+                MiniLogText.Foreground = GetSuccessColor();
+            else
+                MiniLogText.Foreground = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#888888"));
         }
 
         private void BtnClearLogs_Click(object sender, RoutedEventArgs e)
@@ -1353,6 +1707,7 @@ namespace ZapretGUI.Views
 
             MainToggle_Click(this, new RoutedEventArgs());
         }
+
         private void ApplyVisualSettings()
         {
             var isCompact = SettingsManager.Current.CompactMode;
@@ -1426,6 +1781,14 @@ namespace ZapretGUI.Views
             {
                 Log($"ОШИБКА ПРИ ПЕРЕЗАПУСКЕ: {ex.Message}");
             }
+        }
+
+        private void ProcessLogMessage(string message)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                Log(message);
+            });
         }
     }
 }
@@ -1714,11 +2077,11 @@ namespace ZapretGUI.Views
                 <ui:Button Content="Сбросить все настройки" Appearance="Danger" HorizontalAlignment="Center" Margin="0,0,0,20" Click="BtnResetSettings_Click"/>
 
                 <StackPanel HorizontalAlignment="Center" Margin="0,0,0,40">
-                    <TextBlock Text="Zapret for ADHD v1.0" Foreground="#444444" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                    <TextBlock Text="Zapret for ADHD v2.0" Foreground="#444444" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center"/>
                     <TextBlock Foreground="#444444" FontSize="12" HorizontalAlignment="Center" Margin="0,5,0,0">
                         <Run Text="Разработано с ❤️ | "/>
-                        <Hyperlink NavigateUri="https://github.com/" RequestNavigate="Hyperlink_RequestNavigate" Foreground="#107C10" TextDecorations="None">
-                            Блог и портфолио (В разработке)
+                        <Hyperlink NavigateUri="https://github.com/NIK-master/ZapretGUI" RequestNavigate="Hyperlink_RequestNavigate" Foreground="#107C10" TextDecorations="None">
+                            Страница на GitHub
                         </Hyperlink>
                     </TextBlock>
                 </StackPanel>

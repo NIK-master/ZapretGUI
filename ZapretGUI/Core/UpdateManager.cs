@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Net.Http;
@@ -11,18 +12,15 @@ namespace ZapretGUI.Core
     {
         public const string CurrentVersion = "v2.0";
 
-        // Замени на свой ник, когда выложишь интерфейс в общий доступ
-        private const string RepoOwner = "YourGithubUsername";
-        private const string RepoName = "ZapretForADHD";
+        private const string RepoOwner = "NIK-master";
+        private const string RepoName = "ZapretGUI";
 
-        // ИСПРАВЛЕНИЕ: Добавлен модификатор static
         private static string CleanVersion(string version)
         {
             if (string.IsNullOrEmpty(version)) return "0.0.0";
             return version.Trim().TrimStart('v', 'V');
         }
 
-        // 1. Проверка обновления самого графического интерфейса
         public static async Task CheckForUpdatesAsync()
         {
             try
@@ -41,13 +39,13 @@ namespace ZapretGUI.Core
                 {
                     System.Windows.Application.Current.Dispatcher.Invoke(() =>
                     {
-                        var result = System.Windows.MessageBox.Show(
-                            $"Доступна новая версия панели управления {latestVersion}!\n\nХотите скачать обновление?",
+                        var prompt = new Views.UpdateWindow(
                             "Доступно обновление",
-                            System.Windows.MessageBoxButton.YesNo,
-                            System.Windows.MessageBoxImage.Information);
+                            $"Доступна новая версия панели управления {latestVersion}!\n\nХотите скачать обновление?"
+                        );
+                        prompt.ShowDialog();
 
-                        if (result == System.Windows.MessageBoxResult.Yes && !string.IsNullOrEmpty(releaseUrl))
+                        if (prompt.Result && !string.IsNullOrEmpty(releaseUrl))
                         {
                             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(releaseUrl) { UseShellExecute = true });
                         }
@@ -57,8 +55,7 @@ namespace ZapretGUI.Core
             catch { }
         }
 
-        // 2. Проверка обновления ядра Zapret (winws.exe) от flowseal
-        public static async Task CheckForZapretCoreUpdatesAsync(Action stopServicesCallback)
+        public static async Task CheckForZapretCoreUpdatesAsync(Action stopServicesCallback, IProgress<string>? progress = null)
         {
             try
             {
@@ -74,32 +71,28 @@ namespace ZapretGUI.Core
 
                 if (latestVersion != null && CleanVersion(latestVersion) != CleanVersion(currentVersion))
                 {
-                    // ИСПРАВЛЕНИЕ: Разделяем логику UI и фоновой загрузки для устранения CS4014
                     bool shouldUpdate = false;
 
                     System.Windows.Application.Current.Dispatcher.Invoke(() =>
                     {
-                        var result = System.Windows.MessageBox.Show(
-                            $"Найдено обновление обхода Zapret от flowseal ({latestVersion})!\n\nТекущая версия: {currentVersion}\nОбновить автоматически?",
+                        var prompt = new Views.UpdateWindow(
                             "Обновление ядра Zapret",
-                            System.Windows.MessageBoxButton.YesNo,
-                            System.Windows.MessageBoxImage.Information);
-
-                        shouldUpdate = (result == System.Windows.MessageBoxResult.Yes);
+                            $"Найдено обновление обхода Zapret от flowseal ({latestVersion})!\n\nТекущая версия: {currentVersion}\nОбновить автоматически?"
+                        );
+                        prompt.ShowDialog();
+                        shouldUpdate = prompt.Result;
                     });
 
-                    // Загрузка происходит вне Invoke (в фоновом потоке), UI не будет зависать
                     if (shouldUpdate)
                     {
-                        await DownloadAndInstallCoreAsync(doc.RootElement, latestVersion, "zapret-winws", stopServicesCallback, true);
+                        await DownloadAndInstallCoreAsync(doc.RootElement, latestVersion, "Zapret", stopServicesCallback, true, progress);
                     }
                 }
             }
             catch { }
         }
 
-        // 3. Проверка обновления ядра TgWsProxy от flowseal
-        public static async Task CheckForTgProxyCoreUpdatesAsync(Action stopServicesCallback)
+        public static async Task CheckForTgProxyCoreUpdatesAsync(Action stopServicesCallback, IProgress<string>? progress = null)
         {
             try
             {
@@ -115,82 +108,149 @@ namespace ZapretGUI.Core
 
                 if (latestVersion != null && CleanVersion(latestVersion) != CleanVersion(currentVersion))
                 {
-                    // ИСПРАВЛЕНИЕ: Разделяем логику UI и фоновой загрузки для устранения CS4014
                     bool shouldUpdate = false;
 
                     System.Windows.Application.Current.Dispatcher.Invoke(() =>
                     {
-                        var result = System.Windows.MessageBox.Show(
-                            $"Найдено обновление прокси Telegram от flowseal ({latestVersion})!\n\nТекущая версия: {currentVersion}\nОбновить автоматически?",
+                        var prompt = new Views.UpdateWindow(
                             "Обновление ядра TgWsProxy",
-                            System.Windows.MessageBoxButton.YesNo,
-                            System.Windows.MessageBoxImage.Information);
-
-                        shouldUpdate = (result == System.Windows.MessageBoxResult.Yes);
+                            $"Найдено обновление прокси Telegram от flowseal ({latestVersion})!\n\nТекущая версия: {currentVersion}\nОбновить автоматически?"
+                        );
+                        prompt.ShowDialog();
+                        shouldUpdate = prompt.Result;
                     });
 
                     if (shouldUpdate)
                     {
-                        await DownloadAndInstallCoreAsync(doc.RootElement, latestVersion, "tg-ws-proxy", stopServicesCallback, false);
+                        await DownloadAndInstallCoreAsync(doc.RootElement, latestVersion, "TgWsProxy", stopServicesCallback, false, progress);
                     }
                 }
             }
             catch { }
         }
 
-        // Универсальный метод скачивания и распаковки zip-архивов для обоих репозиториев
-        private static async Task DownloadAndInstallCoreAsync(JsonElement root, string latestVersion, string archivePrefix, Action stopServicesCallback, bool isZapret)
+        // Универсальный метод скачивания и распаковки
+        private static async Task DownloadAndInstallCoreAsync(JsonElement root, string latestVersion, string archivePrefix, Action? stopServicesCallback, bool isZapret, IProgress<string>? progress = null, bool isSilent = false)
         {
             try
             {
                 string? downloadUrl = null;
+                bool isZip = false;
+                string? targetFileName = null;
+
+                // Умный поиск файла в релизах
                 foreach (var asset in root.GetProperty("assets").EnumerateArray())
                 {
                     var name = asset.GetProperty("name").GetString();
-                    if (name != null && name.EndsWith(".zip"))
+                    if (string.IsNullOrEmpty(name)) continue;
+
+                    if (isZapret && name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
                     {
-                        downloadUrl = asset.GetProperty("browser_download_url").GetString();
-                        break;
+                        // Если находим архив, в названии которого есть winws - он в приоритете, иначе берем любой .zip
+                        if (downloadUrl == null || name.Contains("winws", StringComparison.OrdinalIgnoreCase))
+                        {
+                            downloadUrl = asset.GetProperty("browser_download_url").GetString();
+                            isZip = true;
+                        }
+                    }
+                    else if (!isZapret)
+                    {
+                        // Для TgProxy ищем exe для винды
+                        if (name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) && name.Contains("windows", StringComparison.OrdinalIgnoreCase))
+                        {
+                            downloadUrl = asset.GetProperty("browser_download_url").GetString();
+                            targetFileName = "TgWsProxy_windows.exe";
+                            isZip = false;
+                            break;
+                        }
+                        else if (name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                        {
+                            downloadUrl = asset.GetProperty("browser_download_url").GetString();
+                            isZip = true;
+                            break;
+                        }
                     }
                 }
 
-                if (downloadUrl == null) return;
+                if (downloadUrl == null)
+                {
+                    if (progress != null) progress.Report($"[ОШИБКА] Подходящий файл релиза не найден.");
+                    return;
+                }
 
-                // Останавливаем службы перед перезаписью бинарников
                 stopServicesCallback?.Invoke();
 
-                var tempZip = Path.Combine(Path.GetTempPath(), $"{archivePrefix}_update.zip");
                 var extractPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ZapretFiles");
+                Directory.CreateDirectory(extractPath);
 
-                using var client = new HttpClient();
-                var zipBytes = await client.GetByteArrayAsync(downloadUrl);
-                await File.WriteAllBytesAsync(tempZip, zipBytes);
-
-                using (var archive = ZipFile.OpenRead(tempZip))
+                if (isZip)
                 {
-                    foreach (var entry in archive.Entries)
+                    var tempZip = Path.Combine(Path.GetTempPath(), $"{archivePrefix}_update.zip");
+
+                    if (progress != null) progress.Report($"Загрузка {archivePrefix}...");
+                    await DownloadFileWithProgressAsync(downloadUrl, tempZip, progress);
+                    if (progress != null) progress.Report("Распаковка архива...");
+
+                    using (var archive = ZipFile.OpenRead(tempZip))
                     {
-                        var entryName = entry.FullName;
+                        // 1. Надежный поиск общей корневой папки внутри ZIP (если она есть)
+                        string? rootDirToStrip = null;
+                        bool hasFilesAtRoot = false;
 
-                        // Избавляемся от корневых папок внутри zip-архивов flowseal, чтобы файлы ложились сразу в ZapretFiles
-                        if (entryName.StartsWith("zapret-winws/"))
-                            entryName = entryName.Substring("zapret-winws/".Length);
-                        else if (entryName.StartsWith("tg-ws-proxy/"))
-                            entryName = entryName.Substring("tg-ws-proxy/".Length);
+                        foreach (var entry in archive.Entries)
+                        {
+                            if (string.IsNullOrEmpty(entry.FullName)) continue;
 
-                        if (string.IsNullOrEmpty(entryName)) continue;
+                            int slashIndex = entry.FullName.IndexOf('/');
+                            if (slashIndex == -1)
+                            {
+                                hasFilesAtRoot = true;
+                                break; // Нашли файл прямо в корне архива
+                            }
 
-                        var destinationPath = Path.GetFullPath(Path.Combine(extractPath, entryName));
-                        Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+                            string currentRoot = entry.FullName.Substring(0, slashIndex + 1);
+                            if (rootDirToStrip == null)
+                                rootDirToStrip = currentRoot;
+                            else if (rootDirToStrip != currentRoot)
+                            {
+                                rootDirToStrip = null; // В архиве несколько папок в корне
+                                break;
+                            }
+                        }
 
-                        if (!string.IsNullOrEmpty(entry.Name))
+                        if (hasFilesAtRoot) rootDirToStrip = null;
+
+                        // 2. Распаковка с обрезкой пути и принудительным обновлением даты
+                        foreach (var entry in archive.Entries)
+                        {
+                            var entryName = entry.FullName;
+
+                            if (rootDirToStrip != null && entryName.StartsWith(rootDirToStrip))
+                                entryName = entryName.Substring(rootDirToStrip.Length);
+
+                            // Пропускаем записи, которые являются самими директориями
+                            if (string.IsNullOrEmpty(entryName) || string.IsNullOrEmpty(entry.Name))
+                                continue;
+
+                            var destinationPath = Path.GetFullPath(Path.Combine(extractPath, entryName));
+                            Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+
                             entry.ExtractToFile(destinationPath, overwrite: true);
+
+                            // МАГИЯ ДЛЯ ПРОВОДНИКА: Ставим свежую дату, чтобы ты видел результат обновления
+                            File.SetLastWriteTime(destinationPath, DateTime.Now);
+                        }
                     }
+                    File.Delete(tempZip);
+                }
+                else
+                {
+                    // Прямое скачивание .exe (TgWsProxy)
+                    var destFilePath = Path.Combine(extractPath, targetFileName!);
+                    if (progress != null) progress.Report($"Загрузка {archivePrefix}...");
+                    await DownloadFileWithProgressAsync(downloadUrl, destFilePath, progress);
                 }
 
-                File.Delete(tempZip);
-
-                // Сохраняем обновленную версию в соответствующее поле конфигурации
                 if (isZapret)
                     SettingsManager.Current.ZapretCoreVersion = latestVersion;
                 else
@@ -198,24 +258,36 @@ namespace ZapretGUI.Core
 
                 SettingsManager.Save();
 
-                System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                if (!isSilent)
                 {
-                    System.Windows.MessageBox.Show($"Модуль {archivePrefix} успешно обновлен до версии {latestVersion}!", "Успех", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
-                });
+                    System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        var msg = new Views.UpdateWindow("Успех", $"Модуль {archivePrefix} успешно обновлен до версии {latestVersion}!", "ОК");
+                        msg.ShowDialog();
+                    });
+                }
+
+                if (progress != null) progress.Report("✅ Обновление успешно завершено.");
             }
             catch (Exception ex)
             {
-                System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                if (!isSilent)
                 {
-                    System.Windows.MessageBox.Show($"Ошибка при установке обновления {archivePrefix}: {ex.Message}", "Ошибка", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
-                });
+                    System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        var msg = new Views.UpdateWindow("Ошибка", $"Ошибка при установке обновления {archivePrefix}: {ex.Message}", "ОК");
+                        msg.ShowDialog();
+                    });
+                }
+                if (progress != null) 
+                    progress.Report("🛑 Ошибка загрузки обновления.");
             }
         }
-        private static async Task DownloadFileWithProgressAsync(string downloadUrl, string destinationFilePath, IProgress<string> progress)
+
+        private static async Task DownloadFileWithProgressAsync(string downloadUrl, string destinationFilePath, IProgress<string>? progress)
         {
             using var client = new HttpClient();
 
-            // Запрашиваем только заголовки, чтобы узнать размер файла
             using var response = await client.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead);
             response.EnsureSuccessStatusCode();
 
@@ -248,12 +320,38 @@ namespace ZapretGUI.Core
                     }
                     else
                     {
-                        // Если сервер не отдал размер файла
                         progress?.Report($"Скачано: {totalRead / 1024 / 1024} МБ");
                     }
                 }
             }
             while (isMoreToRead);
+        }
+        public static async Task InstallModulesSilentAsync(bool installZapret, bool installProxy, IProgress<string> progress)
+        {
+            using var client = new HttpClient();
+            client.DefaultRequestHeaders.Add("User-Agent", "ZapretForADHD-App");
+
+            if (installZapret)
+            {
+                progress.Report("Поиск последней версии Zapret...");
+                var zapretUrl = "https://api.github.com/repos/flowseal/zapret-discord-youtube/releases/latest";
+                var zResponse = await client.GetStringAsync(zapretUrl);
+                using var zDoc = JsonDocument.Parse(zResponse);
+                var zLatest = zDoc.RootElement.GetProperty("tag_name").GetString();
+
+                await DownloadAndInstallCoreAsync(zDoc.RootElement, zLatest!, "Zapret", null, true, progress, isSilent: true);
+            }
+
+            if (installProxy)
+            {
+                progress.Report("Поиск последней версии TgWsProxy...");
+                var proxyUrl = "https://api.github.com/repos/flowseal/tg-ws-proxy/releases/latest";
+                var pResponse = await client.GetStringAsync(proxyUrl);
+                using var pDoc = JsonDocument.Parse(pResponse);
+                var pLatest = pDoc.RootElement.GetProperty("tag_name").GetString();
+
+                await DownloadAndInstallCoreAsync(pDoc.RootElement, pLatest!, "TgWsProxy", null, false, progress, isSilent: true);
+            }
         }
     }
 }

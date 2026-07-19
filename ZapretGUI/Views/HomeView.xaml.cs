@@ -556,5 +556,16 @@ namespace ZapretGUI.Views
                 Log(message);
             });
         }
+
+        // Публичный метод для отображения прогресса скачивания
+        public void ShowUpdateProgress(string message)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                MiniLogText.Text = message;
+                // Сделаем текст синим, чтобы он выделялся как системный процесс
+                MiniLogText.Foreground = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#55AAFF"));
+            });
+        }
     }
 }

@@ -48,8 +48,13 @@ namespace ZapretGUI
                 }
             };
 
-            _ = Core.UpdateManager.CheckForZapretCoreUpdatesAsync(stopServicesAction);
-            _ = Core.UpdateManager.CheckForTgProxyCoreUpdatesAsync(stopServicesAction);
+            var updateProgress = new Progress<string>(status =>
+            {
+                _homeView.ShowUpdateProgress(status);
+            });
+
+            _ = Core.UpdateManager.CheckForZapretCoreUpdatesAsync(stopServicesAction, updateProgress);
+            _ = Core.UpdateManager.CheckForTgProxyCoreUpdatesAsync(stopServicesAction, updateProgress);        
         }
 
         private void BtnHome_Click(object sender, RoutedEventArgs e)
