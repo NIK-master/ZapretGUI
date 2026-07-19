@@ -275,6 +275,8 @@
                     </StackPanel>
                 </Border>
 
+                <ui:Button Content="Проверить обновления" Appearance="Primary" HorizontalAlignment="Center" Margin="0,0,0,10" Click="BtnCheckUpdates_Click"/>
+
                 <ui:Button Content="Сбросить все настройки" Appearance="Danger" HorizontalAlignment="Center" Margin="0,0,0,20" Click="BtnResetSettings_Click"/>
 
                 <StackPanel HorizontalAlignment="Center" Margin="0,0,0,40">

@@ -10,8 +10,6 @@ namespace ZapretGUI.Views
 {
     public partial class SettingsView : System.Windows.Controls.UserControl
     {
-        private readonly string _appName = "ZapretForADHD";
-
         public SettingsView()
         {
             InitializeComponent();
@@ -25,7 +23,7 @@ namespace ZapretGUI.Views
                 using (var key = Registry.CurrentUser.OpenSubKey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true))
                 {
                     if (key != null)
-                        ToggleAutoStart.IsChecked = key.GetValue(_appName) != null;
+                        ToggleAutoStart.IsChecked = key.GetValue(AppConstants.AppRegistryName) != null;
                 }
 
                 var settings = SettingsManager.Current;
@@ -49,7 +47,10 @@ namespace ZapretGUI.Views
                     default: ComboUpdateInterval.SelectedIndex = 0; break;
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Ошибка при загрузке настроек в UI: {ex.Message}");
+            }
         }
 
         private void Setting_Changed(object sender, RoutedEventArgs e)
@@ -77,11 +78,11 @@ namespace ZapretGUI.Views
                         {
                             var exePath = System.Reflection.Assembly.GetExecutingAssembly().Location;
                             exePath = Path.ChangeExtension(exePath, ".exe");
-                            key.SetValue(_appName, $"\"{exePath}\"");
+                            key.SetValue(AppConstants.AppRegistryName, $"\"{exePath}\"");
                         }
                         else
                         {
-                            key.DeleteValue(_appName, false);
+                            key.DeleteValue(AppConstants.AppRegistryName, false);
                         }
                     }
                 }
@@ -122,7 +123,7 @@ namespace ZapretGUI.Views
         {
             try
             {
-                var zapretFolder = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "zapret-winws");
+                var zapretFolder = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.CoreFilesDirectory);
 
                 if (!Directory.Exists(zapretFolder))
                     Directory.CreateDirectory(zapretFolder);
@@ -156,7 +157,7 @@ namespace ZapretGUI.Views
                     using (var key = Registry.CurrentUser.OpenSubKey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true))
                     {
                         if (key != null)
-                            key.DeleteValue(_appName, false);
+                            key.DeleteValue(AppConstants.AppRegistryName, false);
                     }
 
                     SettingsManager.Load();
@@ -175,6 +176,17 @@ namespace ZapretGUI.Views
         {
             Process.Start(new ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true });
             e.Handled = true;
+        }
+
+        private async void BtnCheckUpdates_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is System.Windows.Controls.Button btn)
+                btn.IsEnabled = false;
+
+            await ZapretGUI.Core.UpdateManager.CheckForUpdatesAsync(isManualCheck: true);
+
+            if (sender is System.Windows.Controls.Button btnReEnable)
+                btnReEnable.IsEnabled = true;
         }
     }
 }

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics;
 using System.Threading.Tasks;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -45,18 +46,19 @@ namespace ZapretGUI.Views.WizardPages
                         {
                             var exePath = System.Reflection.Assembly.GetExecutingAssembly().Location;
                             exePath = System.IO.Path.ChangeExtension(exePath, ".exe");
-                            key.SetValue("ZapretForADHD", $"\"{exePath}\"");
+                            key.SetValue(AppConstants.AppRegistryName, $"\"{exePath}\"");
                         }
                     }
                 }
                 catch (Exception ex)
                 {
+                    Debug.WriteLine($"Ошибка при добавлении в автозагрузку (Wizard): {ex.Message}");
                     await AppendLog($"[Error] Не удалось добавить в автозагрузку: {ex.Message}", 0);
                 }
             }
 
             await AppendLog("Проверка директорий...", 150);
-            var zapretDir = System.IO.Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, "ZapretFiles");
+            var zapretDir = System.IO.Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, AppConstants.CoreFilesDirectory);
 
             if (!System.IO.Directory.Exists(zapretDir))
             {
@@ -64,7 +66,6 @@ namespace ZapretGUI.Views.WizardPages
                 System.IO.Directory.CreateDirectory(zapretDir);
             }
 
-            // НОВОЕ: Запускаем скачивание компонентов, если пользователь их выбрал
             if (useZapret || useTgProxy)
             {
                 await AppendLog("=====================================", 0);
@@ -72,7 +73,6 @@ namespace ZapretGUI.Views.WizardPages
 
                 var progress = new Progress<string>(status =>
                 {
-                    // Асинхронно обновляем лог мастера
                     _ = AppendLog($"[Download] {status}", 0);
                 });
 
@@ -83,6 +83,7 @@ namespace ZapretGUI.Views.WizardPages
                 }
                 catch (Exception ex)
                 {
+                    Debug.WriteLine($"Сбой скачивания при начальной настройке: {ex.Message}");
                     await AppendLog($"[ERROR] Ошибка при загрузке: {ex.Message}", 0);
                 }
 
@@ -94,7 +95,7 @@ namespace ZapretGUI.Views.WizardPages
             ProgBar.IsIndeterminate = false;
             ProgBar.Value = 100;
             TxtStatus.Text = "Всё готово!";
-            TxtStatus.Foreground = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#107C10"));
+            TxtStatus.Foreground = UIHelper.GetBrushFromHex("#107C10");
 
             await AppendLog("✅ Настройка успешно завершена. Можно закрывать окно.", 0);
         }

@@ -7,14 +7,13 @@ namespace ZapretGUI.Core
     public class TgProxyManager
     {
         private readonly string _proxyPath;
-        private readonly string _processName = "TgWsProxy_windows";
         private Process? _process;
 
         public event Action<string>? LogMessage;
 
         public TgProxyManager()
         {
-            _proxyPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ZapretFiles", "TgWsProxy_windows.exe");
+            _proxyPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.CoreFilesDirectory, $"{AppConstants.TgProxyProcessName}.exe");
         }
 
         public void Start()
@@ -55,11 +54,14 @@ namespace ZapretGUI.Core
                     _process = null;
                 }
             }
-            catch { }
-            ProcessHelper.KillProcessesByName(_processName);
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Ошибка остановки процесса TgProxy: {ex.Message}");
+            }
+            ProcessHelper.KillProcessesByName(AppConstants.TgProxyProcessName);
         }
 
         public bool IsRunning()
-            => Process.GetProcessesByName(_processName).Length > 0;
+            => Process.GetProcessesByName(AppConstants.TgProxyProcessName).Length > 0;
     }
 }

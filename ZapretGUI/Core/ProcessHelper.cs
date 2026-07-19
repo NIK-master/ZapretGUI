@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+﻿using System;
+using System.Diagnostics;
 
 namespace ZapretGUI.Core
 {
@@ -14,7 +15,10 @@ namespace ZapretGUI.Core
                     process.Kill();
                     process.WaitForExit();
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Ошибка при завершении процесса {processName}: {ex.Message}");
+                }
             }
         }
     }

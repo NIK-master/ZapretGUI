@@ -36,10 +36,8 @@ namespace ZapretGUI
                 wizard.ShowDialog();
             }
 
-            // Запуск фоновых асинхронных проверок обновлений
             _ = Core.UpdateManager.CheckForUpdatesAsync();
 
-            // Коллбек, который корректно остановит обход через UI-триггер в случае обновления ядер
             Action stopServicesAction = () =>
             {
                 if (_homeView.IsRunning)
@@ -54,7 +52,7 @@ namespace ZapretGUI
             });
 
             _ = Core.UpdateManager.CheckForZapretCoreUpdatesAsync(stopServicesAction, updateProgress);
-            _ = Core.UpdateManager.CheckForTgProxyCoreUpdatesAsync(stopServicesAction, updateProgress);        
+            _ = Core.UpdateManager.CheckForTgProxyCoreUpdatesAsync(stopServicesAction, updateProgress);
         }
 
         private void BtnHome_Click(object sender, RoutedEventArgs e)
@@ -87,8 +85,8 @@ namespace ZapretGUI
             BtnSettings.Background = transparent;
             BtnSettings.BorderThickness = zeroThickness;
 
-            activeBtn.Background = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#2A2A2A"));
-            activeBtn.BorderBrush = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#107C10"));
+            activeBtn.Background = UIHelper.GetBrushFromHex("#2A2A2A");
+            activeBtn.BorderBrush = UIHelper.GetBrushFromHex("#107C10");
             activeBtn.BorderThickness = new Thickness(3, 0, 0, 0);
         }
 
@@ -130,8 +128,9 @@ namespace ZapretGUI
 
                 _notifyIcon.Icon = System.Drawing.Icon.FromHandle(bitmap.GetHicon());
             }
-            catch
+            catch (Exception ex)
             {
+                Debug.WriteLine($"Ошибка загрузки иконки в трей: {ex.Message}");
                 _notifyIcon.Icon = System.Drawing.SystemIcons.Shield;
             }
             _notifyIcon.Text = "Zapret for ADHD";
@@ -149,7 +148,6 @@ namespace ZapretGUI
                     return;
 
                 var trayMenu = new Views.TrayMenuWindow();
-
                 trayMenu.WindowStartupLocation = WindowStartupLocation.Manual;
                 trayMenu.Show();
 
@@ -192,13 +190,13 @@ namespace ZapretGUI
         private SolidColorBrush GetSuccessColor()
         {
             var hex = SettingsManager.Current.ColorblindMode ? "#0078D7" : "#107C10";
-            return new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(hex));
+            return UIHelper.GetBrushFromHex(hex);
         }
 
         private SolidColorBrush GetErrorColor()
         {
             var hex = SettingsManager.Current.ColorblindMode ? "#FF8C00" : "#D13438";
-            return new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(hex));
+            return UIHelper.GetBrushFromHex(hex);
         }
 
         public void AnimateWindowSize(bool isCompact)

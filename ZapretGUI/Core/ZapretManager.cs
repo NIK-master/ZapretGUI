@@ -14,7 +14,7 @@ namespace ZapretGUI.Core
 
         public ZapretManager()
         {
-            _basePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ZapretFiles");
+            _basePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.CoreFilesDirectory);
         }
 
         public void Start(string profileName)
@@ -27,24 +27,23 @@ namespace ZapretGUI.Core
 
             var batContent = File.ReadAllText(batFilePath);
 
-            var match = Regex.Match(batContent, @"winws(?:\.exe)?[""']?\s+(.+)");
+            var match = Regex.Match(batContent, $@"{AppConstants.ZapretProcessName}(?:\.exe)?[""']?\s+(.+)");
             if (!match.Success)
-                throw new Exception("Не удалось найти параметры запуска winws в .bat файле.");
+                throw new Exception($"Не удалось найти параметры запуска {AppConstants.ZapretProcessName} в .bat файле.");
 
             var arguments = match.Groups[1].Value.Trim();
-
             arguments = arguments.Replace("^\r\n", " ").Replace("^\n", " ").Replace("^", "");
 
-            var exePath = Path.Combine(_basePath, "winws.exe");
+            var exePath = Path.Combine(_basePath, $"{AppConstants.ZapretProcessName}.exe");
 
             var startInfo = new ProcessStartInfo
             {
                 FileName = exePath,
                 Arguments = arguments,
-                UseShellExecute = false, 
+                UseShellExecute = false,
                 CreateNoWindow = true,
-                RedirectStandardOutput = true, 
-                RedirectStandardError = true,  
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
                 WorkingDirectory = _basePath
             };
 
@@ -70,12 +69,15 @@ namespace ZapretGUI.Core
                     _process = null;
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Ошибка остановки процесса Zapret: {ex.Message}");
+            }
 
-            ProcessHelper.KillProcessesByName("winws");
+            ProcessHelper.KillProcessesByName(AppConstants.ZapretProcessName);
         }
 
         public bool IsRunning()
-            => Process.GetProcessesByName("winws").Length > 0;
+            => Process.GetProcessesByName(AppConstants.ZapretProcessName).Length > 0;
     }
 }

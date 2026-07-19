@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
 
@@ -44,7 +45,10 @@ namespace ZapretGUI.Core
                         Current = settings;
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Ошибка загрузки настроек: {ex.Message}");
+            }
         }
 
         public static void Save()
@@ -56,7 +60,10 @@ namespace ZapretGUI.Core
 
                 SettingsSaved?.Invoke();
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Ошибка сохранения настроек: {ex.Message}");
+            }
         }
     }
 }

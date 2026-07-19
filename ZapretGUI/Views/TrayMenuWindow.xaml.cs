@@ -4,8 +4,7 @@ using System.Net.Sockets;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media;
-using System.IO;
-using System.Text.Json;
+using ZapretGUI.Core;
 
 namespace ZapretGUI.Views
 {
@@ -54,22 +53,23 @@ namespace ZapretGUI.Views
                     PingText.Text = $"{pingMs} мс";
 
                     if (pingMs < 80)
-                        PingText.Foreground = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#4CAF50"));
+                        PingText.Foreground = UIHelper.GetBrushFromHex("#4CAF50");
                     else if (pingMs < 150)
                         PingText.Foreground = new SolidColorBrush(System.Windows.Media.Colors.Orange);
                     else
-                        PingText.Foreground = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#F44336"));
+                        PingText.Foreground = UIHelper.GetBrushFromHex("#F44336");
                 }
                 else
                 {
                     PingText.Text = "ошибка";
-                    PingText.Foreground = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#F44336"));
+                    PingText.Foreground = UIHelper.GetBrushFromHex("#F44336");
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                Debug.WriteLine($"Ошибка проверки пинга из трея: {ex.Message}");
                 PingText.Text = "нет сети";
-                PingText.Foreground = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#F44336"));
+                PingText.Foreground = UIHelper.GetBrushFromHex("#F44336");
             }
         }
 
@@ -91,8 +91,9 @@ namespace ZapretGUI.Views
 
                 return -1;
             }
-            catch
+            catch (Exception ex)
             {
+                Debug.WriteLine($"TCP Ping Failed: {ex.Message}");
                 return -1;
             }
         }
@@ -123,12 +124,12 @@ namespace ZapretGUI.Views
 
             if (_isRunning)
             {
-                BtnTogglePower.Background = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#331A1A"));
-                BtnTogglePower.BorderBrush = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#5C2E2E"));
+                BtnTogglePower.Background = UIHelper.GetBrushFromHex("#331A1A");
+                BtnTogglePower.BorderBrush = UIHelper.GetBrushFromHex("#5C2E2E");
 
                 if (powerIcon != null)
                 {
-                    powerIcon.Foreground = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#F44336"));
+                    powerIcon.Foreground = UIHelper.GetBrushFromHex("#F44336");
                     powerIcon.Text = "\xE71A";
                 }
                 if (powerText != null)
@@ -136,12 +137,12 @@ namespace ZapretGUI.Views
             }
             else
             {
-                BtnTogglePower.Background = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#1B3320"));
-                BtnTogglePower.BorderBrush = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#2E5C37"));
+                BtnTogglePower.Background = UIHelper.GetBrushFromHex("#1B3320");
+                BtnTogglePower.BorderBrush = UIHelper.GetBrushFromHex("#2E5C37");
 
                 if (powerIcon != null)
                 {
-                    powerIcon.Foreground = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#4CAF50"));
+                    powerIcon.Foreground = UIHelper.GetBrushFromHex("#4CAF50");
                     powerIcon.Text = "\xE7E8";
                 }
                 if (powerText != null)

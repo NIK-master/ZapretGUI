@@ -2,11 +2,8 @@
 using System.Diagnostics;
 using System.IO;
 using System.Net.NetworkInformation;
-using System.Net.Sockets;
-using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
-using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Effects;
 using System.Windows.Threading;
@@ -137,7 +134,7 @@ namespace ZapretGUI.Views
                 {
                     RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever
                 };
-                PingIconTransform.BeginAnimation(System.Windows.Media.RotateTransform.AngleProperty, rotateAnim);
+                PingIconTransform.BeginAnimation(RotateTransform.AngleProperty, rotateAnim);
 
                 var pingTask = Core.NetworkHelper.TcpPingAsync("ec2.eu-central-1.amazonaws.com", 443);
                 var delayTask = Task.Delay(600);
@@ -157,19 +154,19 @@ namespace ZapretGUI.Views
                     SyncNetworkIndicator(false);
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                Debug.WriteLine($"Ошибка при пинге: {ex.Message}");
                 PingText.Text = "—";
                 SyncNetworkIndicator(false);
             }
             finally
             {
-                PingIconTransform.BeginAnimation(System.Windows.Media.RotateTransform.AngleProperty, null);
+                PingIconTransform.BeginAnimation(RotateTransform.AngleProperty, null);
                 PingIconTransform.Angle = 0;
                 BtnRefreshPing.IsEnabled = true;
             }
         }
-
 
         private void SyncMainWindowIndicators()
         {
@@ -316,7 +313,7 @@ namespace ZapretGUI.Views
         private void LoadProfiles()
         {
             ProfileComboBox.Items.Clear();
-            var folderPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ZapretFiles");
+            var folderPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.CoreFilesDirectory);
 
             if (Directory.Exists(folderPath))
             {
@@ -328,9 +325,6 @@ namespace ZapretGUI.Views
                     ProfileComboBox.SelectedIndex = 0;
             }
         }
-
-
-        private readonly string _settingsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.json");
 
         private void LoadSettings()
         {
@@ -407,9 +401,9 @@ namespace ZapretGUI.Views
                 run.Foreground = GetSuccessColor();
             }
             else if (message.Contains("[Zapret]") || message.Contains("[TgWsProxy]"))
-                run.Foreground = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#55AAFF"));
+                run.Foreground = UIHelper.GetBrushFromHex("#55AAFF");
             else
-                run.Foreground = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#888888"));
+                run.Foreground = UIHelper.GetBrushFromHex("#888888");
 
             var paragraph = new System.Windows.Documents.Paragraph(run)
             {
@@ -430,7 +424,7 @@ namespace ZapretGUI.Views
             else if (message.Contains("✅") || message.Contains("[OK]"))
                 MiniLogText.Foreground = GetSuccessColor();
             else
-                MiniLogText.Foreground = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#888888"));
+                MiniLogText.Foreground = UIHelper.GetBrushFromHex("#888888");
         }
 
         private void BtnClearLogs_Click(object sender, RoutedEventArgs e)
@@ -470,7 +464,6 @@ namespace ZapretGUI.Views
         public void ToggleFromTray()
         {
             MainToggle.IsChecked = !IsRunning;
-
             MainToggle_Click(this, new RoutedEventArgs());
         }
 
@@ -484,9 +477,7 @@ namespace ZapretGUI.Views
             if (LogsPanel != null)
             {
                 var opacityAnim = new System.Windows.Media.Animation.DoubleAnimation { To = isCompact ? 0 : 1, Duration = TimeSpan.FromSeconds(0.3) };
-
                 var heightAnim = new System.Windows.Media.Animation.DoubleAnimation { To = isCompact ? 0 : 250, Duration = TimeSpan.FromSeconds(0.4), EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut } };
-
                 var marginAnim = new System.Windows.Media.Animation.ThicknessAnimation { To = isCompact ? new Thickness(0) : new Thickness(0, 20, 0, 0), Duration = TimeSpan.FromSeconds(0.4), EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut } };
 
                 LogsPanel.BeginAnimation(UIElement.OpacityProperty, opacityAnim);
@@ -517,13 +508,13 @@ namespace ZapretGUI.Views
         private SolidColorBrush GetSuccessColor()
         {
             var hex = SettingsManager.Current.ColorblindMode ? "#0078D7" : "#107C10";
-            return new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(hex));
+            return UIHelper.GetBrushFromHex(hex);
         }
 
         private SolidColorBrush GetErrorColor()
         {
             var hex = SettingsManager.Current.ColorblindMode ? "#FF8C00" : "#D13438";
-            return new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(hex));
+            return UIHelper.GetBrushFromHex(hex);
         }
 
         private async void RestartServices()
@@ -557,14 +548,12 @@ namespace ZapretGUI.Views
             });
         }
 
-        // Публичный метод для отображения прогресса скачивания
         public void ShowUpdateProgress(string message)
         {
             Dispatcher.Invoke(() =>
             {
                 MiniLogText.Text = message;
-                // Сделаем текст синим, чтобы он выделялся как системный процесс
-                MiniLogText.Foreground = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#55AAFF"));
+                MiniLogText.Foreground = UIHelper.GetBrushFromHex("#55AAFF");
             });
         }
     }
