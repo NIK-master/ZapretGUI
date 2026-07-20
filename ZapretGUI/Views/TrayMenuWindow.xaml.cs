@@ -15,13 +15,17 @@ namespace ZapretGUI.Views
         public TrayMenuWindow()
         {
             InitializeComponent();
-            CheckPingAsync();
+        }
+
+        public void RefreshState()
+        {
             SyncStatus();
+            CheckPingAsync();
         }
 
         private void Window_Deactivated(object sender, EventArgs e)
         {
-            this.Close();
+            this.Hide();
         }
 
         private async void CheckPingAsync()
@@ -158,12 +162,14 @@ namespace ZapretGUI.Views
                 System.Windows.Application.Current.MainWindow.WindowState = WindowState.Normal;
                 System.Windows.Application.Current.MainWindow.Activate();
             }
-            this.Close();
+            this.Hide();
         }
 
         private void BtnExit_Click(object sender, RoutedEventArgs e)
         {
             System.Windows.Application.Current.Shutdown();
         }
+
+
     }
 }

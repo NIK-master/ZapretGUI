@@ -14,6 +14,8 @@ namespace ZapretGUI
 
         private Views.HomeView _homeView;
         private Views.SettingsView _settingsView;
+        private Views.DiagnosticsView _diagnosticsView = new Views.DiagnosticsView();
+        private Views.TrayMenuWindow _trayMenu = null!;
 
         public MainWindow()
         {
@@ -80,8 +82,10 @@ namespace ZapretGUI
 
             BtnHome.Background = transparent;
             BtnHome.BorderThickness = zeroThickness;
-            BtnMods.Background = transparent;
-            BtnMods.BorderThickness = zeroThickness;
+
+            BtnDiagnostics.Background = transparent;
+            BtnDiagnostics.BorderThickness = zeroThickness;
+
             BtnSettings.Background = transparent;
             BtnSettings.BorderThickness = zeroThickness;
 
@@ -119,6 +123,9 @@ namespace ZapretGUI
 
         private void SetupTrayIcon()
         {
+            _trayMenu = new Views.TrayMenuWindow();
+            _trayMenu.WindowStartupLocation = WindowStartupLocation.Manual;
+
             _notifyIcon = new System.Windows.Forms.NotifyIcon();
             try
             {
@@ -147,16 +154,24 @@ namespace ZapretGUI
                 if (e.Button != System.Windows.Forms.MouseButtons.Left && e.Button != System.Windows.Forms.MouseButtons.Right)
                     return;
 
-                var trayMenu = new Views.TrayMenuWindow();
-                trayMenu.WindowStartupLocation = WindowStartupLocation.Manual;
-                trayMenu.Show();
+                _trayMenu.Show();
+                _trayMenu.UpdateLayout();
 
                 var mousePos = System.Windows.Forms.Control.MousePosition;
 
-                trayMenu.Left = mousePos.X - trayMenu.ActualWidth;
-                trayMenu.Top = mousePos.Y - trayMenu.ActualHeight - 20;
+                var source = PresentationSource.FromVisual(this);
+                double dpiX = 1.0, dpiY = 1.0;
+                if (source?.CompositionTarget != null)
+                {
+                    dpiX = source.CompositionTarget.TransformFromDevice.M11;
+                    dpiY = source.CompositionTarget.TransformFromDevice.M22;
+                }
 
-                trayMenu.Activate();
+                _trayMenu.Left = (mousePos.X * dpiX) - _trayMenu.ActualWidth;
+                _trayMenu.Top = (mousePos.Y * dpiY) - _trayMenu.ActualHeight - 20;
+
+                _trayMenu.Activate();
+                _trayMenu.RefreshState();
             };
         }
 
@@ -223,6 +238,21 @@ namespace ZapretGUI
 
             RootBorder.BeginAnimation(FrameworkElement.WidthProperty, widthAnim);
             RootBorder.BeginAnimation(FrameworkElement.HeightProperty, heightAnim);
+        }
+
+        private void BtnDiagnostics_Click(object sender, RoutedEventArgs e)
+        {
+            if (MainContentContainer.Content == _diagnosticsView)
+                return;
+
+            MainContentContainer.Content = _diagnosticsView;
+            SetActiveTab(BtnDiagnostics);
+        }
+
+        protected override void OnClosed(EventArgs e)
+        {
+            _notifyIcon?.Dispose();
+            base.OnClosed(e);
         }
     }
 }

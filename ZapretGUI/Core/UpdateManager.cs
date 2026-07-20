@@ -215,6 +215,11 @@ namespace ZapretGUI.Core
 
                 stopServicesCallback?.Invoke();
 
+                ProcessHelper.KillProcessesByName(AppConstants.ZapretProcessName);
+                ProcessHelper.KillProcessesByName(AppConstants.TgProxyProcessName);
+
+                System.Threading.Thread.Sleep(500);
+
                 var extractPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.CoreFilesDirectory);
                 Directory.CreateDirectory(extractPath);
 

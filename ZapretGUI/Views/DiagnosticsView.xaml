@@ -1,0 +1,183 @@
+﻿<UserControl x:Class="ZapretGUI.Views.DiagnosticsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             mc:Ignorable="d" 
+             d:DesignHeight="700" d:DesignWidth="900"
+             Foreground="White"
+             Background="Transparent">
+
+    <UserControl.Resources>
+        <Style x:Key="CardStyle" TargetType="Border">
+            <Setter Property="Background" Value="#151515"/>
+            <Setter Property="BorderBrush" Value="#2A2A2A"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="10"/>
+            <Setter Property="Padding" Value="15"/>
+            <Setter Property="Margin" Value="0,0,0,15"/>
+        </Style>
+
+        <Style x:Key="HeaderStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="16"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="#E0E0E0"/>
+            <Setter Property="Margin" Value="0,0,0,10"/>
+        </Style>
+    </UserControl.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="20">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+
+                <RowDefinition Height="Auto"/>
+
+                <RowDefinition Height="Auto"/>
+
+                <RowDefinition Height="Auto"/>
+
+                <RowDefinition Height="*"/>
+
+            </Grid.RowDefinitions>
+
+            <Grid Grid.Row="0" Margin="0,0,0,20">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0">
+                    <TextBlock Text="Мониторинг сети" FontSize="24" FontWeight="Bold"/>
+                    <TextBlock x:Name="TxtStatus" Text="Ожидание проверки..." Foreground="#A0A0A0" Margin="0,5,0,0"/>
+                </StackPanel>
+
+                <ProgressBar x:Name="MainProgress" Grid.Column="1" Height="4" Margin="20,0" 
+                             VerticalAlignment="Center" Foreground="#4CAF50" Background="#2A2A2A" BorderThickness="0"
+                             Visibility="Collapsed" IsIndeterminate="True"/>
+
+                <Button x:Name="BtnRunDiagnostics" Grid.Column="2" Content="Запустить проверку" Click="BtnRunDiagnostics_Click"
+                        Padding="15,8" Background="#4CAF50" Foreground="White" BorderThickness="0" Cursor="Hand" VerticalAlignment="Center">
+                    <Button.Resources>
+                        <Style TargetType="Border">
+                            <Setter Property="CornerRadius" Value="6"/>
+                        </Style>
+                    </Button.Resources>
+                </Button>
+            </Grid>
+
+            <Grid Grid.Row="1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="1*"/>
+                    <ColumnDefinition Width="1*"/>
+                </Grid.ColumnDefinitions>
+
+                <Border x:Name="TelegramCard" Grid.Column="0" Style="{StaticResource CardStyle}" Margin="0,0,10,15">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="TxtTgEmoji" Text="✈️" FontSize="24" VerticalAlignment="Center" Margin="0,0,15,0"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock x:Name="TxtTgMainStatus" Text="Telegram" FontSize="16" FontWeight="Bold"/>
+                            <TextBlock x:Name="TxtTgSubStatus" Text="Ожидание данных..." Foreground="#B0B0B0" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <Border x:Name="DiscordCard" Grid.Column="1" Style="{StaticResource CardStyle}" Margin="10,0,0,15">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="🎮" FontSize="24" VerticalAlignment="Center" Margin="0,0,15,0"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock x:Name="TxtDiscordMainStatus" Text="Discord" FontSize="16" FontWeight="Bold"/>
+                            <TextBlock x:Name="TxtDiscordSubStatus" Text="Ожидание данных..." Foreground="#B0B0B0" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <Border Grid.Row="2" Style="{StaticResource CardStyle}">
+                <StackPanel>
+                    <TextBlock Text="Активные процессы в системе" Style="{StaticResource HeaderStyle}"/>
+                    <WrapPanel Margin="0,10,0,0">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,20,10">
+                            <Ellipse x:Name="DotTelegram" Width="10" Height="10" Fill="Gray" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="Telegram" FontWeight="SemiBold"/>
+                        </StackPanel>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,0,20,10">
+                            <Ellipse x:Name="DotDiscord" Width="10" Height="10" Fill="Gray" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="Discord" FontWeight="SemiBold"/>
+                        </StackPanel>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,0,20,10">
+                            <Ellipse x:Name="DotZapret" Width="10" Height="10" Fill="Gray" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="Zapret (winws)" FontWeight="SemiBold"/>
+                        </StackPanel>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,0,20,10">
+                            <Ellipse x:Name="DotTgProxy" Width="10" Height="10" Fill="Gray" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="TgWsProxy" FontWeight="SemiBold"/>
+                        </StackPanel>
+                    </WrapPanel>
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Row="3" Style="{StaticResource CardStyle}">
+                <StackPanel>
+                    <TextBlock Text="Доступность серверов Telegram (DC &amp; Порты)" Style="{StaticResource HeaderStyle}"/>
+
+                    <ItemsControl x:Name="DcItemsControl">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel Orientation="Horizontal"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="#1E1E1E" BorderBrush="#333" BorderThickness="1" 
+                CornerRadius="6" Padding="12,8" Margin="0,0,10,10" MinWidth="130">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+
+                                        <TextBlock Text="{Binding Title}" FontSize="12" Foreground="#A0A0A0" FontWeight="Bold"/>
+
+                                        <TextBlock Grid.Row="1" Text="{Binding PingText}" FontSize="14" 
+                           FontWeight="Bold" Foreground="{Binding StatusColorBrush}" Margin="0,4,0,0"/>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Row="4" Style="{StaticResource CardStyle}">
+                <StackPanel>
+                    <TextBlock Text="Рекомендации по итогам проверки" Style="{StaticResource HeaderStyle}"/>
+
+                    <ItemsControl x:Name="RecItemsControl">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal" Margin="0,5">
+                                    <TextBlock Text="💡" Margin="0,0,10,0"/>
+                                    <TextBlock Text="{Binding}" Foreground="#E0E0E0" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
+        </Grid>
+    </ScrollViewer>
+</UserControl>

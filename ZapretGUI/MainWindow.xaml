@@ -75,16 +75,16 @@
                 </Grid.ColumnDefinitions>
 
                 <Border x:Name="Sidebar" Grid.Column="0" Width="220" Background="#181818" ClipToBounds="True">
-					<StackPanel Width="220" Margin="10,20,10,0">
+                    <StackPanel Width="220" Margin="10,20,10,0">
                         <ui:Button x:Name="BtnHome" Content="Главная" Foreground="White" Background="#2A2A2A" BorderBrush="#107C10" BorderThickness="3,0,0,0"
-                                   HorizontalAlignment="Stretch" Margin="0,0,0,10" Height="40" Click="BtnHome_Click"/>
+               HorizontalAlignment="Stretch" Margin="0,0,0,10" Height="40" Click="BtnHome_Click"/>
 
-                        <ui:Button x:Name="BtnMods" Content="Модификации" Foreground="White" Appearance="Transparent" BorderThickness="0"
-                                   HorizontalAlignment="Stretch" Margin="0,0,0,10" Height="40"/>
+                        <ui:Button x:Name="BtnDiagnostics" Content="Диагностика" Foreground="White" Appearance="Transparent" BorderThickness="0"
+               HorizontalAlignment="Stretch" Margin="0,0,0,10" Height="40" Click="BtnDiagnostics_Click"/>
 
-						<ui:Button x:Name="BtnSettings" Content="Настройки" Foreground="White" Appearance="Transparent" BorderThickness="0"
-                                   HorizontalAlignment="Stretch" Margin="0,0,0,10" Height="40" Click="BtnSettings_Click"/>
-					</StackPanel>
+                        <ui:Button x:Name="BtnSettings" Content="Настройки" Foreground="White" Appearance="Transparent" BorderThickness="0"
+               HorizontalAlignment="Stretch" Margin="0,0,0,10" Height="40" Click="BtnSettings_Click"/>
+                    </StackPanel>
                 </Border>
 
                 <Border Grid.Column="0" HorizontalAlignment="Right" Width="1" Background="#2A2A2A"/>

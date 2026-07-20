@@ -147,16 +147,16 @@ using System.Windows;
                 </Grid.ColumnDefinitions>
 
                 <Border x:Name="Sidebar" Grid.Column="0" Width="220" Background="#181818" ClipToBounds="True">
-					<StackPanel Width="220" Margin="10,20,10,0">
+                    <StackPanel Width="220" Margin="10,20,10,0">
                         <ui:Button x:Name="BtnHome" Content="Главная" Foreground="White" Background="#2A2A2A" BorderBrush="#107C10" BorderThickness="3,0,0,0"
-                                   HorizontalAlignment="Stretch" Margin="0,0,0,10" Height="40" Click="BtnHome_Click"/>
+               HorizontalAlignment="Stretch" Margin="0,0,0,10" Height="40" Click="BtnHome_Click"/>
 
-                        <ui:Button x:Name="BtnMods" Content="Модификации" Foreground="White" Appearance="Transparent" BorderThickness="0"
-                                   HorizontalAlignment="Stretch" Margin="0,0,0,10" Height="40"/>
+                        <ui:Button x:Name="BtnDiagnostics" Content="Диагностика" Foreground="White" Appearance="Transparent" BorderThickness="0"
+               HorizontalAlignment="Stretch" Margin="0,0,0,10" Height="40" Click="BtnDiagnostics_Click"/>
 
-						<ui:Button x:Name="BtnSettings" Content="Настройки" Foreground="White" Appearance="Transparent" BorderThickness="0"
-                                   HorizontalAlignment="Stretch" Margin="0,0,0,10" Height="40" Click="BtnSettings_Click"/>
-					</StackPanel>
+                        <ui:Button x:Name="BtnSettings" Content="Настройки" Foreground="White" Appearance="Transparent" BorderThickness="0"
+               HorizontalAlignment="Stretch" Margin="0,0,0,10" Height="40" Click="BtnSettings_Click"/>
+                    </StackPanel>
                 </Border>
 
                 <Border Grid.Column="0" HorizontalAlignment="Right" Width="1" Background="#2A2A2A"/>
@@ -186,6 +186,8 @@ namespace ZapretGUI
 
         private Views.HomeView _homeView;
         private Views.SettingsView _settingsView;
+        private Views.DiagnosticsView _diagnosticsView = new Views.DiagnosticsView();
+        private Views.TrayMenuWindow _trayMenu = null!;
 
         public MainWindow()
         {
@@ -252,8 +254,10 @@ namespace ZapretGUI
 
             BtnHome.Background = transparent;
             BtnHome.BorderThickness = zeroThickness;
-            BtnMods.Background = transparent;
-            BtnMods.BorderThickness = zeroThickness;
+
+            BtnDiagnostics.Background = transparent;
+            BtnDiagnostics.BorderThickness = zeroThickness;
+
             BtnSettings.Background = transparent;
             BtnSettings.BorderThickness = zeroThickness;
 
@@ -291,6 +295,9 @@ namespace ZapretGUI
 
         private void SetupTrayIcon()
         {
+            _trayMenu = new Views.TrayMenuWindow();
+            _trayMenu.WindowStartupLocation = WindowStartupLocation.Manual;
+
             _notifyIcon = new System.Windows.Forms.NotifyIcon();
             try
             {
@@ -319,16 +326,24 @@ namespace ZapretGUI
                 if (e.Button != System.Windows.Forms.MouseButtons.Left && e.Button != System.Windows.Forms.MouseButtons.Right)
                     return;
 
-                var trayMenu = new Views.TrayMenuWindow();
-                trayMenu.WindowStartupLocation = WindowStartupLocation.Manual;
-                trayMenu.Show();
+                _trayMenu.Show();
+                _trayMenu.UpdateLayout();
 
                 var mousePos = System.Windows.Forms.Control.MousePosition;
 
-                trayMenu.Left = mousePos.X - trayMenu.ActualWidth;
-                trayMenu.Top = mousePos.Y - trayMenu.ActualHeight - 20;
+                var source = PresentationSource.FromVisual(this);
+                double dpiX = 1.0, dpiY = 1.0;
+                if (source?.CompositionTarget != null)
+                {
+                    dpiX = source.CompositionTarget.TransformFromDevice.M11;
+                    dpiY = source.CompositionTarget.TransformFromDevice.M22;
+                }
 
-                trayMenu.Activate();
+                _trayMenu.Left = (mousePos.X * dpiX) - _trayMenu.ActualWidth;
+                _trayMenu.Top = (mousePos.Y * dpiY) - _trayMenu.ActualHeight - 20;
+
+                _trayMenu.Activate();
+                _trayMenu.RefreshState();
             };
         }
 
@@ -396,6 +411,21 @@ namespace ZapretGUI
             RootBorder.BeginAnimation(FrameworkElement.WidthProperty, widthAnim);
             RootBorder.BeginAnimation(FrameworkElement.HeightProperty, heightAnim);
         }
+
+        private void BtnDiagnostics_Click(object sender, RoutedEventArgs e)
+        {
+            if (MainContentContainer.Content == _diagnosticsView)
+                return;
+
+            MainContentContainer.Content = _diagnosticsView;
+            SetActiveTab(BtnDiagnostics);
+        }
+
+        protected override void OnClosed(EventArgs e)
+        {
+            _notifyIcon?.Dispose();
+            base.OnClosed(e);
+        }
     }
 }
 
@@ -412,6 +442,640 @@ namespace ZapretGUI.Core
         public const string TgProxyProcessName = "TgWsProxy_windows";
         public const string GithubUserAgent = "ZapretForADHD-App";
         public const string AppRegistryName = "ZapretForADHD";
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// ФАЙЛ: Core\DiagnosticsEngine.cs
+////////////////////////////////////////////////////////////////////////////////
+
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
+using System.Net;
+using System.Net.Http;
+using System.Net.NetworkInformation;
+using System.Net.Security;
+using System.Net.Sockets;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace ZapretGUI.Core
+{
+    public static class DiagnosticsEngine
+    {
+        private static readonly (int dcId, string ip)[] TelegramDcs =
+        [
+            (1, "149.154.175.50"),
+            (2, "149.154.167.51"),
+            (3, "149.154.175.100"),
+            (4, "149.154.167.91"),
+            (5, "91.108.56.130"),
+        ];
+
+        private static readonly int[] TelegramPorts = [443, 80, 5222];
+        private static readonly string[] PingHosts = ["1.1.1.1", "8.8.8.8", "77.88.8.8"];
+        private const string DiscordHost = "162.159.130.234";
+        private static readonly int[] DiscordUdpPorts = Enumerable.Range(50000, 11).ToArray();
+
+        private static readonly (string label, string ip)[] DiscordPingHosts =
+        [
+            ("Gateway", "162.159.130.234"),
+            ("Media", "162.159.129.235"),
+            ("API", "162.159.128.233"),
+        ];
+
+        private static readonly Dictionary<string, string[]> AppSignatures = new()
+        {
+            ["telegram"] = ["telegram", "tgram", "gram", "aygram"],
+            ["discord"] = ["discord", "cord"],
+            ["zapret"] = [AppConstants.ZapretProcessName, "zapret", "winws"],
+            ["tgwsproxy"] = [AppConstants.TgProxyProcessName.ToLower(), "tg_ws_proxy", "flowseal"],
+        };
+
+        public static async Task<(bool ok, double latencyMs, string error)> TcpConnectAsync(string ip, int port, double timeoutSec = 3.0)
+        {
+            var sw = Stopwatch.StartNew();
+            try
+            {
+                using var tcp = new TcpClient();
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSec));
+                await tcp.ConnectAsync(ip, port, cts.Token);
+                return (true, sw.Elapsed.TotalMilliseconds, "");
+            }
+            catch (OperationCanceledException) { return (false, 0, "timeout"); }
+            catch (SocketException e) when (e.SocketErrorCode == SocketError.ConnectionRefused) { return (false, 0, "refused"); }
+            catch (Exception e) { return (false, 0, e.Message); }
+        }
+
+        private static async Task<string> TlsHandshakeAsync(string ip, string sni, double timeoutSec = 4.0)
+        {
+            try
+            {
+                using var tcp = new TcpClient();
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSec));
+                await tcp.ConnectAsync(ip, 443, cts.Token);
+
+                using var ssl = new SslStream(tcp.GetStream(), false, (_, _, _, _) => true);
+                await ssl.AuthenticateAsClientAsync(new SslClientAuthenticationOptions
+                {
+                    TargetHost = sni,
+                    RemoteCertificateValidationCallback = (_, _, _, _) => true,
+                }, cts.Token);
+                return "ok";
+            }
+            catch (OperationCanceledException) { return "timeout"; }
+            catch (Exception e)
+            {
+                var msg = e.Message.ToLower();
+                if (msg.Contains("connection reset") || msg.Contains("forcibly closed") || msg.Contains("eof"))
+                    return "rst";
+                return $"error:{e.Message}";
+            }
+        }
+
+        private static async Task<List<string>> DnsResolveAsync(string domain, string? server = null)
+        {
+            if (server is null)
+            {
+                try
+                {
+                    var entry = await Dns.GetHostEntryAsync(domain);
+                    return entry.AddressList.Select(a => a.ToString()).Distinct().ToList();
+                }
+                catch { return []; }
+            }
+
+            try
+            {
+                var txId = (ushort)Random.Shared.Next(0, 65536);
+                var query = BuildDnsQuery(domain, txId);
+                using var udp = new UdpClient();
+                udp.Client.ReceiveTimeout = 3000;
+                var ep = new IPEndPoint(IPAddress.Parse(server), 53);
+                await udp.SendAsync(query, ep);
+                var result = await udp.ReceiveAsync();
+                return ParseDnsResponse(result.Buffer);
+            }
+            catch { return []; }
+        }
+
+        private static byte[] BuildDnsQuery(string domain, ushort txId)
+        {
+            var buf = new List<byte>
+            {
+                (byte)(txId >> 8), (byte)(txId & 0xff),
+                0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+            };
+            foreach (var part in domain.Split('.'))
+            {
+                buf.Add((byte)part.Length);
+                buf.AddRange(Encoding.ASCII.GetBytes(part));
+            }
+            buf.Add(0);
+            buf.AddRange(new byte[] { 0x00, 0x01, 0x00, 0x01 });
+            return buf.ToArray();
+        }
+
+        private static List<string> ParseDnsResponse(byte[] data)
+        {
+            var ips = new List<string>();
+            try
+            {
+                int ancount = (data[6] << 8) | data[7];
+                if (ancount == 0) return ips;
+                int i = 12;
+                while (i < data.Length && data[i] != 0) i += data[i] + 1;
+                i += 5;
+                for (int a = 0; a < ancount && i + 10 < data.Length; a++)
+                {
+                    i += 2;
+                    int rtype = (data[i] << 8) | data[i + 1];
+                    int rdlen = (data[i + 8] << 8) | data[i + 9];
+                    i += 10;
+                    if (rtype == 1 && rdlen == 4 && i + 4 <= data.Length)
+                        ips.Add($"{data[i]}.{data[i + 1]}.{data[i + 2]}.{data[i + 3]}");
+                    i += rdlen;
+                }
+            }
+            catch { }
+            return ips;
+        }
+
+        private static async Task<(bool ok, double latencyMs)> PingOnceAsync(string host)
+        {
+            try
+            {
+                using var ping = new Ping();
+                var reply = await ping.SendPingAsync(host, 2000);
+                if (reply.Status == IPStatus.Success)
+                    return (true, reply.RoundtripTime);
+            }
+            catch { }
+            return (false, 0);
+        }
+
+        private static async Task<bool> UdpProbeAsync(string host, int port, int timeoutMs = 2000)
+        {
+            try
+            {
+                using var udp = new UdpClient();
+                await udp.SendAsync(new byte[4], new IPEndPoint(IPAddress.Parse(host), port));
+                using var cts = new CancellationTokenSource(timeoutMs);
+                try
+                {
+                    await udp.ReceiveAsync(cts.Token);
+                    return true;
+                }
+                catch (OperationCanceledException)
+                {
+                    return false;
+                }
+                catch (SocketException e) when (e.SocketErrorCode == SocketError.ConnectionReset)
+                {
+                    return true;
+                }
+                catch { return false; }
+            }
+            catch { return false; }
+        }
+
+        public static AppStatus CheckAppStatus()
+        {
+            var status = new AppStatus();
+            try
+            {
+                var names = Process.GetProcesses()
+                    .Select(p => { try { return p.ProcessName.ToLower(); } catch { return ""; } })
+                    .Where(n => n.Length > 0).ToList();
+
+                string Match(string key) =>
+                    names.FirstOrDefault(n => AppSignatures[key].Any(s => n.Contains(s))) ?? "";
+
+                var tg = Match("telegram"); if (tg != "") { status.TelegramRunning = true; status.TelegramProcName = tg; }
+                var dc = Match("discord"); if (dc != "") { status.DiscordRunning = true; status.DiscordProcName = dc; }
+                var zp = Match("zapret"); if (zp != "") { status.ZapretRunning = true; status.ZapretProcName = zp; }
+                var tw = Match("tgwsproxy"); if (tw != "") { status.TgWsProxyRunning = true; status.TgWsProxyProcName = tw; }
+            }
+            catch { }
+            return status;
+        }
+
+        public static async Task<List<DcResult>> CheckTelegramDcsAsync(Action<double>? progress = null)
+        {
+            int done = 0;
+            int total = TelegramDcs.Length * TelegramPorts.Length;
+            var tasks = (from dc in TelegramDcs
+                         from port in TelegramPorts
+                         select Task.Run(async () =>
+                         {
+                             var (ok, lat, err) = await TcpConnectAsync(dc.ip, port, 4.0);
+                             Interlocked.Increment(ref done);
+                             progress?.Invoke((double)done / total);
+                             return new DcResult
+                             {
+                                 DcId = dc.dcId,
+                                 Ip = dc.ip,
+                                 Port = port,
+                                 Ok = ok,
+                                 LatencyMs = ok ? lat : null,
+                                 Error = err
+                             };
+                         })).ToList();
+
+            var results = await Task.WhenAll(tasks);
+            return [.. results.OrderBy(r => r.DcId).ThenBy(r => r.Port)];
+        }
+
+        public static async Task<List<PingResult>> CheckPingAsync(Action<double>? progress = null)
+        {
+            var results = new List<PingResult>();
+            for (int i = 0; i < PingHosts.Length; i++)
+            {
+                var (ok, rtt) = await PingOnceAsync(PingHosts[i]);
+                results.Add(new PingResult
+                {
+                    Host = PingHosts[i],
+                    Ok = ok,
+                    LatencyMs = ok ? rtt : null,
+                    PacketLoss = ok ? 0 : 100
+                });
+                progress?.Invoke((double)(i + 1) / PingHosts.Length);
+            }
+            return results;
+        }
+
+        public static async Task<DnsResult> CheckDnsAsync(string domain = "telegram.org", Action<double>? progress = null)
+        {
+            var result = new DnsResult { Domain = domain };
+            progress?.Invoke(0.1);
+            result.SystemIps = await DnsResolveAsync(domain);
+            progress?.Invoke(0.5);
+            result.DohIps = await DnsResolveAsync(domain, "1.1.1.1");
+            progress?.Invoke(0.9);
+            if (result.SystemIps.Count > 0 && result.DohIps.Count > 0)
+            {
+                if (!result.SystemIps.Intersect(result.DohIps).Any())
+                    result.Spoofed = true;
+            }
+            else if (result.SystemIps.Count == 0) result.Spoofed = true;
+            else if (result.DohIps.Count == 0) result.Error = "1.1.1.1 недоступен";
+            progress?.Invoke(1.0);
+            return result;
+        }
+
+        public static async Task<DpiResult> CheckDpiAsync(Action<double>? progress = null)
+        {
+            var result = new DpiResult();
+            const string targetIp = "149.154.167.51";
+            progress?.Invoke(0.1);
+            result.SniTelegram = await TlsHandshakeAsync(targetIp, "telegram.org", 5.0);
+            progress?.Invoke(0.5);
+            result.SniNeutral = await TlsHandshakeAsync(targetIp, "example.com", 5.0);
+            progress?.Invoke(0.9);
+            if (result.SniTelegram is "rst" or "timeout" && result.SniNeutral != "rst")
+                result.DpiDetected = true;
+            progress?.Invoke(1.0);
+            return result;
+        }
+
+        public static async Task<MediaThrottleResult> CheckMediaThrottleAsync(Action<double>? progress = null)
+        {
+            var result = new MediaThrottleResult();
+            string[] urls =
+            [
+                "https://cdn1.telegram.org/file/811140210/1/iQITMsUeOrg/0c6eeff1e0b33e29c0",
+                "https://cdn4.telegram.org/file/811140210/1/iQITMsUeOrg/0c6eeff1e0b33e29c0",
+                "https://web.telegram.org/a/runtime.js",
+            ];
+            progress?.Invoke(0.1);
+
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(12) };
+            http.DefaultRequestHeaders.UserAgent.ParseAdd(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+
+            foreach (var url in urls)
+            {
+                try
+                {
+                    var sw = Stopwatch.StartNew();
+                    var data = await http.GetByteArrayAsync(url);
+                    sw.Stop();
+                    double sizeKb = data.Length / 1024.0;
+                    if (sizeKb < 5) continue;
+                    double elapsed = Math.Max(sw.Elapsed.TotalSeconds, 0.001);
+                    result.SpeedKbps = sizeKb / elapsed * 8;
+                    result.Throttled = result.SpeedKbps < MediaThrottleResult.SlowThreshold;
+                    progress?.Invoke(1.0);
+                    return result;
+                }
+                catch (Exception e) { result.Error = e.Message; }
+            }
+            progress?.Invoke(1.0);
+            return result;
+        }
+
+        public static async Task<UdpResult> CheckDiscordUdpAsync(Action<double>? progress = null)
+        {
+            var result = new UdpResult();
+            var tested = DiscordUdpPorts.Take(5).ToList();
+            result.TestedPorts = tested;
+            int done = 0;
+
+            var tasks = tested.Select(async port =>
+            {
+                bool open = await UdpProbeAsync(DiscordHost, port);
+                Interlocked.Increment(ref done);
+                progress?.Invoke((double)done / tested.Count);
+                return (port, open);
+            });
+
+            var results = await Task.WhenAll(tasks);
+            result.OpenPorts = results.Where(r => r.open).Select(r => r.port).ToList();
+            result.Blocked = result.OpenPorts.Count == 0;
+            return result;
+        }
+
+        public static async Task<List<DiscordPingResult>> CheckDiscordPingAsync(Action<double>? progress = null)
+        {
+            var results = new List<DiscordPingResult>();
+            for (int i = 0; i < DiscordPingHosts.Length; i++)
+            {
+                var (label, ip) = DiscordPingHosts[i];
+                var (ok, lat, err) = await TcpConnectAsync(ip, 443, 4.0);
+                results.Add(new DiscordPingResult
+                {
+                    Label = label,
+                    Ip = ip,
+                    Ok = ok,
+                    LatencyMs = ok ? lat : null,
+                    Error = err
+                });
+                progress?.Invoke((double)(i + 1) / DiscordPingHosts.Length);
+            }
+            return results;
+        }
+
+        public static List<BlockType> ClassifyBlocks(DiagReport r)
+        {
+            var blocks = new HashSet<BlockType>();
+            var dcOk = r.DcResults.Where(x => x.Ok).ToList();
+            var pingOk = r.PingResults.Where(x => x.Ok).ToList();
+
+            if (r.DnsResult?.Spoofed == true) blocks.Add(BlockType.DnsSpoof);
+            if (r.DpiResult?.DpiDetected == true) blocks.Add(BlockType.SniBlock);
+
+            if (dcOk.Count == 0 && pingOk.Count > 0 && !blocks.Contains(BlockType.SniBlock))
+                blocks.Add(BlockType.IpBlock);
+
+            if (dcOk.Count > 0 && pingOk.Count > 0)
+            {
+                var withLat = dcOk.Where(x => x.LatencyMs.HasValue).ToList();
+                if (withLat.Count > 0)
+                {
+                    double avgDc = withLat.Average(x => x.LatencyMs!.Value);
+                    var pingWithLat = pingOk.Where(x => x.LatencyMs.HasValue).ToList();
+                    if (pingWithLat.Count > 0)
+                    {
+                        double avgPing = pingWithLat.Average(x => x.LatencyMs!.Value);
+                        if ((avgDc > 150 && avgDc > avgPing * 3) || avgDc > 250)
+                            blocks.Add(BlockType.Throttling);
+                    }
+                }
+            }
+
+            if (r.MediaResult?.Throttled == true) blocks.Add(BlockType.MediaThrottle);
+            return [.. blocks];
+        }
+
+        public static List<string> MakeRecommendations(DiagReport r)
+        {
+            var recs = new List<string>();
+            var blocks = r.BlockTypes;
+            var app = r.AppStatus ?? new AppStatus();
+            bool bypass = app.ZapretRunning;
+
+            string BypassList()
+            {
+                var t = new List<string>();
+                if (app.ZapretRunning) t.Add($"Zapret ({app.ZapretProcName})");
+                return string.Join(", ", t);
+            }
+
+            if (blocks.Contains(BlockType.MediaThrottle))
+            {
+                string spd = r.MediaResult?.SpeedKbps > 0 ? $"{r.MediaResult.SpeedKbps:F0} kbps" : "не измерена";
+                recs.Add($"⚠️  ТСПУ-ЗАМЕДЛЕНИЕ МЕДИА (РКН)\n    Измеренная скорость: {spd} (норма > 200 kbps)\n    Файлы и медиа грузятся медленно. Используйте Zapret или VPN.");
+            }
+
+            if (blocks.Contains(BlockType.SniBlock))
+                recs.Add("🛡  SNI-БЛОКИРОВКА (DPI обрывает TLS по SNI)\n    Проверьте, что Zapret запущен с нужным профилем.");
+
+            if (blocks.Contains(BlockType.IpBlock))
+                recs.Add("📡  IP-БЛОКИРОВКА (все DC недоступны)\n    Требуется VPN или WARP.");
+
+            if (blocks.Contains(BlockType.DnsSpoof))
+                recs.Add("🔵  DNS-СПУФИНГ\n    Включите зашифрованный DNS в Windows (1.1.1.1).");
+
+            if (r.UdpResult?.Blocked == true)
+                recs.Add(bypass
+                    ? $"🎮  Discord UDP: заблокирован, НО {BypassList()} активен, Discord работает! ✓"
+                    : "🎮  Discord UDP заблокирован. Звонки не работают без Zapret.");
+            else
+                recs.Add("🎮  Discord UDP: доступен ✓, голос работает без дополнительных настроек.");
+
+            return recs;
+        }
+
+        public static (string emoji, string title, string detail, string color) HumanVerdict(DiagReport r)
+        {
+            var blocks = new HashSet<BlockType>(r.BlockTypes);
+            var app = r.AppStatus;
+            int dcOk = r.DcResults.Count(x => x.Ok);
+            int dcTot = r.DcResults.Count;
+            bool pingOk = r.PingResults.Any(p => p.Ok);
+            bool bypass = app != null && app.ZapretRunning;
+
+            if (app?.TgWsProxyRunning == true)
+                return ("🟢", "tg-ws-proxy активен", "Telegram работает через прокси локально.", "#107C10");
+
+            if (!pingOk && dcOk == 0)
+                return ("🔴", "Интернета нет", "Ни один сервер не отвечает.", "#D13438");
+
+            if (blocks.Contains(BlockType.SniBlock))
+                return bypass
+                    ? ("🟢", "Telegram работает (обходчик активен)", "DPI обнаружен, но обходчик запущен.", "#107C10")
+                    : ("🔴", "Telegram заблокирован (DPI)", "Нужен Zapret.", "#D13438");
+
+            if (blocks.Contains(BlockType.IpBlock))
+                return bypass
+                    ? ("🟢", "Telegram работает", "IP заблокированы, но обходчик компенсирует.", "#107C10")
+                    : ("🔴", "Серверы заблокированы", "Нужен VPN.", "#D13438");
+
+            if (dcOk >= Math.Max(dcTot / 2, 1))
+                return ("🟢", "Telegram работает нормально", "Серверы отвечают быстро.", "#107C10");
+
+            return ("🟡", "Ситуация неоднозначная", "Проблемы со связью.", "#FF8C00");
+        }
+
+        public static (string emoji, string title, string detail, string color) DiscordVerdict(DiagReport r)
+        {
+            var app = r.AppStatus;
+            bool bypass = app != null && app.ZapretRunning;
+            if (r.UdpResult?.Blocked == true)
+                return bypass
+                    ? ("🟢", "Discord работает (обходчик активен)", "UDP заблокирован, но обходчик работает.", "#107C10")
+                    : ("🔴", "Голосовые звонки могут лагать", "UDP-порты Discord заблокированы. Включи Zapret.", "#D13438");
+            return ("🟢", "Discord работает нормально", "Все нужные порты доступны.", "#107C10");
+        }
+
+        public static async Task<DiagReport> RunFullDiagnosticsAsync(Action<double, string>? progress = null)
+        {
+            void Step(double r, string lbl) => progress?.Invoke(r, lbl);
+            var report = new DiagReport();
+
+            Step(0.00, "Определение процессов...");
+            report.AppStatus = await Task.Run(CheckAppStatus);
+
+            Step(0.10, "Проверка DC Telegram...");
+            report.DcResults = await CheckTelegramDcsAsync(p => Step(0.10 + p * 0.20, "DC Telegram..."));
+
+            Step(0.30, "DNS и DPI...");
+            report.DnsResult = await CheckDnsAsync(progress: p => Step(0.30 + p * 0.10, "DNS..."));
+            report.DpiResult = await CheckDpiAsync(p => Step(0.40 + p * 0.15, "DPI/SNI..."));
+
+            Step(0.55, "Скорость медиа (ТСПУ)...");
+            report.MediaResult = await CheckMediaThrottleAsync(p => Step(0.55 + p * 0.15, "Медиа..."));
+
+            Step(0.70, "UDP порты Discord...");
+            report.UdpResult = await CheckDiscordUdpAsync(p => Step(0.70 + p * 0.20, "UDP..."));
+
+            Step(0.90, "Анализ данных...");
+            report.BlockTypes = ClassifyBlocks(report);
+            report.Recommendations = MakeRecommendations(report);
+
+            Step(1.0, "Готово ✓");
+            return report;
+        }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// ФАЙЛ: Core\DiagnosticsModels.cs
+////////////////////////////////////////////////////////////////////////////////
+
+using System.Collections.Generic;
+
+namespace ZapretGUI.Core
+{
+    public enum BlockType { None, Throttling, IpBlock, SniBlock, DnsSpoof, MediaThrottle }
+
+    public class DcResult
+    {
+        public int DcId { get; set; }
+        public string Ip { get; set; } = "";
+        public int Port { get; set; }
+        public bool Ok { get; set; }
+        public double? LatencyMs { get; set; }
+        public string Error { get; set; } = "";
+
+        // --- Свойства для привязки интерфейса (Data Binding) ---
+        public string Title => $"DC {DcId} :{Port}";
+
+        public string PingText => Ok && LatencyMs.HasValue ? $"{LatencyMs.Value:0} мс" : "Ошибка";
+
+        public string StatusColorBrush
+        {
+            get
+            {
+                if (!Ok || !LatencyMs.HasValue)
+                    return "#D13438"; // Красный
+
+                if (LatencyMs.Value < 120)
+                    return "#107C10"; // Зеленый
+
+                return "#FF8C00"; // Оранжевый
+            }
+        }
+    }
+
+    public class PingResult
+    {
+        public string Host { get; set; } = "";
+        public bool Ok { get; set; }
+        public double? LatencyMs { get; set; }
+        public double PacketLoss { get; set; } = 100;
+        public string Error { get; set; } = "";
+    }
+
+    public class DnsResult
+    {
+        public string Domain { get; set; } = "";
+        public List<string> SystemIps { get; set; } = new();
+        public List<string> DohIps { get; set; } = new();
+        public bool Spoofed { get; set; }
+        public string Error { get; set; } = "";
+    }
+
+    public class DpiResult
+    {
+        public string SniTelegram { get; set; } = "unknown";
+        public string SniNeutral { get; set; } = "unknown";
+        public bool DpiDetected { get; set; }
+        public string Error { get; set; } = "";
+    }
+
+    public class UdpResult
+    {
+        public List<int> TestedPorts { get; set; } = new();
+        public List<int> OpenPorts { get; set; } = new();
+        public bool Blocked { get; set; } = true;
+        public string Error { get; set; } = "";
+    }
+
+    public class MediaThrottleResult
+    {
+        public double SpeedKbps { get; set; }
+        public bool Throttled { get; set; }
+        public string Error { get; set; } = "";
+        public const double SlowThreshold = 200.0;
+    }
+
+    public class AppStatus
+    {
+        public bool TelegramRunning { get; set; }
+        public string TelegramProcName { get; set; } = "";
+        public bool DiscordRunning { get; set; }
+        public string DiscordProcName { get; set; } = "";
+        public bool ZapretRunning { get; set; }
+        public string ZapretProcName { get; set; } = "";
+        public bool TgWsProxyRunning { get; set; }
+        public string TgWsProxyProcName { get; set; } = "";
+    }
+
+    public class DiscordPingResult
+    {
+        public string Label { get; set; } = "";
+        public string Ip { get; set; } = "";
+        public bool Ok { get; set; }
+        public double? LatencyMs { get; set; }
+        public string Error { get; set; } = "";
+    }
+
+    public class DiagReport
+    {
+        public List<DcResult> DcResults { get; set; } = new();
+        public List<PingResult> PingResults { get; set; } = new();
+        public DnsResult? DnsResult { get; set; }
+        public DpiResult? DpiResult { get; set; }
+        public UdpResult? UdpResult { get; set; }
+        public MediaThrottleResult? MediaResult { get; set; }
+        public AppStatus? AppStatus { get; set; }
+        public List<BlockType> BlockTypes { get; set; } = new();
+        public List<string> Recommendations { get; set; } = new();
+        public List<DiscordPingResult> DiscordPing { get; set; } = new();
     }
 }
 
@@ -869,6 +1533,11 @@ namespace ZapretGUI.Core
 
                 stopServicesCallback?.Invoke();
 
+                ProcessHelper.KillProcessesByName(AppConstants.ZapretProcessName);
+                ProcessHelper.KillProcessesByName(AppConstants.TgProxyProcessName);
+
+                System.Threading.Thread.Sleep(500);
+
                 var extractPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.CoreFilesDirectory);
                 Directory.CreateDirectory(extractPath);
 
@@ -1117,7 +1786,7 @@ namespace ZapretGUI.Core
 {
     public class ZapretManager
     {
-        private readonly string _basePath;
+        private string _basePath;
         private Process? _process;
 
         public event Action<string>? LogMessage;
@@ -1135,16 +1804,65 @@ namespace ZapretGUI.Core
             if (!File.Exists(batFilePath))
                 throw new FileNotFoundException($"Профиль {profileName} не найден по пути: {batFilePath}");
 
-            var batContent = File.ReadAllText(batFilePath);
+            var lines = File.ReadAllLines(batFilePath);
+            var arguments = "";
+            bool isReadingArgs = false;
 
-            var match = Regex.Match(batContent, $@"{AppConstants.ZapretProcessName}(?:\.exe)?[""']?\s+(.+)");
-            if (!match.Success)
-                throw new Exception($"Не удалось найти параметры запуска {AppConstants.ZapretProcessName} в .bat файле.");
+            foreach (var line in lines)
+            {
+                var trimmed = line.Trim();
 
-            var arguments = match.Groups[1].Value.Trim();
-            arguments = arguments.Replace("^\r\n", " ").Replace("^\n", " ").Replace("^", "");
+                if (trimmed.StartsWith("::") || trimmed.StartsWith("rem ", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                if (!isReadingArgs && trimmed.Contains(AppConstants.ZapretProcessName, StringComparison.OrdinalIgnoreCase))
+                {
+                    isReadingArgs = true;
+                    var match = Regex.Match(trimmed, $@"{AppConstants.ZapretProcessName}(?:\.exe)?[""']?\s+(.*)", RegexOptions.IgnoreCase);
+                    trimmed = match.Success ? match.Groups[1].Value.Trim() : "";
+                }
+
+                if (isReadingArgs)
+                {
+                    bool hasContinuation = trimmed.EndsWith("^");
+                    if (hasContinuation)
+                        trimmed = trimmed.Substring(0, trimmed.Length - 1).TrimEnd();
+
+                    if (!string.IsNullOrWhiteSpace(trimmed))
+                        arguments += " " + trimmed;
+
+                    if (!hasContinuation)
+                        break;
+                }
+            }
+
+            arguments = arguments.Replace("%BIN%", @"bin\");
+            arguments = arguments.Replace("%LISTS%", @"lists\");
+
+            arguments = arguments.Replace("%GameFilterTCP%", "65535");
+            arguments = arguments.Replace("%GameFilterUDP%", "65535");
+
+            arguments = arguments.Trim();
+
+            if (string.IsNullOrEmpty(arguments))
+                throw new Exception($"Не удалось извлечь параметры запуска из {profileName}.");
 
             var exePath = Path.Combine(_basePath, $"{AppConstants.ZapretProcessName}.exe");
+            var binExePath = Path.Combine(_basePath, "bin", $"{AppConstants.ZapretProcessName}.exe");
+
+            if (!File.Exists(exePath) && File.Exists(binExePath))
+                exePath = binExePath;
+
+            if (!File.Exists(exePath))
+            {
+                var msg = $"Не найден исполняемый файл ядра по пути: {exePath}\n\nПожалуйста, запустите проверку обновлений ядер или переустановите программу.";
+                LogMessage?.Invoke($"[Zapret ERR] {msg}");
+                System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                {
+                    System.Windows.MessageBox.Show(msg, "Ошибка запуска", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+                });
+                return;
+            }
 
             var startInfo = new ProcessStartInfo
             {
@@ -1159,7 +1877,23 @@ namespace ZapretGUI.Core
 
             _process = new Process { StartInfo = startInfo };
 
-            _process.OutputDataReceived += (s, e) => { if (!string.IsNullOrEmpty(e.Data)) LogMessage?.Invoke($"[Zapret] {e.Data}"); };
+            _process.OutputDataReceived += (s, e) =>
+            {
+                if (string.IsNullOrEmpty(e.Data)) return;
+
+                string line = e.Data;
+
+                string[] noise = {
+        "Loading hostlist", "loading plain text list", "Loaded",
+        "user defined desync profile", "github version", "windivert initialized"
+    };
+
+                if (noise.Any(n => line.Contains(n, StringComparison.OrdinalIgnoreCase)))
+                    return;
+
+                LogMessage?.Invoke($"[Zapret] {line}");
+            };
+
             _process.ErrorDataReceived += (s, e) => { if (!string.IsNullOrEmpty(e.Data)) LogMessage?.Invoke($"[Zapret ERR] {e.Data}"); };
 
             _process.Start();
@@ -1189,6 +1923,259 @@ namespace ZapretGUI.Core
 
         public bool IsRunning()
             => Process.GetProcessesByName(AppConstants.ZapretProcessName).Length > 0;
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// ФАЙЛ: Views\DiagnosticsView.xaml
+////////////////////////////////////////////////////////////////////////////////
+
+<UserControl x:Class="ZapretGUI.Views.DiagnosticsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             mc:Ignorable="d" 
+             d:DesignHeight="700" d:DesignWidth="900"
+             Foreground="White"
+             Background="Transparent">
+
+    <UserControl.Resources>
+        <Style x:Key="CardStyle" TargetType="Border">
+            <Setter Property="Background" Value="#151515"/>
+            <Setter Property="BorderBrush" Value="#2A2A2A"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="10"/>
+            <Setter Property="Padding" Value="15"/>
+            <Setter Property="Margin" Value="0,0,0,15"/>
+        </Style>
+
+        <Style x:Key="HeaderStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="16"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="#E0E0E0"/>
+            <Setter Property="Margin" Value="0,0,0,10"/>
+        </Style>
+    </UserControl.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="20">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+
+                <RowDefinition Height="Auto"/>
+
+                <RowDefinition Height="Auto"/>
+
+                <RowDefinition Height="Auto"/>
+
+                <RowDefinition Height="*"/>
+
+            </Grid.RowDefinitions>
+
+            <Grid Grid.Row="0" Margin="0,0,0,20">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0">
+                    <TextBlock Text="Мониторинг сети" FontSize="24" FontWeight="Bold"/>
+                    <TextBlock x:Name="TxtStatus" Text="Ожидание проверки..." Foreground="#A0A0A0" Margin="0,5,0,0"/>
+                </StackPanel>
+
+                <ProgressBar x:Name="MainProgress" Grid.Column="1" Height="4" Margin="20,0" 
+                             VerticalAlignment="Center" Foreground="#4CAF50" Background="#2A2A2A" BorderThickness="0"
+                             Visibility="Collapsed" IsIndeterminate="True"/>
+
+                <Button x:Name="BtnRunDiagnostics" Grid.Column="2" Content="Запустить проверку" Click="BtnRunDiagnostics_Click"
+                        Padding="15,8" Background="#4CAF50" Foreground="White" BorderThickness="0" Cursor="Hand" VerticalAlignment="Center">
+                    <Button.Resources>
+                        <Style TargetType="Border">
+                            <Setter Property="CornerRadius" Value="6"/>
+                        </Style>
+                    </Button.Resources>
+                </Button>
+            </Grid>
+
+            <Grid Grid.Row="1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="1*"/>
+                    <ColumnDefinition Width="1*"/>
+                </Grid.ColumnDefinitions>
+
+                <Border x:Name="TelegramCard" Grid.Column="0" Style="{StaticResource CardStyle}" Margin="0,0,10,15">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="TxtTgEmoji" Text="✈️" FontSize="24" VerticalAlignment="Center" Margin="0,0,15,0"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock x:Name="TxtTgMainStatus" Text="Telegram" FontSize="16" FontWeight="Bold"/>
+                            <TextBlock x:Name="TxtTgSubStatus" Text="Ожидание данных..." Foreground="#B0B0B0" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <Border x:Name="DiscordCard" Grid.Column="1" Style="{StaticResource CardStyle}" Margin="10,0,0,15">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="🎮" FontSize="24" VerticalAlignment="Center" Margin="0,0,15,0"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock x:Name="TxtDiscordMainStatus" Text="Discord" FontSize="16" FontWeight="Bold"/>
+                            <TextBlock x:Name="TxtDiscordSubStatus" Text="Ожидание данных..." Foreground="#B0B0B0" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <Border Grid.Row="2" Style="{StaticResource CardStyle}">
+                <StackPanel>
+                    <TextBlock Text="Активные процессы в системе" Style="{StaticResource HeaderStyle}"/>
+                    <WrapPanel Margin="0,10,0,0">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,20,10">
+                            <Ellipse x:Name="DotTelegram" Width="10" Height="10" Fill="Gray" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="Telegram" FontWeight="SemiBold"/>
+                        </StackPanel>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,0,20,10">
+                            <Ellipse x:Name="DotDiscord" Width="10" Height="10" Fill="Gray" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="Discord" FontWeight="SemiBold"/>
+                        </StackPanel>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,0,20,10">
+                            <Ellipse x:Name="DotZapret" Width="10" Height="10" Fill="Gray" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="Zapret (winws)" FontWeight="SemiBold"/>
+                        </StackPanel>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,0,20,10">
+                            <Ellipse x:Name="DotTgProxy" Width="10" Height="10" Fill="Gray" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="TgWsProxy" FontWeight="SemiBold"/>
+                        </StackPanel>
+                    </WrapPanel>
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Row="3" Style="{StaticResource CardStyle}">
+                <StackPanel>
+                    <TextBlock Text="Доступность серверов Telegram (DC &amp; Порты)" Style="{StaticResource HeaderStyle}"/>
+
+                    <ItemsControl x:Name="DcItemsControl">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel Orientation="Horizontal"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="#1E1E1E" BorderBrush="#333" BorderThickness="1" 
+                CornerRadius="6" Padding="12,8" Margin="0,0,10,10" MinWidth="130">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+
+                                        <TextBlock Text="{Binding Title}" FontSize="12" Foreground="#A0A0A0" FontWeight="Bold"/>
+
+                                        <TextBlock Grid.Row="1" Text="{Binding PingText}" FontSize="14" 
+                           FontWeight="Bold" Foreground="{Binding StatusColorBrush}" Margin="0,4,0,0"/>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Row="4" Style="{StaticResource CardStyle}">
+                <StackPanel>
+                    <TextBlock Text="Рекомендации по итогам проверки" Style="{StaticResource HeaderStyle}"/>
+
+                    <ItemsControl x:Name="RecItemsControl">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal" Margin="0,5">
+                                    <TextBlock Text="💡" Margin="0,0,10,0"/>
+                                    <TextBlock Text="{Binding}" Foreground="#E0E0E0" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
+        </Grid>
+    </ScrollViewer>
+</UserControl>
+
+////////////////////////////////////////////////////////////////////////////////
+// ФАЙЛ: Views\DiagnosticsView.xaml.cs
+////////////////////////////////////////////////////////////////////////////////
+
+using System;
+using System.Windows;
+using System.Windows.Controls;
+using ZapretGUI.Core;
+
+namespace ZapretGUI.Views
+{
+    public partial class DiagnosticsView : System.Windows.Controls.UserControl
+    {
+        public DiagnosticsView()
+        {
+            InitializeComponent();
+        }
+
+        private async void BtnRunDiagnostics_Click(object sender, RoutedEventArgs e)
+        {
+            BtnRunDiagnostics.IsEnabled = false;
+            MainProgress.Value = 0;
+
+            Action<double, string> progressCallback = (p, text) =>
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    MainProgress.Value = p * 100;
+                    TxtStatus.Text = text;
+                });
+            };
+
+            var report = await DiagnosticsEngine.RunFullDiagnosticsAsync(progressCallback);
+
+            UpdateUI(report);
+
+            TxtStatus.Text = "Проверка завершена.";
+            BtnRunDiagnostics.IsEnabled = true;
+        }
+
+        private void UpdateUI(DiagReport report)
+        {
+            var tgVerdict = DiagnosticsEngine.HumanVerdict(report);
+            TxtTgMainStatus.Text = tgVerdict.title;
+            TxtTgSubStatus.Text = tgVerdict.detail;
+            TelegramCard.BorderBrush = UIHelper.GetBrushFromHex(tgVerdict.color);
+            TxtTgEmoji.Foreground = UIHelper.GetBrushFromHex(tgVerdict.color);
+
+            var dsVerdict = DiagnosticsEngine.DiscordVerdict(report);
+            TxtDiscordMainStatus.Text = dsVerdict.title;
+            TxtDiscordSubStatus.Text = dsVerdict.detail;
+            DiscordCard.BorderBrush = UIHelper.GetBrushFromHex(dsVerdict.color);
+
+            var status = report.AppStatus ?? new AppStatus();
+            DotTelegram.Fill = status.TelegramRunning ? UIHelper.GetBrushFromHex("#107C10") : UIHelper.GetBrushFromHex("#D13438");
+            DotDiscord.Fill = status.DiscordRunning ? UIHelper.GetBrushFromHex("#107C10") : UIHelper.GetBrushFromHex("#D13438");
+            DotZapret.Fill = status.ZapretRunning ? UIHelper.GetBrushFromHex("#107C10") : UIHelper.GetBrushFromHex("#D13438");
+            DotTgProxy.Fill = status.TgWsProxyRunning ? UIHelper.GetBrushFromHex("#107C10") : UIHelper.GetBrushFromHex("#D13438");
+
+            RecItemsControl.ItemsSource = report.Recommendations;
+            DcItemsControl.ItemsSource = report.DcResults;
+        }
     }
 }
 
@@ -2779,13 +3766,17 @@ namespace ZapretGUI.Views
         public TrayMenuWindow()
         {
             InitializeComponent();
-            CheckPingAsync();
+        }
+
+        public void RefreshState()
+        {
             SyncStatus();
+            CheckPingAsync();
         }
 
         private void Window_Deactivated(object sender, EventArgs e)
         {
-            this.Close();
+            this.Hide();
         }
 
         private async void CheckPingAsync()
@@ -2922,13 +3913,15 @@ namespace ZapretGUI.Views
                 System.Windows.Application.Current.MainWindow.WindowState = WindowState.Normal;
                 System.Windows.Application.Current.MainWindow.Activate();
             }
-            this.Close();
+            this.Hide();
         }
 
         private void BtnExit_Click(object sender, RoutedEventArgs e)
         {
             System.Windows.Application.Current.Shutdown();
         }
+
+
     }
 }
 
