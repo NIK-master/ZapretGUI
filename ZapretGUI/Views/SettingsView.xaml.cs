@@ -55,6 +55,7 @@ namespace ZapretGUI.Views
 
         private void Setting_Changed(object sender, RoutedEventArgs e)
         {
+            AudioHelper.PlayClick();
             SaveAllSettings();
         }
 
@@ -100,6 +101,18 @@ namespace ZapretGUI.Views
                 settings.CompactMode = ToggleCompactMode.IsChecked ?? false;
                 settings.HardwareAcceleration = useGpu;
                 settings.ColorblindMode = ToggleColorblind.IsChecked ?? false;
+
+                var res = System.Windows.Application.Current.Resources;
+                if (settings.ColorblindMode)
+                {
+                    res["BrandSuccessBrush"] = UIHelper.GetBrushFromHex("#0078D7");
+                    res["BrandErrorBrush"] = UIHelper.GetBrushFromHex("#FF8C00");
+                }
+                else
+                {
+                    res["BrandSuccessBrush"] = UIHelper.GetBrushFromHex("#107C10"); 
+                    res["BrandErrorBrush"] = UIHelper.GetBrushFromHex("#D13438");
+                }
 
                 settings.PingUrl = string.IsNullOrWhiteSpace(TxtPingUrl.Text) ? "https://dynamodb.eu-central-1.amazonaws.com" : TxtPingUrl.Text;
                 settings.AutoRestartServices = ToggleAutoRestart.IsChecked ?? false;

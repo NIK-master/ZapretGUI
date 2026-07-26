@@ -9,6 +9,14 @@
                 <ui:ThemesDictionary Theme="Dark" />
                 <ui:ControlsDictionary />
             </ResourceDictionary.MergedDictionaries>
+
+            <SolidColorBrush x:Key="BrandSuccessBrush" Color="#107C10" />
+            <SolidColorBrush x:Key="BrandErrorBrush" Color="#D13438" />
+            <SolidColorBrush x:Key="BrandWarningBrush" Color="#FF8C00" />
+
+            <SolidColorBrush x:Key="SurfaceBackgroundBrush" Color="#151515" />
+            <SolidColorBrush x:Key="CardBorderBrush" Color="#2A2A2A" />
+            <SolidColorBrush x:Key="CardHoverBorderBrush" Color="#4A4A4A" />
         </ResourceDictionary>
     </Application.Resources>
 </Application>

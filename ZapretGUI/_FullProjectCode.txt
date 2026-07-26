@@ -15,6 +15,14 @@
                 <ui:ThemesDictionary Theme="Dark" />
                 <ui:ControlsDictionary />
             </ResourceDictionary.MergedDictionaries>
+
+            <SolidColorBrush x:Key="BrandSuccessBrush" Color="#107C10" />
+            <SolidColorBrush x:Key="BrandErrorBrush" Color="#D13438" />
+            <SolidColorBrush x:Key="BrandWarningBrush" Color="#FF8C00" />
+
+            <SolidColorBrush x:Key="SurfaceBackgroundBrush" Color="#151515" />
+            <SolidColorBrush x:Key="CardBorderBrush" Color="#2A2A2A" />
+            <SolidColorBrush x:Key="CardHoverBorderBrush" Color="#4A4A4A" />
         </ResourceDictionary>
     </Application.Resources>
 </Application>
@@ -442,6 +450,56 @@ namespace ZapretGUI.Core
         public const string TgProxyProcessName = "TgWsProxy_windows";
         public const string GithubUserAgent = "ZapretForADHD-App";
         public const string AppRegistryName = "ZapretForADHD";
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// ФАЙЛ: Core\AudioHelper.cs
+////////////////////////////////////////////////////////////////////////////////
+
+using System;
+using System.Diagnostics;
+using System.Media;
+using System.Threading.Tasks;
+
+namespace ZapretGUI.Core
+{
+    public static class AudioHelper
+    {
+        private static SoundPlayer? _clickPlayer;
+        private static SoundPlayer? _successPlayer;
+
+        static AudioHelper()
+        {
+            try
+            {
+                _clickPlayer = new SoundPlayer("Assets/Sounds/click.wav");
+                _successPlayer = new SoundPlayer("Assets/Sounds/success.wav");
+
+                _clickPlayer.LoadAsync();
+                _successPlayer.LoadAsync();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Не удалось загрузить звуки: {ex.Message}");
+            }
+        }
+
+        public static void PlayClick()
+        {
+            Task.Run(() =>
+            {
+                try { _clickPlayer?.Play(); } catch { }
+            });
+        }
+
+        public static void PlaySuccess()
+        {
+            Task.Run(() =>
+            {
+                try { _successPlayer?.Play(); } catch { }
+            });
+        }
     }
 }
 
@@ -979,9 +1037,9 @@ namespace ZapretGUI.Core
         public int Port { get; set; }
         public bool Ok { get; set; }
         public double? LatencyMs { get; set; }
+        public bool IsLoading { get; set; } = false;
         public string Error { get; set; } = "";
 
-        // --- Свойства для привязки интерфейса (Data Binding) ---
         public string Title => $"DC {DcId} :{Port}";
 
         public string PingText => Ok && LatencyMs.HasValue ? $"{LatencyMs.Value:0} мс" : "Ошибка";
@@ -991,12 +1049,12 @@ namespace ZapretGUI.Core
             get
             {
                 if (!Ok || !LatencyMs.HasValue)
-                    return "#D13438"; // Красный
+                    return "#D13438"; 
 
                 if (LatencyMs.Value < 120)
-                    return "#107C10"; // Зеленый
+                    return "#107C10"; 
 
-                return "#FF8C00"; // Оранжевый
+                return "#FF8C00"; 
             }
         }
     }
@@ -1941,9 +1999,10 @@ namespace ZapretGUI.Core
              Background="Transparent">
 
     <UserControl.Resources>
+        <!-- СТАТИЧНЫЙ СТИЛЬ: для больших панелей -->
         <Style x:Key="CardStyle" TargetType="Border">
-            <Setter Property="Background" Value="#151515"/>
-            <Setter Property="BorderBrush" Value="#2A2A2A"/>
+            <Setter Property="Background" Value="{DynamicResource SurfaceBackgroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource CardBorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="CornerRadius" Value="10"/>
             <Setter Property="Padding" Value="15"/>
@@ -1958,22 +2017,17 @@ namespace ZapretGUI.Core
         </Style>
     </UserControl.Resources>
 
-    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="20">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16" ClipToBounds="False">
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
-
                 <RowDefinition Height="Auto"/>
-
                 <RowDefinition Height="Auto"/>
-
                 <RowDefinition Height="Auto"/>
-
                 <RowDefinition Height="*"/>
-
             </Grid.RowDefinitions>
 
-            <Grid Grid.Row="0" Margin="0,0,0,20">
+            <Grid Grid.Row="0" Margin="4,0,4,20">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
@@ -1986,11 +2040,11 @@ namespace ZapretGUI.Core
                 </StackPanel>
 
                 <ProgressBar x:Name="MainProgress" Grid.Column="1" Height="4" Margin="20,0" 
-                             VerticalAlignment="Center" Foreground="#4CAF50" Background="#2A2A2A" BorderThickness="0"
+                             VerticalAlignment="Center" Foreground="{DynamicResource BrandSuccessBrush}" Background="#2A2A2A" BorderThickness="0"
                              Visibility="Collapsed" IsIndeterminate="True"/>
 
                 <Button x:Name="BtnRunDiagnostics" Grid.Column="2" Content="Запустить проверку" Click="BtnRunDiagnostics_Click"
-                        Padding="15,8" Background="#4CAF50" Foreground="White" BorderThickness="0" Cursor="Hand" VerticalAlignment="Center">
+                        Padding="15,8" Background="{DynamicResource BrandSuccessBrush}" Foreground="White" BorderThickness="0" Cursor="Hand" VerticalAlignment="Center">
                     <Button.Resources>
                         <Style TargetType="Border">
                             <Setter Property="CornerRadius" Value="6"/>
@@ -2005,7 +2059,7 @@ namespace ZapretGUI.Core
                     <ColumnDefinition Width="1*"/>
                 </Grid.ColumnDefinitions>
 
-                <Border x:Name="TelegramCard" Grid.Column="0" Style="{StaticResource CardStyle}" Margin="0,0,10,15">
+                <Border x:Name="TelegramCard" Grid.Column="0" Style="{StaticResource CardStyle}" Margin="4,4,10,15">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
@@ -2019,7 +2073,7 @@ namespace ZapretGUI.Core
                     </Grid>
                 </Border>
 
-                <Border x:Name="DiscordCard" Grid.Column="1" Style="{StaticResource CardStyle}" Margin="10,0,0,15">
+                <Border x:Name="DiscordCard" Grid.Column="1" Style="{StaticResource CardStyle}" Margin="10,4,4,15">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
@@ -2042,17 +2096,14 @@ namespace ZapretGUI.Core
                             <Ellipse x:Name="DotTelegram" Width="10" Height="10" Fill="Gray" Margin="0,0,8,0" VerticalAlignment="Center"/>
                             <TextBlock Text="Telegram" FontWeight="SemiBold"/>
                         </StackPanel>
-
                         <StackPanel Orientation="Horizontal" Margin="0,0,20,10">
                             <Ellipse x:Name="DotDiscord" Width="10" Height="10" Fill="Gray" Margin="0,0,8,0" VerticalAlignment="Center"/>
                             <TextBlock Text="Discord" FontWeight="SemiBold"/>
                         </StackPanel>
-
                         <StackPanel Orientation="Horizontal" Margin="0,0,20,10">
                             <Ellipse x:Name="DotZapret" Width="10" Height="10" Fill="Gray" Margin="0,0,8,0" VerticalAlignment="Center"/>
                             <TextBlock Text="Zapret (winws)" FontWeight="SemiBold"/>
                         </StackPanel>
-
                         <StackPanel Orientation="Horizontal" Margin="0,0,20,10">
                             <Ellipse x:Name="DotTgProxy" Width="10" Height="10" Fill="Gray" Margin="0,0,8,0" VerticalAlignment="Center"/>
                             <TextBlock Text="TgWsProxy" FontWeight="SemiBold"/>
@@ -2073,20 +2124,106 @@ namespace ZapretGUI.Core
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <Border Background="#1E1E1E" BorderBrush="#333" BorderThickness="1" 
-                CornerRadius="6" Padding="12,8" Margin="0,0,10,10" MinWidth="130">
+                                <!-- ИНТЕРАКТИВНАЯ МИНИ-КАРТОЧКА -->
+                                <Border x:Name="MiniCard" Background="#1E1E1E" BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="1" 
+                                        CornerRadius="6" Padding="12,8" Margin="4,4,10,10" MinWidth="130"
+                                        RenderTransformOrigin="0.5,0.5" Panel.ZIndex="0">
+                                    <Border.RenderTransform>
+                                        <ScaleTransform ScaleX="1" ScaleY="1"/>
+                                    </Border.RenderTransform>
                                     <Grid>
-                                        <Grid.RowDefinitions>
-                                            <RowDefinition Height="Auto"/>
-                                            <RowDefinition Height="Auto"/>
-                                        </Grid.RowDefinitions>
+                                        <!-- Контейнер реальных данных -->
+                                        <!-- Изначально прозрачен и сдвинут вниз для анимации появления -->
+                                        <Grid x:Name="RealData" Opacity="0">
+                                            <Grid.RenderTransform>
+                                                <TranslateTransform Y="5"/>
+                                            </Grid.RenderTransform>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                            </Grid.RowDefinitions>
 
-                                        <TextBlock Text="{Binding Title}" FontSize="12" Foreground="#A0A0A0" FontWeight="Bold"/>
+                                            <TextBlock Text="{Binding Title}" FontSize="12" Foreground="#A0A0A0" FontWeight="Bold"/>
+                                            <TextBlock Grid.Row="1" Text="{Binding PingText}" FontSize="14" 
+                                                       FontWeight="Bold" Foreground="{Binding StatusColorBrush}" Margin="0,4,0,0"/>
+                                        </Grid>
 
-                                        <TextBlock Grid.Row="1" Text="{Binding PingText}" FontSize="14" 
-                           FontWeight="Bold" Foreground="{Binding StatusColorBrush}" Margin="0,4,0,0"/>
+                                        <!-- СКЕЛЕТНАЯ ЗАГРУЗКА (Градиентное переливание) -->
+                                        <Border x:Name="SkeletonLayer" Background="#222222" CornerRadius="4" Margin="-5" Visibility="Collapsed" ClipToBounds="True">
+                                            <Border Width="200" HorizontalAlignment="Left">
+                                                <Border.Background>
+                                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                                        <GradientStop Color="Transparent" Offset="0"/>
+                                                        <GradientStop Color="#15FFFFFF" Offset="0.5"/>
+                                                        <GradientStop Color="Transparent" Offset="1"/>
+                                                    </LinearGradientBrush>
+                                                </Border.Background>
+                                                <Border.RenderTransform>
+                                                    <TranslateTransform x:Name="ShimmerTransform" X="-200"/>
+                                                </Border.RenderTransform>
+                                            </Border>
+                                        </Border>
                                     </Grid>
                                 </Border>
+
+                                <DataTemplate.Triggers>
+                                    <!-- ЕСЛИ ЭТО СКЕЛЕТ -->
+                                    <DataTrigger Binding="{Binding IsLoading}" Value="True">
+                                        <Setter TargetName="SkeletonLayer" Property="Visibility" Value="Visible"/>
+                                        <DataTrigger.EnterActions>
+                                            <BeginStoryboard Name="ShimmerStoryboard">
+                                                <Storyboard RepeatBehavior="Forever">
+                                                    <!-- Сдвиг градиента слева направо -->
+                                                    <DoubleAnimation Storyboard.TargetName="ShimmerTransform" 
+                                                                     Storyboard.TargetProperty="X" 
+                                                                     From="-200" To="200" Duration="0:0:1.3" />
+                                                </Storyboard>
+                                            </BeginStoryboard>
+                                        </DataTrigger.EnterActions>
+                                    </DataTrigger>
+
+                                    <!-- ЕСЛИ ЭТО РЕАЛЬНЫЕ ДАННЫЕ (Анимация красивого появления) -->
+                                    <DataTrigger Binding="{Binding IsLoading}" Value="False">
+                                        <DataTrigger.EnterActions>
+                                            <BeginStoryboard>
+                                                <Storyboard>
+                                                    <DoubleAnimation Storyboard.TargetName="RealData" 
+                                                                     Storyboard.TargetProperty="Opacity" 
+                                                                     From="0" To="1" Duration="0:0:0.4" />
+                                                    <DoubleAnimation Storyboard.TargetName="RealData" 
+                                                                     Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)" 
+                                                                     From="5" To="0" Duration="0:0:0.4">
+                                                        <DoubleAnimation.EasingFunction>
+                                                            <CubicEase EasingMode="EaseOut"/>
+                                                        </DoubleAnimation.EasingFunction>
+                                                    </DoubleAnimation>
+                                                </Storyboard>
+                                            </BeginStoryboard>
+                                        </DataTrigger.EnterActions>
+                                    </DataTrigger>
+
+                                    <!-- Анимация наведения для мини-карточек -->
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="MiniCard" Property="Panel.ZIndex" Value="100"/>
+                                        <Setter TargetName="MiniCard" Property="BorderBrush" Value="{DynamicResource CardHoverBorderBrush}"/>
+                                    </Trigger>
+                                    <EventTrigger RoutedEvent="MouseEnter">
+                                        <BeginStoryboard>
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetName="MiniCard" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" To="1.04" Duration="0:0:0.1" />
+                                                <DoubleAnimation Storyboard.TargetName="MiniCard" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" To="1.04" Duration="0:0:0.1" />
+                                            </Storyboard>
+                                        </BeginStoryboard>
+                                    </EventTrigger>
+                                    <EventTrigger RoutedEvent="MouseLeave">
+                                        <BeginStoryboard>
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetName="MiniCard" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" To="1" Duration="0:0:0.25" />
+                                                <DoubleAnimation Storyboard.TargetName="MiniCard" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" To="1" Duration="0:0:0.25" />
+                                            </Storyboard>
+                                        </BeginStoryboard>
+                                    </EventTrigger>
+                                </DataTemplate.Triggers>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
@@ -2100,9 +2237,29 @@ namespace ZapretGUI.Core
                     <ItemsControl x:Name="RecItemsControl">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <StackPanel Orientation="Horizontal" Margin="0,5">
+                                <!-- Добавлено плавное всплывание и для списка рекомендаций -->
+                                <StackPanel Orientation="Horizontal" Margin="0,5" Opacity="0">
+                                    <StackPanel.RenderTransform>
+                                        <TranslateTransform Y="10"/>
+                                    </StackPanel.RenderTransform>
+
                                     <TextBlock Text="💡" Margin="0,0,10,0"/>
                                     <TextBlock Text="{Binding}" Foreground="#E0E0E0" TextWrapping="Wrap"/>
+
+                                    <StackPanel.Triggers>
+                                        <EventTrigger RoutedEvent="Loaded">
+                                            <BeginStoryboard>
+                                                <Storyboard>
+                                                    <DoubleAnimation Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.4"/>
+                                                    <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)" From="10" To="0" Duration="0:0:0.4">
+                                                        <DoubleAnimation.EasingFunction>
+                                                            <CubicEase EasingMode="EaseOut"/>
+                                                        </DoubleAnimation.EasingFunction>
+                                                    </DoubleAnimation>
+                                                </Storyboard>
+                                            </BeginStoryboard>
+                                        </EventTrigger>
+                                    </StackPanel.Triggers>
                                 </StackPanel>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
@@ -2119,6 +2276,7 @@ namespace ZapretGUI.Core
 ////////////////////////////////////////////////////////////////////////////////
 
 using System;
+using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
 using ZapretGUI.Core;
@@ -2130,12 +2288,34 @@ namespace ZapretGUI.Views
         public DiagnosticsView()
         {
             InitializeComponent();
+            PrepareSkeletons();
+        }
+
+        private void PrepareSkeletons()
+        {
+            var skeletons = new List<DcResult>();
+            int[] dcs = { 1, 2, 3, 4, 5 };
+            int[] ports = { 443, 80, 5222 };
+
+            foreach (var dc in dcs)
+            {
+                foreach (var port in ports)
+                {
+                    skeletons.Add(new DcResult { DcId = dc, Port = port, IsLoading = true });
+                }
+            }
+            DcItemsControl.ItemsSource = skeletons;
         }
 
         private async void BtnRunDiagnostics_Click(object sender, RoutedEventArgs e)
         {
+            AudioHelper.PlayClick();
+
             BtnRunDiagnostics.IsEnabled = false;
             MainProgress.Value = 0;
+            MainProgress.Visibility = Visibility.Visible;
+
+            PrepareSkeletons(); 
 
             Action<double, string> progressCallback = (p, text) =>
             {
@@ -2151,7 +2331,10 @@ namespace ZapretGUI.Views
             UpdateUI(report);
 
             TxtStatus.Text = "Проверка завершена.";
+            MainProgress.Visibility = Visibility.Collapsed;
             BtnRunDiagnostics.IsEnabled = true;
+
+            AudioHelper.PlaySuccess();
         }
 
         private void UpdateUI(DiagReport report)
@@ -2168,13 +2351,17 @@ namespace ZapretGUI.Views
             DiscordCard.BorderBrush = UIHelper.GetBrushFromHex(dsVerdict.color);
 
             var status = report.AppStatus ?? new AppStatus();
-            DotTelegram.Fill = status.TelegramRunning ? UIHelper.GetBrushFromHex("#107C10") : UIHelper.GetBrushFromHex("#D13438");
-            DotDiscord.Fill = status.DiscordRunning ? UIHelper.GetBrushFromHex("#107C10") : UIHelper.GetBrushFromHex("#D13438");
-            DotZapret.Fill = status.ZapretRunning ? UIHelper.GetBrushFromHex("#107C10") : UIHelper.GetBrushFromHex("#D13438");
-            DotTgProxy.Fill = status.TgWsProxyRunning ? UIHelper.GetBrushFromHex("#107C10") : UIHelper.GetBrushFromHex("#D13438");
+
+            var successColor = (System.Windows.Media.SolidColorBrush)System.Windows.Application.Current.Resources["BrandSuccessBrush"];
+            var errorColor = (System.Windows.Media.SolidColorBrush)System.Windows.Application.Current.Resources["BrandErrorBrush"];
+
+            DotTelegram.Fill = status.TelegramRunning ? successColor : errorColor;
+            DotDiscord.Fill = status.DiscordRunning ? successColor : errorColor;
+            DotZapret.Fill = status.ZapretRunning ? successColor : errorColor;
+            DotTgProxy.Fill = status.TgWsProxyRunning ? successColor : errorColor;
 
             RecItemsControl.ItemsSource = report.Recommendations;
-            DcItemsControl.ItemsSource = report.DcResults;
+            DcItemsControl.ItemsSource = report.DcResults; 
         }
     }
 }
@@ -3386,6 +3573,7 @@ namespace ZapretGUI.Views
 
         private void Setting_Changed(object sender, RoutedEventArgs e)
         {
+            AudioHelper.PlayClick();
             SaveAllSettings();
         }
 
@@ -3431,6 +3619,18 @@ namespace ZapretGUI.Views
                 settings.CompactMode = ToggleCompactMode.IsChecked ?? false;
                 settings.HardwareAcceleration = useGpu;
                 settings.ColorblindMode = ToggleColorblind.IsChecked ?? false;
+
+                var res = System.Windows.Application.Current.Resources;
+                if (settings.ColorblindMode)
+                {
+                    res["BrandSuccessBrush"] = UIHelper.GetBrushFromHex("#0078D7");
+                    res["BrandErrorBrush"] = UIHelper.GetBrushFromHex("#FF8C00");
+                }
+                else
+                {
+                    res["BrandSuccessBrush"] = UIHelper.GetBrushFromHex("#107C10"); 
+                    res["BrandErrorBrush"] = UIHelper.GetBrushFromHex("#D13438");
+                }
 
                 settings.PingUrl = string.IsNullOrWhiteSpace(TxtPingUrl.Text) ? "https://dynamodb.eu-central-1.amazonaws.com" : TxtPingUrl.Text;
                 settings.AutoRestartServices = ToggleAutoRestart.IsChecked ?? false;

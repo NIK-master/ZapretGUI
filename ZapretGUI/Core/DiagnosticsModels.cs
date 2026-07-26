@@ -11,9 +11,9 @@ namespace ZapretGUI.Core
         public int Port { get; set; }
         public bool Ok { get; set; }
         public double? LatencyMs { get; set; }
+        public bool IsLoading { get; set; } = false;
         public string Error { get; set; } = "";
 
-        // --- Свойства для привязки интерфейса (Data Binding) ---
         public string Title => $"DC {DcId} :{Port}";
 
         public string PingText => Ok && LatencyMs.HasValue ? $"{LatencyMs.Value:0} мс" : "Ошибка";
@@ -23,12 +23,12 @@ namespace ZapretGUI.Core
             get
             {
                 if (!Ok || !LatencyMs.HasValue)
-                    return "#D13438"; // Красный
+                    return "#D13438"; 
 
                 if (LatencyMs.Value < 120)
-                    return "#107C10"; // Зеленый
+                    return "#107C10"; 
 
-                return "#FF8C00"; // Оранжевый
+                return "#FF8C00"; 
             }
         }
     }
