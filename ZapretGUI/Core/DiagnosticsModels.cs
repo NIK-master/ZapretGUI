@@ -94,6 +94,24 @@ namespace ZapretGUI.Core
         public bool Ok { get; set; }
         public double? LatencyMs { get; set; }
         public string Error { get; set; } = "";
+
+        public bool IsLoading { get; set; } = false;
+        public string Title => Label;
+        public string PingText => Ok && LatencyMs.HasValue ? $"{LatencyMs.Value:0} мс" : "Ошибка";
+
+        public string StatusColorBrush
+        {
+            get
+            {
+                if (!Ok || !LatencyMs.HasValue)
+                    return "#D13438";
+
+                if (LatencyMs.Value < 120)
+                    return "#107C10";
+
+                return "#FF8C00";
+            }
+        }
     }
 
     public class DiagReport

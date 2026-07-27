@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Windows;
+using ZapretGUI.Core;
 
 namespace ZapretGUI
 {
@@ -15,9 +16,15 @@ namespace ZapretGUI
             splash.Closed += (s, args) =>
             {
                 var mainWindow = new MainWindow();
-
                 this.MainWindow = mainWindow;
-                mainWindow.Show();
+
+                if (SettingsManager.Current.StartMinimized)
+                {
+                    mainWindow.WindowState = WindowState.Minimized;
+                    mainWindow.Hide();
+                }
+                else
+                    mainWindow.Show();
 
                 this.ShutdownMode = ShutdownMode.OnMainWindowClose;
             };

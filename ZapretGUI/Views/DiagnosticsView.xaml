@@ -25,6 +25,95 @@
             <Setter Property="Foreground" Value="#E0E0E0"/>
             <Setter Property="Margin" Value="0,0,0,10"/>
         </Style>
+
+        <!-- ОБЩИЙ ШАБЛОН ДЛЯ МИНИ-КАРТОЧЕК ПИНГА -->
+        <DataTemplate x:Key="ServerPingTemplate">
+            <Border x:Name="MiniCard" Background="#1E1E1E" BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="1" 
+                    CornerRadius="6" Padding="12,8" Margin="4,4,10,10" MinWidth="130"
+                    RenderTransformOrigin="0.5,0.5" Panel.ZIndex="0">
+                <Border.RenderTransform>
+                    <ScaleTransform ScaleX="1" ScaleY="1"/>
+                </Border.RenderTransform>
+                <Grid>
+                    <Grid x:Name="RealData" Opacity="0">
+                        <Grid.RenderTransform>
+                            <TranslateTransform Y="5"/>
+                        </Grid.RenderTransform>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Text="{Binding Title}" FontSize="12" Foreground="#A0A0A0" FontWeight="Bold"/>
+                        <TextBlock Grid.Row="1" Text="{Binding PingText}" FontSize="14" 
+                                   FontWeight="Bold" Foreground="{Binding StatusColorBrush}" Margin="0,4,0,0"/>
+                    </Grid>
+
+                    <Border x:Name="SkeletonLayer" Background="#222222" CornerRadius="4" Margin="-5" Visibility="Collapsed" ClipToBounds="True">
+                        <Border Width="200" HorizontalAlignment="Left">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                    <GradientStop Color="Transparent" Offset="0"/>
+                                    <GradientStop Color="#15FFFFFF" Offset="0.5"/>
+                                    <GradientStop Color="Transparent" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.Background>
+                            <Border.RenderTransform>
+                                <TranslateTransform x:Name="ShimmerTransform" X="-200"/>
+                            </Border.RenderTransform>
+                        </Border>
+                    </Border>
+                </Grid>
+            </Border>
+
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsLoading}" Value="True">
+                    <Setter TargetName="SkeletonLayer" Property="Visibility" Value="Visible"/>
+                    <DataTrigger.EnterActions>
+                        <BeginStoryboard Name="ShimmerStoryboard">
+                            <Storyboard RepeatBehavior="Forever">
+                                <DoubleAnimation Storyboard.TargetName="ShimmerTransform" Storyboard.TargetProperty="X" From="-200" To="200" Duration="0:0:1.3" />
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </DataTrigger.EnterActions>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsLoading}" Value="False">
+                    <DataTrigger.EnterActions>
+                        <BeginStoryboard>
+                            <Storyboard>
+                                <DoubleAnimation Storyboard.TargetName="RealData" Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.4" />
+                                <DoubleAnimation Storyboard.TargetName="RealData" Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)" From="5" To="0" Duration="0:0:0.4">
+                                    <DoubleAnimation.EasingFunction>
+                                        <CubicEase EasingMode="EaseOut"/>
+                                    </DoubleAnimation.EasingFunction>
+                                </DoubleAnimation>
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </DataTrigger.EnterActions>
+                </DataTrigger>
+
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter TargetName="MiniCard" Property="Panel.ZIndex" Value="100"/>
+                    <Setter TargetName="MiniCard" Property="BorderBrush" Value="{DynamicResource CardHoverBorderBrush}"/>
+                </Trigger>
+                <EventTrigger RoutedEvent="MouseEnter">
+                    <BeginStoryboard>
+                        <Storyboard>
+                            <DoubleAnimation Storyboard.TargetName="MiniCard" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" To="1.04" Duration="0:0:0.1" />
+                            <DoubleAnimation Storyboard.TargetName="MiniCard" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" To="1.04" Duration="0:0:0.1" />
+                        </Storyboard>
+                    </BeginStoryboard>
+                </EventTrigger>
+                <EventTrigger RoutedEvent="MouseLeave">
+                    <BeginStoryboard>
+                        <Storyboard>
+                            <DoubleAnimation Storyboard.TargetName="MiniCard" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" To="1" Duration="0:0:0.25" />
+                            <DoubleAnimation Storyboard.TargetName="MiniCard" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" To="1" Duration="0:0:0.25" />
+                        </Storyboard>
+                    </BeginStoryboard>
+                </EventTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
     </UserControl.Resources>
 
     <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16" ClipToBounds="False">
@@ -75,7 +164,16 @@
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock x:Name="TxtTgEmoji" Text="✈️" FontSize="24" VerticalAlignment="Center" Margin="0,0,15,0"/>
+
+                        <TextBlock x:Name="TxtTgEmoji" Text="✈️" FontSize="24" VerticalAlignment="Center" Margin="0,0,15,0"
+                                   Cursor="Hand" MouseDown="TxtTgEmoji_MouseDown" RenderTransformOrigin="0.5,0.5">
+                            <TextBlock.RenderTransform>
+                                <TransformGroup>
+                                    <TranslateTransform x:Name="TgEmojiTranslate" X="0" Y="0"/>
+                                </TransformGroup>
+                            </TextBlock.RenderTransform>
+                        </TextBlock>
+
                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
                             <TextBlock x:Name="TxtTgMainStatus" Text="Telegram" FontSize="16" FontWeight="Bold"/>
                             <TextBlock x:Name="TxtTgSubStatus" Text="Ожидание данных..." Foreground="#B0B0B0" TextWrapping="Wrap"/>
@@ -89,7 +187,14 @@
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="🎮" FontSize="24" VerticalAlignment="Center" Margin="0,0,15,0"/>
+
+                        <TextBlock x:Name="TxtDiscordEmoji" Text="🎮" FontSize="24" VerticalAlignment="Center" Margin="0,0,15,0"
+                                   Cursor="Hand" MouseDown="TxtDiscordEmoji_MouseDown" RenderTransformOrigin="0.5,0.5">
+                            <TextBlock.RenderTransform>
+                                <RotateTransform x:Name="DiscordEmojiRotation" Angle="0"/>
+                            </TextBlock.RenderTransform>
+                        </TextBlock>
+
                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
                             <TextBlock x:Name="TxtDiscordMainStatus" Text="Discord" FontSize="16" FontWeight="Bold"/>
                             <TextBlock x:Name="TxtDiscordSubStatus" Text="Ожидание данных..." Foreground="#B0B0B0" TextWrapping="Wrap"/>
@@ -125,117 +230,23 @@
             <Border Grid.Row="3" Style="{StaticResource CardStyle}">
                 <StackPanel>
                     <TextBlock Text="Доступность серверов Telegram (DC &amp; Порты)" Style="{StaticResource HeaderStyle}"/>
-
-                    <ItemsControl x:Name="DcItemsControl">
+                    <!-- Используем общий шаблон -->
+                    <ItemsControl x:Name="DcItemsControl" ItemTemplate="{StaticResource ServerPingTemplate}">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
                                 <WrapPanel Orientation="Horizontal"/>
                             </ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <!-- ИНТЕРАКТИВНАЯ МИНИ-КАРТОЧКА -->
-                                <Border x:Name="MiniCard" Background="#1E1E1E" BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="1" 
-                                        CornerRadius="6" Padding="12,8" Margin="4,4,10,10" MinWidth="130"
-                                        RenderTransformOrigin="0.5,0.5" Panel.ZIndex="0">
-                                    <Border.RenderTransform>
-                                        <ScaleTransform ScaleX="1" ScaleY="1"/>
-                                    </Border.RenderTransform>
-                                    <Grid>
-                                        <!-- Контейнер реальных данных -->
-                                        <!-- Изначально прозрачен и сдвинут вниз для анимации появления -->
-                                        <Grid x:Name="RealData" Opacity="0">
-                                            <Grid.RenderTransform>
-                                                <TranslateTransform Y="5"/>
-                                            </Grid.RenderTransform>
-                                            <Grid.RowDefinitions>
-                                                <RowDefinition Height="Auto"/>
-                                                <RowDefinition Height="Auto"/>
-                                            </Grid.RowDefinitions>
+                    </ItemsControl>
 
-                                            <TextBlock Text="{Binding Title}" FontSize="12" Foreground="#A0A0A0" FontWeight="Bold"/>
-                                            <TextBlock Grid.Row="1" Text="{Binding PingText}" FontSize="14" 
-                                                       FontWeight="Bold" Foreground="{Binding StatusColorBrush}" Margin="0,4,0,0"/>
-                                        </Grid>
-
-                                        <!-- СКЕЛЕТНАЯ ЗАГРУЗКА (Градиентное переливание) -->
-                                        <Border x:Name="SkeletonLayer" Background="#222222" CornerRadius="4" Margin="-5" Visibility="Collapsed" ClipToBounds="True">
-                                            <Border Width="200" HorizontalAlignment="Left">
-                                                <Border.Background>
-                                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                                                        <GradientStop Color="Transparent" Offset="0"/>
-                                                        <GradientStop Color="#15FFFFFF" Offset="0.5"/>
-                                                        <GradientStop Color="Transparent" Offset="1"/>
-                                                    </LinearGradientBrush>
-                                                </Border.Background>
-                                                <Border.RenderTransform>
-                                                    <TranslateTransform x:Name="ShimmerTransform" X="-200"/>
-                                                </Border.RenderTransform>
-                                            </Border>
-                                        </Border>
-                                    </Grid>
-                                </Border>
-
-                                <DataTemplate.Triggers>
-                                    <!-- ЕСЛИ ЭТО СКЕЛЕТ -->
-                                    <DataTrigger Binding="{Binding IsLoading}" Value="True">
-                                        <Setter TargetName="SkeletonLayer" Property="Visibility" Value="Visible"/>
-                                        <DataTrigger.EnterActions>
-                                            <BeginStoryboard Name="ShimmerStoryboard">
-                                                <Storyboard RepeatBehavior="Forever">
-                                                    <!-- Сдвиг градиента слева направо -->
-                                                    <DoubleAnimation Storyboard.TargetName="ShimmerTransform" 
-                                                                     Storyboard.TargetProperty="X" 
-                                                                     From="-200" To="200" Duration="0:0:1.3" />
-                                                </Storyboard>
-                                            </BeginStoryboard>
-                                        </DataTrigger.EnterActions>
-                                    </DataTrigger>
-
-                                    <!-- ЕСЛИ ЭТО РЕАЛЬНЫЕ ДАННЫЕ (Анимация красивого появления) -->
-                                    <DataTrigger Binding="{Binding IsLoading}" Value="False">
-                                        <DataTrigger.EnterActions>
-                                            <BeginStoryboard>
-                                                <Storyboard>
-                                                    <DoubleAnimation Storyboard.TargetName="RealData" 
-                                                                     Storyboard.TargetProperty="Opacity" 
-                                                                     From="0" To="1" Duration="0:0:0.4" />
-                                                    <DoubleAnimation Storyboard.TargetName="RealData" 
-                                                                     Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)" 
-                                                                     From="5" To="0" Duration="0:0:0.4">
-                                                        <DoubleAnimation.EasingFunction>
-                                                            <CubicEase EasingMode="EaseOut"/>
-                                                        </DoubleAnimation.EasingFunction>
-                                                    </DoubleAnimation>
-                                                </Storyboard>
-                                            </BeginStoryboard>
-                                        </DataTrigger.EnterActions>
-                                    </DataTrigger>
-
-                                    <!-- Анимация наведения для мини-карточек -->
-                                    <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter TargetName="MiniCard" Property="Panel.ZIndex" Value="100"/>
-                                        <Setter TargetName="MiniCard" Property="BorderBrush" Value="{DynamicResource CardHoverBorderBrush}"/>
-                                    </Trigger>
-                                    <EventTrigger RoutedEvent="MouseEnter">
-                                        <BeginStoryboard>
-                                            <Storyboard>
-                                                <DoubleAnimation Storyboard.TargetName="MiniCard" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" To="1.04" Duration="0:0:0.1" />
-                                                <DoubleAnimation Storyboard.TargetName="MiniCard" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" To="1.04" Duration="0:0:0.1" />
-                                            </Storyboard>
-                                        </BeginStoryboard>
-                                    </EventTrigger>
-                                    <EventTrigger RoutedEvent="MouseLeave">
-                                        <BeginStoryboard>
-                                            <Storyboard>
-                                                <DoubleAnimation Storyboard.TargetName="MiniCard" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" To="1" Duration="0:0:0.25" />
-                                                <DoubleAnimation Storyboard.TargetName="MiniCard" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" To="1" Duration="0:0:0.25" />
-                                            </Storyboard>
-                                        </BeginStoryboard>
-                                    </EventTrigger>
-                                </DataTemplate.Triggers>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
+                    <TextBlock Text="Доступность серверов Discord" Style="{StaticResource HeaderStyle}" Margin="0,15,0,10"/>
+                    <!-- Выводим серверы Discord через тот же шаблон! -->
+                    <ItemsControl x:Name="DiscordItemsControl" ItemTemplate="{StaticResource ServerPingTemplate}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel Orientation="Horizontal"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
                     </ItemsControl>
                 </StackPanel>
             </Border>
@@ -247,7 +258,6 @@
                     <ItemsControl x:Name="RecItemsControl">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <!-- Добавлено плавное всплывание и для списка рекомендаций -->
                                 <StackPanel Orientation="Horizontal" Margin="0,5" Opacity="0">
                                     <StackPanel.RenderTransform>
                                         <TranslateTransform Y="10"/>

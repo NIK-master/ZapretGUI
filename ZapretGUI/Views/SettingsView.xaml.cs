@@ -195,8 +195,18 @@ namespace ZapretGUI.Views
         {
             if (sender is System.Windows.Controls.Button btn)
                 btn.IsEnabled = false;
-
             await ZapretGUI.Core.UpdateManager.CheckForUpdatesAsync(isManualCheck: true);
+
+            Action stopServicesAction = () =>
+            {
+                if (System.Windows.Application.Current.MainWindow is MainWindow mw && mw.IsBypassRunning())
+                {
+                    mw.ToggleBypass();
+                }
+            };
+
+            await ZapretGUI.Core.UpdateManager.CheckForZapretCoreUpdatesAsync(stopServicesAction, null);
+            await ZapretGUI.Core.UpdateManager.CheckForTgProxyCoreUpdatesAsync(stopServicesAction, null);
 
             if (sender is System.Windows.Controls.Button btnReEnable)
                 btnReEnable.IsEnabled = true;

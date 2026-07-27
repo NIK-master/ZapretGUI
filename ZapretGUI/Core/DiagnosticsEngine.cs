@@ -428,6 +428,9 @@ namespace ZapretGUI.Core
             if (blocks.Contains(BlockType.DnsSpoof))
                 recs.Add("🔵  DNS-СПУФИНГ\n    Включите зашифрованный DNS в Windows (1.1.1.1).");
 
+            if (r.DiscordPing != null && r.DiscordPing.Count > 0 && r.DiscordPing.All(p => !p.Ok))
+                recs.Add("🔴  DISCORD API: Недоступен!\n    Текстовые чаты и авторизация не будут работать без обхода.");
+
             if (r.UdpResult?.Blocked == true)
                 recs.Add(bypass
                     ? $"🎮  Discord UDP: заблокирован, НО {BypassList()} активен, Discord работает! ✓"
@@ -473,11 +476,18 @@ namespace ZapretGUI.Core
         {
             var app = r.AppStatus;
             bool bypass = app != null && app.ZapretRunning;
+
+            if (r.DiscordPing != null && r.DiscordPing.Count > 0 && r.DiscordPing.All(p => !p.Ok))
+                return bypass
+                    ? ("🟡", "Сбои в Discord", "Обходчик работает, но серверы недоступны. Возможно, стоит сменить профиль.", "#FF8C00")
+                    : ("🔴", "Discord полностью заблокирован", "API и Gateway не отвечают. Включи Zapret.", "#D13438");
+
             if (r.UdpResult?.Blocked == true)
                 return bypass
-                    ? ("🟢", "Discord работает (обходчик активен)", "UDP заблокирован, но обходчик работает.", "#107C10")
-                    : ("🔴", "Голосовые звонки могут лагать", "UDP-порты Discord заблокированы. Включи Zapret.", "#D13438");
-            return ("🟢", "Discord работает нормально", "Все нужные порты доступны.", "#107C10");
+                    ? ("🟢", "Discord работает (обходчик активен)", "UDP заблокирован, но Zapret маршрутизирует трафик.", "#107C10")
+                    : ("🟡", "Проблемы с голосом", "Чаты работают, но UDP заблокирован. Звонки не пройдут.", "#FF8C00");
+
+            return ("🟢", "Discord работает нормально", "Все нужные порты и серверы доступны.", "#107C10");
         }
 
         public static async Task<DiagReport> RunFullDiagnosticsAsync(Action<double, string>? progress = null)
@@ -499,7 +509,10 @@ namespace ZapretGUI.Core
             report.MediaResult = await CheckMediaThrottleAsync(p => Step(0.55 + p * 0.15, "Медиа..."));
 
             Step(0.70, "UDP порты Discord...");
-            report.UdpResult = await CheckDiscordUdpAsync(p => Step(0.70 + p * 0.20, "UDP..."));
+            report.UdpResult = await CheckDiscordUdpAsync(p => Step(0.70 + p * 0.10, "UDP..."));
+
+            Step(0.80, "Пинг серверов Discord...");
+            report.DiscordPing = await CheckDiscordPingAsync(p => Step(0.80 + p * 0.10, "Пинг Discord..."));
 
             Step(0.90, "Анализ данных...");
             report.BlockTypes = ClassifyBlocks(report);

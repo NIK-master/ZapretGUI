@@ -2065,7 +2065,17 @@ namespace ZapretGUI.Core
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock x:Name="TxtTgEmoji" Text="✈️" FontSize="24" VerticalAlignment="Center" Margin="0,0,15,0"/>
+
+                        <!-- ПАСХАЛКА: Бумажный самолетик Дурова -->
+                        <TextBlock x:Name="TxtTgEmoji" Text="✈️" FontSize="24" VerticalAlignment="Center" Margin="0,0,15,0"
+                                   Cursor="Hand" MouseDown="TxtTgEmoji_MouseDown" RenderTransformOrigin="0.5,0.5">
+                            <TextBlock.RenderTransform>
+                                <TransformGroup>
+                                    <TranslateTransform x:Name="TgEmojiTranslate" X="0" Y="0"/>
+                                </TransformGroup>
+                            </TextBlock.RenderTransform>
+                        </TextBlock>
+
                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
                             <TextBlock x:Name="TxtTgMainStatus" Text="Telegram" FontSize="16" FontWeight="Bold"/>
                             <TextBlock x:Name="TxtTgSubStatus" Text="Ожидание данных..." Foreground="#B0B0B0" TextWrapping="Wrap"/>
@@ -2079,7 +2089,14 @@ namespace ZapretGUI.Core
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="🎮" FontSize="24" VerticalAlignment="Center" Margin="0,0,15,0"/>
+
+                        <TextBlock x:Name="TxtDiscordEmoji" Text="🎮" FontSize="24" VerticalAlignment="Center" Margin="0,0,15,0"
+                                   Cursor="Hand" MouseDown="TxtDiscordEmoji_MouseDown" RenderTransformOrigin="0.5,0.5">
+                            <TextBlock.RenderTransform>
+                                <RotateTransform x:Name="DiscordEmojiRotation" Angle="0"/>
+                            </TextBlock.RenderTransform>
+                        </TextBlock>
+
                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
                             <TextBlock x:Name="TxtDiscordMainStatus" Text="Discord" FontSize="16" FontWeight="Bold"/>
                             <TextBlock x:Name="TxtDiscordSubStatus" Text="Ожидание данных..." Foreground="#B0B0B0" TextWrapping="Wrap"/>
@@ -2285,6 +2302,14 @@ namespace ZapretGUI.Views
 {
     public partial class DiagnosticsView : System.Windows.Controls.UserControl
     {
+        // Переменные для пасхалки Discord
+        private int _discordClickCount = 0;
+        private DateTime _lastDiscordClick = DateTime.MinValue;
+
+        // Переменные для пасхалки Telegram
+        private int _tgClickCount = 0;
+        private DateTime _lastTgClick = DateTime.MinValue;
+
         public DiagnosticsView()
         {
             InitializeComponent();
@@ -2315,7 +2340,7 @@ namespace ZapretGUI.Views
             MainProgress.Value = 0;
             MainProgress.Visibility = Visibility.Visible;
 
-            PrepareSkeletons(); 
+            PrepareSkeletons();
 
             Action<double, string> progressCallback = (p, text) =>
             {
@@ -2361,7 +2386,131 @@ namespace ZapretGUI.Views
             DotTgProxy.Fill = status.TgWsProxyRunning ? successColor : errorColor;
 
             RecItemsControl.ItemsSource = report.Recommendations;
-            DcItemsControl.ItemsSource = report.DcResults; 
+            DcItemsControl.ItemsSource = report.DcResults;
+        }
+
+        // =======================================================
+        // ПАСХАЛКА 1: DISCORD (САЛЬТО)
+        // =======================================================
+        private void TxtDiscordEmoji_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            // Если между кликами прошло больше 1.5 секунд — сбрасываем счетчик
+            if ((DateTime.Now - _lastDiscordClick).TotalSeconds > 1.5)
+                _discordClickCount = 0;
+
+            _discordClickCount++;
+            _lastDiscordClick = DateTime.Now;
+
+            // Если кликнули 5 раз подряд
+            if (_discordClickCount >= 5)
+            {
+                _discordClickCount = 0;
+                TriggerDiscordEasterEgg();
+            }
+        }
+
+        private void TriggerDiscordEasterEgg()
+        {
+            // Воспроизводим звук успеха
+            AudioHelper.PlaySuccess();
+
+            // Меняем тексты и цвета
+            TxtDiscordMainStatus.Text = "Discord (Режим турбо-деда)";
+            TxtDiscordMainStatus.Foreground = UIHelper.GetBrushFromHex("#FF00FF");
+            TxtDiscordSubStatus.Text = "Никакие блокировки больше не страшны!";
+
+            // Крутая анимация сальто с пружинистым эффектом
+            var anim = new System.Windows.Media.Animation.DoubleAnimation(0, 360, TimeSpan.FromSeconds(0.5))
+            {
+                EasingFunction = new System.Windows.Media.Animation.BackEase { Amplitude = 0.5, EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut }
+            };
+
+            // Запускаем анимацию вращения, если мы её объявили в XAML
+            var storyboard = new System.Windows.Media.Animation.Storyboard();
+            storyboard.Children.Add(anim);
+            System.Windows.Media.Animation.Storyboard.SetTarget(anim, TxtDiscordEmoji);
+            System.Windows.Media.Animation.Storyboard.SetTargetProperty(anim, new PropertyPath("(UIElement.RenderTransform).(RotateTransform.Angle)"));
+            storyboard.Begin();
+
+            // Перекрашиваем саму карточку в кислотный киберпанк
+            DiscordCard.BorderBrush = UIHelper.GetBrushFromHex("#FF00FF");
+            DiscordCard.Background = UIHelper.GetBrushFromHex("#1A001A");
+        }
+
+        // =======================================================
+        // ПАСХАЛКА 2: TELEGRAM (ВЗЛЕТ И ПОСАДКА ДУРОВА)
+        // =======================================================
+        private void TxtTgEmoji_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            // Если между кликами прошло больше 1.5 секунд — сбрасываем
+            if ((DateTime.Now - _lastTgClick).TotalSeconds > 1.5)
+                _tgClickCount = 0;
+
+            _tgClickCount++;
+            _lastTgClick = DateTime.Now;
+
+            // Запускаем при 5 кликах
+            if (_tgClickCount >= 5)
+            {
+                _tgClickCount = 0;
+                TriggerTelegramEasterEgg();
+            }
+        }
+
+        private void TriggerTelegramEasterEgg()
+        {
+            AudioHelper.PlaySuccess();
+
+            // Меняем статус
+            TxtTgMainStatus.Text = "Telegram (Режим Дурова)";
+            TxtTgMainStatus.Foreground = UIHelper.GetBrushFromHex("#00E5FF"); // Неоново-голубой
+            TxtTgSubStatus.Text = "Свободу интернету! Трафик летит напрямую.";
+
+            // Анимация резкого взлета (вправо и вверх)
+            var flyX = new System.Windows.Media.Animation.DoubleAnimation(0, 150, TimeSpan.FromSeconds(0.3))
+            { EasingFunction = new System.Windows.Media.Animation.PowerEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseIn } };
+
+            var flyY = new System.Windows.Media.Animation.DoubleAnimation(0, -150, TimeSpan.FromSeconds(0.3))
+            { EasingFunction = new System.Windows.Media.Animation.PowerEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseIn } };
+
+            var fadeOut = new System.Windows.Media.Animation.DoubleAnimation(1, 0, TimeSpan.FromSeconds(0.3));
+
+            // Получаем доступ к TranslateTransform, который мы прописали в XAML
+            var transformGroup = TxtTgEmoji.RenderTransform as System.Windows.Media.TransformGroup;
+            var translateTransform = transformGroup?.Children[0] as System.Windows.Media.TranslateTransform;
+
+            if (translateTransform != null)
+            {
+                // Как только самолет улетел, возвращаем его с другой стороны
+                flyX.Completed += (s, ev) =>
+                {
+                    // Телепортируем самолетик вниз-влево (за пределы видимости)
+                    translateTransform.X = -50;
+                    translateTransform.Y = 50;
+
+                    // Плавная анимация посадки на место
+                    var returnX = new System.Windows.Media.Animation.DoubleAnimation(-50, 0, TimeSpan.FromSeconds(0.4))
+                    { EasingFunction = new System.Windows.Media.Animation.BackEase { Amplitude = 0.5, EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut } };
+
+                    var returnY = new System.Windows.Media.Animation.DoubleAnimation(50, 0, TimeSpan.FromSeconds(0.4))
+                    { EasingFunction = new System.Windows.Media.Animation.BackEase { Amplitude = 0.5, EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut } };
+
+                    var fadeIn = new System.Windows.Media.Animation.DoubleAnimation(0, 1, TimeSpan.FromSeconds(0.4));
+
+                    translateTransform.BeginAnimation(System.Windows.Media.TranslateTransform.XProperty, returnX);
+                    translateTransform.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, returnY);
+                    TxtTgEmoji.BeginAnimation(UIElement.OpacityProperty, fadeIn);
+                };
+
+                // Запускаем взлет
+                translateTransform.BeginAnimation(System.Windows.Media.TranslateTransform.XProperty, flyX);
+                translateTransform.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, flyY);
+                TxtTgEmoji.BeginAnimation(UIElement.OpacityProperty, fadeOut);
+            }
+
+            // Перекрашиваем саму карточку в темный киберпанк-голубой
+            TelegramCard.BorderBrush = UIHelper.GetBrushFromHex("#00E5FF");
+            TelegramCard.Background = UIHelper.GetBrushFromHex("#001A22");
         }
     }
 }
@@ -2440,7 +2589,7 @@ namespace ZapretGUI.Views
 
         <StackPanel Grid.Row="0" HorizontalAlignment="Center" Margin="0,10,0,30">
             <TextBlock Text="⚡ Починить Telegram и Discord" FontSize="28" FontWeight="Bold" HorizontalAlignment="Center"/>
-            <TextBlock Text="Одна кнопка — запустит всё необходимое." Foreground="#888888" FontSize="14" HorizontalAlignment="Center" Margin="0,5,0,0"/>
+            <TextBlock Text="Одна кнопка — запустит всё необходимое." Foreground="#A0A0A0" FontSize="14" HorizontalAlignment="Center" Margin="0,5,0,0"/>
         </StackPanel>
 
         <Grid Grid.Row="1">
@@ -2450,12 +2599,11 @@ namespace ZapretGUI.Views
                 <ColumnDefinition Width="280"/>
             </Grid.ColumnDefinitions>
 
-            <!-- Обновлено: StackPanel для кнопки и мини-лога -->
+            <!-- Центральная кнопка и лог -->
             <StackPanel Grid.Column="0" HorizontalAlignment="Center" VerticalAlignment="Center">
                 <ToggleButton x:Name="MainToggle" Width="200" Height="200" Click="MainToggle_Click" Cursor="Hand" Background="Transparent" BorderThickness="0">
                     <ToggleButton.Template>
                         <ControlTemplate TargetType="ToggleButton">
-
                             <Border x:Name="BtnBorder" Background="#121212" BorderBrush="#2A2A2A" BorderThickness="3" CornerRadius="100" RenderTransformOrigin="0.5,0.5">
                                 <Border.RenderTransform>
                                     <ScaleTransform ScaleX="1" ScaleY="1"/>
@@ -2521,39 +2669,41 @@ namespace ZapretGUI.Views
                     </ToggleButton.Template>
                 </ToggleButton>
 
+                <!-- Расширили MaxWidth, чтобы лог не обрезался -->
                 <TextBlock x:Name="MiniLogText" Text="Ждем ваших указаний..." 
-                           Foreground="#888888" FontSize="13" FontWeight="SemiBold" 
+                           Foreground="#A0A0A0" FontSize="13" FontWeight="SemiBold" 
                            HorizontalAlignment="Center" Margin="0,20,0,0" 
-                           MaxWidth="260" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/>
+                           MaxWidth="400" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/>
             </StackPanel>
 
-            <StackPanel x:Name="NetworkStatsPanel" Grid.Column="1" VerticalAlignment="Center" Margin="20,0,30,0">
-                <Grid Margin="0,0,0,15">
+            <!-- Очищенная панель статистики без рамки, но с красивым шрифтом -->
+            <StackPanel x:Name="NetworkStatsPanel" Grid.Column="1" VerticalAlignment="Center" Margin="10,0,40,0">
+                <Grid Margin="0,0,0,18">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="&#xE896;" FontFamily="Segoe MDL2 Assets" FontSize="20" Foreground="#888888" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                    <TextBlock Grid.Column="0" Text="&#xE896;" FontFamily="Segoe MDL2 Assets" FontSize="20" Foreground="#A0A0A0" VerticalAlignment="Center" Margin="0,0,15,0"/>
                     <StackPanel Grid.Column="1">
-                        <TextBlock Text="Входящий" Foreground="#555555" FontSize="12" FontWeight="SemiBold"/>
+                        <TextBlock Text="Входящий" Foreground="#A0A0A0" FontSize="12" FontWeight="SemiBold"/>
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock x:Name="DownloadText" Text="0.0" Foreground="#E0E0E0" FontSize="20" FontWeight="Bold"/>
-                            <TextBlock Text=" Мбит/с" Foreground="#555555" FontSize="12" VerticalAlignment="Bottom" Margin="3,0,0,4"/>
+                            <TextBlock x:Name="DownloadText" Text="0.0" Foreground="#FFFFFF" FontSize="24" FontWeight="Bold" FontFamily="Consolas"/>
+                            <TextBlock Text=" Мбит/с" Foreground="#888888" FontSize="12" VerticalAlignment="Bottom" Margin="4,0,0,6"/>
                         </StackPanel>
                     </StackPanel>
                 </Grid>
 
-                <Grid Margin="0,0,0,20">
+                <Grid Margin="0,0,0,22">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="&#xE898;" FontFamily="Segoe MDL2 Assets" FontSize="20" Foreground="#888888" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                    <TextBlock Grid.Column="0" Text="&#xE898;" FontFamily="Segoe MDL2 Assets" FontSize="20" Foreground="#A0A0A0" VerticalAlignment="Center" Margin="0,0,15,0"/>
                     <StackPanel Grid.Column="1">
-                        <TextBlock Text="Исходящий" Foreground="#555555" FontSize="12" FontWeight="SemiBold"/>
+                        <TextBlock Text="Исходящий" Foreground="#A0A0A0" FontSize="12" FontWeight="SemiBold"/>
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock x:Name="UploadText" Text="0.0" Foreground="#E0E0E0" FontSize="20" FontWeight="Bold"/>
-                            <TextBlock Text=" Мбит/с" Foreground="#555555" FontSize="12" VerticalAlignment="Bottom" Margin="3,0,0,4"/>
+                            <TextBlock x:Name="UploadText" Text="0.0" Foreground="#FFFFFF" FontSize="24" FontWeight="Bold" FontFamily="Consolas"/>
+                            <TextBlock Text=" Мбит/с" Foreground="#888888" FontSize="12" VerticalAlignment="Bottom" Margin="4,0,0,6"/>
                         </StackPanel>
                     </StackPanel>
                 </Grid>
@@ -2564,16 +2714,16 @@ namespace ZapretGUI.Views
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="&#xE916;" FontFamily="Segoe MDL2 Assets" FontSize="20" Foreground="#888888" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                    <TextBlock Grid.Column="0" Text="&#xE916;" FontFamily="Segoe MDL2 Assets" FontSize="20" Foreground="#A0A0A0" VerticalAlignment="Center" Margin="0,0,15,0"/>
                     <StackPanel Grid.Column="1">
-                        <TextBlock Text="Пинг (EU Frankfurt)" Foreground="#555555" FontSize="12" FontWeight="SemiBold"/>
+                        <TextBlock Text="Пинг (EU Frankfurt)" Foreground="#A0A0A0" FontSize="12" FontWeight="SemiBold"/>
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock x:Name="PingText" Text="..." Foreground="#E0E0E0" FontSize="20" FontWeight="Bold"/>
-                            <TextBlock Text=" мс" Foreground="#555555" FontSize="12" VerticalAlignment="Bottom" Margin="3,0,0,4"/>
+                            <TextBlock x:Name="PingText" Text="..." Foreground="#FFFFFF" FontSize="24" FontWeight="Bold" FontFamily="Consolas"/>
+                            <TextBlock Text=" мс" Foreground="#888888" FontSize="12" VerticalAlignment="Bottom" Margin="4,0,0,6"/>
                         </StackPanel>
                     </StackPanel>
 
-                    <ui:Button Grid.Column="2" x:Name="BtnRefreshPing" Appearance="Transparent" Foreground="#888888" Cursor="Hand" VerticalAlignment="Bottom" Margin="10,0,0,0" Padding="5,5,5,8" Click="BtnRefreshPing_Click">
+                    <ui:Button Grid.Column="2" x:Name="BtnRefreshPing" Appearance="Transparent" Foreground="#A0A0A0" Cursor="Hand" VerticalAlignment="Bottom" Margin="15,0,0,0" Padding="5,5,5,8" Click="BtnRefreshPing_Click">
                         <TextBlock x:Name="PingIcon" Text="&#xE149;" FontFamily="Segoe MDL2 Assets" FontSize="14" FontWeight="Bold" RenderTransformOrigin="0.5,0.5">
                             <TextBlock.RenderTransform>
                                 <RotateTransform x:Name="PingIconTransform" Angle="0"/>
@@ -2592,7 +2742,7 @@ namespace ZapretGUI.Views
                         </Grid>
                         <TextBlock x:Name="StatusText" Text="Остановлен" Foreground="#D13438" Margin="0,0,0,15"/>
 
-                        <TextBlock Text="Конфигурация:" Foreground="#888888" FontSize="12" Margin="0,0,0,5"/>
+                        <TextBlock Text="Конфигурация:" Foreground="#A0A0A0" FontSize="12" Margin="0,0,0,5"/>
 
                         <ComboBox x:Name="ProfileComboBox" Height="35" SelectionChanged="Settings_Changed"/>
                     </StackPanel>
@@ -2604,13 +2754,18 @@ namespace ZapretGUI.Views
                             <TextBlock Text="TgWsProxy" FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Left" VerticalAlignment="Center"/>
                             <ui:ToggleSwitch x:Name="TgProxyToggle" IsChecked="True" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Settings_Changed"/>
                         </Grid>
-                        <TextBlock Text="Прокси для Telegram" Foreground="#888888" FontSize="12" Margin="0,0,0,15"/>
+                        <TextBlock Text="Прокси для Telegram" Foreground="#A0A0A0" FontSize="12" Margin="0,0,0,15"/>
                     </StackPanel>
                 </Border>
             </StackPanel>
         </Grid>
 
-        <ProgressBar x:Name="LaunchProgressBar" Grid.Row="2" Height="4" VerticalAlignment="Top" Margin="0,5,0,0" Foreground="#107C10" Background="#181818" BorderThickness="0" Value="0" Visibility="Collapsed"/>
+        <!-- Прогресс-бар с эффектом свечения -->
+        <ProgressBar x:Name="LaunchProgressBar" Grid.Row="2" Height="4" VerticalAlignment="Top" Margin="0,5,0,0" Foreground="{DynamicResource BrandSuccessBrush}" Background="#181818" BorderThickness="0" Value="0" Visibility="Collapsed">
+            <ProgressBar.Effect>
+                <DropShadowEffect Color="{DynamicResource MainBtnColor}" BlurRadius="8" ShadowDepth="0" Opacity="0.8"/>
+            </ProgressBar.Effect>
+        </ProgressBar>
 
         <Border x:Name="LogsPanel" Height="250" Grid.Row="2" Background="#0A0A0A" CornerRadius="8" BorderBrush="#2A2A2A" BorderThickness="1" Margin="0,20,0,0">
             <Grid>
@@ -2620,20 +2775,20 @@ namespace ZapretGUI.Views
                 </Grid.RowDefinitions>
 
                 <Grid Grid.Row="0" Margin="15,15,15,5">
-                    <TextBlock Text="Лог событий" Foreground="#888888" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                    <TextBlock Text="Лог событий" Foreground="#A0A0A0" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
 
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                         <Button Background="Transparent" BorderThickness="0" Cursor="Hand" Click="BtnClearLogs_Click" Margin="0,0,10,0" Padding="5">
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="&#xE74D;" FontFamily="Segoe MDL2 Assets" Foreground="#888888" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                <TextBlock Text="Очистить" Foreground="#888888" FontSize="12" VerticalAlignment="Center"/>
+                                <TextBlock Text="&#xE74D;" FontFamily="Segoe MDL2 Assets" Foreground="#A0A0A0" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <TextBlock Text="Очистить" Foreground="#A0A0A0" FontSize="12" VerticalAlignment="Center"/>
                             </StackPanel>
                         </Button>
 
                         <Button Background="Transparent" BorderThickness="0" Cursor="Hand" Click="BtnExportLogs_Click" Padding="5">
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="&#xE78C;" FontFamily="Segoe MDL2 Assets" Foreground="#888888" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                <TextBlock Text="Экспорт" Foreground="#888888" FontSize="12" VerticalAlignment="Center"/>
+                                <TextBlock Text="&#xE78C;" FontFamily="Segoe MDL2 Assets" Foreground="#A0A0A0" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <TextBlock Text="Экспорт" Foreground="#A0A0A0" FontSize="12" VerticalAlignment="Center"/>
                             </StackPanel>
                         </Button>
                     </StackPanel>
@@ -3223,14 +3378,15 @@ namespace ZapretGUI.Views
              Foreground="White">
 
     <UserControl.Resources>
+        <!-- Обновленный стиль строки: больше воздуха и плавный ховер -->
         <Style x:Key="SettingRowStyle" TargetType="Border">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="CornerRadius" Value="8"/>
-            <Setter Property="Padding" Value="10,8"/>
-            <Setter Property="Margin" Value="-10,0,-10,10"/>
+            <Setter Property="Padding" Value="15,12"/>
+            <Setter Property="Margin" Value="-15,0,-15,8"/>
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#0AFFFFFF"/>
+                    <Setter Property="Background" Value="#08FFFFFF"/>
                 </Trigger>
             </Style.Triggers>
         </Style>
@@ -3269,6 +3425,7 @@ namespace ZapretGUI.Views
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,10,0">
             <StackPanel HorizontalAlignment="Stretch" Margin="0,0,20,20">
 
+                <!-- БЛОК 1: СИСТЕМНЫЕ НАСТРОЙКИ -->
                 <Border Background="#181818" CornerRadius="12" BorderBrush="#2A2A2A" BorderThickness="1" Margin="0,0,0,15" Padding="20">
                     <StackPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
@@ -3284,13 +3441,11 @@ namespace ZapretGUI.Views
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" Margin="0,0,20,0" VerticalAlignment="Center">
                                     <TextBlock Text="Автозагрузка Windows" FontSize="14" FontWeight="SemiBold"/>
-                                    <TextBlock Text="Запускать программу при включении компьютера" Foreground="#888888" FontSize="12" Margin="0,2,0,0" TextWrapping="Wrap"/>
+                                    <TextBlock Text="Запускать программу при включении компьютера" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
                                 </StackPanel>
                                 <ui:ToggleSwitch x:Name="ToggleAutoStart" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
                             </Grid>
                         </Border>
-
-                        <Rectangle Height="1" Fill="#1A1A1A" Margin="0,0,0,10"/>
 
                         <Border Style="{StaticResource SettingRowStyle}">
                             <Grid>
@@ -3300,13 +3455,11 @@ namespace ZapretGUI.Views
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" Margin="0,0,20,0" VerticalAlignment="Center">
                                     <TextBlock Text="Запускать свернутым" FontSize="14" FontWeight="SemiBold"/>
-                                    <TextBlock Text="Прятать окно в системный трей при старте программы" Foreground="#888888" FontSize="12" Margin="0,2,0,0" TextWrapping="Wrap"/>
+                                    <TextBlock Text="Прятать окно в системный трей при старте программы" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
                                 </StackPanel>
                                 <ui:ToggleSwitch x:Name="ToggleStartMinimized" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
                             </Grid>
                         </Border>
-
-                        <Rectangle Height="1" Fill="#1A1A1A" Margin="0,0,0,10"/>
 
                         <Border Style="{StaticResource SettingRowStyle}">
                             <Grid>
@@ -3316,15 +3469,14 @@ namespace ZapretGUI.Views
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" Margin="0,0,20,0" VerticalAlignment="Center">
                                     <TextBlock Text="Сворачивать при закрытии" FontSize="14" FontWeight="SemiBold"/>
-                                    <TextBlock Text="Кнопка [X] не закрывает программу, а прячет её в трей" Foreground="#888888" FontSize="12" Margin="0,2,0,0" TextWrapping="Wrap"/>
+                                    <TextBlock Text="Кнопка [X] не закрывает программу, а прячет её в трей" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
                                 </StackPanel>
                                 <ui:ToggleSwitch x:Name="ToggleMinimizeOnClose" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
                             </Grid>
                         </Border>
 
-                        <Rectangle Height="1" Fill="#1A1A1A" Margin="0,0,0,10"/>
-
-                        <Border Style="{StaticResource SettingRowStyle}" Margin="-10,0,-10,0">
+                        <!-- У последней строки убираем отступ снизу -->
+                        <Border Style="{StaticResource SettingRowStyle}" Margin="-15,0,-15,0">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
@@ -3332,7 +3484,7 @@ namespace ZapretGUI.Views
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" Margin="0,0,20,0" VerticalAlignment="Center">
                                     <TextBlock Text="Уведомления Windows (Тихий режим)" FontSize="14" FontWeight="SemiBold"/>
-                                    <TextBlock Text="Показывать всплывающие окна при обрыве сети или запуске/остановке служб" Foreground="#888888" FontSize="12" Margin="0,2,0,0" TextWrapping="Wrap"/>
+                                    <TextBlock Text="Показывать всплывающие окна при обрыве сети или запуске/остановке служб" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
                                 </StackPanel>
                                 <ui:ToggleSwitch x:Name="ToggleNotifications" IsChecked="True" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
                             </Grid>
@@ -3340,6 +3492,7 @@ namespace ZapretGUI.Views
                     </StackPanel>
                 </Border>
 
+                <!-- БЛОК 2: ВИЗУАЛЬНЫЕ ЭФФЕКТЫ -->
                 <Border Background="#181818" CornerRadius="12" BorderBrush="#2A2A2A" BorderThickness="1" Margin="0,0,0,15" Padding="20">
                     <StackPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
@@ -3355,13 +3508,11 @@ namespace ZapretGUI.Views
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" Margin="0,0,20,0" VerticalAlignment="Center">
                                     <TextBlock Text="Режим фокусировки (Без глитчей)" FontSize="14" FontWeight="SemiBold"/>
-                                    <TextBlock Text="Отключить тряску камеры, эффект VHS и резкие вспышки" Foreground="#888888" FontSize="12" Margin="0,2,0,0" TextWrapping="Wrap"/>
+                                    <TextBlock Text="Отключить тряску камеры, эффект VHS и резкие вспышки" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
                                 </StackPanel>
                                 <ui:ToggleSwitch x:Name="ToggleFocusMode" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
                             </Grid>
                         </Border>
-
-                        <Rectangle Height="1" Fill="#1A1A1A" Margin="0,0,0,10"/>
 
                         <Border Style="{StaticResource SettingRowStyle}">
                             <Grid>
@@ -3371,13 +3522,11 @@ namespace ZapretGUI.Views
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" Margin="0,0,20,0" VerticalAlignment="Center">
                                     <TextBlock Text="Минималистичный интерфейс" FontSize="14" FontWeight="SemiBold"/>
-                                    <TextBlock Text="Скрыть графики скорости и логи, оставив только кнопки" Foreground="#888888" FontSize="12" Margin="0,2,0,0" TextWrapping="Wrap"/>
+                                    <TextBlock Text="Скрыть графики скорости и логи, оставив только кнопки" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
                                 </StackPanel>
                                 <ui:ToggleSwitch x:Name="ToggleCompactMode" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
                             </Grid>
                         </Border>
-
-                        <Rectangle Height="1" Fill="#1A1A1A" Margin="0,0,0,10"/>
 
                         <Border Style="{StaticResource SettingRowStyle}">
                             <Grid>
@@ -3387,15 +3536,13 @@ namespace ZapretGUI.Views
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" Margin="0,0,20,0" VerticalAlignment="Center">
                                     <TextBlock Text="Аппаратное ускорение (GPU)" FontSize="14" FontWeight="SemiBold"/>
-                                    <TextBlock Text="Использовать видеокарту для отрисовки интерфейса" Foreground="#888888" FontSize="12" Margin="0,2,0,0" TextWrapping="Wrap"/>
+                                    <TextBlock Text="Использовать видеокарту для отрисовки интерфейса" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
                                 </StackPanel>
                                 <ui:ToggleSwitch x:Name="ToggleHardwareAccel" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
                             </Grid>
                         </Border>
 
-                        <Rectangle Height="1" Fill="#1A1A1A" Margin="0,0,0,10"/>
-
-                        <Border Style="{StaticResource SettingRowStyle}" Margin="-10,0,-10,0">
+                        <Border Style="{StaticResource SettingRowStyle}" Margin="-15,0,-15,0">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
@@ -3403,7 +3550,7 @@ namespace ZapretGUI.Views
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" Margin="0,0,20,0" VerticalAlignment="Center">
                                     <TextBlock Text="Режим цветовой слепоты" FontSize="14" FontWeight="SemiBold"/>
-                                    <TextBlock Text="Заменить красно-зеленые точки индикаторов на оранжево-синие" Foreground="#888888" FontSize="12" Margin="0,2,0,0" TextWrapping="Wrap"/>
+                                    <TextBlock Text="Заменить красно-зеленые точки индикаторов на оранжево-синие" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
                                 </StackPanel>
                                 <ui:ToggleSwitch x:Name="ToggleColorblind" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
                             </Grid>
@@ -3411,6 +3558,7 @@ namespace ZapretGUI.Views
                     </StackPanel>
                 </Border>
 
+                <!-- БЛОК 3: СЕТЬ И ДИАГНОСТИКА -->
                 <Border Background="#181818" CornerRadius="12" BorderBrush="#2A2A2A" BorderThickness="1" Margin="0,0,0,15" Padding="20">
                     <StackPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
@@ -3426,13 +3574,11 @@ namespace ZapretGUI.Views
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" Margin="0,0,20,0" VerticalAlignment="Center">
                                     <TextBlock Text="Адрес сервера для пинга" FontSize="14" FontWeight="SemiBold"/>
-                                    <TextBlock Text="URL для проверки соединения (по умолчанию Франкфурт AWS)" Foreground="#888888" FontSize="12" Margin="0,2,0,0" TextWrapping="Wrap"/>
+                                    <TextBlock Text="URL для проверки соединения (по умолчанию Франкфурт AWS)" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
                                 </StackPanel>
                                 <ui:TextBox x:Name="TxtPingUrl" Grid.Column="1" Text="https://dynamodb.eu-central-1.amazonaws.com" VerticalAlignment="Center" LostFocus="TextInput_LostFocus"/>
                             </Grid>
                         </Border>
-
-                        <Rectangle Height="1" Fill="#1A1A1A" Margin="0,0,0,10"/>
 
                         <Border Style="{StaticResource SettingRowStyle}">
                             <Grid>
@@ -3442,7 +3588,7 @@ namespace ZapretGUI.Views
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" Margin="0,0,20,0" VerticalAlignment="Center">
                                     <TextBlock Text="Интервал обновления статистики" FontSize="14" FontWeight="SemiBold"/>
-                                    <TextBlock Text="Как часто опрашивать сеть и перерисовывать графики" Foreground="#888888" FontSize="12" Margin="0,2,0,0" TextWrapping="Wrap"/>
+                                    <TextBlock Text="Как часто опрашивать сеть и перерисовывать графики" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
                                 </StackPanel>
                                 <ComboBox x:Name="ComboUpdateInterval" Grid.Column="1" Width="140" VerticalAlignment="Center" SelectionChanged="Setting_Changed">
                                     <ComboBoxItem Content="1 секунда"/>
@@ -3452,9 +3598,7 @@ namespace ZapretGUI.Views
                             </Grid>
                         </Border>
 
-                        <Rectangle Height="1" Fill="#1A1A1A" Margin="0,0,0,10"/>
-
-                        <Border Style="{StaticResource SettingRowStyle}" Margin="-10,0,-10,0">
+                        <Border Style="{StaticResource SettingRowStyle}" Margin="-15,0,-15,0">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
@@ -3462,7 +3606,7 @@ namespace ZapretGUI.Views
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" Margin="0,0,20,0" VerticalAlignment="Center">
                                     <TextBlock Text="Авто-перезапуск при обрыве" FontSize="14" FontWeight="SemiBold"/>
-                                    <TextBlock Text="Автоматически перезапускать службы при восстановлении сети" Foreground="#888888" FontSize="12" Margin="0,2,0,0" TextWrapping="Wrap"/>
+                                    <TextBlock Text="Автоматически перезапускать службы при восстановлении сети" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
                                 </StackPanel>
                                 <ui:ToggleSwitch x:Name="ToggleAutoRestart" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
                             </Grid>
@@ -3470,6 +3614,7 @@ namespace ZapretGUI.Views
                     </StackPanel>
                 </Border>
 
+                <!-- БЛОК 4: УПРАВЛЕНИЕ ФАЙЛАМИ -->
                 <Border Background="#181818" CornerRadius="12" BorderBrush="#2A2A2A" BorderThickness="1" Margin="0,0,0,25" Padding="20">
                     <StackPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
@@ -3477,7 +3622,7 @@ namespace ZapretGUI.Views
                             <TextBlock Text="Управление файлами" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center"/>
                         </StackPanel>
 
-                        <Border Style="{StaticResource SettingRowStyle}" Margin="-10,0,-10,0">
+                        <Border Style="{StaticResource SettingRowStyle}" Margin="-15,0,-15,0">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
@@ -3485,7 +3630,7 @@ namespace ZapretGUI.Views
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" Margin="0,0,20,0" VerticalAlignment="Center">
                                     <TextBlock Text="Профили маршрутизации" FontSize="14" FontWeight="SemiBold"/>
-                                    <TextBlock Text="Открыть директорию с .bat конфигурациями Zapret" Foreground="#888888" FontSize="12" Margin="0,2,0,0" TextWrapping="Wrap"/>
+                                    <TextBlock Text="Открыть директорию с .bat конфигурациями Zapret" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
                                 </StackPanel>
                                 <ui:Button Content="Открыть папку" Grid.Column="1" VerticalAlignment="Center" Click="BtnOpenZapretFolder_Click"/>
                             </Grid>
