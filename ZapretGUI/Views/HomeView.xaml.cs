@@ -4,6 +4,7 @@ using System.IO;
 using System.Net.NetworkInformation;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Effects;
 using System.Windows.Threading;
@@ -213,7 +214,7 @@ namespace ZapretGUI.Views
 
                     if (isZapretSelected)
                     {
-                        var selectedProfile = ProfileComboBox.Text;
+                        var selectedProfile = TxtMainProfile.Text;
                         Log($"[Zapret] Подготовка профиля {selectedProfile}...");
                         await Task.Delay(400);
                         Log($"[Zapret] Запуск службы...");
@@ -302,29 +303,31 @@ namespace ZapretGUI.Views
             {
                 StatusText.Text = "Работает";
                 StatusText.Foreground = GetSuccessColor();
-                ProfileComboBox.IsEnabled = false;
+                BtnOpenConfigMenu.IsEnabled = false;
+                BtnOpenConfigMenu.Opacity = 0.5;
             }
             else
             {
                 StatusText.Text = "Остановлен";
                 StatusText.Foreground = GetErrorColor();
-                ProfileComboBox.IsEnabled = true;
+                BtnOpenConfigMenu.IsEnabled = true;
+                BtnOpenConfigMenu.Opacity = 1.0;
             }
         }
 
         private void LoadProfiles()
         {
-            ProfileComboBox.Items.Clear();
+            OverlayProfileListBox.Items.Clear();
             var folderPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.CoreFilesDirectory);
 
             if (Directory.Exists(folderPath))
             {
                 var batFiles = Directory.GetFiles(folderPath, "general*.bat");
                 foreach (var file in batFiles)
-                    ProfileComboBox.Items.Add(Path.GetFileName(file));
+                    OverlayProfileListBox.Items.Add(Path.GetFileName(file));
 
-                if (ProfileComboBox.Items.Count > 0)
-                    ProfileComboBox.SelectedIndex = 0;
+                if (OverlayProfileListBox.Items.Count > 0)
+                    OverlayProfileListBox.SelectedIndex = 0;
             }
         }
 
@@ -333,15 +336,20 @@ namespace ZapretGUI.Views
             ZapretToggle.IsChecked = SettingsManager.Current.ZapretEnabled;
             TgProxyToggle.IsChecked = SettingsManager.Current.TgProxyEnabled;
 
-            if (SettingsManager.Current.SelectedProfileIndex >= 0 && SettingsManager.Current.SelectedProfileIndex < ProfileComboBox.Items.Count)
-                ProfileComboBox.SelectedIndex = SettingsManager.Current.SelectedProfileIndex;
+            if (SettingsManager.Current.SelectedProfileIndex >= 0 && SettingsManager.Current.SelectedProfileIndex < OverlayProfileListBox.Items.Count)
+            {
+                OverlayProfileListBox.SelectedIndex = SettingsManager.Current.SelectedProfileIndex;
+                string current = OverlayProfileListBox.Items[SettingsManager.Current.SelectedProfileIndex].ToString();
+                TxtMainProfile.Text = current;
+                OverlayTxtProfile.Text = current;
+            }
         }
 
         private void SaveSettings()
         {
             SettingsManager.Current.ZapretEnabled = ZapretToggle.IsChecked ?? true;
             SettingsManager.Current.TgProxyEnabled = TgProxyToggle.IsChecked ?? true;
-            SettingsManager.Current.SelectedProfileIndex = ProfileComboBox.SelectedIndex;
+            SettingsManager.Current.SelectedProfileIndex = OverlayProfileListBox.SelectedIndex;
 
             SettingsManager.Save();
         }
@@ -527,7 +535,7 @@ namespace ZapretGUI.Views
                 await Task.Delay(1000);
 
                 if (SettingsManager.Current.ZapretEnabled)
-                    _zapretManager.Start(ProfileComboBox.Text);
+                    _zapretManager.Start(TxtMainProfile.Text);
 
                 if (SettingsManager.Current.TgProxyEnabled)
                     _tgProxyManager.Start();
@@ -554,6 +562,201 @@ namespace ZapretGUI.Views
             {
                 Log($"[Updater] {message}");
             });
+        }
+
+        // ================= ОВЕРЛЕЙ И МЕНЮ ================= //
+
+        private void BtnOpenConfigMenu_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            AudioHelper.PlayClick();
+            OverlayProfileListBox.Visibility = Visibility.Collapsed;
+
+            ConfigOverlay.Visibility = Visibility.Visible;
+            ConfigOverlay.Opacity = 0;
+
+            var fadeIn = new System.Windows.Media.Animation.DoubleAnimation(0, 1, TimeSpan.FromSeconds(0.2));
+            var scaleUp = new System.Windows.Media.Animation.DoubleAnimation(0.95, 1, TimeSpan.FromSeconds(0.2))
+            {
+                EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut }
+            };
+            var slideUp = new System.Windows.Media.Animation.DoubleAnimation(10, 0, TimeSpan.FromSeconds(0.2))
+            {
+                EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut }
+            };
+
+            ConfigOverlay.BeginAnimation(UIElement.OpacityProperty, fadeIn);
+
+            if (OverlayContentBorder.RenderTransform as System.Windows.Media.TransformGroup is System.Windows.Media.TransformGroup transformGroup)
+            {
+                var scale = transformGroup.Children[0] as System.Windows.Media.ScaleTransform;
+                var translate = transformGroup.Children[1] as System.Windows.Media.TranslateTransform;
+
+                scale?.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, scaleUp);
+                scale?.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, scaleUp);
+                translate?.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, slideUp);
+            }
+        }
+        private void CloseOverlay()
+        {
+            var fadeOut = new System.Windows.Media.Animation.DoubleAnimation(1, 0, TimeSpan.FromSeconds(0.15));
+            var scaleDown = new System.Windows.Media.Animation.DoubleAnimation(1, 0.95, TimeSpan.FromSeconds(0.15))
+            {
+                EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseIn }
+            };
+            var slideDown = new System.Windows.Media.Animation.DoubleAnimation(0, 10, TimeSpan.FromSeconds(0.15))
+            {
+                EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseIn }
+            };
+
+            fadeOut.Completed += (s, ev) =>
+            {
+                ConfigOverlay.Visibility = Visibility.Collapsed;
+            };
+
+            ConfigOverlay.BeginAnimation(UIElement.OpacityProperty, fadeOut);
+
+            if (OverlayContentBorder.RenderTransform as System.Windows.Media.TransformGroup is System.Windows.Media.TransformGroup transformGroup)
+            {
+                var scale = transformGroup.Children[0] as System.Windows.Media.ScaleTransform;
+                var translate = transformGroup.Children[1] as System.Windows.Media.TranslateTransform;
+
+                scale?.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, scaleDown);
+                scale?.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, scaleDown);
+                translate?.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, slideDown);
+            }
+        }
+
+        private void BtnCloseOverlay_Click(object sender, RoutedEventArgs e)
+        {
+            CloseOverlay();
+        }
+
+        private void OverlayBackground_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            CloseOverlay();
+        }
+
+        private void OverlayContent_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            e.Handled = true;
+        }
+
+        private void BtnShowConfigList_Click(object sender, RoutedEventArgs e)
+        {
+            AudioHelper.PlayClick();
+            OverlayProfileListBox.Visibility = OverlayProfileListBox.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
+        }
+
+        private void OverlayProfileListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (OverlayProfileListBox.SelectedItem != null && IsLoaded)
+            {
+                string selected = OverlayProfileListBox.SelectedItem.ToString();
+                TxtMainProfile.Text = selected;
+                OverlayTxtProfile.Text = selected;
+                SaveSettings();
+
+                OverlayProfileListBox.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        private async void BtnStartScan_Click(object sender, RoutedEventArgs e)
+        {
+            AudioHelper.PlayClick();
+
+            bool wasRunning = _zapretManager.IsRunning();
+
+            ConfigOverlay.Visibility = Visibility.Collapsed;
+            MainToggle.IsEnabled = false;
+
+            Log("🚀 Инициализация умного сканирования конфигурации...");
+            Log("Пожалуйста, подождите. Процесс может занять пару минут...");
+
+            try
+            {
+                string scriptPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.CoreFilesDirectory, "utils", "test zapret.ps1");
+
+                if (!File.Exists(scriptPath))
+                {
+                    Log("⚠ ОШИБКА: Скрипт тестирования не найден по пути: " + scriptPath);
+                    return;
+                }
+
+                var startInfo = new ProcessStartInfo
+                {
+                    FileName = "powershell.exe",
+                    Arguments = $"-NoProfile -ExecutionPolicy Bypass -File \"{scriptPath}\"",
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardInput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true,
+                    StandardOutputEncoding = System.Text.Encoding.UTF8
+                };
+
+                using var process = new Process { StartInfo = startInfo };
+                process.Start();
+
+                await process.StandardInput.WriteLineAsync("1");
+                await process.StandardInput.WriteLineAsync("1");
+                process.StandardInput.Close();
+
+                string bestConfig = null;
+
+                await Task.Run(() =>
+                {
+                    while (!process.StandardOutput.EndOfStream)
+                    {
+                        var line = process.StandardOutput.ReadLine();
+                        if (string.IsNullOrWhiteSpace(line)) continue;
+
+                        line = System.Text.RegularExpressions.Regex.Replace(line, @"\x1B\[[0-9;]*[a-zA-Z]", "");
+                        Dispatcher.Invoke(() => Log($"[Auto] {line}"));
+
+                        if (line.Contains("Best config:"))
+                        {
+                            bestConfig = line.Split(new[] { "Best config:" }, StringSplitOptions.None)[1].Trim();
+                        }
+                    }
+                    process.WaitForExit();
+                });
+
+                if (!string.IsNullOrEmpty(bestConfig))
+                {
+                    Log($"✅ Сканирование завершено! Победитель: {bestConfig}");
+
+                    for (int i = 0; i < OverlayProfileListBox.Items.Count; i++)
+                    {
+                        if (OverlayProfileListBox.Items[i].ToString() == bestConfig)
+                        {
+                            OverlayProfileListBox.SelectedIndex = i;
+                            TxtMainProfile.Text = bestConfig;
+                            OverlayTxtProfile.Text = bestConfig;
+                            SaveSettings();
+                            break;
+                        }
+                    }
+
+                    if (wasRunning && ZapretToggle.IsChecked == true)
+                    {
+                        Log("🔄 Перезапуск служб с новой конфигурацией...");
+                        _zapretManager.Start(bestConfig);
+                    }
+                }
+                else
+                {
+                    Log("⚠ Сканирование завершено, но победитель не определен. Возможно, все конфиги заблокированы.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Log($"ОШИБКА СКАНИРОВАНИЯ: {ex.Message}");
+            }
+            finally
+            {
+                MainToggle.IsEnabled = true;
+                UpdateUIState(IsRunning);
+            }
         }
     }
 }
