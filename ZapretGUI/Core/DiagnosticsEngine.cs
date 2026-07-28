@@ -450,26 +450,32 @@ namespace ZapretGUI.Core
             bool pingOk = r.PingResults.Any(p => p.Ok);
             bool bypass = app != null && app.ZapretRunning;
 
+            // Считываем режим цветовой слепоты
+            bool isCb = SettingsManager.Current.ColorblindMode;
+            string successColor = isCb ? "#0078D7" : "#107C10";
+            string errorColor = isCb ? "#FF8C00" : "#D13438";
+            string warningColor = isCb ? "#FFB900" : "#FF8C00";
+
             if (app?.TgWsProxyRunning == true)
-                return ("🟢", "tg-ws-proxy активен", "Telegram работает через прокси локально.", "#107C10");
+                return ("🟢", "tg-ws-proxy активен", "Telegram работает через прокси локально.", successColor);
 
             if (!pingOk && dcOk == 0)
-                return ("🔴", "Интернета нет", "Ни один сервер не отвечает.", "#D13438");
+                return ("🔴", "Интернета нет", "Ни один сервер не отвечает.", errorColor);
 
             if (blocks.Contains(BlockType.SniBlock))
                 return bypass
-                    ? ("🟢", "Telegram работает (обходчик активен)", "DPI обнаружен, но обходчик запущен.", "#107C10")
-                    : ("🔴", "Telegram заблокирован (DPI)", "Нужен Zapret.", "#D13438");
+                    ? ("🟢", "Telegram работает (обходчик активен)", "DPI обнаружен, но обходчик запущен.", successColor)
+                    : ("🔴", "Telegram заблокирован (DPI)", "Нужен Zapret.", errorColor);
 
             if (blocks.Contains(BlockType.IpBlock))
                 return bypass
-                    ? ("🟢", "Telegram работает", "IP заблокированы, но обходчик компенсирует.", "#107C10")
-                    : ("🔴", "Серверы заблокированы", "Нужен VPN.", "#D13438");
+                    ? ("🟢", "Telegram работает", "IP заблокированы, но обходчик компенсирует.", successColor)
+                    : ("🔴", "Серверы заблокированы", "Нужен VPN.", errorColor);
 
             if (dcOk >= Math.Max(dcTot / 2, 1))
-                return ("🟢", "Telegram работает нормально", "Серверы отвечают быстро.", "#107C10");
+                return ("🟢", "Telegram работает нормально", "Серверы отвечают быстро.", successColor);
 
-            return ("🟡", "Ситуация неоднозначная", "Проблемы со связью.", "#FF8C00");
+            return ("🟡", "Ситуация неоднозначная", "Проблемы со связью.", warningColor);
         }
 
         public static (string emoji, string title, string detail, string color) DiscordVerdict(DiagReport r)
@@ -477,17 +483,22 @@ namespace ZapretGUI.Core
             var app = r.AppStatus;
             bool bypass = app != null && app.ZapretRunning;
 
+            bool isCb = SettingsManager.Current.ColorblindMode;
+            string successColor = isCb ? "#0078D7" : "#107C10";
+            string errorColor = isCb ? "#FF8C00" : "#D13438";
+            string warningColor = isCb ? "#FFB900" : "#FF8C00";
+
             if (r.DiscordPing != null && r.DiscordPing.Count > 0 && r.DiscordPing.All(p => !p.Ok))
                 return bypass
-                    ? ("🟡", "Сбои в Discord", "Обходчик работает, но серверы недоступны. Возможно, стоит сменить профиль.", "#FF8C00")
-                    : ("🔴", "Discord полностью заблокирован", "API и Gateway не отвечают. Включи Zapret.", "#D13438");
+                    ? ("🟡", "Сбои в Discord", "Обходчик работает, но серверы недоступны. Возможно, стоит сменить профиль.", warningColor)
+                    : ("🔴", "Discord полностью заблокирован", "API и Gateway не отвечают. Включи Zapret.", errorColor);
 
             if (r.UdpResult?.Blocked == true)
                 return bypass
-                    ? ("🟢", "Discord работает (обходчик активен)", "UDP заблокирован, но Zapret маршрутизирует трафик.", "#107C10")
-                    : ("🟡", "Проблемы с голосом", "Чаты работают, но UDP заблокирован. Звонки не пройдут.", "#FF8C00");
+                    ? ("🟢", "Discord работает (обходчик активен)", "UDP заблокирован, но Zapret маршрутизирует трафик.", successColor)
+                    : ("🟡", "Проблемы с голосом", "Чаты работают, но UDP заблокирован. Звонки не пройдут.", warningColor);
 
-            return ("🟢", "Discord работает нормально", "Все нужные порты и серверы доступны.", "#107C10");
+            return ("🟢", "Discord работает нормально", "Все нужные порты и серверы доступны.", successColor);
         }
 
         public static async Task<DiagReport> RunFullDiagnosticsAsync(Action<double, string>? progress = null)

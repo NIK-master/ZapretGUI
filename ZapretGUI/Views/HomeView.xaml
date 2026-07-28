@@ -78,7 +78,6 @@
                 <ColumnDefinition Width="280"/>
             </Grid.ColumnDefinitions>
 
-            <!-- Центральная кнопка и лог -->
             <StackPanel Grid.Column="0" HorizontalAlignment="Center" VerticalAlignment="Center">
                 <ToggleButton x:Name="MainToggle" Width="200" Height="200" Click="MainToggle_Click" Cursor="Hand" Background="Transparent" BorderThickness="0">
                     <ToggleButton.Template>
@@ -147,12 +146,6 @@
                         </ControlTemplate>
                     </ToggleButton.Template>
                 </ToggleButton>
-
-                <!-- Расширили MaxWidth, чтобы лог не обрезался -->
-                <TextBlock x:Name="MiniLogText" Text="Ждем ваших указаний..." 
-                           Foreground="#A0A0A0" FontSize="13" FontWeight="SemiBold" 
-                           HorizontalAlignment="Center" Margin="0,20,0,0" 
-                           MaxWidth="400" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/>
             </StackPanel>
 
             <!-- Очищенная панель статистики без рамки, но с красивым шрифтом -->
@@ -212,7 +205,9 @@
                 </Grid>
             </StackPanel>
 
+            <!-- 2. НАСТРОЙКИ (Без триггеров и изменения цвета рамки) -->
             <StackPanel Grid.Column="2" VerticalAlignment="Center">
+
                 <Border Background="#181818" CornerRadius="12" BorderBrush="#2A2A2A" BorderThickness="1" Margin="0,0,0,15">
                     <StackPanel Margin="20">
                         <Grid Margin="0,0,0,10">
@@ -222,7 +217,6 @@
                         <TextBlock x:Name="StatusText" Text="Остановлен" Foreground="#D13438" Margin="0,0,0,15"/>
 
                         <TextBlock Text="Конфигурация:" Foreground="#A0A0A0" FontSize="12" Margin="0,0,0,5"/>
-
                         <ComboBox x:Name="ProfileComboBox" Height="35" SelectionChanged="Settings_Changed"/>
                     </StackPanel>
                 </Border>
@@ -236,10 +230,10 @@
                         <TextBlock Text="Прокси для Telegram" Foreground="#A0A0A0" FontSize="12" Margin="0,0,0,15"/>
                     </StackPanel>
                 </Border>
+
             </StackPanel>
         </Grid>
 
-        <!-- Прогресс-бар с эффектом свечения -->
         <ProgressBar x:Name="LaunchProgressBar" Grid.Row="2" Height="4" VerticalAlignment="Top" Margin="0,5,0,0" Foreground="{DynamicResource BrandSuccessBrush}" Background="#181818" BorderThickness="0" Value="0" Visibility="Collapsed">
             <ProgressBar.Effect>
                 <DropShadowEffect Color="{DynamicResource MainBtnColor}" BlurRadius="8" ShadowDepth="0" Opacity="0.8"/>

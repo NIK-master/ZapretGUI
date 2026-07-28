@@ -33,6 +33,7 @@
 
 using System;
 using System.Windows;
+using ZapretGUI.Core;
 
 namespace ZapretGUI
 {
@@ -48,9 +49,15 @@ namespace ZapretGUI
             splash.Closed += (s, args) =>
             {
                 var mainWindow = new MainWindow();
-
                 this.MainWindow = mainWindow;
-                mainWindow.Show();
+
+                if (SettingsManager.Current.StartMinimized)
+                {
+                    mainWindow.WindowState = WindowState.Minimized;
+                    mainWindow.Hide();
+                }
+                else
+                    mainWindow.Show();
 
                 this.ShutdownMode = ShutdownMode.OnMainWindowClose;
             };
@@ -937,6 +944,9 @@ namespace ZapretGUI.Core
             if (blocks.Contains(BlockType.DnsSpoof))
                 recs.Add("🔵  DNS-СПУФИНГ\n    Включите зашифрованный DNS в Windows (1.1.1.1).");
 
+            if (r.DiscordPing != null && r.DiscordPing.Count > 0 && r.DiscordPing.All(p => !p.Ok))
+                recs.Add("🔴  DISCORD API: Недоступен!\n    Текстовые чаты и авторизация не будут работать без обхода.");
+
             if (r.UdpResult?.Blocked == true)
                 recs.Add(bypass
                     ? $"🎮  Discord UDP: заблокирован, НО {BypassList()} активен, Discord работает! ✓"
@@ -956,37 +966,55 @@ namespace ZapretGUI.Core
             bool pingOk = r.PingResults.Any(p => p.Ok);
             bool bypass = app != null && app.ZapretRunning;
 
+            // Считываем режим цветовой слепоты
+            bool isCb = SettingsManager.Current.ColorblindMode;
+            string successColor = isCb ? "#0078D7" : "#107C10";
+            string errorColor = isCb ? "#FF8C00" : "#D13438";
+            string warningColor = isCb ? "#FFB900" : "#FF8C00";
+
             if (app?.TgWsProxyRunning == true)
-                return ("🟢", "tg-ws-proxy активен", "Telegram работает через прокси локально.", "#107C10");
+                return ("🟢", "tg-ws-proxy активен", "Telegram работает через прокси локально.", successColor);
 
             if (!pingOk && dcOk == 0)
-                return ("🔴", "Интернета нет", "Ни один сервер не отвечает.", "#D13438");
+                return ("🔴", "Интернета нет", "Ни один сервер не отвечает.", errorColor);
 
             if (blocks.Contains(BlockType.SniBlock))
                 return bypass
-                    ? ("🟢", "Telegram работает (обходчик активен)", "DPI обнаружен, но обходчик запущен.", "#107C10")
-                    : ("🔴", "Telegram заблокирован (DPI)", "Нужен Zapret.", "#D13438");
+                    ? ("🟢", "Telegram работает (обходчик активен)", "DPI обнаружен, но обходчик запущен.", successColor)
+                    : ("🔴", "Telegram заблокирован (DPI)", "Нужен Zapret.", errorColor);
 
             if (blocks.Contains(BlockType.IpBlock))
                 return bypass
-                    ? ("🟢", "Telegram работает", "IP заблокированы, но обходчик компенсирует.", "#107C10")
-                    : ("🔴", "Серверы заблокированы", "Нужен VPN.", "#D13438");
+                    ? ("🟢", "Telegram работает", "IP заблокированы, но обходчик компенсирует.", successColor)
+                    : ("🔴", "Серверы заблокированы", "Нужен VPN.", errorColor);
 
             if (dcOk >= Math.Max(dcTot / 2, 1))
-                return ("🟢", "Telegram работает нормально", "Серверы отвечают быстро.", "#107C10");
+                return ("🟢", "Telegram работает нормально", "Серверы отвечают быстро.", successColor);
 
-            return ("🟡", "Ситуация неоднозначная", "Проблемы со связью.", "#FF8C00");
+            return ("🟡", "Ситуация неоднозначная", "Проблемы со связью.", warningColor);
         }
 
         public static (string emoji, string title, string detail, string color) DiscordVerdict(DiagReport r)
         {
             var app = r.AppStatus;
             bool bypass = app != null && app.ZapretRunning;
+
+            bool isCb = SettingsManager.Current.ColorblindMode;
+            string successColor = isCb ? "#0078D7" : "#107C10";
+            string errorColor = isCb ? "#FF8C00" : "#D13438";
+            string warningColor = isCb ? "#FFB900" : "#FF8C00";
+
+            if (r.DiscordPing != null && r.DiscordPing.Count > 0 && r.DiscordPing.All(p => !p.Ok))
+                return bypass
+                    ? ("🟡", "Сбои в Discord", "Обходчик работает, но серверы недоступны. Возможно, стоит сменить профиль.", warningColor)
+                    : ("🔴", "Discord полностью заблокирован", "API и Gateway не отвечают. Включи Zapret.", errorColor);
+
             if (r.UdpResult?.Blocked == true)
                 return bypass
-                    ? ("🟢", "Discord работает (обходчик активен)", "UDP заблокирован, но обходчик работает.", "#107C10")
-                    : ("🔴", "Голосовые звонки могут лагать", "UDP-порты Discord заблокированы. Включи Zapret.", "#D13438");
-            return ("🟢", "Discord работает нормально", "Все нужные порты доступны.", "#107C10");
+                    ? ("🟢", "Discord работает (обходчик активен)", "UDP заблокирован, но Zapret маршрутизирует трафик.", successColor)
+                    : ("🟡", "Проблемы с голосом", "Чаты работают, но UDP заблокирован. Звонки не пройдут.", warningColor);
+
+            return ("🟢", "Discord работает нормально", "Все нужные порты и серверы доступны.", successColor);
         }
 
         public static async Task<DiagReport> RunFullDiagnosticsAsync(Action<double, string>? progress = null)
@@ -1008,7 +1036,10 @@ namespace ZapretGUI.Core
             report.MediaResult = await CheckMediaThrottleAsync(p => Step(0.55 + p * 0.15, "Медиа..."));
 
             Step(0.70, "UDP порты Discord...");
-            report.UdpResult = await CheckDiscordUdpAsync(p => Step(0.70 + p * 0.20, "UDP..."));
+            report.UdpResult = await CheckDiscordUdpAsync(p => Step(0.70 + p * 0.10, "UDP..."));
+
+            Step(0.80, "Пинг серверов Discord...");
+            report.DiscordPing = await CheckDiscordPingAsync(p => Step(0.80 + p * 0.10, "Пинг Discord..."));
 
             Step(0.90, "Анализ данных...");
             report.BlockTypes = ClassifyBlocks(report);
@@ -1048,13 +1079,15 @@ namespace ZapretGUI.Core
         {
             get
             {
+                bool isColorblind = SettingsManager.Current.ColorblindMode;
+
                 if (!Ok || !LatencyMs.HasValue)
-                    return "#D13438"; 
+                    return isColorblind ? "#FF8C00" : "#D13438";
 
                 if (LatencyMs.Value < 120)
-                    return "#107C10"; 
+                    return isColorblind ? "#0078D7" : "#107C10";
 
-                return "#FF8C00"; 
+                return isColorblind ? "#FFB900" : "#FF8C00";
             }
         }
     }
@@ -1120,6 +1153,26 @@ namespace ZapretGUI.Core
         public bool Ok { get; set; }
         public double? LatencyMs { get; set; }
         public string Error { get; set; } = "";
+
+        public bool IsLoading { get; set; } = false;
+        public string Title => Label;
+        public string PingText => Ok && LatencyMs.HasValue ? $"{LatencyMs.Value:0} мс" : "Ошибка";
+
+        public string StatusColorBrush
+        {
+            get
+            {
+                bool isColorblind = SettingsManager.Current.ColorblindMode;
+
+                if (!Ok || !LatencyMs.HasValue)
+                    return isColorblind ? "#FF8C00" : "#D13438";
+
+                if (LatencyMs.Value < 120)
+                    return isColorblind ? "#0078D7" : "#107C10";
+
+                return isColorblind ? "#FFB900" : "#FF8C00";
+            }
+        }
     }
 
     public class DiagReport
@@ -2015,6 +2068,95 @@ namespace ZapretGUI.Core
             <Setter Property="Foreground" Value="#E0E0E0"/>
             <Setter Property="Margin" Value="0,0,0,10"/>
         </Style>
+
+        <!-- ОБЩИЙ ШАБЛОН ДЛЯ МИНИ-КАРТОЧЕК ПИНГА -->
+        <DataTemplate x:Key="ServerPingTemplate">
+            <Border x:Name="MiniCard" Background="#1E1E1E" BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="1" 
+                    CornerRadius="6" Padding="12,8" Margin="4,4,10,10" MinWidth="130"
+                    RenderTransformOrigin="0.5,0.5" Panel.ZIndex="0">
+                <Border.RenderTransform>
+                    <ScaleTransform ScaleX="1" ScaleY="1"/>
+                </Border.RenderTransform>
+                <Grid>
+                    <Grid x:Name="RealData" Opacity="0">
+                        <Grid.RenderTransform>
+                            <TranslateTransform Y="5"/>
+                        </Grid.RenderTransform>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Text="{Binding Title}" FontSize="12" Foreground="#A0A0A0" FontWeight="Bold"/>
+                        <TextBlock Grid.Row="1" Text="{Binding PingText}" FontSize="14" 
+                                   FontWeight="Bold" Foreground="{Binding StatusColorBrush}" Margin="0,4,0,0"/>
+                    </Grid>
+
+                    <Border x:Name="SkeletonLayer" Background="#222222" CornerRadius="4" Margin="-5" Visibility="Collapsed" ClipToBounds="True">
+                        <Border Width="200" HorizontalAlignment="Left">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                    <GradientStop Color="Transparent" Offset="0"/>
+                                    <GradientStop Color="#15FFFFFF" Offset="0.5"/>
+                                    <GradientStop Color="Transparent" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.Background>
+                            <Border.RenderTransform>
+                                <TranslateTransform x:Name="ShimmerTransform" X="-200"/>
+                            </Border.RenderTransform>
+                        </Border>
+                    </Border>
+                </Grid>
+            </Border>
+
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsLoading}" Value="True">
+                    <Setter TargetName="SkeletonLayer" Property="Visibility" Value="Visible"/>
+                    <DataTrigger.EnterActions>
+                        <BeginStoryboard Name="ShimmerStoryboard">
+                            <Storyboard RepeatBehavior="Forever">
+                                <DoubleAnimation Storyboard.TargetName="ShimmerTransform" Storyboard.TargetProperty="X" From="-200" To="200" Duration="0:0:1.3" />
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </DataTrigger.EnterActions>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsLoading}" Value="False">
+                    <DataTrigger.EnterActions>
+                        <BeginStoryboard>
+                            <Storyboard>
+                                <DoubleAnimation Storyboard.TargetName="RealData" Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.4" />
+                                <DoubleAnimation Storyboard.TargetName="RealData" Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)" From="5" To="0" Duration="0:0:0.4">
+                                    <DoubleAnimation.EasingFunction>
+                                        <CubicEase EasingMode="EaseOut"/>
+                                    </DoubleAnimation.EasingFunction>
+                                </DoubleAnimation>
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </DataTrigger.EnterActions>
+                </DataTrigger>
+
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter TargetName="MiniCard" Property="Panel.ZIndex" Value="100"/>
+                    <Setter TargetName="MiniCard" Property="BorderBrush" Value="{DynamicResource CardHoverBorderBrush}"/>
+                </Trigger>
+                <EventTrigger RoutedEvent="MouseEnter">
+                    <BeginStoryboard>
+                        <Storyboard>
+                            <DoubleAnimation Storyboard.TargetName="MiniCard" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" To="1.04" Duration="0:0:0.1" />
+                            <DoubleAnimation Storyboard.TargetName="MiniCard" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" To="1.04" Duration="0:0:0.1" />
+                        </Storyboard>
+                    </BeginStoryboard>
+                </EventTrigger>
+                <EventTrigger RoutedEvent="MouseLeave">
+                    <BeginStoryboard>
+                        <Storyboard>
+                            <DoubleAnimation Storyboard.TargetName="MiniCard" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" To="1" Duration="0:0:0.25" />
+                            <DoubleAnimation Storyboard.TargetName="MiniCard" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" To="1" Duration="0:0:0.25" />
+                        </Storyboard>
+                    </BeginStoryboard>
+                </EventTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
     </UserControl.Resources>
 
     <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16" ClipToBounds="False">
@@ -2066,7 +2208,6 @@ namespace ZapretGUI.Core
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
 
-                        <!-- ПАСХАЛКА: Бумажный самолетик Дурова -->
                         <TextBlock x:Name="TxtTgEmoji" Text="✈️" FontSize="24" VerticalAlignment="Center" Margin="0,0,15,0"
                                    Cursor="Hand" MouseDown="TxtTgEmoji_MouseDown" RenderTransformOrigin="0.5,0.5">
                             <TextBlock.RenderTransform>
@@ -2132,117 +2273,23 @@ namespace ZapretGUI.Core
             <Border Grid.Row="3" Style="{StaticResource CardStyle}">
                 <StackPanel>
                     <TextBlock Text="Доступность серверов Telegram (DC &amp; Порты)" Style="{StaticResource HeaderStyle}"/>
-
-                    <ItemsControl x:Name="DcItemsControl">
+                    <!-- Используем общий шаблон -->
+                    <ItemsControl x:Name="DcItemsControl" ItemTemplate="{StaticResource ServerPingTemplate}">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
                                 <WrapPanel Orientation="Horizontal"/>
                             </ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <!-- ИНТЕРАКТИВНАЯ МИНИ-КАРТОЧКА -->
-                                <Border x:Name="MiniCard" Background="#1E1E1E" BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="1" 
-                                        CornerRadius="6" Padding="12,8" Margin="4,4,10,10" MinWidth="130"
-                                        RenderTransformOrigin="0.5,0.5" Panel.ZIndex="0">
-                                    <Border.RenderTransform>
-                                        <ScaleTransform ScaleX="1" ScaleY="1"/>
-                                    </Border.RenderTransform>
-                                    <Grid>
-                                        <!-- Контейнер реальных данных -->
-                                        <!-- Изначально прозрачен и сдвинут вниз для анимации появления -->
-                                        <Grid x:Name="RealData" Opacity="0">
-                                            <Grid.RenderTransform>
-                                                <TranslateTransform Y="5"/>
-                                            </Grid.RenderTransform>
-                                            <Grid.RowDefinitions>
-                                                <RowDefinition Height="Auto"/>
-                                                <RowDefinition Height="Auto"/>
-                                            </Grid.RowDefinitions>
+                    </ItemsControl>
 
-                                            <TextBlock Text="{Binding Title}" FontSize="12" Foreground="#A0A0A0" FontWeight="Bold"/>
-                                            <TextBlock Grid.Row="1" Text="{Binding PingText}" FontSize="14" 
-                                                       FontWeight="Bold" Foreground="{Binding StatusColorBrush}" Margin="0,4,0,0"/>
-                                        </Grid>
-
-                                        <!-- СКЕЛЕТНАЯ ЗАГРУЗКА (Градиентное переливание) -->
-                                        <Border x:Name="SkeletonLayer" Background="#222222" CornerRadius="4" Margin="-5" Visibility="Collapsed" ClipToBounds="True">
-                                            <Border Width="200" HorizontalAlignment="Left">
-                                                <Border.Background>
-                                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                                                        <GradientStop Color="Transparent" Offset="0"/>
-                                                        <GradientStop Color="#15FFFFFF" Offset="0.5"/>
-                                                        <GradientStop Color="Transparent" Offset="1"/>
-                                                    </LinearGradientBrush>
-                                                </Border.Background>
-                                                <Border.RenderTransform>
-                                                    <TranslateTransform x:Name="ShimmerTransform" X="-200"/>
-                                                </Border.RenderTransform>
-                                            </Border>
-                                        </Border>
-                                    </Grid>
-                                </Border>
-
-                                <DataTemplate.Triggers>
-                                    <!-- ЕСЛИ ЭТО СКЕЛЕТ -->
-                                    <DataTrigger Binding="{Binding IsLoading}" Value="True">
-                                        <Setter TargetName="SkeletonLayer" Property="Visibility" Value="Visible"/>
-                                        <DataTrigger.EnterActions>
-                                            <BeginStoryboard Name="ShimmerStoryboard">
-                                                <Storyboard RepeatBehavior="Forever">
-                                                    <!-- Сдвиг градиента слева направо -->
-                                                    <DoubleAnimation Storyboard.TargetName="ShimmerTransform" 
-                                                                     Storyboard.TargetProperty="X" 
-                                                                     From="-200" To="200" Duration="0:0:1.3" />
-                                                </Storyboard>
-                                            </BeginStoryboard>
-                                        </DataTrigger.EnterActions>
-                                    </DataTrigger>
-
-                                    <!-- ЕСЛИ ЭТО РЕАЛЬНЫЕ ДАННЫЕ (Анимация красивого появления) -->
-                                    <DataTrigger Binding="{Binding IsLoading}" Value="False">
-                                        <DataTrigger.EnterActions>
-                                            <BeginStoryboard>
-                                                <Storyboard>
-                                                    <DoubleAnimation Storyboard.TargetName="RealData" 
-                                                                     Storyboard.TargetProperty="Opacity" 
-                                                                     From="0" To="1" Duration="0:0:0.4" />
-                                                    <DoubleAnimation Storyboard.TargetName="RealData" 
-                                                                     Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)" 
-                                                                     From="5" To="0" Duration="0:0:0.4">
-                                                        <DoubleAnimation.EasingFunction>
-                                                            <CubicEase EasingMode="EaseOut"/>
-                                                        </DoubleAnimation.EasingFunction>
-                                                    </DoubleAnimation>
-                                                </Storyboard>
-                                            </BeginStoryboard>
-                                        </DataTrigger.EnterActions>
-                                    </DataTrigger>
-
-                                    <!-- Анимация наведения для мини-карточек -->
-                                    <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter TargetName="MiniCard" Property="Panel.ZIndex" Value="100"/>
-                                        <Setter TargetName="MiniCard" Property="BorderBrush" Value="{DynamicResource CardHoverBorderBrush}"/>
-                                    </Trigger>
-                                    <EventTrigger RoutedEvent="MouseEnter">
-                                        <BeginStoryboard>
-                                            <Storyboard>
-                                                <DoubleAnimation Storyboard.TargetName="MiniCard" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" To="1.04" Duration="0:0:0.1" />
-                                                <DoubleAnimation Storyboard.TargetName="MiniCard" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" To="1.04" Duration="0:0:0.1" />
-                                            </Storyboard>
-                                        </BeginStoryboard>
-                                    </EventTrigger>
-                                    <EventTrigger RoutedEvent="MouseLeave">
-                                        <BeginStoryboard>
-                                            <Storyboard>
-                                                <DoubleAnimation Storyboard.TargetName="MiniCard" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" To="1" Duration="0:0:0.25" />
-                                                <DoubleAnimation Storyboard.TargetName="MiniCard" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" To="1" Duration="0:0:0.25" />
-                                            </Storyboard>
-                                        </BeginStoryboard>
-                                    </EventTrigger>
-                                </DataTemplate.Triggers>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
+                    <TextBlock Text="Доступность серверов Discord" Style="{StaticResource HeaderStyle}" Margin="0,15,0,10"/>
+                    <!-- Выводим серверы Discord через тот же шаблон! -->
+                    <ItemsControl x:Name="DiscordItemsControl" ItemTemplate="{StaticResource ServerPingTemplate}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel Orientation="Horizontal"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
                     </ItemsControl>
                 </StackPanel>
             </Border>
@@ -2254,7 +2301,6 @@ namespace ZapretGUI.Core
                     <ItemsControl x:Name="RecItemsControl">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <!-- Добавлено плавное всплывание и для списка рекомендаций -->
                                 <StackPanel Orientation="Horizontal" Margin="0,5" Opacity="0">
                                     <StackPanel.RenderTransform>
                                         <TranslateTransform Y="10"/>
@@ -2302,11 +2348,9 @@ namespace ZapretGUI.Views
 {
     public partial class DiagnosticsView : System.Windows.Controls.UserControl
     {
-        // Переменные для пасхалки Discord
         private int _discordClickCount = 0;
         private DateTime _lastDiscordClick = DateTime.MinValue;
 
-        // Переменные для пасхалки Telegram
         private int _tgClickCount = 0;
         private DateTime _lastTgClick = DateTime.MinValue;
 
@@ -2330,6 +2374,14 @@ namespace ZapretGUI.Views
                 }
             }
             DcItemsControl.ItemsSource = skeletons;
+
+            var dsSkeletons = new List<DiscordPingResult>
+            {
+                new DiscordPingResult { Label = "Gateway", IsLoading = true },
+                new DiscordPingResult { Label = "Media", IsLoading = true },
+                new DiscordPingResult { Label = "API", IsLoading = true }
+            };
+            DiscordItemsControl.ItemsSource = dsSkeletons;
         }
 
         private async void BtnRunDiagnostics_Click(object sender, RoutedEventArgs e)
@@ -2387,21 +2439,19 @@ namespace ZapretGUI.Views
 
             RecItemsControl.ItemsSource = report.Recommendations;
             DcItemsControl.ItemsSource = report.DcResults;
+            RecItemsControl.ItemsSource = report.Recommendations;
+            DcItemsControl.ItemsSource = report.DcResults;
+            DiscordItemsControl.ItemsSource = report.DiscordPing; 
         }
 
-        // =======================================================
-        // ПАСХАЛКА 1: DISCORD (САЛЬТО)
-        // =======================================================
         private void TxtDiscordEmoji_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
-            // Если между кликами прошло больше 1.5 секунд — сбрасываем счетчик
             if ((DateTime.Now - _lastDiscordClick).TotalSeconds > 1.5)
                 _discordClickCount = 0;
 
             _discordClickCount++;
             _lastDiscordClick = DateTime.Now;
 
-            // Если кликнули 5 раз подряд
             if (_discordClickCount >= 5)
             {
                 _discordClickCount = 0;
@@ -2411,45 +2461,35 @@ namespace ZapretGUI.Views
 
         private void TriggerDiscordEasterEgg()
         {
-            // Воспроизводим звук успеха
             AudioHelper.PlaySuccess();
 
-            // Меняем тексты и цвета
             TxtDiscordMainStatus.Text = "Discord (Режим турбо-деда)";
             TxtDiscordMainStatus.Foreground = UIHelper.GetBrushFromHex("#FF00FF");
             TxtDiscordSubStatus.Text = "Никакие блокировки больше не страшны!";
 
-            // Крутая анимация сальто с пружинистым эффектом
             var anim = new System.Windows.Media.Animation.DoubleAnimation(0, 360, TimeSpan.FromSeconds(0.5))
             {
                 EasingFunction = new System.Windows.Media.Animation.BackEase { Amplitude = 0.5, EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut }
             };
 
-            // Запускаем анимацию вращения, если мы её объявили в XAML
             var storyboard = new System.Windows.Media.Animation.Storyboard();
             storyboard.Children.Add(anim);
             System.Windows.Media.Animation.Storyboard.SetTarget(anim, TxtDiscordEmoji);
             System.Windows.Media.Animation.Storyboard.SetTargetProperty(anim, new PropertyPath("(UIElement.RenderTransform).(RotateTransform.Angle)"));
             storyboard.Begin();
 
-            // Перекрашиваем саму карточку в кислотный киберпанк
             DiscordCard.BorderBrush = UIHelper.GetBrushFromHex("#FF00FF");
             DiscordCard.Background = UIHelper.GetBrushFromHex("#1A001A");
         }
 
-        // =======================================================
-        // ПАСХАЛКА 2: TELEGRAM (ВЗЛЕТ И ПОСАДКА ДУРОВА)
-        // =======================================================
         private void TxtTgEmoji_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
-            // Если между кликами прошло больше 1.5 секунд — сбрасываем
             if ((DateTime.Now - _lastTgClick).TotalSeconds > 1.5)
                 _tgClickCount = 0;
 
             _tgClickCount++;
             _lastTgClick = DateTime.Now;
 
-            // Запускаем при 5 кликах
             if (_tgClickCount >= 5)
             {
                 _tgClickCount = 0;
@@ -2461,12 +2501,10 @@ namespace ZapretGUI.Views
         {
             AudioHelper.PlaySuccess();
 
-            // Меняем статус
             TxtTgMainStatus.Text = "Telegram (Режим Дурова)";
-            TxtTgMainStatus.Foreground = UIHelper.GetBrushFromHex("#00E5FF"); // Неоново-голубой
+            TxtTgMainStatus.Foreground = UIHelper.GetBrushFromHex("#00E5FF"); 
             TxtTgSubStatus.Text = "Свободу интернету! Трафик летит напрямую.";
 
-            // Анимация резкого взлета (вправо и вверх)
             var flyX = new System.Windows.Media.Animation.DoubleAnimation(0, 150, TimeSpan.FromSeconds(0.3))
             { EasingFunction = new System.Windows.Media.Animation.PowerEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseIn } };
 
@@ -2475,20 +2513,16 @@ namespace ZapretGUI.Views
 
             var fadeOut = new System.Windows.Media.Animation.DoubleAnimation(1, 0, TimeSpan.FromSeconds(0.3));
 
-            // Получаем доступ к TranslateTransform, который мы прописали в XAML
             var transformGroup = TxtTgEmoji.RenderTransform as System.Windows.Media.TransformGroup;
             var translateTransform = transformGroup?.Children[0] as System.Windows.Media.TranslateTransform;
 
             if (translateTransform != null)
             {
-                // Как только самолет улетел, возвращаем его с другой стороны
                 flyX.Completed += (s, ev) =>
                 {
-                    // Телепортируем самолетик вниз-влево (за пределы видимости)
                     translateTransform.X = -50;
                     translateTransform.Y = 50;
 
-                    // Плавная анимация посадки на место
                     var returnX = new System.Windows.Media.Animation.DoubleAnimation(-50, 0, TimeSpan.FromSeconds(0.4))
                     { EasingFunction = new System.Windows.Media.Animation.BackEase { Amplitude = 0.5, EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut } };
 
@@ -2502,13 +2536,11 @@ namespace ZapretGUI.Views
                     TxtTgEmoji.BeginAnimation(UIElement.OpacityProperty, fadeIn);
                 };
 
-                // Запускаем взлет
                 translateTransform.BeginAnimation(System.Windows.Media.TranslateTransform.XProperty, flyX);
                 translateTransform.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, flyY);
                 TxtTgEmoji.BeginAnimation(UIElement.OpacityProperty, fadeOut);
             }
 
-            // Перекрашиваем саму карточку в темный киберпанк-голубой
             TelegramCard.BorderBrush = UIHelper.GetBrushFromHex("#00E5FF");
             TelegramCard.Background = UIHelper.GetBrushFromHex("#001A22");
         }
@@ -2599,7 +2631,6 @@ namespace ZapretGUI.Views
                 <ColumnDefinition Width="280"/>
             </Grid.ColumnDefinitions>
 
-            <!-- Центральная кнопка и лог -->
             <StackPanel Grid.Column="0" HorizontalAlignment="Center" VerticalAlignment="Center">
                 <ToggleButton x:Name="MainToggle" Width="200" Height="200" Click="MainToggle_Click" Cursor="Hand" Background="Transparent" BorderThickness="0">
                     <ToggleButton.Template>
@@ -2668,12 +2699,6 @@ namespace ZapretGUI.Views
                         </ControlTemplate>
                     </ToggleButton.Template>
                 </ToggleButton>
-
-                <!-- Расширили MaxWidth, чтобы лог не обрезался -->
-                <TextBlock x:Name="MiniLogText" Text="Ждем ваших указаний..." 
-                           Foreground="#A0A0A0" FontSize="13" FontWeight="SemiBold" 
-                           HorizontalAlignment="Center" Margin="0,20,0,0" 
-                           MaxWidth="400" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/>
             </StackPanel>
 
             <!-- Очищенная панель статистики без рамки, но с красивым шрифтом -->
@@ -2733,7 +2758,9 @@ namespace ZapretGUI.Views
                 </Grid>
             </StackPanel>
 
+            <!-- 2. НАСТРОЙКИ (Без триггеров и изменения цвета рамки) -->
             <StackPanel Grid.Column="2" VerticalAlignment="Center">
+
                 <Border Background="#181818" CornerRadius="12" BorderBrush="#2A2A2A" BorderThickness="1" Margin="0,0,0,15">
                     <StackPanel Margin="20">
                         <Grid Margin="0,0,0,10">
@@ -2743,7 +2770,6 @@ namespace ZapretGUI.Views
                         <TextBlock x:Name="StatusText" Text="Остановлен" Foreground="#D13438" Margin="0,0,0,15"/>
 
                         <TextBlock Text="Конфигурация:" Foreground="#A0A0A0" FontSize="12" Margin="0,0,0,5"/>
-
                         <ComboBox x:Name="ProfileComboBox" Height="35" SelectionChanged="Settings_Changed"/>
                     </StackPanel>
                 </Border>
@@ -2757,10 +2783,10 @@ namespace ZapretGUI.Views
                         <TextBlock Text="Прокси для Telegram" Foreground="#A0A0A0" FontSize="12" Margin="0,0,0,15"/>
                     </StackPanel>
                 </Border>
+
             </StackPanel>
         </Grid>
 
-        <!-- Прогресс-бар с эффектом свечения -->
         <ProgressBar x:Name="LaunchProgressBar" Grid.Row="2" Height="4" VerticalAlignment="Top" Margin="0,5,0,0" Foreground="{DynamicResource BrandSuccessBrush}" Background="#181818" BorderThickness="0" Value="0" Visibility="Collapsed">
             <ProgressBar.Effect>
                 <DropShadowEffect Color="{DynamicResource MainBtnColor}" BlurRadius="8" ShadowDepth="0" Opacity="0.8"/>
@@ -2829,6 +2855,8 @@ namespace ZapretGUI.Views
         private long _lastBytesSent = 0;
 
         private bool _wasNetworkAvailable = true;
+
+        private System.Windows.Documents.Run? _lastProgressRun = null;
 
         public HomeView()
         {
@@ -3197,6 +3225,14 @@ namespace ZapretGUI.Views
 
         private void Log(string message)
         {
+            bool isProgress = message.Contains("Скачивание:") || message.Contains("Скачано:");
+
+            if (isProgress && _lastProgressRun != null)
+            {
+                _lastProgressRun.Text = $"[{DateTime.Now:HH:mm:ss}] {message}";
+                return;
+            }
+
             var run = new System.Windows.Documents.Run($"[{DateTime.Now:HH:mm:ss}] {message}");
 
             if (message.Contains("ОШИБКА") || message.Contains("⚠") || message.Contains("🛑"))
@@ -3221,23 +3257,13 @@ namespace ZapretGUI.Views
             LogDocument.Blocks.Add(paragraph);
             LogRichTextBox.ScrollToEnd();
 
-            var cleanMessage = message.Contains("] ")
-                ? message.Substring(message.IndexOf("] ") + 2)
-                : message;
-
-            MiniLogText.Text = cleanMessage;
-
-            if (message.Contains("ОШИБКА") || message.Contains("⚠") || message.Contains("🛑"))
-                MiniLogText.Foreground = GetErrorColor();
-            else if (message.Contains("✅") || message.Contains("[OK]"))
-                MiniLogText.Foreground = GetSuccessColor();
-            else
-                MiniLogText.Foreground = UIHelper.GetBrushFromHex("#888888");
+            _lastProgressRun = isProgress ? run : null;
         }
 
         private void BtnClearLogs_Click(object sender, RoutedEventArgs e)
         {
             LogDocument.Blocks.Clear();
+            _lastProgressRun = null;
         }
 
         private void BtnExportLogs_Click(object sender, RoutedEventArgs e)
@@ -3360,8 +3386,7 @@ namespace ZapretGUI.Views
         {
             Dispatcher.Invoke(() =>
             {
-                MiniLogText.Text = message;
-                MiniLogText.Foreground = UIHelper.GetBrushFromHex("#55AAFF");
+                Log($"[Updater] {message}");
             });
         }
     }
@@ -3858,8 +3883,18 @@ namespace ZapretGUI.Views
         {
             if (sender is System.Windows.Controls.Button btn)
                 btn.IsEnabled = false;
-
             await ZapretGUI.Core.UpdateManager.CheckForUpdatesAsync(isManualCheck: true);
+
+            Action stopServicesAction = () =>
+            {
+                if (System.Windows.Application.Current.MainWindow is MainWindow mw && mw.IsBypassRunning())
+                {
+                    mw.ToggleBypass();
+                }
+            };
+
+            await ZapretGUI.Core.UpdateManager.CheckForZapretCoreUpdatesAsync(stopServicesAction, null);
+            await ZapretGUI.Core.UpdateManager.CheckForTgProxyCoreUpdatesAsync(stopServicesAction, null);
 
             if (sender is System.Windows.Controls.Button btnReEnable)
                 btnReEnable.IsEnabled = true;
@@ -4968,6 +5003,7 @@ namespace ZapretGUI.Views.WizardPages
 {
     public partial class Step5_FinishPage : System.Windows.Controls.UserControl
     {
+        private bool _isLastMessageProgress = false;
         public Step5_FinishPage()
         {
             InitializeComponent();
@@ -4975,9 +5011,26 @@ namespace ZapretGUI.Views.WizardPages
 
         private async Task AppendLog(string message, int delay = 100)
         {
+            bool isProgress = message.Contains("Скачивание:") || message.Contains("Скачано:");
+
+            if (isProgress && _isLastMessageProgress)
+            {
+                var currentText = ConsoleLog.Text;
+                var lastNewLine = currentText.LastIndexOf('\n', Math.Max(0, currentText.Length - 2));
+
+                if (lastNewLine >= 0)
+                    ConsoleLog.Text = currentText.Substring(0, lastNewLine + 1);
+                else
+                    ConsoleLog.Text = "";
+            }
+
             ConsoleLog.Text += $"[{DateTime.Now:HH:mm:ss}] {message}\n";
             LogScroller.ScrollToEnd();
-            await Task.Delay(delay);
+
+            _isLastMessageProgress = isProgress;
+
+            if (delay > 0)
+                await Task.Delay(delay);
         }
 
         public async Task RunSetupAsync(bool useZapret, bool useTgProxy, bool autoStart, bool focusMode, bool colorblind)

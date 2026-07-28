@@ -9,6 +9,7 @@ namespace ZapretGUI.Views.WizardPages
 {
     public partial class Step5_FinishPage : System.Windows.Controls.UserControl
     {
+        private bool _isLastMessageProgress = false;
         public Step5_FinishPage()
         {
             InitializeComponent();
@@ -16,9 +17,26 @@ namespace ZapretGUI.Views.WizardPages
 
         private async Task AppendLog(string message, int delay = 100)
         {
+            bool isProgress = message.Contains("Скачивание:") || message.Contains("Скачано:");
+
+            if (isProgress && _isLastMessageProgress)
+            {
+                var currentText = ConsoleLog.Text;
+                var lastNewLine = currentText.LastIndexOf('\n', Math.Max(0, currentText.Length - 2));
+
+                if (lastNewLine >= 0)
+                    ConsoleLog.Text = currentText.Substring(0, lastNewLine + 1);
+                else
+                    ConsoleLog.Text = "";
+            }
+
             ConsoleLog.Text += $"[{DateTime.Now:HH:mm:ss}] {message}\n";
             LogScroller.ScrollToEnd();
-            await Task.Delay(delay);
+
+            _isLastMessageProgress = isProgress;
+
+            if (delay > 0)
+                await Task.Delay(delay);
         }
 
         public async Task RunSetupAsync(bool useZapret, bool useTgProxy, bool autoStart, bool focusMode, bool colorblind)

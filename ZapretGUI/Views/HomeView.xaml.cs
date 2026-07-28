@@ -22,6 +22,8 @@ namespace ZapretGUI.Views
 
         private bool _wasNetworkAvailable = true;
 
+        private System.Windows.Documents.Run? _lastProgressRun = null;
+
         public HomeView()
         {
             InitializeComponent();
@@ -389,6 +391,14 @@ namespace ZapretGUI.Views
 
         private void Log(string message)
         {
+            bool isProgress = message.Contains("Скачивание:") || message.Contains("Скачано:");
+
+            if (isProgress && _lastProgressRun != null)
+            {
+                _lastProgressRun.Text = $"[{DateTime.Now:HH:mm:ss}] {message}";
+                return;
+            }
+
             var run = new System.Windows.Documents.Run($"[{DateTime.Now:HH:mm:ss}] {message}");
 
             if (message.Contains("ОШИБКА") || message.Contains("⚠") || message.Contains("🛑"))
@@ -413,23 +423,13 @@ namespace ZapretGUI.Views
             LogDocument.Blocks.Add(paragraph);
             LogRichTextBox.ScrollToEnd();
 
-            var cleanMessage = message.Contains("] ")
-                ? message.Substring(message.IndexOf("] ") + 2)
-                : message;
-
-            MiniLogText.Text = cleanMessage;
-
-            if (message.Contains("ОШИБКА") || message.Contains("⚠") || message.Contains("🛑"))
-                MiniLogText.Foreground = GetErrorColor();
-            else if (message.Contains("✅") || message.Contains("[OK]"))
-                MiniLogText.Foreground = GetSuccessColor();
-            else
-                MiniLogText.Foreground = UIHelper.GetBrushFromHex("#888888");
+            _lastProgressRun = isProgress ? run : null;
         }
 
         private void BtnClearLogs_Click(object sender, RoutedEventArgs e)
         {
             LogDocument.Blocks.Clear();
+            _lastProgressRun = null;
         }
 
         private void BtnExportLogs_Click(object sender, RoutedEventArgs e)
@@ -552,8 +552,7 @@ namespace ZapretGUI.Views
         {
             Dispatcher.Invoke(() =>
             {
-                MiniLogText.Text = message;
-                MiniLogText.Foreground = UIHelper.GetBrushFromHex("#55AAFF");
+                Log($"[Updater] {message}");
             });
         }
     }

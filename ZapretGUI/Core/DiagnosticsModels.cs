@@ -22,13 +22,15 @@ namespace ZapretGUI.Core
         {
             get
             {
+                bool isColorblind = SettingsManager.Current.ColorblindMode;
+
                 if (!Ok || !LatencyMs.HasValue)
-                    return "#D13438"; 
+                    return isColorblind ? "#FF8C00" : "#D13438";
 
                 if (LatencyMs.Value < 120)
-                    return "#107C10"; 
+                    return isColorblind ? "#0078D7" : "#107C10";
 
-                return "#FF8C00"; 
+                return isColorblind ? "#FFB900" : "#FF8C00";
             }
         }
     }
@@ -103,13 +105,15 @@ namespace ZapretGUI.Core
         {
             get
             {
+                bool isColorblind = SettingsManager.Current.ColorblindMode;
+
                 if (!Ok || !LatencyMs.HasValue)
-                    return "#D13438";
+                    return isColorblind ? "#FF8C00" : "#D13438";
 
                 if (LatencyMs.Value < 120)
-                    return "#107C10";
+                    return isColorblind ? "#0078D7" : "#107C10";
 
-                return "#FF8C00";
+                return isColorblind ? "#FFB900" : "#FF8C00";
             }
         }
     }
