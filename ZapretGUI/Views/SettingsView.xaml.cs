@@ -3,7 +3,6 @@ using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Interop;
-using Microsoft.Win32;
 using ZapretGUI.Core;
 
 namespace ZapretGUI.Views
@@ -20,11 +19,7 @@ namespace ZapretGUI.Views
         {
             try
             {
-                using (var key = Registry.CurrentUser.OpenSubKey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true))
-                {
-                    if (key != null)
-                        ToggleAutoStart.IsChecked = key.GetValue(AppConstants.AppRegistryName) != null;
-                }
+                ToggleAutoStart.IsChecked = StartupHelper.IsAutoStartEnabled();
 
                 var settings = SettingsManager.Current;
 
@@ -37,7 +32,7 @@ namespace ZapretGUI.Views
                 ToggleHardwareAccel.IsChecked = settings.HardwareAcceleration;
                 ToggleColorblind.IsChecked = settings.ColorblindMode;
 
-                TxtPingUrl.Text = settings.PingUrl ?? "https://dynamodb.eu-central-1.amazonaws.com";
+                TxtPingUrl.Text = settings.PingUrl ?? AppConstants.DefaultPingUrl;
                 ToggleAutoRestart.IsChecked = settings.AutoRestartServices;
 
                 switch (settings.StatsUpdateInterval)
@@ -66,33 +61,16 @@ namespace ZapretGUI.Views
 
         private void SaveAllSettings()
         {
-            if (!IsLoaded)
-                return;
+            if (!IsLoaded) return;
 
             try
             {
-                using (var key = Registry.CurrentUser.OpenSubKey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true))
-                {
-                    if (key != null)
-                    {
-                        if (ToggleAutoStart.IsChecked == true)
-                        {
-                            var exePath = System.Reflection.Assembly.GetExecutingAssembly().Location;
-                            exePath = Path.ChangeExtension(exePath, ".exe");
-                            key.SetValue(AppConstants.AppRegistryName, $"\"{exePath}\"");
-                        }
-                        else
-                        {
-                            key.DeleteValue(AppConstants.AppRegistryName, false);
-                        }
-                    }
-                }
+                StartupHelper.SetAutoStart(ToggleAutoStart.IsChecked ?? true);
 
                 var useGpu = ToggleHardwareAccel.IsChecked ?? true;
                 System.Windows.Media.RenderOptions.ProcessRenderMode = useGpu ? RenderMode.Default : RenderMode.SoftwareOnly;
 
                 var settings = SettingsManager.Current;
-
                 settings.StartMinimized = ToggleStartMinimized.IsChecked ?? false;
                 settings.MinimizeOnClose = ToggleMinimizeOnClose.IsChecked ?? true;
                 settings.NotificationsEnabled = ToggleNotifications.IsChecked ?? true;
@@ -110,19 +88,14 @@ namespace ZapretGUI.Views
                 }
                 else
                 {
-                    res["BrandSuccessBrush"] = UIHelper.GetBrushFromHex("#107C10"); 
+                    res["BrandSuccessBrush"] = UIHelper.GetBrushFromHex("#107C10");
                     res["BrandErrorBrush"] = UIHelper.GetBrushFromHex("#D13438");
                 }
 
-                settings.PingUrl = string.IsNullOrWhiteSpace(TxtPingUrl.Text) ? "https://dynamodb.eu-central-1.amazonaws.com" : TxtPingUrl.Text;
+                settings.PingUrl = string.IsNullOrWhiteSpace(TxtPingUrl.Text) ? AppConstants.DefaultPingUrl : TxtPingUrl.Text;
                 settings.AutoRestartServices = ToggleAutoRestart.IsChecked ?? false;
 
-                var interval = 1;
-                if (ComboUpdateInterval.SelectedIndex == 1)
-                    interval = 3;
-                else if (ComboUpdateInterval.SelectedIndex == 2)
-                    interval = 5;
-                settings.StatsUpdateInterval = interval;
+                settings.StatsUpdateInterval = ComboUpdateInterval.SelectedIndex switch { 1 => 3, 2 => 5, _ => 1 };
 
                 SettingsManager.Save();
             }
@@ -137,10 +110,7 @@ namespace ZapretGUI.Views
             try
             {
                 var zapretFolder = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.CoreFilesDirectory);
-
-                if (!Directory.Exists(zapretFolder))
-                    Directory.CreateDirectory(zapretFolder);
-
+                if (!Directory.Exists(zapretFolder)) Directory.CreateDirectory(zapretFolder);
                 Process.Start("explorer.exe", zapretFolder);
             }
             catch (Exception ex)
@@ -153,25 +123,16 @@ namespace ZapretGUI.Views
         {
             var result = System.Windows.MessageBox.Show(
                 "Вы уверены, что хотите вернуть все настройки к состоянию по умолчанию? Это действие нельзя отменить.",
-                "Сброс настроек",
-                System.Windows.MessageBoxButton.YesNo,
-                System.Windows.MessageBoxImage.Warning);
+                "Сброс настроек", System.Windows.MessageBoxButton.YesNo, System.Windows.MessageBoxImage.Warning);
 
             if (result == System.Windows.MessageBoxResult.Yes)
             {
                 try
                 {
                     var settingsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.json");
-                    if (File.Exists(settingsPath))
-                    {
-                        File.Delete(settingsPath);
-                    }
+                    if (File.Exists(settingsPath)) File.Delete(settingsPath);
 
-                    using (var key = Registry.CurrentUser.OpenSubKey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true))
-                    {
-                        if (key != null)
-                            key.DeleteValue(AppConstants.AppRegistryName, false);
-                    }
+                    StartupHelper.SetAutoStart(false);
 
                     SettingsManager.Load();
                     LoadSettings();
@@ -193,23 +154,68 @@ namespace ZapretGUI.Views
 
         private async void BtnCheckUpdates_Click(object sender, RoutedEventArgs e)
         {
-            if (sender is System.Windows.Controls.Button btn)
-                btn.IsEnabled = false;
-            await ZapretGUI.Core.UpdateManager.CheckForUpdatesAsync(isManualCheck: true);
+            if (sender is System.Windows.Controls.Button btn) btn.IsEnabled = false;
 
-            Action stopServicesAction = () =>
+            var appUpdate = await Core.UpdateManager.CheckForAppUpdateAsync();
+            if (appUpdate.UpdateAvailable)
             {
-                if (System.Windows.Application.Current.MainWindow is MainWindow mw && mw.IsBypassRunning())
+                var prompt = new Views.UpdateWindow("Обновление программы", $"Доступна новая версия панели управления {appUpdate.Version}!\n\nПрограмма будет закрыта для установки обновления. Продолжить?");
+                prompt.ShowDialog();
+                if (prompt.Result && !string.IsNullOrEmpty(appUpdate.DownloadUrl))
+                    await Core.UpdateManager.ApplyAppUpdateAsync(appUpdate.DownloadUrl, () => System.Windows.Application.Current.Shutdown());
+            }
+            else
+            {
+                new Views.UpdateWindow("Проверка обновлений", "У вас уже установлена самая последняя версия панели управления!", "ОК").ShowDialog();
+            }
+
+            Action stopServicesAction = () => { if (System.Windows.Application.Current.MainWindow is MainWindow mw && mw.IsBypassRunning()) mw.ToggleBypass(); };
+
+            var zapretUpdate = await Core.UpdateManager.CheckForCoreUpdateAsync("https://api.github.com/repos/flowseal/zapret-discord-youtube/releases/latest", SettingsManager.Current.ZapretCoreVersion, "Zapret", true);
+            if (zapretUpdate.UpdateAvailable)
+            {
+                var prompt = new Views.UpdateWindow("Обновление ядра Zapret", $"Найдено обновление обхода Zapret ({zapretUpdate.Version})!\n\nТекущая версия: {zapretUpdate.CurrentVersion}\nОбновить автоматически?");
+                prompt.ShowDialog();
+                if (prompt.Result)
                 {
-                    mw.ToggleBypass();
+                    try
+                    {
+                        await Core.UpdateManager.InstallCoreAsync(zapretUpdate, stopServicesAction, null);
+                        SettingsManager.Current.ZapretCoreVersion = zapretUpdate.Version;
+                        SettingsManager.Save();
+                        new Views.UpdateWindow("Успех", "Модуль Zapret успешно обновлен!", "ОК").ShowDialog();
+                    }
+                    catch (Exception ex) { new Views.UpdateWindow("Ошибка", $"Ошибка: {ex.Message}", "ОК").ShowDialog(); }
                 }
-            };
+            }
+            else
+            {
+                new Views.UpdateWindow("Проверка ядра Zapret", "Ядро Zapret обновлено до последней версии.", "ОК").ShowDialog();
+            }
 
-            await ZapretGUI.Core.UpdateManager.CheckForZapretCoreUpdatesAsync(stopServicesAction, null);
-            await ZapretGUI.Core.UpdateManager.CheckForTgProxyCoreUpdatesAsync(stopServicesAction, null);
+            var proxyUpdate = await Core.UpdateManager.CheckForCoreUpdateAsync("https://api.github.com/repos/flowseal/tg-ws-proxy/releases/latest", SettingsManager.Current.TgProxyCoreVersion, "TgWsProxy", false);
+            if (proxyUpdate.UpdateAvailable)
+            {
+                var prompt = new Views.UpdateWindow("Обновление ядра TgWsProxy", $"Найдено обновление прокси Telegram ({proxyUpdate.Version})!\n\nОбновить автоматически?");
+                prompt.ShowDialog();
+                if (prompt.Result)
+                {
+                    try
+                    {
+                        await Core.UpdateManager.InstallCoreAsync(proxyUpdate, stopServicesAction, null);
+                        SettingsManager.Current.TgProxyCoreVersion = proxyUpdate.Version;
+                        SettingsManager.Save();
+                        new Views.UpdateWindow("Успех", "Модуль TgWsProxy успешно обновлен!", "ОК").ShowDialog();
+                    }
+                    catch (Exception ex) { new Views.UpdateWindow("Ошибка", $"Ошибка: {ex.Message}", "ОК").ShowDialog(); }
+                }
+            }
+            else
+            {
+                new Views.UpdateWindow("Проверка ядра TgWsProxy", "Ядро TgWsProxy обновлено до последней версии.", "ОК").ShowDialog();
+            }
 
-            if (sender is System.Windows.Controls.Button btnReEnable)
-                btnReEnable.IsEnabled = true;
+            if (sender is System.Windows.Controls.Button btnReEnable) btnReEnable.IsEnabled = true;
         }
     }
 }

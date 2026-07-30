@@ -35,8 +35,8 @@ namespace ZapretGUI.Views
 
             try
             {
-                var hostToPing = "ec2.eu-central-1.amazonaws.com";
-                var portToPing = 443;
+                var hostToPing = AppConstants.AwsPingHost;
+                var portToPing = AppConstants.AwsPingPort;
 
                 var fullUrl = Core.SettingsManager.Current.PingUrl;
                 if (!string.IsNullOrWhiteSpace(fullUrl))

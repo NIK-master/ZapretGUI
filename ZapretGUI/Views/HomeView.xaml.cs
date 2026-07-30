@@ -1,53 +1,43 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
-using System.Net.NetworkInformation;
-using System.Runtime.InteropServices;
-using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Effects;
-using System.Windows.Threading;
 using ZapretGUI.Core;
 
 namespace ZapretGUI.Views
 {
     public partial class HomeView : System.Windows.Controls.UserControl
     {
-        [DllImport("user32.dll")]
-        private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
-        private const int SW_HIDE = 0;
-
         private readonly ZapretManager _zapretManager;
         private readonly TgProxyManager _tgProxyManager;
+        private readonly NetworkMonitor _networkMonitor;
+        private readonly ZapretScanner _zapretScanner;
 
-        private DispatcherTimer? _networkTimer;
-        private long _lastBytesReceived = 0;
-        private long _lastBytesSent = 0;
-        private bool _wasNetworkAvailable = true;
         private System.Windows.Documents.Run? _lastProgressRun = null;
-
-        private Process? _scanProcess;
-        private CancellationTokenSource? _scanCts;
-        private List<string> _topConfigs = new List<string>();
-
-        private int _currentTestNumber = 0;
-        private string _currentStrategy = "";
-        private bool _isCurrentTestLogged = false;
 
         public HomeView()
         {
             InitializeComponent();
             _zapretManager = new ZapretManager();
             _tgProxyManager = new TgProxyManager();
+            _networkMonitor = new NetworkMonitor();
+            _zapretScanner = new ZapretScanner();
 
             _zapretManager.LogMessage += ProcessLogMessage;
             _tgProxyManager.LogMessage += ProcessLogMessage;
 
-            System.Windows.Application.Current.Exit += (s, e) => CancelScan();
+            _networkMonitor.StatsUpdated += NetworkMonitor_StatsUpdated;
+            _networkMonitor.StatusChanged += NetworkMonitor_StatusChanged;
+
+            _zapretScanner.LogMessage += ProcessLogMessage;
+            _zapretScanner.ScanCompleted += ZapretScanner_ScanCompleted;
+            _zapretScanner.ScanFailed += ZapretScanner_ScanFailed;
+
+            System.Windows.Application.Current.Exit += (s, e) => _zapretScanner.CancelScan();
 
             LoadProfiles();
             LoadSettings();
@@ -55,13 +45,10 @@ namespace ZapretGUI.Views
             SettingsManager.SettingsSaved += ApplyVisualSettings;
             ApplyVisualSettings();
 
-            StartNetworkMonitor();
+            _networkMonitor.Start();
             _ = PingNetworkAsync();
 
-            var isZapretRunning = _zapretManager.IsRunning();
-            var isProxyRunning = _tgProxyManager.IsRunning();
-
-            if (isZapretRunning || isProxyRunning)
+            if (_zapretManager.IsRunning() || _tgProxyManager.IsRunning())
             {
                 MainToggle.IsChecked = true;
                 UpdateUIState(true);
@@ -72,68 +59,36 @@ namespace ZapretGUI.Views
                 Log("Интерфейс загружен. Ожидание команд...");
         }
 
-        private void StartNetworkMonitor()
+        private void NetworkMonitor_StatsUpdated(double mbpsReceived, double mbpsSent)
         {
-            _networkTimer = new DispatcherTimer
+            Dispatcher.Invoke(() =>
             {
-                Interval = TimeSpan.FromSeconds(1)
-            };
-            _networkTimer.Tick += NetworkTimer_Tick;
-            _networkTimer.Start();
-        }
-
-        private void NetworkTimer_Tick(object? sender, EventArgs e)
-        {
-            var isAvailable = NetworkInterface.GetIsNetworkAvailable();
-
-            if (!isAvailable && _wasNetworkAvailable)
-            {
-                _wasNetworkAvailable = false;
-                Log("⚠ Обнаружен обрыв сетевого подключения!");
-                SyncNetworkIndicator(false);
-            }
-            else if (isAvailable && !_wasNetworkAvailable)
-            {
-                _wasNetworkAvailable = true;
-                Log("🌐 Сетевое подключение восстановлено.");
-                SyncNetworkIndicator(true);
-
-                if (SettingsManager.Current.AutoRestartServices && MainToggle.IsChecked == true)
-                {
-                    Log("🔄 Автоматический перезапуск служб...");
-                    RestartServices();
-                }
-            }
-
-            var currentReceived = 0L;
-            var currentSent = 0L;
-
-            var interfaces = NetworkInterface.GetAllNetworkInterfaces();
-            foreach (var netInterface in interfaces)
-            {
-                if (netInterface.OperationalStatus == OperationalStatus.Up &&
-                    netInterface.NetworkInterfaceType != NetworkInterfaceType.Loopback)
-                {
-                    var stats = netInterface.GetIPv4Statistics();
-                    currentReceived += stats.BytesReceived;
-                    currentSent += stats.BytesSent;
-                }
-            }
-
-            if (_lastBytesReceived != 0 && _lastBytesSent != 0)
-            {
-                var diffReceived = currentReceived - _lastBytesReceived;
-                var diffSent = currentSent - _lastBytesSent;
-
-                var mbpsReceived = (diffReceived * 8.0) / 1000000.0;
-                var mbpsSent = (diffSent * 8.0) / 1000000.0;
-
                 DownloadText.Text = mbpsReceived.ToString("0.0");
                 UploadText.Text = mbpsSent.ToString("0.0");
-            }
+            });
+        }
 
-            _lastBytesReceived = currentReceived;
-            _lastBytesSent = currentSent;
+        private void NetworkMonitor_StatusChanged(bool isAvailable)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                if (!isAvailable)
+                {
+                    Log("⚠ Обнаружен обрыв сетевого подключения!");
+                    SyncNetworkIndicator(false);
+                }
+                else
+                {
+                    Log("🌐 Сетевое подключение восстановлено.");
+                    SyncNetworkIndicator(true);
+
+                    if (SettingsManager.Current.AutoRestartServices && MainToggle.IsChecked == true)
+                    {
+                        Log("🔄 Автоматический перезапуск служб...");
+                        RestartServices();
+                    }
+                }
+            });
         }
 
         private async void BtnRefreshPing_Click(object sender, RoutedEventArgs e)
@@ -154,7 +109,7 @@ namespace ZapretGUI.Views
                 };
                 PingIconTransform.BeginAnimation(RotateTransform.AngleProperty, rotateAnim);
 
-                var pingTask = Core.NetworkHelper.TcpPingAsync("ec2.eu-central-1.amazonaws.com", 443);
+                var pingTask = Core.NetworkHelper.TcpPingAsync(AppConstants.AwsPingHost, AppConstants.AwsPingPort);
                 var delayTask = Task.Delay(600);
 
                 await Task.WhenAll(pingTask, delayTask);
@@ -174,7 +129,7 @@ namespace ZapretGUI.Views
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Ошибка при пинге: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"Ошибка при пинге: {ex.Message}");
                 PingText.Text = "—";
                 SyncNetworkIndicator(false);
             }
@@ -418,7 +373,7 @@ namespace ZapretGUI.Views
 
         private void Log(string message)
         {
-            bool isProgress = message.Contains("Скачивание:") || message.Contains("Скачано:");
+            var isProgress = message.Contains("Скачивание:") || message.Contains("Скачано:");
 
             if (isProgress && _lastProgressRun != null)
             {
@@ -434,9 +389,7 @@ namespace ZapretGUI.Views
                 run.FontWeight = FontWeights.Bold;
             }
             else if (message.Contains("✅") || message.Contains("✨") || message.Contains("🏆"))
-            {
                 run.Foreground = GetSuccessColor();
-            }
             else if (message.Contains("🔍"))
                 run.Foreground = UIHelper.GetBrushFromHex("#55AAFF");
             else
@@ -569,37 +522,24 @@ namespace ZapretGUI.Views
 
         private void ProcessLogMessage(string message)
         {
-            Dispatcher.Invoke(() =>
-            {
-                Log(message);
-            });
+            Dispatcher.Invoke(() => Log(message));
         }
 
         public void ShowUpdateProgress(string message)
         {
-            Dispatcher.Invoke(() =>
-            {
-                Log($"[Updater] {message}");
-            });
+            Dispatcher.Invoke(() => Log($"[Updater] {message}"));
         }
 
         private void BtnOpenConfigMenu_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
             AudioHelper.PlayClick();
             OverlayProfileListBox.Visibility = Visibility.Collapsed;
-
             ConfigOverlay.Visibility = Visibility.Visible;
             ConfigOverlay.Opacity = 0;
 
             var fadeIn = new System.Windows.Media.Animation.DoubleAnimation(0, 1, TimeSpan.FromSeconds(0.2));
-            var scaleUp = new System.Windows.Media.Animation.DoubleAnimation(0.95, 1, TimeSpan.FromSeconds(0.2))
-            {
-                EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut }
-            };
-            var slideUp = new System.Windows.Media.Animation.DoubleAnimation(10, 0, TimeSpan.FromSeconds(0.2))
-            {
-                EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut }
-            };
+            var scaleUp = new System.Windows.Media.Animation.DoubleAnimation(0.95, 1, TimeSpan.FromSeconds(0.2)) { EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut } };
+            var slideUp = new System.Windows.Media.Animation.DoubleAnimation(10, 0, TimeSpan.FromSeconds(0.2)) { EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut } };
 
             ConfigOverlay.BeginAnimation(UIElement.OpacityProperty, fadeIn);
 
@@ -607,7 +547,6 @@ namespace ZapretGUI.Views
             {
                 var scale = transformGroup.Children[0] as System.Windows.Media.ScaleTransform;
                 var translate = transformGroup.Children[1] as System.Windows.Media.TranslateTransform;
-
                 scale?.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, scaleUp);
                 scale?.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, scaleUp);
                 translate?.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, slideUp);
@@ -617,19 +556,10 @@ namespace ZapretGUI.Views
         private void CloseOverlay()
         {
             var fadeOut = new System.Windows.Media.Animation.DoubleAnimation(1, 0, TimeSpan.FromSeconds(0.15));
-            var scaleDown = new System.Windows.Media.Animation.DoubleAnimation(1, 0.95, TimeSpan.FromSeconds(0.15))
-            {
-                EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseIn }
-            };
-            var slideDown = new System.Windows.Media.Animation.DoubleAnimation(0, 10, TimeSpan.FromSeconds(0.15))
-            {
-                EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseIn }
-            };
+            var scaleDown = new System.Windows.Media.Animation.DoubleAnimation(1, 0.95, TimeSpan.FromSeconds(0.15)) { EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseIn } };
+            var slideDown = new System.Windows.Media.Animation.DoubleAnimation(0, 10, TimeSpan.FromSeconds(0.15)) { EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseIn } };
 
-            fadeOut.Completed += (s, ev) =>
-            {
-                ConfigOverlay.Visibility = Visibility.Collapsed;
-            };
+            fadeOut.Completed += (s, ev) => { ConfigOverlay.Visibility = Visibility.Collapsed; };
 
             ConfigOverlay.BeginAnimation(UIElement.OpacityProperty, fadeOut);
 
@@ -637,27 +567,15 @@ namespace ZapretGUI.Views
             {
                 var scale = transformGroup.Children[0] as System.Windows.Media.ScaleTransform;
                 var translate = transformGroup.Children[1] as System.Windows.Media.TranslateTransform;
-
                 scale?.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, scaleDown);
                 scale?.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, scaleDown);
                 translate?.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, slideDown);
             }
         }
 
-        private void BtnCloseOverlay_Click(object sender, RoutedEventArgs e)
-        {
-            CloseOverlay();
-        }
-
-        private void OverlayBackground_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
-        {
-            CloseOverlay();
-        }
-
-        private void OverlayContent_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
-        {
-            e.Handled = true;
-        }
+        private void BtnCloseOverlay_Click(object sender, RoutedEventArgs e) => CloseOverlay();
+        private void OverlayBackground_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e) => CloseOverlay();
+        private void OverlayContent_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e) => e.Handled = true;
 
         private void BtnShowConfigList_Click(object sender, RoutedEventArgs e)
         {
@@ -670,107 +588,88 @@ namespace ZapretGUI.Views
             if (OverlayProfileListBox.SelectedItem != null && IsLoaded)
             {
                 string? selected = OverlayProfileListBox.SelectedItem?.ToString();
-
                 if (selected != null)
                 {
                     TxtMainProfile.Text = selected;
                     OverlayTxtProfile.Text = selected;
                     SaveSettings();
                 }
-
                 OverlayProfileListBox.Visibility = Visibility.Collapsed;
             }
         }
 
-        private void CancelScan()
-        {
-            _scanCts?.Cancel();
-            try
-            {
-                if (_scanProcess != null && !_scanProcess.HasExited)
-                {
-                    _scanProcess.Kill();
-                }
-            }
-            catch { }
-
-            ProcessHelper.KillProcessesByName("powershell");
-            ProcessHelper.KillProcessesByName(AppConstants.ZapretProcessName);
-        }
-
         private void ResetScanButton()
         {
-            MainToggle.IsEnabled = true;
-            ScanIcon.Text = "\xE721";
-            ScanIcon.Foreground = UIHelper.GetBrushFromHex("#A0A0A0");
-            ScanText.Text = "Начать сканирование";
+            Dispatcher.Invoke(() =>
+            {
+                MainToggle.IsEnabled = true;
+                ScanIcon.Text = "\xE721";
+                ScanIcon.Foreground = UIHelper.GetBrushFromHex("#A0A0A0");
+                ScanText.Text = "Начать сканирование";
+                UpdateUIState(IsRunning);
+            });
         }
 
-        private string? SimplifyLogLine(string line)
+        private void ZapretScanner_ScanCompleted(List<string> topConfigs)
         {
-            if (string.IsNullOrWhiteSpace(line))
-                return null;
-
-            var progressMatch = System.Text.RegularExpressions.Regex.Match(line, @"\[(\d+/\d+)\]\s+([a-zA-Z0-9_\-\(\)\s]+\.bat)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            if (progressMatch.Success)
+            Dispatcher.Invoke(() =>
             {
-                var progress = progressMatch.Groups[1].Value;
-                var configName = progressMatch.Groups[2].Value.Trim();
-                return $"[{progress}] 🔍 Анализ профиля: {configName}...";
-            }
-
-            if (line.Contains("=== ANALYTICS ==="))
-                return "📊 Сводка результатов тестирования:";
-
-            var statsMatch = System.Text.RegularExpressions.Regex.Match(line, @"([a-zA-Z0-9_\-\(\)\s]+\.bat)\s*:\s*(?:HTTP\s*)?OK:\s*(\d+).*?(?:ERR|FAIL):\s*(\d+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            if (statsMatch.Success)
-            {
-                var batName = statsMatch.Groups[1].Value.Trim();
-                var okCount = statsMatch.Groups[2].Value;
-                var errCount = statsMatch.Groups[3].Value;
-
-                if (errCount == "0" && okCount != "0")
+                if (topConfigs.Count > 0)
                 {
-                    if (!_topConfigs.Contains(batName))
-                        _topConfigs.Add(batName);
+                    Log("🏆 Сканирование завершено! Топ рабочих стратегий:");
+                    for (int i = 0; i < Math.Min(3, topConfigs.Count); i++)
+                    {
+                        Log($"  {i + 1}. {topConfigs[i]}");
+                    }
 
-                    return $"      ✨ {batName} -> Работает идеально (Успешно: {okCount})";
+                    string? bestConfig = topConfigs[0];
+                    Log($"⭐ Применяем лучшую: {bestConfig}");
+
+                    for (int i = 0; i < OverlayProfileListBox.Items.Count; i++)
+                    {
+                        if (OverlayProfileListBox.Items[i].ToString() == bestConfig)
+                        {
+                            OverlayProfileListBox.SelectedIndex = i;
+                            TxtMainProfile.Text = bestConfig;
+                            OverlayTxtProfile.Text = bestConfig;
+                            SaveSettings();
+                            break;
+                        }
+                    }
+
+                    if (_zapretManager.IsRunning() && ZapretToggle.IsChecked == true)
+                    {
+                        Log("🔄 Перезапуск служб с новой конфигурацией...");
+                        _zapretManager.Start(bestConfig);
+                    }
                 }
                 else
                 {
-                    return $"      ⚠️ {batName} -> Есть блокировки (Успешно: {okCount}, Ошибок: {errCount})";
+                    Log("⚠ Сканирование завершено, но ни одна стратегия не сработала.");
                 }
-            }
 
-            if (line.Contains("Best config:"))
+                ResetScanButton();
+            });
+        }
+
+        private void ZapretScanner_ScanFailed(Exception ex)
+        {
+            Dispatcher.Invoke(() =>
             {
-                var bestMatch = System.Text.RegularExpressions.Regex.Match(line, @"Best config:\s*([a-zA-Z0-9_\-\(\)\s]+\.bat)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-                if (bestMatch.Success)
-                {
-                    string best = bestMatch.Groups[1].Value.Trim();
-
-                    if (_topConfigs.Contains(best))
-                        _topConfigs.Remove(best);
-
-                    _topConfigs.Insert(0, best);
-                }
-                return null;
-            }
-
-            return null;
+                Log($"ОШИБКА СКАНИРОВАНИЯ: {ex.Message}");
+                ResetScanButton();
+            });
         }
 
         private async void BtnStartScan_Click(object sender, RoutedEventArgs e)
         {
             AudioHelper.PlayClick();
 
-            if (_scanProcess != null && !_scanProcess.HasExited)
+            if (_zapretScanner.IsScanning)
             {
-                CancelScan();
+                _zapretScanner.CancelScan();
                 return;
             }
-
-            bool wasRunning = _zapretManager.IsRunning();
 
             CloseOverlay();
             MainToggle.IsEnabled = false;
@@ -779,132 +678,10 @@ namespace ZapretGUI.Views
             ScanIcon.Foreground = UIHelper.GetBrushFromHex("#F44336");
             ScanText.Text = "Остановить тесты";
 
-            _currentTestNumber = 0;
-            _currentStrategy = "";
-            _isCurrentTestLogged = false;
-
             Log("🚀 Инициализация умного сканирования конфигурации...");
             Log("Мы скрыли всплывающие окна консоли, чтобы они не мешали. Процесс займет пару минут...");
 
-            _topConfigs.Clear();
-            _scanCts = new CancellationTokenSource();
-
-            var hideTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
-            hideTimer.Tick += (s, ev) =>
-            {
-                foreach (var p in Process.GetProcessesByName(AppConstants.ZapretProcessName))
-                {
-                    if (p.MainWindowHandle != IntPtr.Zero)
-                        ShowWindow(p.MainWindowHandle, SW_HIDE);
-                }
-            };
-            hideTimer.Start();
-
-            try
-            {
-                string scriptPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.CoreFilesDirectory, "utils", "test zapret.ps1");
-
-                if (!File.Exists(scriptPath))
-                {
-                    Log("⚠ ОШИБКА: Скрипт тестирования не найден по пути: " + scriptPath);
-                    ResetScanButton();
-                    return;
-                }
-
-                var startInfo = new ProcessStartInfo
-                {
-                    FileName = "powershell.exe",
-                    Arguments = $"-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File \"{scriptPath}\"",
-                    UseShellExecute = false,
-                    RedirectStandardOutput = true,
-                    RedirectStandardInput = true,
-                    RedirectStandardError = true,
-                    CreateNoWindow = true,
-                    StandardOutputEncoding = System.Text.Encoding.UTF8
-                };
-
-                _scanProcess = new Process { StartInfo = startInfo };
-                _scanProcess.Start();
-
-                await _scanProcess.StandardInput.WriteLineAsync("1");
-                await _scanProcess.StandardInput.WriteLineAsync("1");
-                _scanProcess.StandardInput.Close();
-
-                await Task.Run(async () =>
-                {
-                    while (!_scanProcess.StandardOutput.EndOfStream)
-                    {
-                        if (_scanCts.Token.IsCancellationRequested) break;
-
-                        var line = await _scanProcess.StandardOutput.ReadLineAsync();
-                        if (string.IsNullOrWhiteSpace(line)) continue;
-
-                        line = System.Text.RegularExpressions.Regex.Replace(line, @"\x1B\[[0-9;]*[a-zA-Z]", "");
-
-                        string? simpleLog = SimplifyLogLine(line);
-                        if (simpleLog != null)
-                        {
-                            Dispatcher.Invoke(() => Log($"[Auto] {simpleLog}"));
-                        }
-                    }
-
-                    if (!_scanProcess.HasExited)
-                        _scanProcess.WaitForExit();
-
-                }, _scanCts.Token);
-
-                if (_scanCts.Token.IsCancellationRequested)
-                {
-                    Log("🛑 Сканирование было прервано пользователем.");
-                }
-                else
-                {
-                    if (_topConfigs.Count > 0)
-                    {
-                        Log("🏆 Сканирование завершено! Топ рабочих стратегий:");
-                        for (int i = 0; i < Math.Min(3, _topConfigs.Count); i++)
-                        {
-                            Log($"  {i + 1}. {_topConfigs[i]}");
-                        }
-
-                        string? bestConfig = _topConfigs[0];
-                        Log($"⭐ Применяем лучшую: {bestConfig}");
-
-                        for (int i = 0; i < OverlayProfileListBox.Items.Count; i++)
-                        {
-                            if (OverlayProfileListBox.Items[i].ToString() == bestConfig)
-                            {
-                                OverlayProfileListBox.SelectedIndex = i;
-                                TxtMainProfile.Text = bestConfig;
-                                OverlayTxtProfile.Text = bestConfig;
-                                SaveSettings();
-                                break;
-                            }
-                        }
-
-                        if (wasRunning && ZapretToggle.IsChecked == true)
-                        {
-                            Log("🔄 Перезапуск служб с новой конфигурацией...");
-                            _zapretManager.Start(bestConfig);
-                        }
-                    }
-                    else
-                    {
-                        Log("⚠ Сканирование завершено, но ни одна стратегия не сработала. Возможно провайдер блокирует слишком жестко.");
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                if (_scanCts != null && !_scanCts.Token.IsCancellationRequested)
-                    Log($"ОШИБКА СКАНИРОВАНИЯ: {ex.Message}");
-            }
-            finally
-            {
-                hideTimer.Stop();
-                ResetScanButton();
-                UpdateUIState(IsRunning);
-            }
+            await _zapretScanner.StartScanAsync();
         }
     }
 }

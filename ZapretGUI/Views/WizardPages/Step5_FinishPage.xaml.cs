@@ -10,6 +10,7 @@ namespace ZapretGUI.Views.WizardPages
     public partial class Step5_FinishPage : System.Windows.Controls.UserControl
     {
         private bool _isLastMessageProgress = false;
+
         public Step5_FinishPage()
         {
             InitializeComponent();
@@ -56,23 +57,7 @@ namespace ZapretGUI.Views.WizardPages
             if (autoStart)
             {
                 await AppendLog("[System] Регистрация приложения в автозагрузке Windows...", 150);
-                try
-                {
-                    using (var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true))
-                    {
-                        if (key != null)
-                        {
-                            var exePath = System.Reflection.Assembly.GetExecutingAssembly().Location;
-                            exePath = System.IO.Path.ChangeExtension(exePath, ".exe");
-                            key.SetValue(AppConstants.AppRegistryName, $"\"{exePath}\"");
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"Ошибка при добавлении в автозагрузку (Wizard): {ex.Message}");
-                    await AppendLog($"[Error] Не удалось добавить в автозагрузку: {ex.Message}", 0);
-                }
+                StartupHelper.SetAutoStart(true);
             }
 
             await AppendLog("Проверка директорий...", 150);
