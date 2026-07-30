@@ -148,7 +148,6 @@
                 </ToggleButton>
             </StackPanel>
 
-            <!-- Очищенная панель статистики без рамки -->
             <StackPanel x:Name="NetworkStatsPanel" Grid.Column="1" VerticalAlignment="Center" Margin="10,0,40,0">
                 <Grid Margin="0,0,0,18">
                     <Grid.ColumnDefinitions>
@@ -205,7 +204,6 @@
                 </Grid>
             </StackPanel>
 
-            <!-- 2. НАСТРОЙКИ (Минималистичная карточка) -->
             <StackPanel Grid.Column="2" VerticalAlignment="Center">
                 <Border Background="#181818" CornerRadius="12" BorderBrush="#2A2A2A" BorderThickness="1" Margin="0,0,0,15">
                     <StackPanel Margin="20">
@@ -215,7 +213,6 @@
                         </Grid>
                         <TextBlock x:Name="StatusText" Text="Остановлен" Foreground="#D13438" Margin="0,0,0,15"/>
 
-                        <!-- Кнопка вызова оверлея -->
                         <Border x:Name="BtnOpenConfigMenu" Background="#222222" CornerRadius="8" Padding="15" Cursor="Hand" MouseLeftButtonDown="BtnOpenConfigMenu_MouseDown">
                             <Border.Style>
                                 <Style TargetType="Border">
@@ -299,7 +296,6 @@
                     HorizontalAlignment="Center" VerticalAlignment="Center" Padding="25" Width="360"
                     MouseDown="OverlayContent_MouseDown" RenderTransformOrigin="0.5,0.5">
 
-                <!-- Точки для анимации масштаба и позиции -->
                 <Border.RenderTransform>
                     <TransformGroup>
                         <ScaleTransform ScaleX="0.95" ScaleY="0.95"/>
@@ -322,7 +318,7 @@
                         <TextBlock x:Name="OverlayTxtProfile" Text="general.bat" Foreground="#107C10" FontSize="15" FontWeight="Bold" TextWrapping="Wrap"/>
                     </WrapPanel>
 
-                    <!-- Кнопка выбора конфига со своим шаблоном -->
+                    <!-- Кнопка выбора конфига -->
                     <Button x:Name="BtnShowConfigList" HorizontalAlignment="Stretch" Foreground="White" Padding="0,12" Margin="0,0,0,10" Cursor="Hand" Click="BtnShowConfigList_Click">
                         <Button.Template>
                             <ControlTemplate TargetType="Button">
@@ -345,7 +341,7 @@
                         </StackPanel>
                     </Button>
 
-                    <!-- Скрытый список для выбора с пофикшенным скроллбаром -->
+                    <!-- Скрытый список для выбора -->
                     <ListBox x:Name="OverlayProfileListBox" Background="#141414" BorderBrush="#333333" BorderThickness="1" Foreground="White" 
                              SelectionChanged="OverlayProfileListBox_SelectionChanged" ScrollViewer.VerticalScrollBarVisibility="Auto" MaxHeight="160" Margin="0,0,0,10" Visibility="Collapsed">
                         <ListBox.ItemContainerStyle>
@@ -377,6 +373,7 @@
                         </ListBox.ItemContainerStyle>
                     </ListBox>
 
+                    <!-- Кнопка сканирования -->
                     <Button x:Name="BtnStartScan" HorizontalAlignment="Stretch" Foreground="White" Padding="0,12" Cursor="Hand" Click="BtnStartScan_Click">
                         <Button.Template>
                             <ControlTemplate TargetType="Button">
@@ -394,8 +391,8 @@
                             </ControlTemplate>
                         </Button.Template>
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                            <TextBlock Text="&#xE721;" FontFamily="Segoe MDL2 Assets" FontSize="16" Foreground="#A0A0A0" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                            <TextBlock Text="Начать сканирование" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="ScanIcon" Text="&#xE721;" FontFamily="Segoe MDL2 Assets" FontSize="16" Foreground="#A0A0A0" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <TextBlock x:Name="ScanText" Text="Начать сканирование" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Button>
                 </StackPanel>
