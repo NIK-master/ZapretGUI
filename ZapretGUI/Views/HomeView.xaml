@@ -290,11 +290,11 @@
         </Border>
 
         <!-- ОВЕРЛЕЙ ЦЕНТРАЛЬНОГО МЕНЮ (Z-Index: 100) -->
-        <Grid x:Name="ConfigOverlay" Grid.RowSpan="3" Background="#B2000000" Visibility="Collapsed" Panel.ZIndex="100" MouseDown="OverlayBackground_MouseDown">
+        <Grid x:Name="ConfigOverlay" Grid.RowSpan="3" Background="#CC000000" Visibility="Collapsed" Panel.ZIndex="100" MouseDown="OverlayBackground_MouseDown">
 
-            <Border x:Name="OverlayContentBorder" Background="#1E1E1E" BorderBrush="#333333" BorderThickness="1" CornerRadius="12" 
-                    HorizontalAlignment="Center" VerticalAlignment="Center" Padding="25" Width="360"
-                    MouseDown="OverlayContent_MouseDown" RenderTransformOrigin="0.5,0.5">
+            <Border x:Name="OverlayContentBorder" Background="#141414" BorderBrush="#2A2A2A" BorderThickness="1" CornerRadius="12" 
+            HorizontalAlignment="Center" VerticalAlignment="Center" Padding="20" Width="550"
+            MouseDown="OverlayContent_MouseDown" RenderTransformOrigin="0.5,0.5">
 
                 <Border.RenderTransform>
                     <TransformGroup>
@@ -304,98 +304,130 @@
                 </Border.RenderTransform>
 
                 <Border.Effect>
-                    <DropShadowEffect Color="Black" BlurRadius="30" ShadowDepth="10" Opacity="0.6"/>
+                    <DropShadowEffect Color="Black" BlurRadius="40" ShadowDepth="10" Opacity="0.8"/>
                 </Border.Effect>
 
-                <StackPanel>
-                    <Grid Margin="0,0,0,15">
-                        <TextBlock Text="Настройка Zapret" Foreground="#888888" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                        <Button Content="✕" HorizontalAlignment="Right" Background="Transparent" Foreground="#888888" BorderThickness="0" FontSize="14" Cursor="Hand" Click="BtnCloseOverlay_Click"/>
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Шапка: Иконка, Заголовок и Кнопка закрытия -->
+                    <Grid Grid.Row="0" Margin="0,0,0,20">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Border Grid.Column="0" Width="32" Height="32" Background="#1E3A8A" CornerRadius="8" Margin="0,0,12,0">
+                            <TextBlock Text="&#xE713;" FontFamily="Segoe MDL2 Assets" Foreground="#60A5FA" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock Text="Zapret" Foreground="#888888" FontSize="12" Margin="0,0,0,2"/>
+                            <TextBlock Text="Настройка конфига" Foreground="White" FontSize="16" FontWeight="Bold"/>
+                        </StackPanel>
+
+                        <Button Grid.Column="2" Content="✕" Background="Transparent" Foreground="#888888" BorderThickness="0" FontSize="16" Cursor="Hand" Click="BtnCloseOverlay_Click" VerticalAlignment="Top"/>
                     </Grid>
 
-                    <WrapPanel Margin="0,0,0,20">
-                        <TextBlock Text="Выбранный конфиг: " Foreground="White" FontSize="15" FontWeight="Bold"/>
-                        <TextBlock x:Name="OverlayTxtProfile" Text="general.bat" Foreground="#107C10" FontSize="15" FontWeight="Bold" TextWrapping="Wrap"/>
+                    <!-- Активный конфиг -->
+                    <WrapPanel Grid.Row="1" Margin="0,0,0,25">
+                        <TextBlock Text="Активный конфиг: " Foreground="White" FontSize="15" FontWeight="Bold"/>
+                        <TextBlock x:Name="OverlayTxtProfile" Text="general.bat" Foreground="{DynamicResource BrandSuccessBrush}" FontSize="15" FontWeight="Bold"/>
                     </WrapPanel>
 
-                    <!-- Кнопка выбора конфига -->
-                    <Button x:Name="BtnShowConfigList" HorizontalAlignment="Stretch" Foreground="White" Padding="0,12" Margin="0,0,0,10" Cursor="Hand" Click="BtnShowConfigList_Click">
-                        <Button.Template>
-                            <ControlTemplate TargetType="Button">
-                                <Border x:Name="border" Background="#2A2A2A" BorderBrush="#444444" BorderThickness="1" CornerRadius="8" Padding="{TemplateBinding Padding}">
-                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                </Border>
-                                <ControlTemplate.Triggers>
-                                    <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter TargetName="border" Property="Background" Value="#333333"/>
-                                    </Trigger>
-                                    <Trigger Property="IsPressed" Value="True">
-                                        <Setter TargetName="border" Property="Background" Value="#1A1A1A"/>
-                                    </Trigger>
-                                </ControlTemplate.Triggers>
-                            </ControlTemplate>
-                        </Button.Template>
-                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                            <TextBlock Text="&#xE713;" FontFamily="Segoe MDL2 Assets" FontSize="16" Foreground="#A0A0A0" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                            <TextBlock Text="Выбрать конфиг" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                        </StackPanel>
-                    </Button>
+                    <!-- Заголовок списка и счетчик -->
+                    <Grid Grid.Row="2" Margin="0,0,0,10">
+                        <TextBlock Text="Доступные конфиги" Foreground="#AAAAAA" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        <Border HorizontalAlignment="Right" Background="#1E293B" CornerRadius="6" Padding="8,4">
+                            <TextBlock x:Name="TxtConfigsCount" Text="0 конфигов" Foreground="#60A5FA" FontSize="12" FontWeight="SemiBold"/>
+                        </Border>
+                    </Grid>
 
-                    <!-- Скрытый список для выбора -->
-                    <ListBox x:Name="OverlayProfileListBox" Background="#141414" BorderBrush="#333333" BorderThickness="1" Foreground="White" 
-                             SelectionChanged="OverlayProfileListBox_SelectionChanged" ScrollViewer.VerticalScrollBarVisibility="Auto" MaxHeight="160" Margin="0,0,0,10" Visibility="Collapsed">
+                    <!-- Список конфигов -->
+                    <ListBox x:Name="OverlayProfileListBox" Grid.Row="3" Background="Transparent" BorderThickness="0" 
+         SelectionChanged="OverlayProfileListBox_SelectionChanged" ScrollViewer.VerticalScrollBarVisibility="Auto" MaxHeight="300" Margin="0,0,0,15" Padding="0,0,8,0">
                         <ListBox.ItemContainerStyle>
                             <Style TargetType="ListBoxItem">
-                                <Setter Property="Padding" Value="10,8"/>
+                                <Setter Property="Padding" Value="0"/>
+                                <Setter Property="Margin" Value="0,0,8,8"/>
+                                <!-- Освобождаем место справа под скроллбар -->
                                 <Setter Property="Cursor" Value="Hand"/>
+                                <!-- Остальной код стиля остается без изменений -->
                                 <Setter Property="Background" Value="Transparent"/>
-                                <Setter Property="Foreground" Value="#CCCCCC"/>
                                 <Setter Property="Template">
                                     <Setter.Value>
                                         <ControlTemplate TargetType="ListBoxItem">
-                                            <Border Background="{TemplateBinding Background}" CornerRadius="4" Margin="6,2,14,2" Padding="{TemplateBinding Padding}">
-                                                <ContentPresenter/>
+                                            <!-- Карточка конфига -->
+                                            <Border x:Name="CardBorder" Background="#18181B" BorderBrush="#27272A" BorderThickness="1" CornerRadius="10" Padding="15,12">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                                            <TextBlock Text="{Binding FileName}" Foreground="{DynamicResource BrandSuccessBrush}" FontSize="15" FontWeight="SemiBold"/>
+                                                            <!-- Бейдж "Активный" -->
+                                                            <Border x:Name="ActiveBadge" Background="#1E3A8A" CornerRadius="4" Padding="6,2" Margin="10,0,0,0" Visibility="Collapsed">
+                                                                <TextBlock Text="активный" Foreground="#60A5FA" FontSize="11" FontWeight="SemiBold"/>
+                                                            </Border>
+                                                        </StackPanel>
+                                                        <TextBlock Text="{Binding MetaInfo}" Foreground="#71717A" FontSize="13"/>
+                                                    </StackPanel>
+
+                                                    <!-- Иконка галочки / стрелочки -->
+                                                    <TextBlock x:Name="ActionIcon" Grid.Column="1" Text="→" Foreground="#3F3F46" FontSize="16" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                                                </Grid>
                                             </Border>
+
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="CardBorder" Property="Background" Value="#27272A"/>
+                                                </Trigger>
+                                                <!-- Состояние выбранного/активного элемента -->
+                                                <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                                    <Setter TargetName="CardBorder" Property="Background" Value="#172554"/>
+                                                    <Setter TargetName="CardBorder" Property="BorderBrush" Value="#2563EB"/>
+                                                    <Setter TargetName="ActiveBadge" Property="Visibility" Value="Visible"/>
+                                                    <Setter TargetName="ActionIcon" Property="Text" Value="✓"/>
+                                                    <Setter TargetName="ActionIcon" Property="Foreground" Value="#60A5FA"/>
+                                                </DataTrigger>
+                                            </ControlTemplate.Triggers>
                                         </ControlTemplate>
                                     </Setter.Value>
                                 </Setter>
-                                <Style.Triggers>
-                                    <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter Property="Background" Value="#2A2A2A"/>
-                                        <Setter Property="Foreground" Value="White"/>
-                                    </Trigger>
-                                    <Trigger Property="IsSelected" Value="True">
-                                        <Setter Property="Background" Value="{DynamicResource BrandSuccessBrush}"/>
-                                        <Setter Property="Foreground" Value="White"/>
-                                    </Trigger>
-                                </Style.Triggers>
                             </Style>
                         </ListBox.ItemContainerStyle>
                     </ListBox>
 
-                    <!-- Кнопка сканирования -->
-                    <Button x:Name="BtnStartScan" HorizontalAlignment="Stretch" Foreground="White" Padding="0,12" Cursor="Hand" Click="BtnStartScan_Click">
+                    <!-- Кнопка сканирования теперь внизу окна -->
+                    <Button x:Name="BtnStartScan" Grid.Row="4" HorizontalAlignment="Stretch" Padding="0,14" Cursor="Hand" Click="BtnStartScan_Click">
                         <Button.Template>
                             <ControlTemplate TargetType="Button">
-                                <Border x:Name="border" Background="#2A2A2A" BorderBrush="#444444" BorderThickness="1" CornerRadius="8" Padding="{TemplateBinding Padding}">
+                                <Border x:Name="border" Background="#27272A" CornerRadius="8">
                                     <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
                                 <ControlTemplate.Triggers>
                                     <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter TargetName="border" Property="Background" Value="#333333"/>
-                                    </Trigger>
-                                    <Trigger Property="IsPressed" Value="True">
-                                        <Setter TargetName="border" Property="Background" Value="#1A1A1A"/>
+                                        <Setter TargetName="border" Property="Background" Value="#3F3F46"/>
                                     </Trigger>
                                 </ControlTemplate.Triggers>
                             </ControlTemplate>
                         </Button.Template>
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                            <TextBlock x:Name="ScanIcon" Text="&#xE721;" FontFamily="Segoe MDL2 Assets" FontSize="16" Foreground="#A0A0A0" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                            <TextBlock x:Name="ScanText" Text="Начать сканирование" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="ScanIcon" Text="&#xE721;" FontFamily="Segoe MDL2 Assets" FontSize="16" Foreground="#A1A1AA" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <TextBlock x:Name="ScanText" Text="Запустить авто-подбор (Smart DPI Scan)" FontSize="14" FontWeight="SemiBold" Foreground="White" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Button>
-                </StackPanel>
+                </Grid>
             </Border>
         </Grid>
     </Grid>

@@ -30,7 +30,7 @@ namespace ZapretGUI.Core
 
     public static class UpdateManager
     {
-        public const string CurrentVersion = "v2.0";
+        public const string CurrentVersion = "v2.1";
 
         private static readonly HttpClient _httpClient = new HttpClient();
 
