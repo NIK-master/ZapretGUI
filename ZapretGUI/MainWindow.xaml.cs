@@ -22,6 +22,11 @@ namespace ZapretGUI
             InitializeComponent();
             SettingsManager.Load();
 
+            var modManager = new ModManager();
+            modManager.InitializeFolders();
+            modManager.SyncActiveBatMods();
+            modManager.ApplyListMods();
+
             _homeView = new Views.HomeView();
             _settingsView = new Views.SettingsView();
             MainContentContainer.Content = _homeView;

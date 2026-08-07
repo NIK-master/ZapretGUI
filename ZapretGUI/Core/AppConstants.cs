@@ -4,6 +4,7 @@
     {
         // Основные
         public const string CoreFilesDirectory = "ZapretFiles";
+        public const string ModsDirectory = "Mods";
         public const string ZapretProcessName = "winws";
         public const string TgProxyProcessName = "TgWsProxy_windows";
         public const string GithubUserAgent = "ZapretForADHD-App";

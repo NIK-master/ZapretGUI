@@ -23,6 +23,9 @@ namespace ZapretGUI.Core
 
         public string ZapretCoreVersion { get; set; } = "0.0.0";
         public string TgProxyCoreVersion { get; set; } = "0.0.0";
+
+        public List<string> ActiveBatMods { get; set; } = new List<string>();
+        public List<string> ActiveListMods { get; set; } = new List<string>();
     }
 
     public static class SettingsManager
