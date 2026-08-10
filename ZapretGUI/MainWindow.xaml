@@ -79,6 +79,9 @@
                         <ui:Button x:Name="BtnHome" Content="Главная" Foreground="White" Background="#2A2A2A" BorderBrush="#107C10" BorderThickness="3,0,0,0"
                HorizontalAlignment="Stretch" Margin="0,0,0,10" Height="40" Click="BtnHome_Click"/>
 
+                        <ui:Button x:Name="BtnMods" Content="Модификации" Foreground="White" Appearance="Transparent" BorderThickness="0"
+           HorizontalAlignment="Stretch" Margin="0,0,0,10" Height="40" Click="BtnMods_Click"/>
+
                         <ui:Button x:Name="BtnDiagnostics" Content="Диагностика" Foreground="White" Appearance="Transparent" BorderThickness="0"
                HorizontalAlignment="Stretch" Margin="0,0,0,10" Height="40" Click="BtnDiagnostics_Click"/>
 

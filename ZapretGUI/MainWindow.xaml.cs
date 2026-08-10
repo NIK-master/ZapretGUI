@@ -16,6 +16,7 @@ namespace ZapretGUI
         private Views.HomeView _homeView;
         private Views.SettingsView _settingsView;
         private Views.DiagnosticsView _diagnosticsView = new Views.DiagnosticsView();
+        private Views.ModsView _modsView = new Views.ModsView();
 
         public MainWindow()
         {
@@ -136,6 +137,8 @@ namespace ZapretGUI
             BtnHome.BorderThickness = zeroThickness;
             BtnDiagnostics.Background = transparent;
             BtnDiagnostics.BorderThickness = zeroThickness;
+            BtnMods.Background = transparent;
+            BtnMods.BorderThickness = zeroThickness;
             BtnSettings.Background = transparent;
             BtnSettings.BorderThickness = zeroThickness;
 
@@ -219,6 +222,14 @@ namespace ZapretGUI
         {
             _trayIconManager.Dispose();
             base.OnClosed(e);
+        }
+
+        private void BtnMods_Click(object sender, RoutedEventArgs e)
+        {
+            if (MainContentContainer.Content == _modsView) 
+                return;
+            MainContentContainer.Content = _modsView;
+            SetActiveTab(BtnMods);
         }
     }
 }

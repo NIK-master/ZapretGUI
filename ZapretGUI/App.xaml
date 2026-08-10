@@ -2,13 +2,18 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+             xmlns:localCore="clr-namespace:ZapretGUI.Core"
              Startup="Application_Startup">
     <Application.Resources>
         <ResourceDictionary>
+
             <ResourceDictionary.MergedDictionaries>
                 <ui:ThemesDictionary Theme="Dark" />
                 <ui:ControlsDictionary />
             </ResourceDictionary.MergedDictionaries>
+
+            <localCore:ActiveStatusToBrushConverter x:Key="ActiveStatusToBrushConverter" />
+            <localCore:ActiveStatusToIconConverter x:Key="ActiveStatusToIconConverter" />
 
             <SolidColorBrush x:Key="BrandSuccessBrush" Color="#107C10" />
             <SolidColorBrush x:Key="BrandErrorBrush" Color="#D13438" />
@@ -17,6 +22,7 @@
             <SolidColorBrush x:Key="SurfaceBackgroundBrush" Color="#151515" />
             <SolidColorBrush x:Key="CardBorderBrush" Color="#2A2A2A" />
             <SolidColorBrush x:Key="CardHoverBorderBrush" Color="#4A4A4A" />
+
         </ResourceDictionary>
     </Application.Resources>
 </Application>
