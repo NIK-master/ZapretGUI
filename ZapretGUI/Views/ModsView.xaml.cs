@@ -3,9 +3,12 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using ZapretGUI.Core;
 
 namespace ZapretGUI.Views
@@ -19,6 +22,9 @@ namespace ZapretGUI.Views
         private ObservableCollection<UIModItem> _activeMods = new();
 
         private string _currentEditingFilePath = "";
+
+        // Экшен, который выполнится при нажатии "Да" в окне подтверждения
+        private Action _pendingConfirmAction;
 
         public ModsView()
         {
@@ -65,7 +71,7 @@ namespace ZapretGUI.Views
 
                 LoadCurrentMods();
             }
-            else 
+            else
             {
                 TxtCategoryTitle.Text = "Руководство";
                 TxtCategoryDesc.Text = "Ответы на частые вопросы и инструкции.";
@@ -93,11 +99,20 @@ namespace ZapretGUI.Views
                     _availableMods.Add(mod);
             }
 
+            UpdateHeadersVisibility();
+        }
+
+        private void UpdateHeadersVisibility()
+        {
+            ActiveModsHeader.Visibility = _activeMods.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            AvailableModsHeader.Visibility = _availableMods.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            ModsDivider.Visibility = (_activeMods.Count > 0 && _availableMods.Count > 0) ? Visibility.Visible : Visibility.Collapsed;
+            EmptyStatePanel.Visibility = (_activeMods.Count == 0 && _availableMods.Count == 0) ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private void BtnStrategies_Click(object sender, RoutedEventArgs e) { AudioHelper.PlayClick(); SwitchTab(ModType.BatStrategy); }
         private void BtnDomainLists_Click(object sender, RoutedEventArgs e) { AudioHelper.PlayClick(); SwitchTab(ModType.DomainList); }
-        private void BtnGuide_Click(object sender, RoutedEventArgs e) { AudioHelper.PlayClick(); SwitchTab((ModType)99); /* 99 - фейковый Enum для Гайда */ }
+        private void BtnGuide_Click(object sender, RoutedEventArgs e) { AudioHelper.PlayClick(); SwitchTab((ModType)99); }
 
         private void BtnOpenModsFolder_Click(object sender, RoutedEventArgs e)
         {
@@ -109,15 +124,92 @@ namespace ZapretGUI.Views
         private void BtnCreateMod_Click(object sender, RoutedEventArgs e)
         {
             AudioHelper.PlayClick();
-            System.Windows.MessageBox.Show("Мастер создания модов будет добавлен позже. Вы можете создать папку мода вручную.", "Инфо", MessageBoxButton.OK, MessageBoxImage.Information);
+
+            TxtNewModId.Text = $"mod_{DateTime.Now:HHmmss}";
+            TxtNewModName.Text = "Мой новый мод";
+            TxtNewModAuthor.Text = "You";
+            TxtNewModDesc.Text = "Описание мода";
+
+            CreateModOverlay.Visibility = Visibility.Visible;
         }
 
-        private void BtnToggleMod_Click(object sender, RoutedEventArgs e)
+        private void BtnCloseCreateMod_Click(object sender, RoutedEventArgs e)
+        {
+            AudioHelper.PlayClick();
+            CreateModOverlay.Visibility = Visibility.Collapsed;
+        }
+
+        private void BtnConfirmCreateMod_Click(object sender, RoutedEventArgs e)
+        {
+            AudioHelper.PlayClick();
+
+            string id = TxtNewModId.Text.Trim().Replace(" ", "_").ToLower();
+            var invalidChars = System.IO.Path.GetInvalidFileNameChars();
+            id = new string(id.Where(c => !invalidChars.Contains(c)).ToArray());
+
+            if (string.IsNullOrEmpty(id))
+                id = $"mod_{DateTime.Now:HHmmss}";
+
+            string folderName = _currentTab == ModType.BatStrategy ? "strategies" : "lists";
+            string modFolderPath = Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, folderName, id);
+
+            if (Directory.Exists(modFolderPath))
+            {
+                System.Windows.MessageBox.Show("Мод с таким ID (папкой) уже существует!", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            try
+            {
+                Directory.CreateDirectory(modFolderPath);
+
+                var meta = new ModMetaData
+                {
+                    Name = string.IsNullOrWhiteSpace(TxtNewModName.Text) ? id : TxtNewModName.Text,
+                    Author = string.IsNullOrWhiteSpace(TxtNewModAuthor.Text) ? "Аноним" : TxtNewModAuthor.Text,
+                    Version = "1.0",
+                    Description = TxtNewModDesc.Text,
+                    IsBatStrategy = _currentTab == ModType.BatStrategy
+                };
+
+                string jsonPath = Path.Combine(modFolderPath, "mod.json");
+                File.WriteAllText(jsonPath, System.Text.Json.JsonSerializer.Serialize(meta, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+
+                if (_currentTab == ModType.BatStrategy)
+                    File.WriteAllText(Path.Combine(modFolderPath, "strategy.bat"), ":: Ваш код обхода здесь\r\n");
+                else
+                    File.WriteAllText(Path.Combine(modFolderPath, "list.txt"), "");
+
+                CreateModOverlay.Visibility = Visibility.Collapsed;
+                LoadCurrentMods();
+            }
+            catch (Exception ex)
+            {
+                System.Windows.MessageBox.Show($"Ошибка при создании мода: {ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private async void BtnToggleMod_Click(object sender, RoutedEventArgs e)
         {
             AudioHelper.PlayClick();
 
             if ((sender as FrameworkElement)?.DataContext is UIModItem mod)
             {
+                var btn = sender as System.Windows.Controls.Button;
+                var border = FindParent<System.Windows.Controls.Border>(btn, "ModCardContainer");
+
+                if (border != null)
+                {
+                    var fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(150));
+                    var slideOut = new DoubleAnimation(0, mod.IsActive ? 30 : -30, TimeSpan.FromMilliseconds(150));
+
+                    border.RenderTransform = new TranslateTransform();
+                    border.BeginAnimation(OpacityProperty, fadeOut);
+                    border.RenderTransform.BeginAnimation(TranslateTransform.XProperty, slideOut);
+
+                    await Task.Delay(150);
+                }
+
                 mod.IsActive = !mod.IsActive;
 
                 if (mod.IsActive)
@@ -132,7 +224,22 @@ namespace ZapretGUI.Views
                 }
 
                 SaveAndApplyMods();
+                UpdateHeadersVisibility();
             }
+        }
+
+        private T? FindParent<T>(DependencyObject child, string? name = null) where T : FrameworkElement
+        {
+            DependencyObject parent = VisualTreeHelper.GetParent(child);
+            while (parent != null)
+            {
+                if (parent is T typed && (name == null || typed.Name == name))
+                {
+                    return typed;
+                }
+                parent = VisualTreeHelper.GetParent(parent);
+            }
+            return null;
         }
 
         private void SaveAndApplyMods()
@@ -156,6 +263,96 @@ namespace ZapretGUI.Views
             SettingsManager.Save();
         }
 
+        // --- ЛОГИКА КАСТОМНЫХ ОКНА ПОДТВЕРЖДЕНИЯ ---
+
+        private void ShowConfirmDialog(string title, string message, string confirmBtnText, System.Windows.Media.Brush confirmBtnBrush, Action onConfirm)
+        {
+            TxtConfirmTitle.Text = title;
+            TxtConfirmMessage.Text = message;
+            BtnExecuteConfirm.Content = confirmBtnText;
+            BtnExecuteConfirm.Background = confirmBtnBrush;
+            _pendingConfirmAction = onConfirm;
+            ConfirmOverlay.Visibility = Visibility.Visible;
+        }
+
+        private void BtnCancelConfirm_Click(object sender, RoutedEventArgs e)
+        {
+            AudioHelper.PlayClick();
+            ConfirmOverlay.Visibility = Visibility.Collapsed;
+            _pendingConfirmAction = null;
+        }
+
+        private void BtnExecuteConfirm_Click(object sender, RoutedEventArgs e)
+        {
+            AudioHelper.PlayClick();
+            ConfirmOverlay.Visibility = Visibility.Collapsed;
+            _pendingConfirmAction?.Invoke();
+            _pendingConfirmAction = null;
+        }
+
+        private void BtnDisableAll_Click(object sender, RoutedEventArgs e)
+        {
+            AudioHelper.PlayClick();
+            if (_activeMods.Count == 0) return;
+
+            ShowConfirmDialog(
+                "Отключить всё",
+                "Вы уверены, что хотите отключить все моды в этой категории?",
+                "Отключить",
+                UIHelper.GetBrushFromHex("#F44336"),
+                () => {
+                    var modsToDisable = _activeMods.ToList();
+                    foreach (var mod in modsToDisable)
+                    {
+                        mod.IsActive = false;
+                        _activeMods.Remove(mod);
+                        _availableMods.Add(mod);
+                    }
+                    SaveAndApplyMods();
+                    UpdateHeadersVisibility();
+                });
+        }
+
+        private void BtnDeleteMod_Click(object sender, RoutedEventArgs e)
+        {
+            AudioHelper.PlayClick();
+            if ((sender as FrameworkElement)?.DataContext is UIModItem mod)
+            {
+                ShowConfirmDialog(
+                    "Удаление мода",
+                    $"Удалить мод '{mod.Meta.Name}' навсегда?\nЭто удалит все файлы мода с диска.",
+                    "Удалить",
+                    UIHelper.GetBrushFromHex("#F44336"),
+                    () => {
+                        try
+                        {
+                            string folderName = _currentTab == ModType.BatStrategy ? "strategies" : "lists";
+                            string modFolderPath = Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, folderName, mod.Id);
+
+                            if (Directory.Exists(modFolderPath))
+                                Directory.Delete(modFolderPath, true);
+
+                            if (mod.IsActive)
+                            {
+                                _activeMods.Remove(mod);
+                                SaveAndApplyMods();
+                            }
+                            else
+                            {
+                                _availableMods.Remove(mod);
+                            }
+
+                            UpdateHeadersVisibility();
+                        }
+                        catch (Exception ex)
+                        {
+                            System.Windows.MessageBox.Show($"Не удалось удалить мод.\nОшибка: {ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                        }
+                    });
+            }
+        }
+
+        // --- ЛОГИКА ВСТРОЕННОГО РЕДАКТОРА ---
 
         private void BtnEditMod_Click(object sender, RoutedEventArgs e)
         {
@@ -187,9 +384,7 @@ namespace ZapretGUI.Views
             try
             {
                 File.WriteAllText(_currentEditingFilePath, EditorTextBox.Text);
-
                 SaveAndApplyMods();
-
                 EditorOverlay.Visibility = Visibility.Collapsed;
             }
             catch (Exception ex)

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -76,6 +77,7 @@ namespace ZapretGUI.Views
             LoadSettings();
 
             SettingsManager.SettingsSaved += ApplyVisualSettings;
+            SettingsManager.SettingsSaved += RefreshProfilesLive; // АВТООБНОВЛЕНИЕ БАТНИКОВ
             ApplyVisualSettings();
 
             _networkMonitor.Start();
@@ -90,6 +92,30 @@ namespace ZapretGUI.Views
             }
             else
                 Log("Интерфейс загружен. Ожидание команд...");
+        }
+
+        // Обновление профилей "на лету" без сброса выбора
+        private void RefreshProfilesLive()
+        {
+            Dispatcher.Invoke(() =>
+            {
+                string currentProfile = TxtMainProfile.Text;
+                LoadProfiles();
+
+                bool found = false;
+                for (int i = 0; i < OverlayProfileListBox.Items.Count; i++)
+                {
+                    if (OverlayProfileListBox.Items[i] is ConfigItem item && item.FileName == currentProfile)
+                    {
+                        OverlayProfileListBox.SelectedIndex = i;
+                        found = true;
+                        break;
+                    }
+                }
+
+                if (!found && OverlayProfileListBox.Items.Count > 0)
+                    OverlayProfileListBox.SelectedIndex = 0;
+            });
         }
 
         private void NetworkMonitor_StatsUpdated(double mbpsReceived, double mbpsSent)
@@ -326,7 +352,14 @@ namespace ZapretGUI.Views
 
             if (Directory.Exists(folderPath))
             {
-                var batFiles = Directory.GetFiles(folderPath, "general*.bat");
+                var batFiles = System.IO.Directory.GetFiles(folderPath, "*.bat")
+                    .Where(f =>
+                    {
+                        var name = System.IO.Path.GetFileName(f);
+                        return name.StartsWith("general", StringComparison.OrdinalIgnoreCase) ||
+                               name.StartsWith("mod_", StringComparison.OrdinalIgnoreCase);
+                    }).ToArray();
+
                 foreach (var file in batFiles)
                 {
                     var fileName = Path.GetFileName(file);
@@ -341,7 +374,7 @@ namespace ZapretGUI.Views
                 if (TxtConfigsCount != null)
                     TxtConfigsCount.Text = $"{batFiles.Length} конфигов";
 
-                if (OverlayProfileListBox.Items.Count > 0)
+                if (OverlayProfileListBox.Items.Count > 0 && OverlayProfileListBox.SelectedIndex == -1)
                     OverlayProfileListBox.SelectedIndex = 0;
             }
         }

@@ -8,16 +8,18 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+             xmlns:localCore="clr-namespace:ZapretGUI.Core"
              Startup="Application_Startup">
     <Application.Resources>
         <ResourceDictionary>
+
             <ResourceDictionary.MergedDictionaries>
                 <ui:ThemesDictionary Theme="Dark" />
                 <ui:ControlsDictionary />
             </ResourceDictionary.MergedDictionaries>
 
-            <localCore:ActiveStatusToBrushConverter x:Key="ActiveStatusToBrushConverter" xmlns:localCore="clr-namespace:ZapretGUI.Core" />
-            <localCore:ActiveStatusToIconConverter x:Key="ActiveStatusToIconConverter" xmlns:localCore="clr-namespace:ZapretGUI.Core" />
+            <localCore:ActiveStatusToBrushConverter x:Key="ActiveStatusToBrushConverter" />
+            <localCore:ActiveStatusToIconConverter x:Key="ActiveStatusToIconConverter" />
 
             <SolidColorBrush x:Key="BrandSuccessBrush" Color="#107C10" />
             <SolidColorBrush x:Key="BrandErrorBrush" Color="#D13438" />
@@ -26,6 +28,7 @@
             <SolidColorBrush x:Key="SurfaceBackgroundBrush" Color="#151515" />
             <SolidColorBrush x:Key="CardBorderBrush" Color="#2A2A2A" />
             <SolidColorBrush x:Key="CardHoverBorderBrush" Color="#4A4A4A" />
+
         </ResourceDictionary>
     </Application.Resources>
 </Application>
@@ -3496,6 +3499,7 @@ namespace ZapretGUI.Views
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -3571,6 +3575,7 @@ namespace ZapretGUI.Views
             LoadSettings();
 
             SettingsManager.SettingsSaved += ApplyVisualSettings;
+            SettingsManager.SettingsSaved += RefreshProfilesLive; // АВТООБНОВЛЕНИЕ БАТНИКОВ
             ApplyVisualSettings();
 
             _networkMonitor.Start();
@@ -3585,6 +3590,30 @@ namespace ZapretGUI.Views
             }
             else
                 Log("Интерфейс загружен. Ожидание команд...");
+        }
+
+        // Обновление профилей "на лету" без сброса выбора
+        private void RefreshProfilesLive()
+        {
+            Dispatcher.Invoke(() =>
+            {
+                string currentProfile = TxtMainProfile.Text;
+                LoadProfiles();
+
+                bool found = false;
+                for (int i = 0; i < OverlayProfileListBox.Items.Count; i++)
+                {
+                    if (OverlayProfileListBox.Items[i] is ConfigItem item && item.FileName == currentProfile)
+                    {
+                        OverlayProfileListBox.SelectedIndex = i;
+                        found = true;
+                        break;
+                    }
+                }
+
+                if (!found && OverlayProfileListBox.Items.Count > 0)
+                    OverlayProfileListBox.SelectedIndex = 0;
+            });
         }
 
         private void NetworkMonitor_StatsUpdated(double mbpsReceived, double mbpsSent)
@@ -3821,7 +3850,15 @@ namespace ZapretGUI.Views
 
             if (Directory.Exists(folderPath))
             {
-                var batFiles = Directory.GetFiles(folderPath, "general*.bat");
+                // ИЩЕМ И СТАНДАРТНЫЕ КОНФИГИ И МОДЫ
+                var batFiles = System.IO.Directory.GetFiles(folderPath, "*.bat")
+                    .Where(f =>
+                    {
+                        var name = System.IO.Path.GetFileName(f);
+                        return name.StartsWith("general", StringComparison.OrdinalIgnoreCase) ||
+                               name.StartsWith("mod_", StringComparison.OrdinalIgnoreCase);
+                    }).ToArray();
+
                 foreach (var file in batFiles)
                 {
                     var fileName = Path.GetFileName(file);
@@ -3836,7 +3873,7 @@ namespace ZapretGUI.Views
                 if (TxtConfigsCount != null)
                     TxtConfigsCount.Text = $"{batFiles.Length} конфигов";
 
-                if (OverlayProfileListBox.Items.Count > 0)
+                if (OverlayProfileListBox.Items.Count > 0 && OverlayProfileListBox.SelectedIndex == -1)
                     OverlayProfileListBox.SelectedIndex = 0;
             }
         }
@@ -4289,18 +4326,110 @@ namespace ZapretGUI.Views
 
     <UserControl.Resources>
         <Style x:Key="ModCardStyle" TargetType="Border">
-            <Setter Property="Background" Value="#181818"/>
+            <Setter Property="Background" Value="#18181B"/>
             <Setter Property="CornerRadius" Value="10"/>
-            <Setter Property="BorderBrush" Value="#2A2A2A"/>
+            <Setter Property="BorderBrush" Value="#27272A"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="15"/>
+            <Setter Property="Padding" Value="15,12"/>
             <Setter Property="Margin" Value="0,0,0,10"/>
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#1C1C1C"/>
+                    <Setter Property="Background" Value="#27272A"/>
                 </Trigger>
+                <DataTrigger Binding="{Binding IsActive}" Value="True">
+                    <Setter Property="Background" Value="#0A1F0A"/>
+                    <Setter Property="BorderBrush" Value="{DynamicResource BrandSuccessBrush}"/>
+                </DataTrigger>
             </Style.Triggers>
         </Style>
+
+        <Style x:Key="ModActionButton" TargetType="Button">
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border" Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <TextBlock x:Name="IconLeft" FontFamily="Segoe MDL2 Assets" VerticalAlignment="Center" Margin="0,1,6,0" FontSize="10" Visibility="Collapsed"/>
+                                <TextBlock x:Name="BtnText" Text="Включить" VerticalAlignment="Center"/>
+                                <TextBlock x:Name="IconRight" Text="&#xE768;" FontFamily="Segoe MDL2 Assets" VerticalAlignment="Center" Margin="6,1,0,0" FontSize="11" Visibility="Visible"/>
+                            </StackPanel>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <DataTrigger Binding="{Binding IsActive}" Value="False">
+                                <Setter TargetName="border" Property="Background" Value="#1E3A8A"/>
+                                <Setter TargetName="BtnText" Property="Text" Value="Включить"/>
+                                <Setter TargetName="IconLeft" Property="Visibility" Value="Collapsed"/>
+                                <Setter TargetName="IconRight" Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#7F1D1D"/>
+                                <Setter TargetName="BtnText" Property="Text" Value="Убрать"/>
+                                <Setter TargetName="IconLeft" Property="Text" Value="&#xE711;"/>
+                                <Setter TargetName="IconLeft" Property="Visibility" Value="Visible"/>
+                                <Setter TargetName="IconRight" Property="Visibility" Value="Collapsed"/>
+                            </DataTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <DataTemplate x:Key="ModItemTemplate">
+            <Border x:Name="ModCardContainer" Style="{StaticResource ModCardStyle}" Opacity="0" RenderTransformOrigin="0.5,0.5">
+                <Border.RenderTransform>
+                    <TranslateTransform X="20" />
+                </Border.RenderTransform>
+                <Border.Triggers>
+                    <EventTrigger RoutedEvent="Loaded">
+                        <BeginStoryboard>
+                            <Storyboard>
+                                <DoubleAnimation Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.25"/>
+                                <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.X)" To="0" Duration="0:0:0.25">
+                                    <DoubleAnimation.EasingFunction>
+                                        <CubicEase EasingMode="EaseOut"/>
+                                    </DoubleAnimation.EasingFunction>
+                                </DoubleAnimation>
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </EventTrigger>
+                </Border.Triggers>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0" Margin="0,0,20,0" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Meta.Name}" FontSize="16" FontWeight="Bold" Foreground="White" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock Text="{Binding Meta.Author, StringFormat='Автор: {0}'}" FontSize="12" Foreground="{DynamicResource BrandSuccessBrush}" Margin="0,2,0,6" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock Text="{Binding Meta.Description}" FontSize="13" Foreground="#AAAAAA" TextWrapping="Wrap"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" MinWidth="130">
+                        <Button Style="{StaticResource ModActionButton}" Click="BtnToggleMod_Click" HorizontalAlignment="Stretch"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0" HorizontalAlignment="Center">
+                            <Button Background="Transparent" Foreground="#888888" BorderThickness="0" Cursor="Hand" FontSize="12" Margin="0,0,15,0" Click="BtnEditMod_Click">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE70F;" FontFamily="Segoe MDL2 Assets" FontSize="11" Margin="0,2,4,0"/>
+                                    <TextBlock Text="Изменить" FontSize="12"/>
+                                </StackPanel>
+                            </Button>
+                            <Button Background="Transparent" Foreground="#F44336" BorderThickness="0" Cursor="Hand" FontSize="12" Click="BtnDeleteMod_Click">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE74D;" FontFamily="Segoe MDL2 Assets" FontSize="11" Margin="0,2,4,0"/>
+                                    <TextBlock Text="Удалить" FontSize="12"/>
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </DataTemplate>
 
         <Style x:Key="SidebarButtonStyle" TargetType="Button">
             <Setter Property="Background" Value="Transparent"/>
@@ -4327,126 +4456,201 @@ namespace ZapretGUI.Views
         </Style>
     </UserControl.Resources>
 
-    <UserControl.Triggers>
-        <EventTrigger RoutedEvent="Loaded">
-            <BeginStoryboard>
-                <Storyboard>
-                    <DoubleAnimation Storyboard.TargetName="MainGrid" Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.3"/>
-                    <DoubleAnimation Storyboard.TargetName="MainGrid" Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)" From="15" To="0" Duration="0:0:0.3">
-                        <DoubleAnimation.EasingFunction>
-                            <CubicEase EasingMode="EaseOut"/>
-                        </DoubleAnimation.EasingFunction>
-                    </DoubleAnimation>
-                </Storyboard>
-            </BeginStoryboard>
-        </EventTrigger>
-    </UserControl.Triggers>
-
-    <Grid x:Name="MainGrid" Margin="20" Opacity="0">
-        <Grid.RenderTransform>
-            <TranslateTransform Y="15"/>
-        </Grid.RenderTransform>
-
+    <Grid x:Name="MainGrid" Margin="20">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="220"/>
             <ColumnDefinition Width="20"/>
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
-        <!-- Левое меню (Типы модов) -->
         <Border Grid.Column="0" Background="#0C0C0C" CornerRadius="12" BorderBrush="#2A2A2A" BorderThickness="1" Padding="15">
             <StackPanel>
                 <TextBlock Text="Модификации" FontSize="20" FontWeight="Bold" Margin="0,0,0,20"/>
-
                 <Button x:Name="BtnStrategies" Style="{StaticResource SidebarButtonStyle}" Click="BtnStrategies_Click">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="&#xE8B7;" FontFamily="Segoe MDL2 Assets" FontSize="16" Margin="0,0,10,0" VerticalAlignment="Center"/>
                         <TextBlock Text=".bat Стратегии" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Button>
-
                 <Button x:Name="BtnDomainLists" Style="{StaticResource SidebarButtonStyle}" Click="BtnDomainLists_Click">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="&#xE71C;" FontFamily="Segoe MDL2 Assets" FontSize="16" Margin="0,0,10,0" VerticalAlignment="Center"/>
                         <TextBlock Text="Листы доменов" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Button>
+                <Border Height="1" Background="#2A2A2A" Margin="0,10"/>
+                <Button x:Name="BtnGuide" Style="{StaticResource SidebarButtonStyle}" Click="BtnGuide_Click">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#xE9CE;" FontFamily="Segoe MDL2 Assets" FontSize="16" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="Руководство" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
             </StackPanel>
         </Border>
 
-        <!-- Правая часть (Список модов) -->
         <Grid Grid.Column="2">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
-            <!-- Верхняя панель управления (Action Bar) -->
             <Grid Grid.Row="0" Margin="0,0,0,15">
                 <Grid.ColumnDefinitions>
+                    <!-- Даем тексту сжиматься, а кнопкам занимать ровно столько места, сколько нужно -->
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                <!-- Добавили Margin справа, чтобы текст гарантированно не прилипал к кнопкам -->
+                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,20,0">
                     <TextBlock x:Name="TxtCategoryTitle" Text=".bat Стратегии" FontSize="22" FontWeight="Bold"/>
-                    <TextBlock x:Name="TxtCategoryDesc" Text="Пользовательские скрипты обхода для специфичных задач." Foreground="#888888" FontSize="13" Margin="0,5,0,0"/>
+                    <!-- Включили TextWrapping="Wrap", чтобы длинный текст уходил на новую строку -->
+                    <TextBlock x:Name="TxtCategoryDesc" Text="Пользовательские скрипты обхода для специфичных задач." Foreground="#888888" FontSize="13" Margin="0,5,0,0" TextWrapping="Wrap"/>
                 </StackPanel>
 
-                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                    <ui:Button Content="📂 Открыть папку" Appearance="Transparent" Foreground="#A0A0A0" Margin="0,0,10,0" Click="BtnOpenModsFolder_Click"/>
-                    <ui:Button Content="📥 Импорт (.zip)" Appearance="Primary" Click="BtnImportMod_Click"/>
+                <!-- ИСПРАВЛЕННЫЕ КНОПКИ ACTION BAR -->
+                <StackPanel x:Name="ActionButtonsPanel" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Background="Transparent" Foreground="#F44336" BorderBrush="#333333" BorderThickness="1" Padding="12,6" Margin="0,0,10,0" Cursor="Hand" Click="BtnDisableAll_Click">
+                        <Button.Resources>
+                            <Style TargetType="Border">
+                                <Setter Property="CornerRadius" Value="6"/>
+                            </Style>
+                        </Button.Resources>
+                        <StackPanel Orientation="Horizontal">
+                            <!-- Заменили глиф на стабильный E711 -->
+                            <TextBlock Text="&#xE711;" FontFamily="Segoe MDL2 Assets" Margin="0,1,6,0" FontSize="11" VerticalAlignment="Center" FontWeight="Bold"/>
+                            <TextBlock Text="Отключить всё" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Background="Transparent" Foreground="#A0A0A0" BorderBrush="#333333" BorderThickness="1" Padding="12,6" Margin="0,0,10,0" Cursor="Hand" Click="BtnOpenModsFolder_Click">
+                        <Button.Resources>
+                            <Style TargetType="Border">
+                                <Setter Property="CornerRadius" Value="6"/>
+                            </Style>
+                        </Button.Resources>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE8B7;" FontFamily="Segoe MDL2 Assets" Margin="0,1,6,0" FontSize="14" VerticalAlignment="Center"/>
+                            <TextBlock Text="Папка" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Background="{DynamicResource BrandSuccessBrush}" Foreground="White" BorderThickness="0" Padding="12,6" Cursor="Hand" Click="BtnCreateMod_Click">
+                        <Button.Resources>
+                            <Style TargetType="Border">
+                                <Setter Property="CornerRadius" Value="6"/>
+                            </Style>
+                        </Button.Resources>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE710;" FontFamily="Segoe MDL2 Assets" Margin="0,1,6,0" FontSize="12" VerticalAlignment="Center" FontWeight="Bold"/>
+                            <TextBlock Text="Создать" VerticalAlignment="Center" FontWeight="Bold"/>
+                        </StackPanel>
+                    </Button>
                 </StackPanel>
             </Grid>
 
-            <!-- Список модов -->
-            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                <ItemsControl x:Name="ModsItemsControl">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <Border Style="{StaticResource ModCardStyle}">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
+            <!-- ПАНЕЛЬ 1: ОДНА ШИРОКАЯ КОЛОНКА (Вертикальное расположение) -->
+            <ScrollViewer x:Name="ModsListsPanel" Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="0,0,15,0">
+                <StackPanel>
+                    <!-- Секция Включенных -->
+                    <TextBlock x:Name="ActiveModsHeader" Text="ВКЛЮЧЕННЫЕ МОДЫ" Foreground="{DynamicResource BrandSuccessBrush}" FontSize="12" FontWeight="Bold" Margin="0,0,0,10"/>
+                    <ItemsControl x:Name="ActiveModsList" ItemTemplate="{StaticResource ModItemTemplate}"/>
 
-                                    <!-- Иконка статуса -->
-                                    <Border Grid.Column="0" Width="40" Height="40" CornerRadius="8" Margin="0,0,15,0"
-                                            Background="{Binding IsActive, Converter={StaticResource ActiveStatusToBrushConverter}}">
-                                        <TextBlock Text="{Binding IsActive, Converter={StaticResource ActiveStatusToIconConverter}}" 
-                                                   FontFamily="Segoe MDL2 Assets" Foreground="White" FontSize="18" 
-                                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                    </Border>
+                    <Border x:Name="ModsDivider" Height="1" Background="#2A2A2A" Margin="0,10,0,20"/>
 
-                                    <!-- Информация -->
-                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,15,0">
-                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                                            <TextBlock Text="{Binding Meta.Name}" FontSize="16" FontWeight="Bold" Foreground="White" Margin="0,0,10,0"/>
-                                            <Border Background="#222222" CornerRadius="4" Padding="6,2" VerticalAlignment="Center">
-                                                <TextBlock Text="{Binding Meta.Version, StringFormat='v{0}'}" FontSize="11" Foreground="#A0A0A0" FontWeight="SemiBold"/>
-                                            </Border>
-                                            <TextBlock Text="{Binding Meta.Author, StringFormat='от {0}'}" FontSize="12" Foreground="#666666" Margin="10,0,0,0" VerticalAlignment="Center"/>
-                                        </StackPanel>
-                                        <TextBlock Text="{Binding Meta.Description}" FontSize="13" Foreground="#AAAAAA" TextWrapping="Wrap"/>
-                                    </StackPanel>
+                    <!-- Секция Доступных -->
+                    <TextBlock x:Name="AvailableModsHeader" Text="ДОСТУПНЫЕ МОДЫ" Foreground="#888888" FontSize="12" FontWeight="Bold" Margin="0,0,0,10"/>
+                    <ItemsControl x:Name="AvailableModsList" ItemTemplate="{StaticResource ModItemTemplate}"/>
 
-                                    <!-- Переключатель -->
-                                    <ui:ToggleSwitch Grid.Column="2" IsChecked="{Binding IsActive, Mode=TwoWay}" VerticalAlignment="Center" Click="ModToggle_Click"/>
-                                </Grid>
-                            </Border>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                    <!-- Пустое состояние -->
+                    <StackPanel x:Name="EmptyStatePanel" HorizontalAlignment="Center" Margin="0,60,0,0" Visibility="Collapsed">
+                        <TextBlock Text="&#xE711;" FontFamily="Segoe MDL2 Assets" FontSize="48" Foreground="#333333" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                        <TextBlock Text="В этой категории нет установленных модов" FontSize="16" Foreground="#666666" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                    </StackPanel>
+                </StackPanel>
             </ScrollViewer>
 
-            <!-- Сообщение, если модов нет -->
-            <StackPanel x:Name="EmptyStatePanel" Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed">
-                <TextBlock Text="&#xE711;" FontFamily="Segoe MDL2 Assets" FontSize="48" Foreground="#333333" HorizontalAlignment="Center" Margin="0,0,0,10"/>
-                <TextBlock Text="В этой категории нет установленных модов" FontSize="16" Foreground="#666666" FontWeight="SemiBold" HorizontalAlignment="Center"/>
-            </StackPanel>
+            <!-- ПАНЕЛЬ 2: РУКОВОДСТВО -->
+            <ScrollViewer x:Name="GuidePanel" Grid.Row="1" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" Padding="0,0,20,0">
+                <StackPanel>
+                    <Border Background="#1A1A00" BorderBrush="{DynamicResource BrandSuccessBrush}" BorderThickness="1" CornerRadius="8" Padding="15" Margin="0,0,0,20">
+                        <StackPanel>
+                            <TextBlock Text="⚠️ ВАЖНАЯ ИНФОРМАЦИЯ!" Foreground="{DynamicResource BrandSuccessBrush}" FontWeight="Bold" FontSize="16" Margin="0,0,0,10"/>
+                            <TextBlock Text="Добро пожаловать в раздел модификаций! Здесь вы можете гибко настраивать обход блокировок, добавлять свои скрипты для игр и управлять списками сайтов. Все изменения сохраняются локально и автоматически объединяются." Foreground="#CCCCCC" TextWrapping="Wrap" LineHeight="20"/>
+                        </StackPanel>
+                    </Border>
+                    <TextBlock Text="1. .BAT-СТРАТЕГИИ (Обход для игр)" FontWeight="Bold" FontSize="16" Foreground="White" Margin="0,0,0,10"/>
+                    <TextBlock Text="Этот раздел предназначен для добавления готовых батников (.bat), которые создают индивидуальные стратегии обхода (например, для Battle.net, EA App, League of Legends). Вы можете скачать готовые моды или написать свои через встроенный редактор." Foreground="#AAAAAA" TextWrapping="Wrap" Margin="0,0,0,15" LineHeight="20"/>
+                    <TextBlock Text="2. ЛИСТЫ ДОМЕНОВ" FontWeight="Bold" FontSize="16" Foreground="White" Margin="0,0,0,10"/>
+                    <TextBlock Text="Позволяет создавать именованные списки сайтов. Программа сама соберет все активные листы и объединит их в единый список без дубликатов. Если выключить мод, домены автоматически удалятся из главного списка." Foreground="#AAAAAA" TextWrapping="Wrap" Margin="0,0,0,15" LineHeight="20"/>
+                    <TextBlock Text="Как включить мод:" FontWeight="Bold" FontSize="14" Foreground="White" Margin="0,0,0,5"/>
+                    <TextBlock Text="1. Нажмите «Включить» в колонке доступных модов.&#x0a;2. Перейдите на вкладку «Главная» и перезапустите обход.&#x0a;3. Моды-стратегии появятся в списке конфигов на главном экране." Foreground="#AAAAAA" TextWrapping="Wrap" LineHeight="22"/>
+                </StackPanel>
+            </ScrollViewer>
         </Grid>
+
+        <!-- ОВЕРЛЕЙ РЕДАКТОРА -->
+        <Grid x:Name="EditorOverlay" Grid.ColumnSpan="3" Background="#CC000000" Visibility="Collapsed" Panel.ZIndex="200">
+            <Border Background="#141414" BorderBrush="#2A2A2A" BorderThickness="1" CornerRadius="12" Width="600" Height="500" Padding="20">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <TextBlock x:Name="TxtEditorTitle" Text="Редактор: mod.bat" FontSize="18" FontWeight="Bold" Margin="0,0,0,15"/>
+                    <TextBox x:Name="EditorTextBox" Grid.Row="1" Background="#0C0C0C" Foreground="#4ADE80" FontFamily="Consolas" FontSize="13" TextWrapping="Wrap" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" BorderBrush="#2A2A2A" Padding="10"/>
+                    <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,15,0,0">
+                        <Button Content="Отмена" Background="Transparent" Foreground="#A0A0A0" BorderBrush="#333333" BorderThickness="1" Padding="15,6" Margin="0,0,10,0" Cursor="Hand" Click="BtnCloseEditor_Click">
+                            <Button.Resources>
+                                <Style TargetType="Border">
+                                    <Setter Property="CornerRadius" Value="6"/>
+                                </Style>
+                            </Button.Resources>
+                        </Button>
+                        <Button Content="💾 Сохранить файл" Background="{DynamicResource BrandSuccessBrush}" Foreground="White" BorderThickness="0" Padding="15,6" Cursor="Hand" Click="BtnSaveEditor_Click">
+                            <Button.Resources>
+                                <Style TargetType="Border">
+                                    <Setter Property="CornerRadius" Value="6"/>
+                                </Style>
+                            </Button.Resources>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- ОВЕРЛЕЙ СОЗДАНИЯ МОДА -->
+        <Grid x:Name="CreateModOverlay" Grid.ColumnSpan="3" Background="#CC000000" Visibility="Collapsed" Panel.ZIndex="200">
+            <Border Background="#141414" BorderBrush="#2A2A2A" BorderThickness="1" CornerRadius="12" Width="450" Padding="20" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <StackPanel>
+                    <TextBlock Text="Создать новый мод" FontSize="18" FontWeight="Bold" Margin="0,0,0,15"/>
+                    <TextBlock Text="Название (ID папки, англ.):" Foreground="#A0A0A0" FontSize="12" Margin="0,0,0,5"/>
+                    <ui:TextBox x:Name="TxtNewModId" Margin="0,0,0,10"/>
+                    <TextBlock Text="Отображаемое имя:" Foreground="#A0A0A0" FontSize="12" Margin="0,0,0,5"/>
+                    <ui:TextBox x:Name="TxtNewModName" Margin="0,0,0,10"/>
+                    <TextBlock Text="Автор:" Foreground="#A0A0A0" FontSize="12" Margin="0,0,0,5"/>
+                    <ui:TextBox x:Name="TxtNewModAuthor" Margin="0,0,0,10"/>
+                    <TextBlock Text="Описание:" Foreground="#A0A0A0" FontSize="12" Margin="0,0,0,5"/>
+                    <ui:TextBox x:Name="TxtNewModDesc" Margin="0,0,0,20"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button Content="Отмена" Background="Transparent" Foreground="#A0A0A0" BorderBrush="#333333" BorderThickness="1" Padding="15,6" Margin="0,0,10,0" Cursor="Hand" Click="BtnCloseCreateMod_Click">
+                            <Button.Resources>
+                                <Style TargetType="Border">
+                                    <Setter Property="CornerRadius" Value="6"/>
+                                </Style>
+                            </Button.Resources>
+                        </Button>
+                        <Button Content="Создать" Background="{DynamicResource BrandSuccessBrush}" Foreground="White" BorderThickness="0" Padding="15,6" Cursor="Hand" Click="BtnConfirmCreateMod_Click">
+                            <Button.Resources>
+                                <Style TargetType="Border">
+                                    <Setter Property="CornerRadius" Value="6"/>
+                                </Style>
+                            </Button.Resources>
+                        </Button>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Grid>
+
     </Grid>
 </UserControl>
 
@@ -4454,12 +4658,17 @@ namespace ZapretGUI.Views
 // ФАЙЛ: Views\ModsView.xaml.cs
 ////////////////////////////////////////////////////////////////////////////////
 
+using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using ZapretGUI.Core;
 
 namespace ZapretGUI.Views
@@ -4468,12 +4677,19 @@ namespace ZapretGUI.Views
     {
         private readonly ModManager _modManager;
         private ModType _currentTab = ModType.BatStrategy;
-        private List<UIModItem> _currentMods = new();
+
+        private ObservableCollection<UIModItem> _availableMods = new();
+        private ObservableCollection<UIModItem> _activeMods = new();
+
+        private string _currentEditingFilePath = "";
 
         public ModsView()
         {
             InitializeComponent();
             _modManager = new ModManager();
+
+            AvailableModsList.ItemsSource = _availableMods;
+            ActiveModsList.ItemsSource = _activeMods;
 
             SwitchTab(ModType.BatStrategy);
         }
@@ -4482,95 +4698,327 @@ namespace ZapretGUI.Views
         {
             _currentTab = type;
 
-            if (type == ModType.BatStrategy)
+            BtnStrategies.Background = System.Windows.Media.Brushes.Transparent;
+            BtnStrategies.Foreground = UIHelper.GetBrushFromHex("#A0A0A0");
+            BtnDomainLists.Background = System.Windows.Media.Brushes.Transparent;
+            BtnDomainLists.Foreground = UIHelper.GetBrushFromHex("#A0A0A0");
+            BtnGuide.Background = System.Windows.Media.Brushes.Transparent;
+            BtnGuide.Foreground = UIHelper.GetBrushFromHex("#A0A0A0");
+
+            if (type == ModType.BatStrategy || type == ModType.DomainList)
             {
-                TxtCategoryTitle.Text = ".bat Стратегии";
-                TxtCategoryDesc.Text = "Пользовательские скрипты обхода для специфичных игр и задач.";
-                BtnStrategies.Background = UIHelper.GetBrushFromHex("#2A2A2A");
-                BtnStrategies.Foreground = System.Windows.Media.Brushes.White;
-                BtnDomainLists.Background = System.Windows.Media.Brushes.Transparent;
-                BtnDomainLists.Foreground = UIHelper.GetBrushFromHex("#A0A0A0");
+                GuidePanel.Visibility = Visibility.Collapsed;
+                ModsListsPanel.Visibility = Visibility.Visible;
+                ActionButtonsPanel.Visibility = Visibility.Visible;
+
+                if (type == ModType.BatStrategy)
+                {
+                    TxtCategoryTitle.Text = ".bat Стратегии";
+                    TxtCategoryDesc.Text = "Пользовательские скрипты обхода для специфичных игр и задач.";
+                    BtnStrategies.Background = UIHelper.GetBrushFromHex("#2A2A2A");
+                    BtnStrategies.Foreground = System.Windows.Media.Brushes.White;
+                }
+                else
+                {
+                    TxtCategoryTitle.Text = "Листы доменов";
+                    TxtCategoryDesc.Text = "Списки сайтов и сервисов для маршрутизации трафика.";
+                    BtnDomainLists.Background = UIHelper.GetBrushFromHex("#2A2A2A");
+                    BtnDomainLists.Foreground = System.Windows.Media.Brushes.White;
+                }
+
+                LoadCurrentMods();
             }
             else
             {
-                TxtCategoryTitle.Text = "Листы доменов";
-                TxtCategoryDesc.Text = "Списки сайтов и сервисов для маршрутизации трафика.";
-                BtnDomainLists.Background = UIHelper.GetBrushFromHex("#2A2A2A");
-                BtnDomainLists.Foreground = System.Windows.Media.Brushes.White;
-                BtnStrategies.Background = System.Windows.Media.Brushes.Transparent;
-                BtnStrategies.Foreground = UIHelper.GetBrushFromHex("#A0A0A0");
-            }
+                TxtCategoryTitle.Text = "Руководство";
+                TxtCategoryDesc.Text = "Ответы на частые вопросы и инструкции.";
+                BtnGuide.Background = UIHelper.GetBrushFromHex("#2A2A2A");
+                BtnGuide.Foreground = System.Windows.Media.Brushes.White;
 
-            LoadCurrentMods();
+                ModsListsPanel.Visibility = Visibility.Collapsed;
+                ActionButtonsPanel.Visibility = Visibility.Collapsed;
+                GuidePanel.Visibility = Visibility.Visible;
+            }
         }
 
         private void LoadCurrentMods()
         {
-            _currentMods = _modManager.GetAvailableMods(_currentTab);
-            ModsItemsControl.ItemsSource = null;
-            ModsItemsControl.ItemsSource = _currentMods;
+            _availableMods.Clear();
+            _activeMods.Clear();
 
-            EmptyStatePanel.Visibility = _currentMods.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-            ModsItemsControl.Visibility = _currentMods.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            var allMods = _modManager.GetAvailableMods(_currentTab);
+
+            foreach (var mod in allMods)
+            {
+                if (mod.IsActive)
+                    _activeMods.Add(mod);
+                else
+                    _availableMods.Add(mod);
+            }
+
+            UpdateHeadersVisibility();
         }
 
-        private void BtnStrategies_Click(object sender, RoutedEventArgs e)
+        private void UpdateHeadersVisibility()
         {
-            AudioHelper.PlayClick();
-            SwitchTab(ModType.BatStrategy);
+            ActiveModsHeader.Visibility = _activeMods.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            AvailableModsHeader.Visibility = _availableMods.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            ModsDivider.Visibility = (_activeMods.Count > 0 && _availableMods.Count > 0) ? Visibility.Visible : Visibility.Collapsed;
+            EmptyStatePanel.Visibility = (_activeMods.Count == 0 && _availableMods.Count == 0) ? Visibility.Visible : Visibility.Collapsed;
         }
 
-        private void BtnDomainLists_Click(object sender, RoutedEventArgs e)
-        {
-            AudioHelper.PlayClick();
-            SwitchTab(ModType.DomainList);
-        }
+        private void BtnStrategies_Click(object sender, RoutedEventArgs e) { AudioHelper.PlayClick(); SwitchTab(ModType.BatStrategy); }
+        private void BtnDomainLists_Click(object sender, RoutedEventArgs e) { AudioHelper.PlayClick(); SwitchTab(ModType.DomainList); }
+        private void BtnGuide_Click(object sender, RoutedEventArgs e) { AudioHelper.PlayClick(); SwitchTab((ModType)99); }
 
         private void BtnOpenModsFolder_Click(object sender, RoutedEventArgs e)
         {
             AudioHelper.PlayClick();
             var path = Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory);
-            if (Directory.Exists(path))
+            if (Directory.Exists(path)) Process.Start("explorer.exe", path);
+        }
+
+        private void BtnCreateMod_Click(object sender, RoutedEventArgs e)
+        {
+            AudioHelper.PlayClick();
+
+            TxtNewModId.Text = $"mod_{DateTime.Now:HHmmss}";
+            TxtNewModName.Text = "Мой новый мод";
+            TxtNewModAuthor.Text = "You";
+            TxtNewModDesc.Text = "Описание мода";
+
+            CreateModOverlay.Visibility = Visibility.Visible;
+        }
+
+        private void BtnCloseCreateMod_Click(object sender, RoutedEventArgs e)
+        {
+            AudioHelper.PlayClick();
+            CreateModOverlay.Visibility = Visibility.Collapsed;
+        }
+
+        private void BtnConfirmCreateMod_Click(object sender, RoutedEventArgs e)
+        {
+            AudioHelper.PlayClick();
+
+            string id = TxtNewModId.Text.Trim().Replace(" ", "_").ToLower();
+            var invalidChars = System.IO.Path.GetInvalidFileNameChars();
+            id = new string(id.Where(c => !invalidChars.Contains(c)).ToArray());
+
+            if (string.IsNullOrEmpty(id))
+                id = $"mod_{DateTime.Now:HHmmss}";
+
+            string folderName = _currentTab == ModType.BatStrategy ? "strategies" : "lists";
+            string modFolderPath = Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, folderName, id);
+
+            if (Directory.Exists(modFolderPath))
             {
-                Process.Start("explorer.exe", path);
+                System.Windows.MessageBox.Show("Мод с таким ID (папкой) уже существует!", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            try
+            {
+                Directory.CreateDirectory(modFolderPath);
+
+                var meta = new ModMetaData
+                {
+                    Name = string.IsNullOrWhiteSpace(TxtNewModName.Text) ? id : TxtNewModName.Text,
+                    Author = string.IsNullOrWhiteSpace(TxtNewModAuthor.Text) ? "Аноним" : TxtNewModAuthor.Text,
+                    Version = "1.0",
+                    Description = TxtNewModDesc.Text,
+                    IsBatStrategy = _currentTab == ModType.BatStrategy
+                };
+
+                string jsonPath = Path.Combine(modFolderPath, "mod.json");
+                File.WriteAllText(jsonPath, System.Text.Json.JsonSerializer.Serialize(meta, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+
+                if (_currentTab == ModType.BatStrategy)
+                    File.WriteAllText(Path.Combine(modFolderPath, "strategy.bat"), ":: Ваш код обхода здесь\r\n");
+                else
+                    File.WriteAllText(Path.Combine(modFolderPath, "list.txt"), "");
+
+                CreateModOverlay.Visibility = Visibility.Collapsed;
+                LoadCurrentMods();
+            }
+            catch (Exception ex)
+            {
+                System.Windows.MessageBox.Show($"Ошибка при создании мода: {ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
-        private void BtnImportMod_Click(object sender, RoutedEventArgs e)
+        private async void BtnToggleMod_Click(object sender, RoutedEventArgs e)
         {
             AudioHelper.PlayClick();
-            System.Windows.MessageBox.Show("Функция импорта архива .zip будет добавлена в следующем патче. Пока вы можете распаковать моды в папку вручную.", "В разработке", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
+
+            if ((sender as FrameworkElement)?.DataContext is UIModItem mod)
+            {
+                var btn = sender as System.Windows.Controls.Button;
+                var border = FindParent<System.Windows.Controls.Border>(btn, "ModCardContainer");
+
+                if (border != null)
+                {
+                    var fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(150));
+                    var slideOut = new DoubleAnimation(0, mod.IsActive ? 30 : -30, TimeSpan.FromMilliseconds(150));
+
+                    border.RenderTransform = new TranslateTransform();
+                    border.BeginAnimation(OpacityProperty, fadeOut);
+                    border.RenderTransform.BeginAnimation(TranslateTransform.XProperty, slideOut);
+
+                    await Task.Delay(150);
+                }
+
+                mod.IsActive = !mod.IsActive;
+
+                if (mod.IsActive)
+                {
+                    _availableMods.Remove(mod);
+                    _activeMods.Add(mod);
+                }
+                else
+                {
+                    _activeMods.Remove(mod);
+                    _availableMods.Add(mod);
+                }
+
+                SaveAndApplyMods();
+                UpdateHeadersVisibility();
+            }
         }
 
-        private void ModToggle_Click(object sender, RoutedEventArgs e)
+        private T? FindParent<T>(DependencyObject child, string? name = null) where T : FrameworkElement
         {
-            AudioHelper.PlayClick();
+            DependencyObject parent = VisualTreeHelper.GetParent(child);
+            while (parent != null)
+            {
+                if (parent is T typed && (name == null || typed.Name == name))
+                {
+                    return typed;
+                }
+                parent = VisualTreeHelper.GetParent(parent);
+            }
+            return null;
+        }
 
+        private void SaveAndApplyMods()
+        {
             var activeStrategies = new List<string>();
             var activeLists = new List<string>();
 
             if (_currentTab == ModType.BatStrategy)
             {
-                foreach (var mod in _currentMods)
-                    if (mod.IsActive) activeStrategies.Add(mod.Id);
-
+                foreach (var mod in _activeMods) activeStrategies.Add(mod.Id);
                 SettingsManager.Current.ActiveBatMods = activeStrategies;
-
                 _modManager.SyncActiveBatMods();
             }
             else
             {
-                foreach (var mod in _currentMods)
-                    if (mod.IsActive) activeLists.Add(mod.Id);
-
+                foreach (var mod in _activeMods) activeLists.Add(mod.Id);
                 SettingsManager.Current.ActiveListMods = activeLists;
-
                 _modManager.ApplyListMods();
             }
 
             SettingsManager.Save();
+        }
 
-            ModsItemsControl.Items.Refresh();
+        private void BtnDisableAll_Click(object sender, RoutedEventArgs e)
+        {
+            AudioHelper.PlayClick();
+            if (_activeMods.Count == 0) return;
+
+            var result = System.Windows.MessageBox.Show("Вы уверены, что хотите отключить все моды в этой категории?", "Подтверждение", MessageBoxButton.YesNo, MessageBoxImage.Question);
+            if (result != MessageBoxResult.Yes) return;
+
+            var modsToDisable = _activeMods.ToList();
+            foreach (var mod in modsToDisable)
+            {
+                mod.IsActive = false;
+                _activeMods.Remove(mod);
+                _availableMods.Add(mod);
+            }
+
+            SaveAndApplyMods();
+            UpdateHeadersVisibility();
+        }
+
+        private void BtnDeleteMod_Click(object sender, RoutedEventArgs e)
+        {
+            AudioHelper.PlayClick();
+            if ((sender as FrameworkElement)?.DataContext is UIModItem mod)
+            {
+                var result = System.Windows.MessageBox.Show($"Удалить мод '{mod.Meta.Name}' навсегда?\nЭто удалит все файлы мода с диска.", "Удаление", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+                if (result == MessageBoxResult.Yes)
+                {
+                    try
+                    {
+                        string folderName = _currentTab == ModType.BatStrategy ? "strategies" : "lists";
+                        string modFolderPath = Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, folderName, mod.Id);
+
+                        if (Directory.Exists(modFolderPath))
+                            Directory.Delete(modFolderPath, true);
+
+                        if (mod.IsActive)
+                        {
+                            _activeMods.Remove(mod);
+                            SaveAndApplyMods();
+                        }
+                        else
+                        {
+                            _availableMods.Remove(mod);
+                        }
+
+                        UpdateHeadersVisibility();
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Windows.MessageBox.Show($"Не удалось удалить мод.\nОшибка: {ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                    }
+                }
+            }
+        }
+
+        private void BtnEditMod_Click(object sender, RoutedEventArgs e)
+        {
+            AudioHelper.PlayClick();
+
+            if ((sender as FrameworkElement)?.DataContext is UIModItem mod)
+            {
+                string folderName = _currentTab == ModType.BatStrategy ? "strategies" : "lists";
+                string fileName = _currentTab == ModType.BatStrategy ? "strategy.bat" : "list.txt";
+
+                _currentEditingFilePath = Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, folderName, mod.Id, fileName);
+
+                if (File.Exists(_currentEditingFilePath))
+                {
+                    TxtEditorTitle.Text = $"Редактор: {mod.Meta.Name} ({fileName})";
+                    EditorTextBox.Text = File.ReadAllText(_currentEditingFilePath);
+                    EditorOverlay.Visibility = Visibility.Visible;
+                }
+                else
+                {
+                    System.Windows.MessageBox.Show($"Файл {fileName} не найден в папке мода!", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+        }
+
+        private void BtnSaveEditor_Click(object sender, RoutedEventArgs e)
+        {
+            AudioHelper.PlayClick();
+            try
+            {
+                File.WriteAllText(_currentEditingFilePath, EditorTextBox.Text);
+                SaveAndApplyMods();
+                EditorOverlay.Visibility = Visibility.Collapsed;
+            }
+            catch (Exception ex)
+            {
+                System.Windows.MessageBox.Show($"Ошибка сохранения: {ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void BtnCloseEditor_Click(object sender, RoutedEventArgs e)
+        {
+            AudioHelper.PlayClick();
+            EditorOverlay.Visibility = Visibility.Collapsed;
         }
     }
 }
