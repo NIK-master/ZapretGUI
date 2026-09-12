@@ -118,7 +118,8 @@ namespace ZapretGUI.Views
         {
             AudioHelper.PlayClick();
             var path = Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory);
-            if (Directory.Exists(path)) Process.Start("explorer.exe", path);
+            if (Directory.Exists(path)) 
+                Process.Start("explorer.exe", path);
         }
 
         private void BtnCreateMod_Click(object sender, RoutedEventArgs e)
@@ -143,15 +144,15 @@ namespace ZapretGUI.Views
         {
             AudioHelper.PlayClick();
 
-            string id = TxtNewModId.Text.Trim().Replace(" ", "_").ToLower();
+            var id = TxtNewModId.Text.Trim().Replace(" ", "_").ToLower();
             var invalidChars = System.IO.Path.GetInvalidFileNameChars();
             id = new string(id.Where(c => !invalidChars.Contains(c)).ToArray());
 
             if (string.IsNullOrEmpty(id))
                 id = $"mod_{DateTime.Now:HHmmss}";
 
-            string folderName = _currentTab == ModType.BatStrategy ? "strategies" : "lists";
-            string modFolderPath = Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, folderName, id);
+            var folderName = _currentTab == ModType.BatStrategy ? "strategies" : "lists";
+            var modFolderPath = Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, folderName, id);
 
             if (Directory.Exists(modFolderPath))
             {
@@ -172,7 +173,7 @@ namespace ZapretGUI.Views
                     IsBatStrategy = _currentTab == ModType.BatStrategy
                 };
 
-                string jsonPath = Path.Combine(modFolderPath, "mod.json");
+                var jsonPath = Path.Combine(modFolderPath, "mod.json");
                 File.WriteAllText(jsonPath, System.Text.Json.JsonSerializer.Serialize(meta, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
 
                 if (_currentTab == ModType.BatStrategy)
@@ -234,9 +235,7 @@ namespace ZapretGUI.Views
             while (parent != null)
             {
                 if (parent is T typed && (name == null || typed.Name == name))
-                {
                     return typed;
-                }
                 parent = VisualTreeHelper.GetParent(parent);
             }
             return null;
@@ -263,7 +262,6 @@ namespace ZapretGUI.Views
             SettingsManager.Save();
         }
 
-        // --- ЛОГИКА КАСТОМНЫХ ОКНА ПОДТВЕРЖДЕНИЯ ---
 
         private void ShowConfirmDialog(string title, string message, string confirmBtnText, System.Windows.Media.Brush confirmBtnBrush, Action onConfirm)
         {
@@ -326,8 +324,8 @@ namespace ZapretGUI.Views
                     () => {
                         try
                         {
-                            string folderName = _currentTab == ModType.BatStrategy ? "strategies" : "lists";
-                            string modFolderPath = Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, folderName, mod.Id);
+                            var folderName = _currentTab == ModType.BatStrategy ? "strategies" : "lists";
+                            var modFolderPath = Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, folderName, mod.Id);
 
                             if (Directory.Exists(modFolderPath))
                                 Directory.Delete(modFolderPath, true);
@@ -338,9 +336,7 @@ namespace ZapretGUI.Views
                                 SaveAndApplyMods();
                             }
                             else
-                            {
                                 _availableMods.Remove(mod);
-                            }
 
                             UpdateHeadersVisibility();
                         }
@@ -352,7 +348,6 @@ namespace ZapretGUI.Views
             }
         }
 
-        // --- ЛОГИКА ВСТРОЕННОГО РЕДАКТОРА ---
 
         private void BtnEditMod_Click(object sender, RoutedEventArgs e)
         {
@@ -360,8 +355,8 @@ namespace ZapretGUI.Views
 
             if ((sender as FrameworkElement)?.DataContext is UIModItem mod)
             {
-                string folderName = _currentTab == ModType.BatStrategy ? "strategies" : "lists";
-                string fileName = _currentTab == ModType.BatStrategy ? "strategy.bat" : "list.txt";
+                var folderName = _currentTab == ModType.BatStrategy ? "strategies" : "lists";
+                var fileName = _currentTab == ModType.BatStrategy ? "strategy.bat" : "list.txt";
 
                 _currentEditingFilePath = Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, folderName, mod.Id, fileName);
 
@@ -372,9 +367,7 @@ namespace ZapretGUI.Views
                     EditorOverlay.Visibility = Visibility.Visible;
                 }
                 else
-                {
                     System.Windows.MessageBox.Show($"Файл {fileName} не найден в папке мода!", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
-                }
             }
         }
 
@@ -399,7 +392,6 @@ namespace ZapretGUI.Views
             EditorOverlay.Visibility = Visibility.Collapsed;
         }
 
-        // --- ЛОГИКА ИМПОРТА ИЗ ZIP ---
         private void BtnImportMod_Click(object sender, RoutedEventArgs e)
         {
             AudioHelper.PlayClick();
@@ -412,13 +404,12 @@ namespace ZapretGUI.Views
 
             if (openFileDialog.ShowDialog() == true)
             {
-                string tempDir = Path.Combine(Path.GetTempPath(), "ZapretGUI_Mod_" + Guid.NewGuid().ToString());
+                var tempDir = Path.Combine(Path.GetTempPath(), "ZapretGUI_Mod_" + Guid.NewGuid().ToString());
                 try
                 {
                     Directory.CreateDirectory(tempDir);
                     ZipFile.ExtractToDirectory(openFileDialog.FileName, tempDir);
 
-                    // Ищем mod.json рекурсивно (помогает, если файлы в архиве лежат внутри папки)
                     string[] jsonFiles = Directory.GetFiles(tempDir, "mod.json", SearchOption.AllDirectories);
                     if (jsonFiles.Length == 0)
                     {
@@ -426,10 +417,9 @@ namespace ZapretGUI.Views
                         return;
                     }
 
-                    string jsonPath = jsonFiles[0];
-                    string modRootPath = Path.GetDirectoryName(jsonPath);
+                    var jsonPath = jsonFiles[0];
+                    var modRootPath = Path.GetDirectoryName(jsonPath);
 
-                    // Читаем метаданные
                     var meta = System.Text.Json.JsonSerializer.Deserialize<ModMetaData>(
                         File.ReadAllText(jsonPath),
                         new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }
@@ -441,19 +431,17 @@ namespace ZapretGUI.Views
                         return;
                     }
 
-                    // Формируем безопасное название папки из названия архива
-                    string safeId = Path.GetFileNameWithoutExtension(openFileDialog.FileName).Replace(" ", "_").ToLower();
+                    var safeId = Path.GetFileNameWithoutExtension(openFileDialog.FileName).Replace(" ", "_").ToLower();
                     var invalidChars = Path.GetInvalidFileNameChars();
                     safeId = new string(safeId.Where(c => !invalidChars.Contains(c)).ToArray());
-                    if (string.IsNullOrEmpty(safeId)) safeId = $"mod_{DateTime.Now:HHmmss}";
+                    if (string.IsNullOrEmpty(safeId)) 
+                        safeId = $"mod_{DateTime.Now:HHmmss}";
 
-                    // Определяем конечную папку
-                    string folderType = meta.IsBatStrategy ? "strategies" : "lists";
-                    string destPath = Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, folderType, safeId);
+                    var folderType = meta.IsBatStrategy ? "strategies" : "lists";
+                    var destPath = Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, folderType, safeId);
 
-                    // Защита от перезаписи (если мод с таким именем папки уже существует)
-                    int counter = 1;
-                    string originalId = safeId;
+                    var counter = 1;
+                    var originalId = safeId;
                     while (Directory.Exists(destPath))
                     {
                         safeId = $"{originalId}_{counter}";
@@ -463,24 +451,18 @@ namespace ZapretGUI.Views
 
                     Directory.CreateDirectory(destPath);
 
-                    // Рекурсивно копируем всё содержимое извлеченной папки в конечную
                     foreach (var file in Directory.GetFiles(modRootPath, "*.*", SearchOption.AllDirectories))
                     {
-                        string relativePath = file.Substring(modRootPath.Length + 1);
-                        string targetPath = Path.Combine(destPath, relativePath);
+                        var relativePath = file.Substring(modRootPath.Length + 1);
+                        var targetPath = Path.Combine(destPath, relativePath);
                         Directory.CreateDirectory(Path.GetDirectoryName(targetPath));
                         File.Copy(file, targetPath, true);
                     }
 
-                    // Если тип загруженного мода не совпадает с текущей вкладкой, предупреждаем пользователя
                     if ((meta.IsBatStrategy && _currentTab != ModType.BatStrategy) || (!meta.IsBatStrategy && _currentTab != ModType.DomainList))
-                    {
                         System.Windows.MessageBox.Show($"Мод '{meta.Name}' успешно установлен, но он относится к другой категории. Переключите вкладку, чтобы увидеть его.", "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
-                    }
                     else
-                    {
                         LoadCurrentMods();
-                    }
                 }
                 catch (Exception ex)
                 {
@@ -494,7 +476,6 @@ namespace ZapretGUI.Views
             }
         }
 
-        // --- ЛОГИКА ЭКСПОРТА МОДА В ZIP ---
         private void BtnExportMod_Click(object sender, RoutedEventArgs e)
         {
             AudioHelper.PlayClick();
@@ -512,8 +493,8 @@ namespace ZapretGUI.Views
                 {
                     try
                     {
-                        string folderName = _currentTab == ModType.BatStrategy ? "strategies" : "lists";
-                        string modFolderPath = Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, folderName, mod.Id);
+                        var folderName = _currentTab == ModType.BatStrategy ? "strategies" : "lists";
+                        var modFolderPath = Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, folderName, mod.Id);
 
                         if (!Directory.Exists(modFolderPath))
                         {
@@ -521,11 +502,9 @@ namespace ZapretGUI.Views
                             return;
                         }
 
-                        // Удаляем старый файл, если пользователь решил его перезаписать
                         if (File.Exists(saveFileDialog.FileName))
                             File.Delete(saveFileDialog.FileName);
 
-                        // Упаковываем всю директорию мода в архив
                         System.IO.Compression.ZipFile.CreateFromDirectory(modFolderPath, saveFileDialog.FileName);
 
                         System.Windows.MessageBox.Show($"Мод '{mod.Meta.Name}' успешно экспортирован и готов к публикации!", "Успех", MessageBoxButton.OK, MessageBoxImage.Information);

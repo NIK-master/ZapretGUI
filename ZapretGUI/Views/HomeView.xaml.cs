@@ -77,7 +77,7 @@ namespace ZapretGUI.Views
             LoadSettings();
 
             SettingsManager.SettingsSaved += ApplyVisualSettings;
-            SettingsManager.SettingsSaved += RefreshProfilesLive; // АВТООБНОВЛЕНИЕ БАТНИКОВ
+            SettingsManager.SettingsSaved += RefreshProfilesLive;
             ApplyVisualSettings();
 
             _networkMonitor.Start();
@@ -94,16 +94,15 @@ namespace ZapretGUI.Views
                 Log("Интерфейс загружен. Ожидание команд...");
         }
 
-        // Обновление профилей "на лету" без сброса выбора
         private void RefreshProfilesLive()
         {
             Dispatcher.Invoke(() =>
             {
-                string currentProfile = TxtMainProfile.Text;
+                var currentProfile = TxtMainProfile.Text;
                 LoadProfiles();
 
-                bool found = false;
-                for (int i = 0; i < OverlayProfileListBox.Items.Count; i++)
+                var found = false;
+                for (var i = 0; i < OverlayProfileListBox.Items.Count; i++)
                 {
                     if (OverlayProfileListBox.Items[i] is ConfigItem item && item.FileName == currentProfile)
                     {
@@ -402,9 +401,7 @@ namespace ZapretGUI.Views
             foreach (var item in OverlayProfileListBox.Items)
             {
                 if (item is ConfigItem configItem)
-                {
                     configItem.IsActive = (configItem.FileName == activeFileName);
-                }
             }
             OverlayProfileListBox.Items.Refresh();
         }
@@ -801,7 +798,7 @@ namespace ZapretGUI.Views
 
         private void UpdateConfigTests(string fileName, string okCount, string totalCount)
         {
-            string currentPing = PingText.Text == "..." || PingText.Text == "—" ? "—" : PingText.Text;
+            var currentPing = PingText.Text == "..." || PingText.Text == "—" ? "—" : PingText.Text;
 
             foreach (var item in OverlayProfileListBox.Items)
             {

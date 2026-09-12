@@ -77,7 +77,8 @@ namespace ZapretGUI.Core
                         if (_scanCts.Token.IsCancellationRequested) break;
 
                         var line = await _scanProcess.StandardOutput.ReadLineAsync();
-                        if (string.IsNullOrWhiteSpace(line)) continue;
+                        if (string.IsNullOrWhiteSpace(line)) 
+                            continue;
 
                         line = Regex.Replace(line, @"\x1B\[[0-9;]*[a-zA-Z]", "");
 
@@ -149,9 +150,7 @@ namespace ZapretGUI.Core
                     return $"      ✨ {batName} -> Работает идеально (Успешно: {okCount})";
                 }
                 else
-                {
                     return $"      ⚠️ {batName} -> Есть блокировки (Успешно: {okCount}, Ошибок: {errCount})";
-                }
             }
 
             if (line.Contains("Best config:"))

@@ -27,7 +27,7 @@ namespace ZapretGUI.Core
 
             var lines = File.ReadAllLines(batFilePath);
             var arguments = "";
-            bool isReadingArgs = false;
+            var isReadingArgs = false;
 
             foreach (var line in lines)
             {
@@ -45,7 +45,7 @@ namespace ZapretGUI.Core
 
                 if (isReadingArgs)
                 {
-                    bool hasContinuation = trimmed.EndsWith("^");
+                    var hasContinuation = trimmed.EndsWith("^");
                     if (hasContinuation)
                         trimmed = trimmed.Substring(0, trimmed.Length - 1).TrimEnd();
 
@@ -100,9 +100,10 @@ namespace ZapretGUI.Core
 
             _process.OutputDataReceived += (s, e) =>
             {
-                if (string.IsNullOrEmpty(e.Data)) return;
+                if (string.IsNullOrEmpty(e.Data)) 
+                    return;
 
-                string line = e.Data;
+                var line = e.Data;
 
                 string[] noise = {
         "Loading hostlist", "loading plain text list", "Loaded",

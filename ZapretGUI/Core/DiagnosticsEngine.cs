@@ -133,16 +133,16 @@ namespace ZapretGUI.Core
             var ips = new List<string>();
             try
             {
-                int ancount = (data[6] << 8) | data[7];
+                var ancount = (data[6] << 8) | data[7];
                 if (ancount == 0) return ips;
-                int i = 12;
+                var i = 12;
                 while (i < data.Length && data[i] != 0) i += data[i] + 1;
                 i += 5;
-                for (int a = 0; a < ancount && i + 10 < data.Length; a++)
+                for (var a = 0; a < ancount && i + 10 < data.Length; a++)
                 {
                     i += 2;
-                    int rtype = (data[i] << 8) | data[i + 1];
-                    int rdlen = (data[i + 8] << 8) | data[i + 9];
+                    var rtype = (data[i] << 8) | data[i + 1];
+                    var rdlen = (data[i + 8] << 8) | data[i + 9];
                     i += 10;
                     if (rtype == 1 && rdlen == 4 && i + 4 <= data.Length)
                         ips.Add($"{data[i]}.{data[i + 1]}.{data[i + 2]}.{data[i + 3]}");
@@ -214,8 +214,8 @@ namespace ZapretGUI.Core
 
         public static async Task<List<DcResult>> CheckTelegramDcsAsync(Action<double>? progress = null)
         {
-            int done = 0;
-            int total = TelegramDcs.Length * TelegramPorts.Length;
+            var done = 0;
+            var total = TelegramDcs.Length * TelegramPorts.Length;
             var tasks = (from dc in TelegramDcs
                          from port in TelegramPorts
                          select Task.Run(async () =>
@@ -241,7 +241,7 @@ namespace ZapretGUI.Core
         public static async Task<List<PingResult>> CheckPingAsync(Action<double>? progress = null)
         {
             var results = new List<PingResult>();
-            for (int i = 0; i < PingHosts.Length; i++)
+            for (var i = 0; i < PingHosts.Length; i++)
             {
                 var (ok, rtt) = await PingOnceAsync(PingHosts[i]);
                 results.Add(new PingResult
@@ -269,8 +269,10 @@ namespace ZapretGUI.Core
                 if (!result.SystemIps.Intersect(result.DohIps).Any())
                     result.Spoofed = true;
             }
-            else if (result.SystemIps.Count == 0) result.Spoofed = true;
-            else if (result.DohIps.Count == 0) result.Error = "1.1.1.1 недоступен";
+            else if 
+                (result.SystemIps.Count == 0) result.Spoofed = true;
+            else if 
+                (result.DohIps.Count == 0) result.Error = "1.1.1.1 недоступен";
             progress?.Invoke(1.0);
             return result;
         }
@@ -373,8 +375,11 @@ namespace ZapretGUI.Core
             var dcOk = r.DcResults.Where(x => x.Ok).ToList();
             var pingOk = r.PingResults.Where(x => x.Ok).ToList();
 
-            if (r.DnsResult?.Spoofed == true) blocks.Add(BlockType.DnsSpoof);
-            if (r.DpiResult?.DpiDetected == true) blocks.Add(BlockType.SniBlock);
+            if (r.DnsResult?.Spoofed == true) 
+                blocks.Add(BlockType.DnsSpoof);
+
+            if (r.DpiResult?.DpiDetected == true) 
+                blocks.Add(BlockType.SniBlock);
 
             if (dcOk.Count == 0 && pingOk.Count > 0 && !blocks.Contains(BlockType.SniBlock))
                 blocks.Add(BlockType.IpBlock);
@@ -384,18 +389,19 @@ namespace ZapretGUI.Core
                 var withLat = dcOk.Where(x => x.LatencyMs.HasValue).ToList();
                 if (withLat.Count > 0)
                 {
-                    double avgDc = withLat.Average(x => x.LatencyMs!.Value);
+                    var avgDc = withLat.Average(x => x.LatencyMs!.Value);
                     var pingWithLat = pingOk.Where(x => x.LatencyMs.HasValue).ToList();
                     if (pingWithLat.Count > 0)
                     {
-                        double avgPing = pingWithLat.Average(x => x.LatencyMs!.Value);
+                        var avgPing = pingWithLat.Average(x => x.LatencyMs!.Value);
                         if ((avgDc > 150 && avgDc > avgPing * 3) || avgDc > 250)
                             blocks.Add(BlockType.Throttling);
                     }
                 }
             }
 
-            if (r.MediaResult?.Throttled == true) blocks.Add(BlockType.MediaThrottle);
+            if (r.MediaResult?.Throttled == true) 
+                blocks.Add(BlockType.MediaThrottle);
             return [.. blocks];
         }
 
@@ -404,7 +410,7 @@ namespace ZapretGUI.Core
             var recs = new List<string>();
             var blocks = r.BlockTypes;
             var app = r.AppStatus ?? new AppStatus();
-            bool bypass = app.ZapretRunning;
+            var bypass = app.ZapretRunning;
 
             string BypassList()
             {
@@ -415,7 +421,7 @@ namespace ZapretGUI.Core
 
             if (blocks.Contains(BlockType.MediaThrottle))
             {
-                string spd = r.MediaResult?.SpeedKbps > 0 ? $"{r.MediaResult.SpeedKbps:F0} kbps" : "не измерена";
+                var spd = r.MediaResult?.SpeedKbps > 0 ? $"{r.MediaResult.SpeedKbps:F0} kbps" : "не измерена";
                 recs.Add($"⚠️  ТСПУ-ЗАМЕДЛЕНИЕ МЕДИА (РКН)\n    Измеренная скорость: {spd} (норма > 200 kbps)\n    Файлы и медиа грузятся медленно. Используйте Zapret или VPN.");
             }
 
@@ -445,16 +451,15 @@ namespace ZapretGUI.Core
         {
             var blocks = new HashSet<BlockType>(r.BlockTypes);
             var app = r.AppStatus;
-            int dcOk = r.DcResults.Count(x => x.Ok);
-            int dcTot = r.DcResults.Count;
-            bool pingOk = r.PingResults.Any(p => p.Ok);
-            bool bypass = app != null && app.ZapretRunning;
+            var dcOk = r.DcResults.Count(x => x.Ok);
+            var dcTot = r.DcResults.Count;
+            var pingOk = r.PingResults.Any(p => p.Ok);
+            var bypass = app != null && app.ZapretRunning;
 
-            // Считываем режим цветовой слепоты
-            bool isCb = SettingsManager.Current.ColorblindMode;
-            string successColor = isCb ? "#0078D7" : "#107C10";
-            string errorColor = isCb ? "#FF8C00" : "#D13438";
-            string warningColor = isCb ? "#FFB900" : "#FF8C00";
+            var isCb = SettingsManager.Current.ColorblindMode;
+            var successColor = isCb ? "#0078D7" : "#107C10";
+            var errorColor = isCb ? "#FF8C00" : "#D13438";
+            var warningColor = isCb ? "#FFB900" : "#FF8C00";
 
             if (app?.TgWsProxyRunning == true)
                 return ("🟢", "tg-ws-proxy активен", "Telegram работает через прокси локально.", successColor);
@@ -481,12 +486,12 @@ namespace ZapretGUI.Core
         public static (string emoji, string title, string detail, string color) DiscordVerdict(DiagReport r)
         {
             var app = r.AppStatus;
-            bool bypass = app != null && app.ZapretRunning;
+            var bypass = app != null && app.ZapretRunning;
 
-            bool isCb = SettingsManager.Current.ColorblindMode;
-            string successColor = isCb ? "#0078D7" : "#107C10";
-            string errorColor = isCb ? "#FF8C00" : "#D13438";
-            string warningColor = isCb ? "#FFB900" : "#FF8C00";
+            var isCb = SettingsManager.Current.ColorblindMode;
+            var successColor = isCb ? "#0078D7" : "#107C10";
+            var errorColor = isCb ? "#FF8C00" : "#D13438";
+            var warningColor = isCb ? "#FFB900" : "#FF8C00";
 
             if (r.DiscordPing != null && r.DiscordPing.Count > 0 && r.DiscordPing.All(p => !p.Ok))
                 return bypass

@@ -25,7 +25,7 @@ namespace ZapretGUI.Core
     {
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
-            return (value is bool isActive && isActive) ? "\xE73E" : "\xE1D3"; // Галочка или блок
+            return (value is bool isActive && isActive) ? "\xE73E" : "\xE1D3";
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotImplementedException();

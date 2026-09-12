@@ -37,9 +37,7 @@ namespace ZapretGUI.Core
                     key.SetValue(AppConstants.AppRegistryName, $"\"{exePath}\"");
                 }
                 else
-                {
                     key.DeleteValue(AppConstants.AppRegistryName, false);
-                }
             }
             catch (Exception ex)
             {

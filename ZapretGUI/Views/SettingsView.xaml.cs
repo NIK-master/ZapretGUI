@@ -215,7 +215,8 @@ namespace ZapretGUI.Views
                 new Views.UpdateWindow("Проверка ядра TgWsProxy", "Ядро TgWsProxy обновлено до последней версии.", "ОК").ShowDialog();
             }
 
-            if (sender is System.Windows.Controls.Button btnReEnable) btnReEnable.IsEnabled = true;
+            if (sender is System.Windows.Controls.Button btnReEnable) 
+                btnReEnable.IsEnabled = true;
         }
     }
 }

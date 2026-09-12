@@ -184,15 +184,29 @@ namespace ZapretGUI.Core
 
                     foreach (var entry in archive.Entries)
                     {
-                        if (string.IsNullOrEmpty(entry.FullName)) continue;
+                        if (string.IsNullOrEmpty(entry.FullName)) 
+                            continue;
+
                         var slashIndex = entry.FullName.IndexOf('/');
-                        if (slashIndex == -1) { hasFilesAtRoot = true; break; }
+
+                        if (slashIndex == -1) 
+                        { 
+                            hasFilesAtRoot = true; 
+                            break; 
+                        }
                         var currentRoot = entry.FullName.Substring(0, slashIndex + 1);
-                        if (rootDirToStrip == null) rootDirToStrip = currentRoot;
-                        else if (rootDirToStrip != currentRoot) { rootDirToStrip = null; break; }
+
+                        if (rootDirToStrip == null) 
+                            rootDirToStrip = currentRoot;
+                        else if (rootDirToStrip != currentRoot) 
+                        { 
+                            rootDirToStrip = null; 
+                            break; 
+                        }
                     }
 
-                    if (hasFilesAtRoot) rootDirToStrip = null;
+                    if (hasFilesAtRoot) 
+                        rootDirToStrip = null;
 
                     foreach (var entry in archive.Entries)
                     {
@@ -228,7 +242,8 @@ namespace ZapretGUI.Core
             var tempZip = Path.Combine(tempDir, "update.zip");
             var extractDir = Path.Combine(tempDir, "Extracted");
 
-            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+            if (Directory.Exists(tempDir)) 
+                Directory.Delete(tempDir, true);
 
             Directory.CreateDirectory(tempDir);
             Directory.CreateDirectory(extractDir);
@@ -306,7 +321,8 @@ del ""%~f0""
             do
             {
                 var read = await contentStream.ReadAsync(buffer, 0, buffer.Length);
-                if (read == 0) isMoreToRead = false;
+                if (read == 0) 
+                    isMoreToRead = false;
                 else
                 {
                     await fileStream.WriteAsync(buffer, 0, read);
@@ -318,9 +334,7 @@ del ""%~f0""
                         progress?.Report($"Скачивание: {percentage}%");
                     }
                     else
-                    {
                         progress?.Report($"Скачано: {totalRead / 1024 / 1024} МБ");
-                    }
                 }
             }
             while (isMoreToRead);

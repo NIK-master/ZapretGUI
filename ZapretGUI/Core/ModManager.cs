@@ -34,7 +34,8 @@ namespace ZapretGUI.Core
             var mods = new List<UIModItem>();
             var targetFolder = type == ModType.BatStrategy ? _strategiesPath : _listsPath;
 
-            if (!Directory.Exists(targetFolder)) return mods;
+            if (!Directory.Exists(targetFolder)) 
+                return mods;
 
             var activeList = type == ModType.BatStrategy
                 ? SettingsManager.Current.ActiveBatMods
@@ -74,8 +75,8 @@ namespace ZapretGUI.Core
 
         public void ApplyListMods()
         {
-            string listsDir = Path.Combine(_zapretFilesPath, "lists");
-            string targetFile = Path.Combine(listsDir, "list-general.txt");
+            var listsDir = Path.Combine(_zapretFilesPath, "lists");
+            var targetFile = Path.Combine(listsDir, "list-general.txt");
 
             if (!File.Exists(targetFile)) return;
 
@@ -97,9 +98,7 @@ namespace ZapretGUI.Core
                     {
                         allModDomains.Add(d);
                         if (SettingsManager.Current.ActiveListMods.Contains(modId))
-                        {
                             activeModDomains.Add(d);
-                        }
                     }
                 }
             }
@@ -121,9 +120,7 @@ namespace ZapretGUI.Core
             if (!Directory.Exists(_zapretFilesPath)) return;
 
             foreach (var file in Directory.GetFiles(_zapretFilesPath, "mod_*.bat"))
-            {
                 try { File.Delete(file); } catch { }
-            }
 
             foreach (var modId in SettingsManager.Current.ActiveBatMods)
             {

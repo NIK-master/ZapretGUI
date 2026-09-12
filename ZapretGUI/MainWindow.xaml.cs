@@ -67,7 +67,7 @@ namespace ZapretGUI
                 }
             }
 
-            Action stopServicesAction = () => { if (IsBypassRunning()) ToggleBypass(); };
+            var stopServicesAction = () => { if (IsBypassRunning()) ToggleBypass(); };
             var progress = new Progress<string>(status => _homeView.ShowUpdateProgress(status));
 
             var zapretUpdate = await Core.UpdateManager.CheckForCoreUpdateAsync("https://api.github.com/repos/flowseal/zapret-discord-youtube/releases/latest", SettingsManager.Current.ZapretCoreVersion, "Zapret", true);
@@ -109,21 +109,27 @@ namespace ZapretGUI
 
         private void BtnHome_Click(object sender, RoutedEventArgs e)
         {
-            if (MainContentContainer.Content == _homeView) return;
+            if (MainContentContainer.Content == _homeView) 
+                return;
+
             MainContentContainer.Content = _homeView;
             SetActiveTab(BtnHome);
         }
 
         private void BtnSettings_Click(object sender, RoutedEventArgs e)
         {
-            if (MainContentContainer.Content == _settingsView) return;
+            if (MainContentContainer.Content == _settingsView) 
+                return;
+
             MainContentContainer.Content = _settingsView;
             SetActiveTab(BtnSettings);
         }
 
         private void BtnDiagnostics_Click(object sender, RoutedEventArgs e)
         {
-            if (MainContentContainer.Content == _diagnosticsView) return;
+            if (MainContentContainer.Content == _diagnosticsView) 
+                return;
+
             MainContentContainer.Content = _diagnosticsView;
             SetActiveTab(BtnDiagnostics);
         }
