@@ -46,32 +46,21 @@ namespace ZapretGUI.Views
 
     public partial class HomeView : System.Windows.Controls.UserControl
     {
-        private readonly ZapretManager _zapretManager;
-        private readonly TgProxyManager _tgProxyManager;
-        private readonly NetworkMonitor _networkMonitor;
-        private readonly ZapretScanner _zapretScanner;
-
         private System.Windows.Documents.Run? _lastProgressRun = null;
 
         public HomeView()
         {
             InitializeComponent();
-            _zapretManager = new ZapretManager();
-            _tgProxyManager = new TgProxyManager();
-            _networkMonitor = new NetworkMonitor();
-            _zapretScanner = new ZapretScanner();
 
-            _zapretManager.LogMessage += ProcessLogMessage;
-            _tgProxyManager.LogMessage += ProcessLogMessage;
+            // Подписываемся на единый лог-центр контроллера
+            BypassController.Current.OnLog += ProcessLogMessage;
+            BypassController.Current.NetMonitor.StatsUpdated += NetworkMonitor_StatsUpdated;
+            BypassController.Current.NetMonitor.StatusChanged += NetworkMonitor_StatusChanged;
 
-            _networkMonitor.StatsUpdated += NetworkMonitor_StatsUpdated;
-            _networkMonitor.StatusChanged += NetworkMonitor_StatusChanged;
+            BypassController.Current.Scanner.ScanCompleted += ZapretScanner_ScanCompleted;
+            BypassController.Current.Scanner.ScanFailed += ZapretScanner_ScanFailed;
 
-            _zapretScanner.LogMessage += ProcessLogMessage;
-            _zapretScanner.ScanCompleted += ZapretScanner_ScanCompleted;
-            _zapretScanner.ScanFailed += ZapretScanner_ScanFailed;
-
-            System.Windows.Application.Current.Exit += (s, e) => _zapretScanner.CancelScan();
+            System.Windows.Application.Current.Exit += (s, e) => BypassController.Current.Scanner.CancelScan();
 
             LoadProfiles();
             LoadSettings();
@@ -80,10 +69,10 @@ namespace ZapretGUI.Views
             SettingsManager.SettingsSaved += RefreshProfilesLive;
             ApplyVisualSettings();
 
-            _networkMonitor.Start();
+            BypassController.Current.NetMonitor.Start();
             _ = PingNetworkAsync();
 
-            if (_zapretManager.IsRunning() || _tgProxyManager.IsRunning())
+            if (BypassController.Current.IsRunning)
             {
                 MainToggle.IsChecked = true;
                 UpdateUIState(true);
@@ -128,7 +117,7 @@ namespace ZapretGUI.Views
 
         private void NetworkMonitor_StatusChanged(bool isAvailable)
         {
-            Dispatcher.Invoke(() =>
+            Dispatcher.Invoke(async () =>
             {
                 if (!isAvailable)
                 {
@@ -143,7 +132,7 @@ namespace ZapretGUI.Views
                     if (SettingsManager.Current.AutoRestartServices && MainToggle.IsChecked == true)
                     {
                         Log("🔄 Автоматический перезапуск служб...");
-                        RestartServices();
+                        await BypassController.Current.RestartServicesAsync(TxtMainProfile.Text);
                     }
                 }
             });
@@ -167,7 +156,7 @@ namespace ZapretGUI.Views
                 };
                 PingIconTransform.BeginAnimation(RotateTransform.AngleProperty, rotateAnim);
 
-                var pingTask = Core.NetworkHelper.TcpPingAsync(AppConstants.AwsPingHost, AppConstants.AwsPingPort);
+                var pingTask = BypassController.Current.CheckPingAsync();
                 var delayTask = Task.Delay(600);
 
                 await Task.WhenAll(pingTask, delayTask);
@@ -203,7 +192,7 @@ namespace ZapretGUI.Views
         private void SyncMainWindowIndicators()
         {
             if (System.Windows.Application.Current.MainWindow is MainWindow mainWindow)
-                mainWindow.UpdateIndicators(_zapretManager.IsRunning(), _tgProxyManager.IsRunning());
+                mainWindow.UpdateIndicators(BypassController.Current.Zapret.IsRunning(), BypassController.Current.TgProxy.IsRunning());
         }
 
         private void SyncNetworkIndicator(bool isOnline)
@@ -233,36 +222,15 @@ namespace ZapretGUI.Views
 
                     MainToggle.IsEnabled = false;
                     LaunchProgressBar.Visibility = Visibility.Visible;
-
-                    LaunchProgressBar.BeginAnimation(System.Windows.Controls.ProgressBar.ValueProperty, null);
                     LaunchProgressBar.Value = 0;
+
                     Log("Инициализация запуска...");
+                    AnimateProgressBar(30);
 
-                    await Task.Delay(200);
-                    AnimateProgressBar(20);
+                    // Передаем команду контроллеру
+                    await BypassController.Current.StartServicesAsync(TxtMainProfile.Text, isZapretSelected, isTgProxySelected);
 
-                    if (isZapretSelected)
-                    {
-                        var selectedProfile = TxtMainProfile.Text;
-                        Log($"[Zapret] Подготовка профиля {selectedProfile}...");
-                        await Task.Delay(400);
-                        Log($"[Zapret] Запуск службы...");
-                        _zapretManager.Start(selectedProfile);
-                        AnimateProgressBar(60);
-                    }
-
-                    if (isTgProxySelected)
-                    {
-                        Log("[TgWsProxy] Настройка маршрутов...");
-                        await Task.Delay(300);
-                        Log("[TgWsProxy] Запуск прокси...");
-                        _tgProxyManager.Start();
-                        AnimateProgressBar(90);
-                    }
-
-                    await Task.Delay(300);
                     AnimateProgressBar(100);
-
                     UpdateUIState(true);
                     SyncMainWindowIndicators();
                     Log("✅ Выбранные модули успешно запущены.");
@@ -284,12 +252,10 @@ namespace ZapretGUI.Views
                 else
                 {
                     Log("Остановка всех процессов...");
-                    _zapretManager.Stop();
-                    _tgProxyManager.Stop();
+                    BypassController.Current.StopServices();
 
                     UpdateUIState(false);
                     SyncMainWindowIndicators();
-                    Log("🛑 Все модули остановлены.");
 
                     if (System.Windows.Application.Current.MainWindow is MainWindow mainWindowStop)
                     {
@@ -401,7 +367,9 @@ namespace ZapretGUI.Views
             foreach (var item in OverlayProfileListBox.Items)
             {
                 if (item is ConfigItem configItem)
+                {
                     configItem.IsActive = (configItem.FileName == activeFileName);
+                }
             }
             OverlayProfileListBox.Items.Refresh();
         }
@@ -456,6 +424,25 @@ namespace ZapretGUI.Views
 
             shadowAnim.Completed += (s, e) => MainGridGlitchShadow.Opacity = 0;
             MainGridGlitchShadow.BeginAnimation(DropShadowEffect.ShadowDepthProperty, shadowAnim);
+        }
+
+        private void ProcessLogMessage(string message)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                Log(message);
+
+                var match = Regex.Match(message, @"([a-zA-Z0-9_\-\(\)\s]+\.bat).*?Успешно:\s*(\d+)(?:,\s*Ошибок:\s*(\d+))?");
+                if (match.Success)
+                {
+                    string batName = match.Groups[1].Value.Trim();
+                    string okCount = match.Groups[2].Value;
+                    string errCount = match.Groups[3].Success ? match.Groups[3].Value : "0";
+
+                    int total = int.Parse(okCount) + int.Parse(errCount);
+                    UpdateConfigTests(batName, okCount, total.ToString());
+                }
+            });
         }
 
         private void Log(string message)
@@ -526,7 +513,7 @@ namespace ZapretGUI.Views
             }
         }
 
-        public bool IsRunning => _zapretManager.IsRunning() || _tgProxyManager.IsRunning();
+        public bool IsRunning => BypassController.Current.IsRunning;
 
         public void ToggleFromTray()
         {
@@ -554,8 +541,8 @@ namespace ZapretGUI.Views
                 LogsPanel.IsHitTestVisible = !isCompact;
             }
 
-            var isZapret = _zapretManager != null && _zapretManager.IsRunning();
-            var isProxy = _tgProxyManager != null && _tgProxyManager.IsRunning();
+            var isZapret = BypassController.Current.Zapret.IsRunning();
+            var isProxy = BypassController.Current.TgProxy.IsRunning();
 
             UpdateUIState(isZapret || isProxy);
 
@@ -582,48 +569,6 @@ namespace ZapretGUI.Views
         {
             var hex = SettingsManager.Current.ColorblindMode ? "#FF8C00" : "#D13438";
             return UIHelper.GetBrushFromHex(hex);
-        }
-
-        private async void RestartServices()
-        {
-            try
-            {
-                _zapretManager.Stop();
-                _tgProxyManager.Stop();
-
-                await Task.Delay(1000);
-
-                if (SettingsManager.Current.ZapretEnabled)
-                    _zapretManager.Start(TxtMainProfile.Text);
-
-                if (SettingsManager.Current.TgProxyEnabled)
-                    _tgProxyManager.Start();
-
-                Log("✅ Службы успешно перезапущены.");
-            }
-            catch (Exception ex)
-            {
-                Log($"ОШИБКА ПРИ ПЕРЕЗАПУСКЕ: {ex.Message}");
-            }
-        }
-
-        private void ProcessLogMessage(string message)
-        {
-            Dispatcher.Invoke(() =>
-            {
-                Log(message);
-
-                var match = Regex.Match(message, @"([a-zA-Z0-9_\-\(\)\s]+\.bat).*?Успешно:\s*(\d+)(?:,\s*Ошибок:\s*(\d+))?");
-                if (match.Success)
-                {
-                    string batName = match.Groups[1].Value.Trim();
-                    string okCount = match.Groups[2].Value;
-                    string errCount = match.Groups[3].Success ? match.Groups[3].Value : "0";
-
-                    int total = int.Parse(okCount) + int.Parse(errCount);
-                    UpdateConfigTests(batName, okCount, total.ToString());
-                }
-            });
         }
 
         public void ShowUpdateProgress(string message)
@@ -737,10 +682,10 @@ namespace ZapretGUI.Views
                         }
                     }
 
-                    if (_zapretManager.IsRunning() && ZapretToggle.IsChecked == true)
+                    if (BypassController.Current.Zapret.IsRunning() && ZapretToggle.IsChecked == true)
                     {
                         Log("🔄 Перезапуск служб с новой конфигурацией...");
-                        _zapretManager.Start(bestConfig);
+                        BypassController.Current.Zapret.Start(bestConfig);
                     }
                 }
                 else
@@ -765,9 +710,9 @@ namespace ZapretGUI.Views
         {
             AudioHelper.PlayClick();
 
-            if (_zapretScanner.IsScanning)
+            if (BypassController.Current.Scanner.IsScanning)
             {
-                _zapretScanner.CancelScan();
+                BypassController.Current.Scanner.CancelScan();
                 return;
             }
 
@@ -780,7 +725,7 @@ namespace ZapretGUI.Views
             Log("🚀 Инициализация умного сканирования конфигурации...");
             Log("Мы скрыли всплывающие окна консоли, чтобы они не мешали. Процесс займет пару минут...");
 
-            await _zapretScanner.StartScanAsync();
+            await BypassController.Current.Scanner.StartScanAsync();
         }
 
         private void UpdateAllConfigsPing(string currentPing)

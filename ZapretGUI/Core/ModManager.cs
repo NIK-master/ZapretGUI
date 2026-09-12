@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Threading.Tasks;
 
 namespace ZapretGUI.Core
 {
@@ -29,12 +30,12 @@ namespace ZapretGUI.Core
             if (!Directory.Exists(_listsPath)) Directory.CreateDirectory(_listsPath);
         }
 
-        public List<UIModItem> GetAvailableMods(ModType type)
+        public async Task<List<UIModItem>> GetAvailableModsAsync(ModType type)
         {
             var mods = new List<UIModItem>();
             var targetFolder = type == ModType.BatStrategy ? _strategiesPath : _listsPath;
 
-            if (!Directory.Exists(targetFolder)) 
+            if (!Directory.Exists(targetFolder))
                 return mods;
 
             var activeList = type == ModType.BatStrategy
@@ -50,7 +51,7 @@ namespace ZapretGUI.Core
                 {
                     try
                     {
-                        var json = File.ReadAllText(jsonPath);
+                        var json = await File.ReadAllTextAsync(jsonPath);
                         var meta = JsonSerializer.Deserialize<ModMetaData>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
                         if (meta != null)
@@ -73,7 +74,7 @@ namespace ZapretGUI.Core
             return mods;
         }
 
-        public void ApplyListMods()
+        public async Task ApplyListModsAsync()
         {
             var listsDir = Path.Combine(_zapretFilesPath, "lists");
             var targetFile = Path.Combine(listsDir, "list-general.txt");
@@ -90,9 +91,8 @@ namespace ZapretGUI.Core
 
                 if (File.Exists(listPath))
                 {
-                    var domains = File.ReadAllLines(listPath)
-                                      .Where(l => !string.IsNullOrWhiteSpace(l))
-                                      .Select(l => l.Trim());
+                    var lines = await File.ReadAllLinesAsync(listPath);
+                    var domains = lines.Where(l => !string.IsNullOrWhiteSpace(l)).Select(l => l.Trim());
 
                     foreach (var d in domains)
                     {
@@ -103,34 +103,34 @@ namespace ZapretGUI.Core
                 }
             }
 
-            var currentLines = File.ReadAllLines(targetFile)
-                                   .Where(l => !string.IsNullOrWhiteSpace(l))
-                                   .Select(l => l.Trim())
-                                   .ToList();
+            var currentLinesRaw = await File.ReadAllLinesAsync(targetFile);
+            var currentLines = currentLinesRaw.Where(l => !string.IsNullOrWhiteSpace(l)).Select(l => l.Trim()).ToList();
 
             var newLines = currentLines.Where(l => !allModDomains.Contains(l)).ToList();
-
             newLines.AddRange(activeModDomains);
 
-            File.WriteAllLines(targetFile, newLines.Distinct(StringComparer.OrdinalIgnoreCase));
+            await File.WriteAllLinesAsync(targetFile, newLines.Distinct(StringComparer.OrdinalIgnoreCase));
         }
 
-        public void SyncActiveBatMods()
+        public async Task SyncActiveBatModsAsync()
         {
             if (!Directory.Exists(_zapretFilesPath)) return;
 
-            foreach (var file in Directory.GetFiles(_zapretFilesPath, "mod_*.bat"))
-                try { File.Delete(file); } catch { }
-
-            foreach (var modId in SettingsManager.Current.ActiveBatMods)
+            await Task.Run(() =>
             {
-                var sourceBat = Path.Combine(_strategiesPath, modId, "strategy.bat");
-                if (File.Exists(sourceBat))
+                foreach (var file in Directory.GetFiles(_zapretFilesPath, "mod_*.bat"))
+                    try { File.Delete(file); } catch { }
+
+                foreach (var modId in SettingsManager.Current.ActiveBatMods)
                 {
-                    var destBat = Path.Combine(_zapretFilesPath, $"mod_{modId}.bat");
-                    try { File.Copy(sourceBat, destBat, true); } catch { }
+                    var sourceBat = Path.Combine(_strategiesPath, modId, "strategy.bat");
+                    if (File.Exists(sourceBat))
+                    {
+                        var destBat = Path.Combine(_zapretFilesPath, $"mod_{modId}.bat");
+                        try { File.Copy(sourceBat, destBat, true); } catch { }
+                    }
                 }
-            }
+            });
         }
     }
 }
