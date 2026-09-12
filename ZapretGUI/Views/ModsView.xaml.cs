@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
@@ -23,7 +24,6 @@ namespace ZapretGUI.Views
 
         private string _currentEditingFilePath = "";
 
-        // Экшен, который выполнится при нажатии "Да" в окне подтверждения
         private Action _pendingConfirmAction;
 
         public ModsView()
@@ -397,6 +397,101 @@ namespace ZapretGUI.Views
         {
             AudioHelper.PlayClick();
             EditorOverlay.Visibility = Visibility.Collapsed;
+        }
+
+        // --- ЛОГИКА ИМПОРТА ИЗ ZIP ---
+        private void BtnImportMod_Click(object sender, RoutedEventArgs e)
+        {
+            AudioHelper.PlayClick();
+
+            var openFileDialog = new Microsoft.Win32.OpenFileDialog
+            {
+                Filter = "Архивы модов (*.zip;*.netfix-mod)|*.zip;*.netfix-mod|Все файлы (*.*)|*.*",
+                Title = "Выберите архив с модом"
+            };
+
+            if (openFileDialog.ShowDialog() == true)
+            {
+                string tempDir = Path.Combine(Path.GetTempPath(), "ZapretGUI_Mod_" + Guid.NewGuid().ToString());
+                try
+                {
+                    Directory.CreateDirectory(tempDir);
+                    ZipFile.ExtractToDirectory(openFileDialog.FileName, tempDir);
+
+                    // Ищем mod.json рекурсивно (помогает, если файлы в архиве лежат внутри папки)
+                    string[] jsonFiles = Directory.GetFiles(tempDir, "mod.json", SearchOption.AllDirectories);
+                    if (jsonFiles.Length == 0)
+                    {
+                        System.Windows.MessageBox.Show("В архиве не найден файл mod.json. Убедитесь, что это корректный мод.", "Ошибка импорта", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        return;
+                    }
+
+                    string jsonPath = jsonFiles[0];
+                    string modRootPath = Path.GetDirectoryName(jsonPath);
+
+                    // Читаем метаданные
+                    var meta = System.Text.Json.JsonSerializer.Deserialize<ModMetaData>(
+                        File.ReadAllText(jsonPath),
+                        new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }
+                    );
+
+                    if (meta == null)
+                    {
+                        System.Windows.MessageBox.Show("Файл mod.json поврежден.", "Ошибка импорта", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        return;
+                    }
+
+                    // Формируем безопасное название папки из названия архива
+                    string safeId = Path.GetFileNameWithoutExtension(openFileDialog.FileName).Replace(" ", "_").ToLower();
+                    var invalidChars = Path.GetInvalidFileNameChars();
+                    safeId = new string(safeId.Where(c => !invalidChars.Contains(c)).ToArray());
+                    if (string.IsNullOrEmpty(safeId)) safeId = $"mod_{DateTime.Now:HHmmss}";
+
+                    // Определяем конечную папку
+                    string folderType = meta.IsBatStrategy ? "strategies" : "lists";
+                    string destPath = Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, folderType, safeId);
+
+                    // Защита от перезаписи (если мод с таким именем папки уже существует)
+                    int counter = 1;
+                    string originalId = safeId;
+                    while (Directory.Exists(destPath))
+                    {
+                        safeId = $"{originalId}_{counter}";
+                        destPath = Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, folderType, safeId);
+                        counter++;
+                    }
+
+                    Directory.CreateDirectory(destPath);
+
+                    // Рекурсивно копируем всё содержимое извлеченной папки в конечную
+                    foreach (var file in Directory.GetFiles(modRootPath, "*.*", SearchOption.AllDirectories))
+                    {
+                        string relativePath = file.Substring(modRootPath.Length + 1);
+                        string targetPath = Path.Combine(destPath, relativePath);
+                        Directory.CreateDirectory(Path.GetDirectoryName(targetPath));
+                        File.Copy(file, targetPath, true);
+                    }
+
+                    // Если тип загруженного мода не совпадает с текущей вкладкой, предупреждаем пользователя
+                    if ((meta.IsBatStrategy && _currentTab != ModType.BatStrategy) || (!meta.IsBatStrategy && _currentTab != ModType.DomainList))
+                    {
+                        System.Windows.MessageBox.Show($"Мод '{meta.Name}' успешно установлен, но он относится к другой категории. Переключите вкладку, чтобы увидеть его.", "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
+                    }
+                    else
+                    {
+                        LoadCurrentMods();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Windows.MessageBox.Show($"Ошибка при импорте мода:\n{ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+                finally
+                {
+                    if (Directory.Exists(tempDir))
+                        try { Directory.Delete(tempDir, true); } catch { }
+                }
+            }
         }
     }
 }

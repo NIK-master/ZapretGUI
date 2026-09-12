@@ -174,19 +174,14 @@
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
-            <Grid Grid.Row="0" Margin="0,0,0,15">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
+            <!-- Шапка и Action Bar (Перенесены друг под друга) -->
+            <StackPanel Grid.Row="0" Margin="0,0,0,10">
+                <TextBlock x:Name="TxtCategoryTitle" Text=".bat Стратегии" FontSize="22" FontWeight="Bold"/>
+                <TextBlock x:Name="TxtCategoryDesc" Text="Пользовательские скрипты обхода для специфичных задач." Foreground="#888888" FontSize="13" Margin="0,5,0,15" TextWrapping="Wrap"/>
 
-                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,20,0">
-                    <TextBlock x:Name="TxtCategoryTitle" Text=".bat Стратегии" FontSize="22" FontWeight="Bold"/>
-                    <TextBlock x:Name="TxtCategoryDesc" Text="Пользовательские скрипты обхода для специфичных задач." Foreground="#888888" FontSize="13" Margin="0,5,0,0" TextWrapping="Wrap"/>
-                </StackPanel>
-
-                <StackPanel x:Name="ActionButtonsPanel" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Button Background="Transparent" Foreground="#F44336" BorderBrush="#333333" BorderThickness="1" Padding="12,6" Margin="0,0,10,0" Cursor="Hand" Click="BtnDisableAll_Click">
+                <!-- WrapPanel автоматически переносит кнопки, если не хватает ширины -->
+                <WrapPanel x:Name="ActionButtonsPanel" Orientation="Horizontal">
+                    <Button Background="Transparent" Foreground="#F44336" BorderBrush="#333333" BorderThickness="1" Padding="12,6" Margin="0,0,10,10" Cursor="Hand" Click="BtnDisableAll_Click">
                         <Button.Resources>
                             <Style TargetType="Border">
                                 <Setter Property="CornerRadius" Value="6"/>
@@ -197,7 +192,20 @@
                             <TextBlock Text="Отключить всё" VerticalAlignment="Center" FontWeight="SemiBold"/>
                         </StackPanel>
                     </Button>
-                    <Button Background="Transparent" Foreground="#A0A0A0" BorderBrush="#333333" BorderThickness="1" Padding="12,6" Margin="0,0,10,0" Cursor="Hand" Click="BtnOpenModsFolder_Click">
+
+                    <Button Background="Transparent" Foreground="#60A5FA" BorderBrush="#333333" BorderThickness="1" Padding="12,6" Margin="0,0,10,10" Cursor="Hand" Click="BtnImportMod_Click">
+                        <Button.Resources>
+                            <Style TargetType="Border">
+                                <Setter Property="CornerRadius" Value="6"/>
+                            </Style>
+                        </Button.Resources>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE8B5;" FontFamily="Segoe MDL2 Assets" Margin="0,1,6,0" FontSize="14" VerticalAlignment="Center"/>
+                            <TextBlock Text="Импорт (.zip)" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                        </StackPanel>
+                    </Button>
+
+                    <Button Background="Transparent" Foreground="#A0A0A0" BorderBrush="#333333" BorderThickness="1" Padding="12,6" Margin="0,0,10,10" Cursor="Hand" Click="BtnOpenModsFolder_Click">
                         <Button.Resources>
                             <Style TargetType="Border">
                                 <Setter Property="CornerRadius" Value="6"/>
@@ -208,7 +216,8 @@
                             <TextBlock Text="Папка" VerticalAlignment="Center" FontWeight="SemiBold"/>
                         </StackPanel>
                     </Button>
-                    <Button Background="{DynamicResource BrandSuccessBrush}" Foreground="White" BorderThickness="0" Padding="12,6" Cursor="Hand" Click="BtnCreateMod_Click">
+
+                    <Button Background="{DynamicResource BrandSuccessBrush}" Foreground="White" BorderThickness="0" Padding="12,6" Margin="0,0,10,10" Cursor="Hand" Click="BtnCreateMod_Click">
                         <Button.Resources>
                             <Style TargetType="Border">
                                 <Setter Property="CornerRadius" Value="6"/>
@@ -219,8 +228,8 @@
                             <TextBlock Text="Создать" VerticalAlignment="Center" FontWeight="Bold"/>
                         </StackPanel>
                     </Button>
-                </StackPanel>
-            </Grid>
+                </WrapPanel>
+            </StackPanel>
 
             <ScrollViewer x:Name="ModsListsPanel" Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="0,0,15,0">
                 <StackPanel>

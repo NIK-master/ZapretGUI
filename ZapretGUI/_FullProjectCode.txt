@@ -3850,7 +3850,6 @@ namespace ZapretGUI.Views
 
             if (Directory.Exists(folderPath))
             {
-                // ИЩЕМ И СТАНДАРТНЫЕ КОНФИГИ И МОДЫ
                 var batFiles = System.IO.Directory.GetFiles(folderPath, "*.bat")
                     .Where(f =>
                     {
@@ -4494,35 +4493,38 @@ namespace ZapretGUI.Views
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
-            <Grid Grid.Row="0" Margin="0,0,0,15">
-                <Grid.ColumnDefinitions>
-                    <!-- Даем тексту сжиматься, а кнопкам занимать ровно столько места, сколько нужно -->
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
+            <!-- Шапка и Action Bar (Перенесены друг под друга) -->
+            <StackPanel Grid.Row="0" Margin="0,0,0,10">
+                <TextBlock x:Name="TxtCategoryTitle" Text=".bat Стратегии" FontSize="22" FontWeight="Bold"/>
+                <TextBlock x:Name="TxtCategoryDesc" Text="Пользовательские скрипты обхода для специфичных задач." Foreground="#888888" FontSize="13" Margin="0,5,0,15" TextWrapping="Wrap"/>
 
-                <!-- Добавили Margin справа, чтобы текст гарантированно не прилипал к кнопкам -->
-                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,20,0">
-                    <TextBlock x:Name="TxtCategoryTitle" Text=".bat Стратегии" FontSize="22" FontWeight="Bold"/>
-                    <!-- Включили TextWrapping="Wrap", чтобы длинный текст уходил на новую строку -->
-                    <TextBlock x:Name="TxtCategoryDesc" Text="Пользовательские скрипты обхода для специфичных задач." Foreground="#888888" FontSize="13" Margin="0,5,0,0" TextWrapping="Wrap"/>
-                </StackPanel>
-
-                <!-- ИСПРАВЛЕННЫЕ КНОПКИ ACTION BAR -->
-                <StackPanel x:Name="ActionButtonsPanel" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Button Background="Transparent" Foreground="#F44336" BorderBrush="#333333" BorderThickness="1" Padding="12,6" Margin="0,0,10,0" Cursor="Hand" Click="BtnDisableAll_Click">
+                <!-- WrapPanel автоматически переносит кнопки, если не хватает ширины -->
+                <WrapPanel x:Name="ActionButtonsPanel" Orientation="Horizontal">
+                    <Button Background="Transparent" Foreground="#F44336" BorderBrush="#333333" BorderThickness="1" Padding="12,6" Margin="0,0,10,10" Cursor="Hand" Click="BtnDisableAll_Click">
                         <Button.Resources>
                             <Style TargetType="Border">
                                 <Setter Property="CornerRadius" Value="6"/>
                             </Style>
                         </Button.Resources>
                         <StackPanel Orientation="Horizontal">
-                            <!-- Заменили глиф на стабильный E711 -->
                             <TextBlock Text="&#xE711;" FontFamily="Segoe MDL2 Assets" Margin="0,1,6,0" FontSize="11" VerticalAlignment="Center" FontWeight="Bold"/>
                             <TextBlock Text="Отключить всё" VerticalAlignment="Center" FontWeight="SemiBold"/>
                         </StackPanel>
                     </Button>
-                    <Button Background="Transparent" Foreground="#A0A0A0" BorderBrush="#333333" BorderThickness="1" Padding="12,6" Margin="0,0,10,0" Cursor="Hand" Click="BtnOpenModsFolder_Click">
+
+                    <Button Background="Transparent" Foreground="#60A5FA" BorderBrush="#333333" BorderThickness="1" Padding="12,6" Margin="0,0,10,10" Cursor="Hand" Click="BtnImportMod_Click">
+                        <Button.Resources>
+                            <Style TargetType="Border">
+                                <Setter Property="CornerRadius" Value="6"/>
+                            </Style>
+                        </Button.Resources>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE8B5;" FontFamily="Segoe MDL2 Assets" Margin="0,1,6,0" FontSize="14" VerticalAlignment="Center"/>
+                            <TextBlock Text="Импорт (.zip)" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                        </StackPanel>
+                    </Button>
+
+                    <Button Background="Transparent" Foreground="#A0A0A0" BorderBrush="#333333" BorderThickness="1" Padding="12,6" Margin="0,0,10,10" Cursor="Hand" Click="BtnOpenModsFolder_Click">
                         <Button.Resources>
                             <Style TargetType="Border">
                                 <Setter Property="CornerRadius" Value="6"/>
@@ -4533,7 +4535,8 @@ namespace ZapretGUI.Views
                             <TextBlock Text="Папка" VerticalAlignment="Center" FontWeight="SemiBold"/>
                         </StackPanel>
                     </Button>
-                    <Button Background="{DynamicResource BrandSuccessBrush}" Foreground="White" BorderThickness="0" Padding="12,6" Cursor="Hand" Click="BtnCreateMod_Click">
+
+                    <Button Background="{DynamicResource BrandSuccessBrush}" Foreground="White" BorderThickness="0" Padding="12,6" Margin="0,0,10,10" Cursor="Hand" Click="BtnCreateMod_Click">
                         <Button.Resources>
                             <Style TargetType="Border">
                                 <Setter Property="CornerRadius" Value="6"/>
@@ -4544,10 +4547,9 @@ namespace ZapretGUI.Views
                             <TextBlock Text="Создать" VerticalAlignment="Center" FontWeight="Bold"/>
                         </StackPanel>
                     </Button>
-                </StackPanel>
-            </Grid>
+                </WrapPanel>
+            </StackPanel>
 
-            <!-- ПАНЕЛЬ 1: ОДНА ШИРОКАЯ КОЛОНКА (Вертикальное расположение) -->
             <ScrollViewer x:Name="ModsListsPanel" Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="0,0,15,0">
                 <StackPanel>
                     <!-- Секция Включенных -->
@@ -4568,7 +4570,6 @@ namespace ZapretGUI.Views
                 </StackPanel>
             </ScrollViewer>
 
-            <!-- ПАНЕЛЬ 2: РУКОВОДСТВО -->
             <ScrollViewer x:Name="GuidePanel" Grid.Row="1" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" Padding="0,0,20,0">
                 <StackPanel>
                     <Border Background="#1A1A00" BorderBrush="{DynamicResource BrandSuccessBrush}" BorderThickness="1" CornerRadius="8" Padding="15" Margin="0,0,0,20">
@@ -4651,6 +4652,33 @@ namespace ZapretGUI.Views
             </Border>
         </Grid>
 
+        <!-- ОВЕРЛЕЙ ПОДТВЕРЖДЕНИЯ ДЕЙСТВИЙ (Новый) -->
+        <Grid x:Name="ConfirmOverlay" Grid.ColumnSpan="3" Background="#CC000000" Visibility="Collapsed" Panel.ZIndex="300">
+            <Border Background="#141414" BorderBrush="#2A2A2A" BorderThickness="1" CornerRadius="12" Width="400" Padding="20" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <StackPanel>
+                    <TextBlock x:Name="TxtConfirmTitle" Text="Подтверждение" FontSize="18" FontWeight="Bold" Margin="0,0,0,10"/>
+                    <TextBlock x:Name="TxtConfirmMessage" Text="Вы уверены?" Foreground="#CCCCCC" FontSize="14" TextWrapping="Wrap" Margin="0,0,0,20"/>
+
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button Content="Отмена" Background="Transparent" Foreground="#A0A0A0" BorderBrush="#333333" BorderThickness="1" Padding="15,6" Margin="0,0,10,0" Cursor="Hand" Click="BtnCancelConfirm_Click">
+                            <Button.Resources>
+                                <Style TargetType="Border">
+                                    <Setter Property="CornerRadius" Value="6"/>
+                                </Style>
+                            </Button.Resources>
+                        </Button>
+                        <Button x:Name="BtnExecuteConfirm" Content="Да" Background="#F44336" Foreground="White" BorderThickness="0" Padding="15,6" Cursor="Hand" Click="BtnExecuteConfirm_Click">
+                            <Button.Resources>
+                                <Style TargetType="Border">
+                                    <Setter Property="CornerRadius" Value="6"/>
+                                </Style>
+                            </Button.Resources>
+                        </Button>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Grid>
+
     </Grid>
 </UserControl>
 
@@ -4663,6 +4691,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
@@ -4682,6 +4711,8 @@ namespace ZapretGUI.Views
         private ObservableCollection<UIModItem> _activeMods = new();
 
         private string _currentEditingFilePath = "";
+
+        private Action _pendingConfirmAction;
 
         public ModsView()
         {
@@ -4920,24 +4951,54 @@ namespace ZapretGUI.Views
             SettingsManager.Save();
         }
 
+        // --- ЛОГИКА КАСТОМНЫХ ОКНА ПОДТВЕРЖДЕНИЯ ---
+
+        private void ShowConfirmDialog(string title, string message, string confirmBtnText, System.Windows.Media.Brush confirmBtnBrush, Action onConfirm)
+        {
+            TxtConfirmTitle.Text = title;
+            TxtConfirmMessage.Text = message;
+            BtnExecuteConfirm.Content = confirmBtnText;
+            BtnExecuteConfirm.Background = confirmBtnBrush;
+            _pendingConfirmAction = onConfirm;
+            ConfirmOverlay.Visibility = Visibility.Visible;
+        }
+
+        private void BtnCancelConfirm_Click(object sender, RoutedEventArgs e)
+        {
+            AudioHelper.PlayClick();
+            ConfirmOverlay.Visibility = Visibility.Collapsed;
+            _pendingConfirmAction = null;
+        }
+
+        private void BtnExecuteConfirm_Click(object sender, RoutedEventArgs e)
+        {
+            AudioHelper.PlayClick();
+            ConfirmOverlay.Visibility = Visibility.Collapsed;
+            _pendingConfirmAction?.Invoke();
+            _pendingConfirmAction = null;
+        }
+
         private void BtnDisableAll_Click(object sender, RoutedEventArgs e)
         {
             AudioHelper.PlayClick();
             if (_activeMods.Count == 0) return;
 
-            var result = System.Windows.MessageBox.Show("Вы уверены, что хотите отключить все моды в этой категории?", "Подтверждение", MessageBoxButton.YesNo, MessageBoxImage.Question);
-            if (result != MessageBoxResult.Yes) return;
-
-            var modsToDisable = _activeMods.ToList();
-            foreach (var mod in modsToDisable)
-            {
-                mod.IsActive = false;
-                _activeMods.Remove(mod);
-                _availableMods.Add(mod);
-            }
-
-            SaveAndApplyMods();
-            UpdateHeadersVisibility();
+            ShowConfirmDialog(
+                "Отключить всё",
+                "Вы уверены, что хотите отключить все моды в этой категории?",
+                "Отключить",
+                UIHelper.GetBrushFromHex("#F44336"),
+                () => {
+                    var modsToDisable = _activeMods.ToList();
+                    foreach (var mod in modsToDisable)
+                    {
+                        mod.IsActive = false;
+                        _activeMods.Remove(mod);
+                        _availableMods.Add(mod);
+                    }
+                    SaveAndApplyMods();
+                    UpdateHeadersVisibility();
+                });
         }
 
         private void BtnDeleteMod_Click(object sender, RoutedEventArgs e)
@@ -4945,36 +5006,41 @@ namespace ZapretGUI.Views
             AudioHelper.PlayClick();
             if ((sender as FrameworkElement)?.DataContext is UIModItem mod)
             {
-                var result = System.Windows.MessageBox.Show($"Удалить мод '{mod.Meta.Name}' навсегда?\nЭто удалит все файлы мода с диска.", "Удаление", MessageBoxButton.YesNo, MessageBoxImage.Warning);
-                if (result == MessageBoxResult.Yes)
-                {
-                    try
-                    {
-                        string folderName = _currentTab == ModType.BatStrategy ? "strategies" : "lists";
-                        string modFolderPath = Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, folderName, mod.Id);
-
-                        if (Directory.Exists(modFolderPath))
-                            Directory.Delete(modFolderPath, true);
-
-                        if (mod.IsActive)
+                ShowConfirmDialog(
+                    "Удаление мода",
+                    $"Удалить мод '{mod.Meta.Name}' навсегда?\nЭто удалит все файлы мода с диска.",
+                    "Удалить",
+                    UIHelper.GetBrushFromHex("#F44336"),
+                    () => {
+                        try
                         {
-                            _activeMods.Remove(mod);
-                            SaveAndApplyMods();
-                        }
-                        else
-                        {
-                            _availableMods.Remove(mod);
-                        }
+                            string folderName = _currentTab == ModType.BatStrategy ? "strategies" : "lists";
+                            string modFolderPath = Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, folderName, mod.Id);
 
-                        UpdateHeadersVisibility();
-                    }
-                    catch (Exception ex)
-                    {
-                        System.Windows.MessageBox.Show($"Не удалось удалить мод.\nОшибка: {ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
-                    }
-                }
+                            if (Directory.Exists(modFolderPath))
+                                Directory.Delete(modFolderPath, true);
+
+                            if (mod.IsActive)
+                            {
+                                _activeMods.Remove(mod);
+                                SaveAndApplyMods();
+                            }
+                            else
+                            {
+                                _availableMods.Remove(mod);
+                            }
+
+                            UpdateHeadersVisibility();
+                        }
+                        catch (Exception ex)
+                        {
+                            System.Windows.MessageBox.Show($"Не удалось удалить мод.\nОшибка: {ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                        }
+                    });
             }
         }
+
+        // --- ЛОГИКА ВСТРОЕННОГО РЕДАКТОРА ---
 
         private void BtnEditMod_Click(object sender, RoutedEventArgs e)
         {
@@ -5019,6 +5085,101 @@ namespace ZapretGUI.Views
         {
             AudioHelper.PlayClick();
             EditorOverlay.Visibility = Visibility.Collapsed;
+        }
+
+        // --- ЛОГИКА ИМПОРТА ИЗ ZIP ---
+        private void BtnImportMod_Click(object sender, RoutedEventArgs e)
+        {
+            AudioHelper.PlayClick();
+
+            var openFileDialog = new Microsoft.Win32.OpenFileDialog
+            {
+                Filter = "Архивы модов (*.zip;*.netfix-mod)|*.zip;*.netfix-mod|Все файлы (*.*)|*.*",
+                Title = "Выберите архив с модом"
+            };
+
+            if (openFileDialog.ShowDialog() == true)
+            {
+                string tempDir = Path.Combine(Path.GetTempPath(), "ZapretGUI_Mod_" + Guid.NewGuid().ToString());
+                try
+                {
+                    Directory.CreateDirectory(tempDir);
+                    ZipFile.ExtractToDirectory(openFileDialog.FileName, tempDir);
+
+                    // Ищем mod.json рекурсивно (помогает, если файлы в архиве лежат внутри папки)
+                    string[] jsonFiles = Directory.GetFiles(tempDir, "mod.json", SearchOption.AllDirectories);
+                    if (jsonFiles.Length == 0)
+                    {
+                        System.Windows.MessageBox.Show("В архиве не найден файл mod.json. Убедитесь, что это корректный мод.", "Ошибка импорта", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        return;
+                    }
+
+                    string jsonPath = jsonFiles[0];
+                    string modRootPath = Path.GetDirectoryName(jsonPath);
+
+                    // Читаем метаданные
+                    var meta = System.Text.Json.JsonSerializer.Deserialize<ModMetaData>(
+                        File.ReadAllText(jsonPath),
+                        new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }
+                    );
+
+                    if (meta == null)
+                    {
+                        System.Windows.MessageBox.Show("Файл mod.json поврежден.", "Ошибка импорта", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        return;
+                    }
+
+                    // Формируем безопасное название папки из названия архива
+                    string safeId = Path.GetFileNameWithoutExtension(openFileDialog.FileName).Replace(" ", "_").ToLower();
+                    var invalidChars = Path.GetInvalidFileNameChars();
+                    safeId = new string(safeId.Where(c => !invalidChars.Contains(c)).ToArray());
+                    if (string.IsNullOrEmpty(safeId)) safeId = $"mod_{DateTime.Now:HHmmss}";
+
+                    // Определяем конечную папку
+                    string folderType = meta.IsBatStrategy ? "strategies" : "lists";
+                    string destPath = Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, folderType, safeId);
+
+                    // Защита от перезаписи (если мод с таким именем папки уже существует)
+                    int counter = 1;
+                    string originalId = safeId;
+                    while (Directory.Exists(destPath))
+                    {
+                        safeId = $"{originalId}_{counter}";
+                        destPath = Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, folderType, safeId);
+                        counter++;
+                    }
+
+                    Directory.CreateDirectory(destPath);
+
+                    // Рекурсивно копируем всё содержимое извлеченной папки в конечную
+                    foreach (var file in Directory.GetFiles(modRootPath, "*.*", SearchOption.AllDirectories))
+                    {
+                        string relativePath = file.Substring(modRootPath.Length + 1);
+                        string targetPath = Path.Combine(destPath, relativePath);
+                        Directory.CreateDirectory(Path.GetDirectoryName(targetPath));
+                        File.Copy(file, targetPath, true);
+                    }
+
+                    // Если тип загруженного мода не совпадает с текущей вкладкой, предупреждаем пользователя
+                    if ((meta.IsBatStrategy && _currentTab != ModType.BatStrategy) || (!meta.IsBatStrategy && _currentTab != ModType.DomainList))
+                    {
+                        System.Windows.MessageBox.Show($"Мод '{meta.Name}' успешно установлен, но он относится к другой категории. Переключите вкладку, чтобы увидеть его.", "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
+                    }
+                    else
+                    {
+                        LoadCurrentMods();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Windows.MessageBox.Show($"Ошибка при импорте мода:\n{ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+                finally
+                {
+                    if (Directory.Exists(tempDir))
+                        try { Directory.Delete(tempDir, true); } catch { }
+                }
+            }
         }
     }
 }
