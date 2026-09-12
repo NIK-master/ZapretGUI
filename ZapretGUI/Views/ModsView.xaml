@@ -90,13 +90,20 @@
                         <TextBlock Text="{Binding Meta.Description}" FontSize="13" Foreground="#AAAAAA" TextWrapping="Wrap"/>
                     </StackPanel>
 
+                    <!-- Блок с кнопками Включить, Изменить, Экспорт, Удалить -->
                     <StackPanel Grid.Column="1" VerticalAlignment="Center" MinWidth="130">
                         <Button Style="{StaticResource ModActionButton}" Click="BtnToggleMod_Click" HorizontalAlignment="Stretch"/>
                         <StackPanel Orientation="Horizontal" Margin="0,8,0,0" HorizontalAlignment="Center">
-                            <Button Background="Transparent" Foreground="#888888" BorderThickness="0" Cursor="Hand" FontSize="12" Margin="0,0,15,0" Click="BtnEditMod_Click">
+                            <Button Background="Transparent" Foreground="#888888" BorderThickness="0" Cursor="Hand" FontSize="12" Margin="0,0,10,0" Click="BtnEditMod_Click">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="&#xE70F;" FontFamily="Segoe MDL2 Assets" FontSize="11" Margin="0,2,4,0"/>
                                     <TextBlock Text="Изменить" FontSize="12"/>
+                                </StackPanel>
+                            </Button>
+                            <Button Background="Transparent" Foreground="#60A5FA" BorderThickness="0" Cursor="Hand" FontSize="12" Margin="0,0,10,0" Click="BtnExportMod_Click">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE78C;" FontFamily="Segoe MDL2 Assets" FontSize="11" Margin="0,2,4,0"/>
+                                    <TextBlock Text="Экспорт" FontSize="12"/>
                                 </StackPanel>
                             </Button>
                             <Button Background="Transparent" Foreground="#F44336" BorderThickness="0" Cursor="Hand" FontSize="12" Click="BtnDeleteMod_Click">

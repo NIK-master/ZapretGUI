@@ -493,5 +493,49 @@ namespace ZapretGUI.Views
                 }
             }
         }
+
+        // --- ЛОГИКА ЭКСПОРТА МОДА В ZIP ---
+        private void BtnExportMod_Click(object sender, RoutedEventArgs e)
+        {
+            AudioHelper.PlayClick();
+
+            if ((sender as FrameworkElement)?.DataContext is UIModItem mod)
+            {
+                var saveFileDialog = new Microsoft.Win32.SaveFileDialog
+                {
+                    Filter = "Архивы модов (*.zip)|*.zip|Мод NetFix (*.netfix-mod)|*.netfix-mod|Все файлы (*.*)|*.*",
+                    Title = "Экспорт мода",
+                    FileName = $"{mod.Id}_export.zip"
+                };
+
+                if (saveFileDialog.ShowDialog() == true)
+                {
+                    try
+                    {
+                        string folderName = _currentTab == ModType.BatStrategy ? "strategies" : "lists";
+                        string modFolderPath = Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, folderName, mod.Id);
+
+                        if (!Directory.Exists(modFolderPath))
+                        {
+                            System.Windows.MessageBox.Show("Папка мода не найдена на диске!", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                            return;
+                        }
+
+                        // Удаляем старый файл, если пользователь решил его перезаписать
+                        if (File.Exists(saveFileDialog.FileName))
+                            File.Delete(saveFileDialog.FileName);
+
+                        // Упаковываем всю директорию мода в архив
+                        System.IO.Compression.ZipFile.CreateFromDirectory(modFolderPath, saveFileDialog.FileName);
+
+                        System.Windows.MessageBox.Show($"Мод '{mod.Meta.Name}' успешно экспортирован и готов к публикации!", "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Windows.MessageBox.Show($"Ошибка при экспорте мода:\n{ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                    }
+                }
+            }
+        }
     }
 }
