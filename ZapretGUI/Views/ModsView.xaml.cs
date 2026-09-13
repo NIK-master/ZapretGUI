@@ -130,13 +130,13 @@ namespace ZapretGUI.Views
             TxtNewModAuthor.Text = "You";
             TxtNewModDesc.Text = "Описание мода";
 
-            CreateModOverlay.Visibility = Visibility.Visible;
+            AnimationHelper.ShowOverlay(CreateModOverlay, CreateContentBorder);
         }
 
         private void BtnCloseCreateMod_Click(object sender, RoutedEventArgs e)
         {
             AudioHelper.PlayClick();
-            CreateModOverlay.Visibility = Visibility.Collapsed;
+            AnimationHelper.HideOverlay(CreateModOverlay, CreateContentBorder);
         }
 
         private async void BtnConfirmCreateMod_Click(object sender, RoutedEventArgs e)
@@ -180,7 +180,7 @@ namespace ZapretGUI.Views
                 else
                     await File.WriteAllTextAsync(Path.Combine(modFolderPath, "list.txt"), "");
 
-                CreateModOverlay.Visibility = Visibility.Collapsed;
+                AnimationHelper.HideOverlay(CreateModOverlay, CreateContentBorder);
                 await LoadCurrentModsAsync();
             }
             catch (Exception ex)
@@ -196,19 +196,10 @@ namespace ZapretGUI.Views
             if ((sender as FrameworkElement)?.DataContext is UIModItem mod)
             {
                 var btn = sender as System.Windows.Controls.Button;
-                var border = FindParent<System.Windows.Controls.Border>(btn, "ModCardContainer");
+                var border = UIHelper.FindParent<System.Windows.Controls.Border>(btn, "ModCardContainer");
 
                 if (border != null)
-                {
-                    var fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(150));
-                    var slideOut = new DoubleAnimation(0, mod.IsActive ? 30 : -30, TimeSpan.FromMilliseconds(150));
-
-                    border.RenderTransform = new TranslateTransform();
-                    border.BeginAnimation(OpacityProperty, fadeOut);
-                    border.RenderTransform.BeginAnimation(TranslateTransform.XProperty, slideOut);
-
-                    await Task.Delay(150);
-                }
+                    await AnimationHelper.SlideOutAndHideAsync(border, mod.IsActive);
 
                 mod.IsActive = !mod.IsActive;
 
@@ -226,20 +217,6 @@ namespace ZapretGUI.Views
                 await SaveAndApplyModsAsync();
                 UpdateHeadersVisibility();
             }
-        }
-
-        private T? FindParent<T>(DependencyObject child, string? name = null) where T : FrameworkElement
-        {
-            DependencyObject parent = VisualTreeHelper.GetParent(child);
-            while (parent != null)
-            {
-                if (parent is T typed && (name == null || typed.Name == name))
-                {
-                    return typed;
-                }
-                parent = VisualTreeHelper.GetParent(parent);
-            }
-            return null;
         }
 
         private async Task SaveAndApplyModsAsync()
@@ -270,20 +247,20 @@ namespace ZapretGUI.Views
             BtnExecuteConfirm.Content = confirmBtnText;
             BtnExecuteConfirm.Background = confirmBtnBrush;
             _pendingConfirmAction = onConfirm;
-            ConfirmOverlay.Visibility = Visibility.Visible;
+            AnimationHelper.ShowOverlay(ConfirmOverlay, ConfirmContentBorder);
         }
 
         private void BtnCancelConfirm_Click(object sender, RoutedEventArgs e)
         {
             AudioHelper.PlayClick();
-            ConfirmOverlay.Visibility = Visibility.Collapsed;
+            AnimationHelper.HideOverlay(ConfirmOverlay, ConfirmContentBorder);
             _pendingConfirmAction = null;
         }
 
         private void BtnExecuteConfirm_Click(object sender, RoutedEventArgs e)
         {
             AudioHelper.PlayClick();
-            ConfirmOverlay.Visibility = Visibility.Collapsed;
+            AnimationHelper.HideOverlay(ConfirmOverlay, ConfirmContentBorder);
             _pendingConfirmAction?.Invoke();
             _pendingConfirmAction = null;
         }
@@ -365,7 +342,7 @@ namespace ZapretGUI.Views
                 {
                     TxtEditorTitle.Text = $"Редактор: {mod.Meta.Name} ({fileName})";
                     EditorTextBox.Text = File.ReadAllText(_currentEditingFilePath);
-                    EditorOverlay.Visibility = Visibility.Visible;
+                    AnimationHelper.ShowOverlay(EditorOverlay, EditorContentBorder);
                 }
                 else
                 {
@@ -381,7 +358,7 @@ namespace ZapretGUI.Views
             {
                 await File.WriteAllTextAsync(_currentEditingFilePath, EditorTextBox.Text);
                 await SaveAndApplyModsAsync();
-                EditorOverlay.Visibility = Visibility.Collapsed;
+                AnimationHelper.HideOverlay(EditorOverlay, EditorContentBorder);
             }
             catch (Exception ex)
             {
@@ -392,7 +369,7 @@ namespace ZapretGUI.Views
         private void BtnCloseEditor_Click(object sender, RoutedEventArgs e)
         {
             AudioHelper.PlayClick();
-            EditorOverlay.Visibility = Visibility.Collapsed;
+            AnimationHelper.HideOverlay(EditorOverlay, EditorContentBorder);
         }
 
         private async void BtnImportMod_Click(object sender, RoutedEventArgs e)

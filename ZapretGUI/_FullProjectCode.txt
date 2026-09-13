@@ -20,6 +20,7 @@
 
             <localCore:ActiveStatusToBrushConverter x:Key="ActiveStatusToBrushConverter" />
             <localCore:ActiveStatusToIconConverter x:Key="ActiveStatusToIconConverter" />
+            <localCore:PingToBrushConverter x:Key="PingToBrushConverter" />
 
             <SolidColorBrush x:Key="BrandSuccessBrush" Color="#107C10" />
             <SolidColorBrush x:Key="BrandErrorBrush" Color="#D13438" />
@@ -28,6 +29,8 @@
             <SolidColorBrush x:Key="SurfaceBackgroundBrush" Color="#151515" />
             <SolidColorBrush x:Key="CardBorderBrush" Color="#2A2A2A" />
             <SolidColorBrush x:Key="CardHoverBorderBrush" Color="#4A4A4A" />
+            
+            
 
         </ResourceDictionary>
     </Application.Resources>
@@ -206,29 +209,25 @@ namespace ZapretGUI
 {
     public partial class MainWindow : Window
     {
-        private readonly ZapretManager _zapretManager;
         private readonly TrayIconManager _trayIconManager;
 
+        // Делаем представления Nullable. Они будут создаваться только при клике.
         private Views.HomeView _homeView;
-        private Views.SettingsView _settingsView;
-        private Views.DiagnosticsView _diagnosticsView = new Views.DiagnosticsView();
-        private Views.ModsView _modsView = new Views.ModsView();
+        private Views.SettingsView? _settingsView;
+        private Views.DiagnosticsView? _diagnosticsView;
+        private Views.ModsView? _modsView;
 
         public MainWindow()
         {
             InitializeComponent();
             SettingsManager.Load();
 
-            var modManager = new ModManager();
-            modManager.InitializeFolders();
-            modManager.SyncActiveBatMods();
-            modManager.ApplyListMods();
+            _ = InitializeModsAsync();
 
+            // Загружаем только главную страницу при старте
             _homeView = new Views.HomeView();
-            _settingsView = new Views.SettingsView();
             MainContentContainer.Content = _homeView;
 
-            _zapretManager = new ZapretManager();
             _trayIconManager = new TrayIconManager(this);
 
             var configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.json");
@@ -239,6 +238,14 @@ namespace ZapretGUI
             }
 
             _ = CheckUpdatesOnStartupAsync();
+        }
+
+        private async Task InitializeModsAsync()
+        {
+            var modManager = new ModManager();
+            modManager.InitializeFolders();
+            await modManager.SyncActiveBatModsAsync();
+            await modManager.ApplyListModsAsync();
         }
 
         private async Task CheckUpdatesOnStartupAsync()
@@ -263,7 +270,7 @@ namespace ZapretGUI
                 }
             }
 
-            var stopServicesAction = () => { if (IsBypassRunning()) ToggleBypass(); };
+            Action stopServicesAction = () => { if (IsBypassRunning()) ToggleBypass(); };
             var progress = new Progress<string>(status => _homeView.ShowUpdateProgress(status));
 
             var zapretUpdate = await Core.UpdateManager.CheckForCoreUpdateAsync("https://api.github.com/repos/flowseal/zapret-discord-youtube/releases/latest", SettingsManager.Current.ZapretCoreVersion, "Zapret", true);
@@ -303,31 +310,37 @@ namespace ZapretGUI
             }
         }
 
+        // --- ЛЕНИВАЯ ЗАГРУЗКА ВКЛАДОК ---
+
         private void BtnHome_Click(object sender, RoutedEventArgs e)
         {
-            if (MainContentContainer.Content == _homeView) 
-                return;
-
+            if (MainContentContainer.Content == _homeView) return;
             MainContentContainer.Content = _homeView;
             SetActiveTab(BtnHome);
         }
 
-        private void BtnSettings_Click(object sender, RoutedEventArgs e)
+        private void BtnMods_Click(object sender, RoutedEventArgs e)
         {
-            if (MainContentContainer.Content == _settingsView) 
-                return;
-
-            MainContentContainer.Content = _settingsView;
-            SetActiveTab(BtnSettings);
+            if (_modsView == null) _modsView = new Views.ModsView();
+            if (MainContentContainer.Content == _modsView) return;
+            MainContentContainer.Content = _modsView;
+            SetActiveTab(BtnMods);
         }
 
         private void BtnDiagnostics_Click(object sender, RoutedEventArgs e)
         {
-            if (MainContentContainer.Content == _diagnosticsView) 
-                return;
-
+            if (_diagnosticsView == null) _diagnosticsView = new Views.DiagnosticsView();
+            if (MainContentContainer.Content == _diagnosticsView) return;
             MainContentContainer.Content = _diagnosticsView;
             SetActiveTab(BtnDiagnostics);
+        }
+
+        private void BtnSettings_Click(object sender, RoutedEventArgs e)
+        {
+            if (_settingsView == null) _settingsView = new Views.SettingsView();
+            if (MainContentContainer.Content == _settingsView) return;
+            MainContentContainer.Content = _settingsView;
+            SetActiveTab(BtnSettings);
         }
 
         private void SetActiveTab(System.Windows.Controls.Button activeBtn)
@@ -385,7 +398,7 @@ namespace ZapretGUI
             }
         }
 
-        public bool IsBypassRunning() => _homeView.IsRunning;
+        public bool IsBypassRunning() => BypassController.Current.IsRunning;
 
         public void ToggleBypass() => _homeView.ToggleFromTray();
 
@@ -425,13 +438,95 @@ namespace ZapretGUI
             _trayIconManager.Dispose();
             base.OnClosed(e);
         }
+    }
+}
 
-        private void BtnMods_Click(object sender, RoutedEventArgs e)
+////////////////////////////////////////////////////////////////////////////////
+// ФАЙЛ: Core\AnimationHelper.cs
+////////////////////////////////////////////////////////////////////////////////
+
+using System;
+using System.Threading.Tasks;
+using System.Windows;
+using System.Windows.Media;
+using System.Windows.Media.Animation;
+using System.Windows.Media.Effects;
+
+namespace ZapretGUI.Core
+{
+    public static class AnimationHelper
+    {
+        public static void PlayGlitchEffect(UIElement grid, TranslateTransform translate, SkewTransform skew, DropShadowEffect shadow)
         {
-            if (MainContentContainer.Content == _modsView) 
-                return;
-            MainContentContainer.Content = _modsView;
-            SetActiveTab(BtnMods);
+            var shakeAnim = new DoubleAnimation(0, 10, TimeSpan.FromMilliseconds(40)) { AutoReverse = true, RepeatBehavior = new RepeatBehavior(4) };
+            var skewAnim = new DoubleAnimation(0, -3, TimeSpan.FromMilliseconds(30)) { AutoReverse = true, RepeatBehavior = new RepeatBehavior(5) };
+            var opacityAnim = new DoubleAnimation(1, 0.6, TimeSpan.FromMilliseconds(50)) { AutoReverse = true, RepeatBehavior = new RepeatBehavior(4) };
+            var shadowAnim = new DoubleAnimation(0, -15, TimeSpan.FromMilliseconds(40)) { AutoReverse = true, RepeatBehavior = new RepeatBehavior(4) };
+
+            shadowAnim.Completed += (s, e) => shadow.Opacity = 0;
+            shadow.Opacity = 1;
+
+            translate.BeginAnimation(TranslateTransform.XProperty, shakeAnim);
+            skew.BeginAnimation(SkewTransform.AngleXProperty, skewAnim);
+            grid.BeginAnimation(UIElement.OpacityProperty, opacityAnim);
+            shadow.BeginAnimation(DropShadowEffect.ShadowDepthProperty, shadowAnim);
+        }
+
+        public static void ShowOverlay(UIElement overlayGrid, FrameworkElement contentBorder)
+        {
+            overlayGrid.Visibility = Visibility.Visible;
+            overlayGrid.Opacity = 0;
+
+            overlayGrid.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromSeconds(0.2)));
+
+            if (contentBorder.RenderTransform is TransformGroup transformGroup)
+            {
+                var scale = transformGroup.Children[0] as ScaleTransform;
+                var translate = transformGroup.Children[1] as TranslateTransform;
+
+                if (scale != null && translate != null)
+                {
+                    var scaleUp = new DoubleAnimation(0.95, 1, TimeSpan.FromSeconds(0.2)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
+                    var slideUp = new DoubleAnimation(10, 0, TimeSpan.FromSeconds(0.2)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
+                    scale.BeginAnimation(ScaleTransform.ScaleXProperty, scaleUp);
+                    scale.BeginAnimation(ScaleTransform.ScaleYProperty, scaleUp);
+                    translate.BeginAnimation(TranslateTransform.YProperty, slideUp);
+                }
+            }
+        }
+
+        public static void HideOverlay(UIElement overlayGrid, FrameworkElement contentBorder)
+        {
+            var fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromSeconds(0.15));
+            fadeOut.Completed += (s, ev) => overlayGrid.Visibility = Visibility.Collapsed;
+            overlayGrid.BeginAnimation(UIElement.OpacityProperty, fadeOut);
+
+            if (contentBorder.RenderTransform is TransformGroup transformGroup)
+            {
+                var scale = transformGroup.Children[0] as ScaleTransform;
+                var translate = transformGroup.Children[1] as TranslateTransform;
+
+                if (scale != null && translate != null)
+                {
+                    var scaleDown = new DoubleAnimation(1, 0.95, TimeSpan.FromSeconds(0.15)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn } };
+                    var slideDown = new DoubleAnimation(0, 10, TimeSpan.FromSeconds(0.15)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn } };
+                    scale.BeginAnimation(ScaleTransform.ScaleXProperty, scaleDown);
+                    scale.BeginAnimation(ScaleTransform.ScaleYProperty, scaleDown);
+                    translate.BeginAnimation(TranslateTransform.YProperty, slideDown);
+                }
+            }
+        }
+
+        public static async Task SlideOutAndHideAsync(FrameworkElement element, bool isRightDirection, int durationMs = 150)
+        {
+            var fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(durationMs));
+            var slideOut = new DoubleAnimation(0, isRightDirection ? 30 : -30, TimeSpan.FromMilliseconds(durationMs));
+
+            element.RenderTransform = new TranslateTransform();
+            element.BeginAnimation(UIElement.OpacityProperty, fadeOut);
+            element.RenderTransform.BeginAnimation(TranslateTransform.XProperty, slideOut);
+
+            await Task.Delay(durationMs);
         }
     }
 }
@@ -516,6 +611,99 @@ namespace ZapretGUI.Core
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// ФАЙЛ: Core\BypassController.cs
+////////////////////////////////////////////////////////////////////////////////
+
+using System;
+using System.Threading.Tasks;
+
+namespace ZapretGUI.Core
+{
+    public class BypassController
+    {
+        public static BypassController Current { get; } = new BypassController();
+
+        public ZapretManager Zapret { get; } = new ZapretManager();
+        public TgProxyManager TgProxy { get; } = new TgProxyManager();
+        public NetworkMonitor NetMonitor { get; } = new NetworkMonitor();
+        public ZapretScanner Scanner { get; } = new ZapretScanner();
+
+        public bool IsRunning => Zapret.IsRunning() || TgProxy.IsRunning();
+
+        public event Action<string>? OnLog;
+
+        private BypassController()
+        {
+            Zapret.LogMessage += msg => OnLog?.Invoke(msg);
+            TgProxy.LogMessage += msg => OnLog?.Invoke(msg);
+            Scanner.LogMessage += msg => OnLog?.Invoke(msg);
+        }
+
+        public async Task StartServicesAsync(string profileName, bool useZapret, bool useTgProxy)
+        {
+            if (useZapret)
+            {
+                OnLog?.Invoke($"[Zapret] Подготовка профиля {profileName}...");
+                await Task.Delay(400);
+                OnLog?.Invoke($"[Zapret] Запуск службы...");
+                Zapret.Start(profileName);
+            }
+
+            if (useTgProxy)
+            {
+                OnLog?.Invoke("[TgWsProxy] Настройка маршрутов...");
+                await Task.Delay(300);
+                OnLog?.Invoke("[TgWsProxy] Запуск прокси...");
+                TgProxy.Start();
+            }
+        }
+
+        public void StopServices()
+        {
+            Zapret.Stop();
+            TgProxy.Stop();
+            OnLog?.Invoke("🛑 Все модули остановлены.");
+        }
+
+        public async Task RestartServicesAsync(string profileName)
+        {
+            StopServices();
+            await Task.Delay(1000);
+
+            if (SettingsManager.Current.ZapretEnabled)
+                Zapret.Start(profileName);
+
+            if (SettingsManager.Current.TgProxyEnabled)
+                TgProxy.Start();
+
+            OnLog?.Invoke("✅ Службы успешно перезапущены.");
+        }
+
+        public async Task<long> CheckPingAsync()
+        {
+            var hostToPing = AppConstants.AwsPingHost;
+            var portToPing = AppConstants.AwsPingPort;
+
+            var fullUrl = SettingsManager.Current.PingUrl;
+            if (!string.IsNullOrWhiteSpace(fullUrl))
+            {
+                if (Uri.TryCreate(fullUrl, UriKind.Absolute, out Uri? uri))
+                {
+                    hostToPing = uri.Host;
+                    portToPing = uri.Port > 0 ? uri.Port : 443;
+                }
+                else
+                {
+                    hostToPing = fullUrl;
+                }
+            }
+
+            return await NetworkHelper.TcpPingAsync(hostToPing, portToPing);
+        }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // ФАЙЛ: Core\DiagnosticsEngine.cs
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -564,6 +752,13 @@ namespace ZapretGUI.Core
             ["zapret"] = [AppConstants.ZapretProcessName, "zapret", "winws"],
             ["tgwsproxy"] = [AppConstants.TgProxyProcessName.ToLower(), "tg_ws_proxy", "flowseal"],
         };
+
+        private static readonly HttpClient _httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(12) };
+
+        static DiagnosticsEngine()
+        {
+            _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+        }
 
         public static async Task<(bool ok, double latencyMs, string error)> TcpConnectAsync(string ip, int port, double timeoutSec = 3.0)
         {
@@ -790,10 +985,8 @@ namespace ZapretGUI.Core
                 if (!result.SystemIps.Intersect(result.DohIps).Any())
                     result.Spoofed = true;
             }
-            else if 
-                (result.SystemIps.Count == 0) result.Spoofed = true;
-            else if 
-                (result.DohIps.Count == 0) result.Error = "1.1.1.1 недоступен";
+            else if (result.SystemIps.Count == 0) result.Spoofed = true;
+            else if (result.DohIps.Count == 0) result.Error = "1.1.1.1 недоступен";
             progress?.Invoke(1.0);
             return result;
         }
@@ -824,16 +1017,12 @@ namespace ZapretGUI.Core
             ];
             progress?.Invoke(0.1);
 
-            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(12) };
-            http.DefaultRequestHeaders.UserAgent.ParseAdd(
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
-
             foreach (var url in urls)
             {
                 try
                 {
                     var sw = Stopwatch.StartNew();
-                    var data = await http.GetByteArrayAsync(url);
+                    var data = await _httpClient.GetByteArrayAsync(url);
                     sw.Stop();
                     double sizeKb = data.Length / 1024.0;
                     if (sizeKb < 5) continue;
@@ -896,11 +1085,8 @@ namespace ZapretGUI.Core
             var dcOk = r.DcResults.Where(x => x.Ok).ToList();
             var pingOk = r.PingResults.Where(x => x.Ok).ToList();
 
-            if (r.DnsResult?.Spoofed == true) 
-                blocks.Add(BlockType.DnsSpoof);
-
-            if (r.DpiResult?.DpiDetected == true) 
-                blocks.Add(BlockType.SniBlock);
+            if (r.DnsResult?.Spoofed == true) blocks.Add(BlockType.DnsSpoof);
+            if (r.DpiResult?.DpiDetected == true) blocks.Add(BlockType.SniBlock);
 
             if (dcOk.Count == 0 && pingOk.Count > 0 && !blocks.Contains(BlockType.SniBlock))
                 blocks.Add(BlockType.IpBlock);
@@ -921,8 +1107,7 @@ namespace ZapretGUI.Core
                 }
             }
 
-            if (r.MediaResult?.Throttled == true) 
-                blocks.Add(BlockType.MediaThrottle);
+            if (r.MediaResult?.Throttled == true) blocks.Add(BlockType.MediaThrottle);
             return [.. blocks];
         }
 
@@ -966,65 +1151,6 @@ namespace ZapretGUI.Core
                 recs.Add("🎮  Discord UDP: доступен ✓, голос работает без дополнительных настроек.");
 
             return recs;
-        }
-
-        public static (string emoji, string title, string detail, string color) HumanVerdict(DiagReport r)
-        {
-            var blocks = new HashSet<BlockType>(r.BlockTypes);
-            var app = r.AppStatus;
-            var dcOk = r.DcResults.Count(x => x.Ok);
-            var dcTot = r.DcResults.Count;
-            var pingOk = r.PingResults.Any(p => p.Ok);
-            var bypass = app != null && app.ZapretRunning;
-
-            var isCb = SettingsManager.Current.ColorblindMode;
-            var successColor = isCb ? "#0078D7" : "#107C10";
-            var errorColor = isCb ? "#FF8C00" : "#D13438";
-            var warningColor = isCb ? "#FFB900" : "#FF8C00";
-
-            if (app?.TgWsProxyRunning == true)
-                return ("🟢", "tg-ws-proxy активен", "Telegram работает через прокси локально.", successColor);
-
-            if (!pingOk && dcOk == 0)
-                return ("🔴", "Интернета нет", "Ни один сервер не отвечает.", errorColor);
-
-            if (blocks.Contains(BlockType.SniBlock))
-                return bypass
-                    ? ("🟢", "Telegram работает (обходчик активен)", "DPI обнаружен, но обходчик запущен.", successColor)
-                    : ("🔴", "Telegram заблокирован (DPI)", "Нужен Zapret.", errorColor);
-
-            if (blocks.Contains(BlockType.IpBlock))
-                return bypass
-                    ? ("🟢", "Telegram работает", "IP заблокированы, но обходчик компенсирует.", successColor)
-                    : ("🔴", "Серверы заблокированы", "Нужен VPN.", errorColor);
-
-            if (dcOk >= Math.Max(dcTot / 2, 1))
-                return ("🟢", "Telegram работает нормально", "Серверы отвечают быстро.", successColor);
-
-            return ("🟡", "Ситуация неоднозначная", "Проблемы со связью.", warningColor);
-        }
-
-        public static (string emoji, string title, string detail, string color) DiscordVerdict(DiagReport r)
-        {
-            var app = r.AppStatus;
-            var bypass = app != null && app.ZapretRunning;
-
-            var isCb = SettingsManager.Current.ColorblindMode;
-            var successColor = isCb ? "#0078D7" : "#107C10";
-            var errorColor = isCb ? "#FF8C00" : "#D13438";
-            var warningColor = isCb ? "#FFB900" : "#FF8C00";
-
-            if (r.DiscordPing != null && r.DiscordPing.Count > 0 && r.DiscordPing.All(p => !p.Ok))
-                return bypass
-                    ? ("🟡", "Сбои в Discord", "Обходчик работает, но серверы недоступны. Возможно, стоит сменить профиль.", warningColor)
-                    : ("🔴", "Discord полностью заблокирован", "API и Gateway не отвечают. Включи Zapret.", errorColor);
-
-            if (r.UdpResult?.Blocked == true)
-                return bypass
-                    ? ("🟢", "Discord работает (обходчик активен)", "UDP заблокирован, но Zapret маршрутизирует трафик.", successColor)
-                    : ("🟡", "Проблемы с голосом", "Чаты работают, но UDP заблокирован. Звонки не пройдут.", warningColor);
-
-            return ("🟢", "Discord работает нормально", "Все нужные порты и серверы доступны.", successColor);
         }
 
         public static async Task<DiagReport> RunFullDiagnosticsAsync(Action<double, string>? progress = null)
@@ -1082,24 +1208,7 @@ namespace ZapretGUI.Core
         public string Error { get; set; } = "";
 
         public string Title => $"DC {DcId} :{Port}";
-
         public string PingText => Ok && LatencyMs.HasValue ? $"{LatencyMs.Value:0} мс" : "Ошибка";
-
-        public string StatusColorBrush
-        {
-            get
-            {
-                bool isColorblind = SettingsManager.Current.ColorblindMode;
-
-                if (!Ok || !LatencyMs.HasValue)
-                    return isColorblind ? "#FF8C00" : "#D13438";
-
-                if (LatencyMs.Value < 120)
-                    return isColorblind ? "#0078D7" : "#107C10";
-
-                return isColorblind ? "#FFB900" : "#FF8C00";
-            }
-        }
     }
 
     public class PingResult
@@ -1167,22 +1276,6 @@ namespace ZapretGUI.Core
         public bool IsLoading { get; set; } = false;
         public string Title => Label;
         public string PingText => Ok && LatencyMs.HasValue ? $"{LatencyMs.Value:0} мс" : "Ошибка";
-
-        public string StatusColorBrush
-        {
-            get
-            {
-                bool isColorblind = SettingsManager.Current.ColorblindMode;
-
-                if (!Ok || !LatencyMs.HasValue)
-                    return isColorblind ? "#FF8C00" : "#D13438";
-
-                if (LatencyMs.Value < 120)
-                    return isColorblind ? "#0078D7" : "#107C10";
-
-                return isColorblind ? "#FFB900" : "#FF8C00";
-            }
-        }
     }
 
     public class DiagReport
@@ -1210,6 +1303,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Threading.Tasks;
 
 namespace ZapretGUI.Core
 {
@@ -1235,12 +1329,12 @@ namespace ZapretGUI.Core
             if (!Directory.Exists(_listsPath)) Directory.CreateDirectory(_listsPath);
         }
 
-        public List<UIModItem> GetAvailableMods(ModType type)
+        public async Task<List<UIModItem>> GetAvailableModsAsync(ModType type)
         {
             var mods = new List<UIModItem>();
             var targetFolder = type == ModType.BatStrategy ? _strategiesPath : _listsPath;
 
-            if (!Directory.Exists(targetFolder)) 
+            if (!Directory.Exists(targetFolder))
                 return mods;
 
             var activeList = type == ModType.BatStrategy
@@ -1256,7 +1350,7 @@ namespace ZapretGUI.Core
                 {
                     try
                     {
-                        var json = File.ReadAllText(jsonPath);
+                        var json = await File.ReadAllTextAsync(jsonPath);
                         var meta = JsonSerializer.Deserialize<ModMetaData>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
                         if (meta != null)
@@ -1279,7 +1373,7 @@ namespace ZapretGUI.Core
             return mods;
         }
 
-        public void ApplyListMods()
+        public async Task ApplyListModsAsync()
         {
             var listsDir = Path.Combine(_zapretFilesPath, "lists");
             var targetFile = Path.Combine(listsDir, "list-general.txt");
@@ -1296,9 +1390,8 @@ namespace ZapretGUI.Core
 
                 if (File.Exists(listPath))
                 {
-                    var domains = File.ReadAllLines(listPath)
-                                      .Where(l => !string.IsNullOrWhiteSpace(l))
-                                      .Select(l => l.Trim());
+                    var lines = await File.ReadAllLinesAsync(listPath);
+                    var domains = lines.Where(l => !string.IsNullOrWhiteSpace(l)).Select(l => l.Trim());
 
                     foreach (var d in domains)
                     {
@@ -1309,34 +1402,34 @@ namespace ZapretGUI.Core
                 }
             }
 
-            var currentLines = File.ReadAllLines(targetFile)
-                                   .Where(l => !string.IsNullOrWhiteSpace(l))
-                                   .Select(l => l.Trim())
-                                   .ToList();
+            var currentLinesRaw = await File.ReadAllLinesAsync(targetFile);
+            var currentLines = currentLinesRaw.Where(l => !string.IsNullOrWhiteSpace(l)).Select(l => l.Trim()).ToList();
 
             var newLines = currentLines.Where(l => !allModDomains.Contains(l)).ToList();
-
             newLines.AddRange(activeModDomains);
 
-            File.WriteAllLines(targetFile, newLines.Distinct(StringComparer.OrdinalIgnoreCase));
+            await File.WriteAllLinesAsync(targetFile, newLines.Distinct(StringComparer.OrdinalIgnoreCase));
         }
 
-        public void SyncActiveBatMods()
+        public async Task SyncActiveBatModsAsync()
         {
             if (!Directory.Exists(_zapretFilesPath)) return;
 
-            foreach (var file in Directory.GetFiles(_zapretFilesPath, "mod_*.bat"))
-                try { File.Delete(file); } catch { }
-
-            foreach (var modId in SettingsManager.Current.ActiveBatMods)
+            await Task.Run(() =>
             {
-                var sourceBat = Path.Combine(_strategiesPath, modId, "strategy.bat");
-                if (File.Exists(sourceBat))
+                foreach (var file in Directory.GetFiles(_zapretFilesPath, "mod_*.bat"))
+                    try { File.Delete(file); } catch { }
+
+                foreach (var modId in SettingsManager.Current.ActiveBatMods)
                 {
-                    var destBat = Path.Combine(_zapretFilesPath, $"mod_{modId}.bat");
-                    try { File.Copy(sourceBat, destBat, true); } catch { }
+                    var sourceBat = Path.Combine(_strategiesPath, modId, "strategy.bat");
+                    if (File.Exists(sourceBat))
+                    {
+                        var destBat = Path.Combine(_zapretFilesPath, $"mod_{modId}.bat");
+                        try { File.Copy(sourceBat, destBat, true); } catch { }
+                    }
                 }
-            }
+            });
         }
     }
 }
@@ -1864,12 +1957,32 @@ namespace ZapretGUI.Core
 
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotImplementedException();
     }
+    public class PingToBrushConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            var isColorblind = SettingsManager.Current.ColorblindMode;
+
+            if (value is double latency)
+            {
+                if (latency < 120) 
+                    return UIHelper.GetBrushFromHex(isColorblind ? "#0078D7" : "#107C10");
+
+                return UIHelper.GetBrushFromHex(isColorblind ? "#FFB900" : "#FF8C00");
+            }
+
+            return UIHelper.GetBrushFromHex(isColorblind ? "#FF8C00" : "#D13438");
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotImplementedException();
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // ФАЙЛ: Core\UIHelper.cs
 ////////////////////////////////////////////////////////////////////////////////
 
+using System.Windows;
 using System.Windows.Media;
 
 namespace ZapretGUI.Core
@@ -1881,6 +1994,18 @@ namespace ZapretGUI.Core
         public static SolidColorBrush GetBrushFromHex(string hex)
         {
             return (SolidColorBrush)_brushConverter.ConvertFromString(hex)!;
+        }
+
+        public static T? FindParent<T>(DependencyObject child, string? name = null) where T : FrameworkElement
+        {
+            DependencyObject parent = VisualTreeHelper.GetParent(child);
+            while (parent != null)
+            {
+                if (parent is T typed && (name == null || typed.Name == name))
+                    return typed;
+                parent = VisualTreeHelper.GetParent(parent);
+            }
+            return null;
         }
     }
 }
@@ -2614,8 +2739,8 @@ namespace ZapretGUI.Core
                         </Grid.RowDefinitions>
 
                         <TextBlock Text="{Binding Title}" FontSize="12" Foreground="#A0A0A0" FontWeight="Bold"/>
-                        <TextBlock Grid.Row="1" Text="{Binding PingText}" FontSize="14" 
-                                   FontWeight="Bold" Foreground="{Binding StatusColorBrush}" Margin="0,4,0,0"/>
+                        <TextBlock Grid.Row="1" Text="{Binding PingText}" FontSize="14" FontWeight="Bold" 
+                            Foreground="{Binding LatencyMs, Converter={StaticResource PingToBrushConverter}}" Margin="0,4,0,0"/>
                     </Grid>
 
                     <Border x:Name="SkeletonLayer" Background="#222222" CornerRadius="4" Margin="-5" Visibility="Collapsed" ClipToBounds="True">
@@ -2866,6 +2991,7 @@ namespace ZapretGUI.Core
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using ZapretGUI.Core;
@@ -2942,13 +3068,14 @@ namespace ZapretGUI.Views
 
         private void UpdateUI(DiagReport report)
         {
-            var tgVerdict = DiagnosticsEngine.HumanVerdict(report);
+            // Теперь мы вызываем методы прямо из этого же класса
+            var tgVerdict = HumanVerdict(report);
             TxtTgMainStatus.Text = tgVerdict.title;
             TxtTgSubStatus.Text = tgVerdict.detail;
             TelegramCard.BorderBrush = UIHelper.GetBrushFromHex(tgVerdict.color);
             TxtTgEmoji.Foreground = UIHelper.GetBrushFromHex(tgVerdict.color);
 
-            var dsVerdict = DiagnosticsEngine.DiscordVerdict(report);
+            var dsVerdict = DiscordVerdict(report);
             TxtDiscordMainStatus.Text = dsVerdict.title;
             TxtDiscordSubStatus.Text = dsVerdict.detail;
             DiscordCard.BorderBrush = UIHelper.GetBrushFromHex(dsVerdict.color);
@@ -2965,10 +3092,70 @@ namespace ZapretGUI.Views
 
             RecItemsControl.ItemsSource = report.Recommendations;
             DcItemsControl.ItemsSource = report.DcResults;
-            RecItemsControl.ItemsSource = report.Recommendations;
-            DcItemsControl.ItemsSource = report.DcResults;
-            DiscordItemsControl.ItemsSource = report.DiscordPing; 
+            DiscordItemsControl.ItemsSource = report.DiscordPing;
         }
+
+        // --- ПЕРЕНЕСЕННЫЕ ИЗ ДВИЖКА МЕТОДЫ ОФОРМЛЕНИЯ ---
+        private (string emoji, string title, string detail, string color) HumanVerdict(DiagReport r)
+        {
+            var blocks = new HashSet<BlockType>(r.BlockTypes);
+            var app = r.AppStatus;
+            int dcOk = r.DcResults.Count(x => x.Ok);
+            int dcTot = r.DcResults.Count;
+            bool pingOk = r.PingResults.Any(p => p.Ok);
+            bool bypass = app != null && app.ZapretRunning;
+
+            bool isCb = SettingsManager.Current.ColorblindMode;
+            string successColor = isCb ? "#0078D7" : "#107C10";
+            string errorColor = isCb ? "#FF8C00" : "#D13438";
+            string warningColor = isCb ? "#FFB900" : "#FF8C00";
+
+            if (app?.TgWsProxyRunning == true)
+                return ("🟢", "tg-ws-proxy активен", "Telegram работает через прокси локально.", successColor);
+
+            if (!pingOk && dcOk == 0)
+                return ("🔴", "Интернета нет", "Ни один сервер не отвечает.", errorColor);
+
+            if (blocks.Contains(BlockType.SniBlock))
+                return bypass
+                    ? ("🟢", "Telegram работает (обходчик активен)", "DPI обнаружен, но обходчик запущен.", successColor)
+                    : ("🔴", "Telegram заблокирован (DPI)", "Нужен Zapret.", errorColor);
+
+            if (blocks.Contains(BlockType.IpBlock))
+                return bypass
+                    ? ("🟢", "Telegram работает", "IP заблокированы, но обходчик компенсирует.", successColor)
+                    : ("🔴", "Серверы заблокированы", "Нужен VPN.", errorColor);
+
+            if (dcOk >= Math.Max(dcTot / 2, 1))
+                return ("🟢", "Telegram работает нормально", "Серверы отвечают быстро.", successColor);
+
+            return ("🟡", "Ситуация неоднозначная", "Проблемы со связью.", warningColor);
+        }
+
+        private (string emoji, string title, string detail, string color) DiscordVerdict(DiagReport r)
+        {
+            var app = r.AppStatus;
+            bool bypass = app != null && app.ZapretRunning;
+
+            bool isCb = SettingsManager.Current.ColorblindMode;
+            string successColor = isCb ? "#0078D7" : "#107C10";
+            string errorColor = isCb ? "#FF8C00" : "#D13438";
+            string warningColor = isCb ? "#FFB900" : "#FF8C00";
+
+            if (r.DiscordPing != null && r.DiscordPing.Count > 0 && r.DiscordPing.All(p => !p.Ok))
+                return bypass
+                    ? ("🟡", "Сбои в Discord", "Обходчик работает, но серверы недоступны. Возможно, стоит сменить профиль.", warningColor)
+                    : ("🔴", "Discord полностью заблокирован", "API и Gateway не отвечают. Включи Zapret.", errorColor);
+
+            if (r.UdpResult?.Blocked == true)
+                return bypass
+                    ? ("🟢", "Discord работает (обходчик активен)", "UDP заблокирован, но Zapret маршрутизирует трафик.", successColor)
+                    : ("🟡", "Проблемы с голосом", "Чаты работают, но UDP заблокирован. Звонки не пройдут.", warningColor);
+
+            return ("🟢", "Discord работает нормально", "Все нужные порты и серверы доступны.", successColor);
+        }
+
+        // --- ЛОГИКА ПАСХАЛОК ---
 
         private void TxtDiscordEmoji_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
@@ -3028,7 +3215,7 @@ namespace ZapretGUI.Views
             AudioHelper.PlaySuccess();
 
             TxtTgMainStatus.Text = "Telegram (Режим Дурова)";
-            TxtTgMainStatus.Foreground = UIHelper.GetBrushFromHex("#00E5FF"); 
+            TxtTgMainStatus.Foreground = UIHelper.GetBrushFromHex("#00E5FF");
             TxtTgSubStatus.Text = "Свободу интернету! Трафик летит напрямую.";
 
             var flyX = new System.Windows.Media.Animation.DoubleAnimation(0, 150, TimeSpan.FromSeconds(0.3))
@@ -3564,32 +3751,21 @@ namespace ZapretGUI.Views
 
     public partial class HomeView : System.Windows.Controls.UserControl
     {
-        private readonly ZapretManager _zapretManager;
-        private readonly TgProxyManager _tgProxyManager;
-        private readonly NetworkMonitor _networkMonitor;
-        private readonly ZapretScanner _zapretScanner;
-
         private System.Windows.Documents.Run? _lastProgressRun = null;
 
         public HomeView()
         {
             InitializeComponent();
-            _zapretManager = new ZapretManager();
-            _tgProxyManager = new TgProxyManager();
-            _networkMonitor = new NetworkMonitor();
-            _zapretScanner = new ZapretScanner();
 
-            _zapretManager.LogMessage += ProcessLogMessage;
-            _tgProxyManager.LogMessage += ProcessLogMessage;
+            // Подписываемся на единый лог-центр контроллера
+            BypassController.Current.OnLog += ProcessLogMessage;
+            BypassController.Current.NetMonitor.StatsUpdated += NetworkMonitor_StatsUpdated;
+            BypassController.Current.NetMonitor.StatusChanged += NetworkMonitor_StatusChanged;
 
-            _networkMonitor.StatsUpdated += NetworkMonitor_StatsUpdated;
-            _networkMonitor.StatusChanged += NetworkMonitor_StatusChanged;
+            BypassController.Current.Scanner.ScanCompleted += ZapretScanner_ScanCompleted;
+            BypassController.Current.Scanner.ScanFailed += ZapretScanner_ScanFailed;
 
-            _zapretScanner.LogMessage += ProcessLogMessage;
-            _zapretScanner.ScanCompleted += ZapretScanner_ScanCompleted;
-            _zapretScanner.ScanFailed += ZapretScanner_ScanFailed;
-
-            System.Windows.Application.Current.Exit += (s, e) => _zapretScanner.CancelScan();
+            System.Windows.Application.Current.Exit += (s, e) => BypassController.Current.Scanner.CancelScan();
 
             LoadProfiles();
             LoadSettings();
@@ -3598,10 +3774,10 @@ namespace ZapretGUI.Views
             SettingsManager.SettingsSaved += RefreshProfilesLive;
             ApplyVisualSettings();
 
-            _networkMonitor.Start();
+            BypassController.Current.NetMonitor.Start();
             _ = PingNetworkAsync();
 
-            if (_zapretManager.IsRunning() || _tgProxyManager.IsRunning())
+            if (BypassController.Current.IsRunning)
             {
                 MainToggle.IsChecked = true;
                 UpdateUIState(true);
@@ -3646,7 +3822,7 @@ namespace ZapretGUI.Views
 
         private void NetworkMonitor_StatusChanged(bool isAvailable)
         {
-            Dispatcher.Invoke(() =>
+            Dispatcher.Invoke(async () =>
             {
                 if (!isAvailable)
                 {
@@ -3661,7 +3837,7 @@ namespace ZapretGUI.Views
                     if (SettingsManager.Current.AutoRestartServices && MainToggle.IsChecked == true)
                     {
                         Log("🔄 Автоматический перезапуск служб...");
-                        RestartServices();
+                        await BypassController.Current.RestartServicesAsync(TxtMainProfile.Text);
                     }
                 }
             });
@@ -3685,7 +3861,7 @@ namespace ZapretGUI.Views
                 };
                 PingIconTransform.BeginAnimation(RotateTransform.AngleProperty, rotateAnim);
 
-                var pingTask = Core.NetworkHelper.TcpPingAsync(AppConstants.AwsPingHost, AppConstants.AwsPingPort);
+                var pingTask = BypassController.Current.CheckPingAsync();
                 var delayTask = Task.Delay(600);
 
                 await Task.WhenAll(pingTask, delayTask);
@@ -3721,7 +3897,7 @@ namespace ZapretGUI.Views
         private void SyncMainWindowIndicators()
         {
             if (System.Windows.Application.Current.MainWindow is MainWindow mainWindow)
-                mainWindow.UpdateIndicators(_zapretManager.IsRunning(), _tgProxyManager.IsRunning());
+                mainWindow.UpdateIndicators(BypassController.Current.Zapret.IsRunning(), BypassController.Current.TgProxy.IsRunning());
         }
 
         private void SyncNetworkIndicator(bool isOnline)
@@ -3751,36 +3927,15 @@ namespace ZapretGUI.Views
 
                     MainToggle.IsEnabled = false;
                     LaunchProgressBar.Visibility = Visibility.Visible;
-
-                    LaunchProgressBar.BeginAnimation(System.Windows.Controls.ProgressBar.ValueProperty, null);
                     LaunchProgressBar.Value = 0;
+
                     Log("Инициализация запуска...");
+                    AnimateProgressBar(30);
 
-                    await Task.Delay(200);
-                    AnimateProgressBar(20);
+                    // Передаем команду контроллеру
+                    await BypassController.Current.StartServicesAsync(TxtMainProfile.Text, isZapretSelected, isTgProxySelected);
 
-                    if (isZapretSelected)
-                    {
-                        var selectedProfile = TxtMainProfile.Text;
-                        Log($"[Zapret] Подготовка профиля {selectedProfile}...");
-                        await Task.Delay(400);
-                        Log($"[Zapret] Запуск службы...");
-                        _zapretManager.Start(selectedProfile);
-                        AnimateProgressBar(60);
-                    }
-
-                    if (isTgProxySelected)
-                    {
-                        Log("[TgWsProxy] Настройка маршрутов...");
-                        await Task.Delay(300);
-                        Log("[TgWsProxy] Запуск прокси...");
-                        _tgProxyManager.Start();
-                        AnimateProgressBar(90);
-                    }
-
-                    await Task.Delay(300);
                     AnimateProgressBar(100);
-
                     UpdateUIState(true);
                     SyncMainWindowIndicators();
                     Log("✅ Выбранные модули успешно запущены.");
@@ -3802,12 +3957,10 @@ namespace ZapretGUI.Views
                 else
                 {
                     Log("Остановка всех процессов...");
-                    _zapretManager.Stop();
-                    _tgProxyManager.Stop();
+                    BypassController.Current.StopServices();
 
                     UpdateUIState(false);
                     SyncMainWindowIndicators();
-                    Log("🛑 Все модули остановлены.");
 
                     if (System.Windows.Application.Current.MainWindow is MainWindow mainWindowStop)
                     {
@@ -3919,7 +4072,9 @@ namespace ZapretGUI.Views
             foreach (var item in OverlayProfileListBox.Items)
             {
                 if (item is ConfigItem configItem)
+                {
                     configItem.IsActive = (configItem.FileName == activeFileName);
+                }
             }
             OverlayProfileListBox.Items.Refresh();
         }
@@ -3944,36 +4099,26 @@ namespace ZapretGUI.Views
             if (SettingsManager.Current.FocusMode)
                 return;
 
-            var shakeAnim = new System.Windows.Media.Animation.DoubleAnimation(0, 10, TimeSpan.FromMilliseconds(40))
-            {
-                AutoReverse = true,
-                RepeatBehavior = new System.Windows.Media.Animation.RepeatBehavior(4)
-            };
-            MainGridTranslate.BeginAnimation(TranslateTransform.XProperty, shakeAnim);
+            AnimationHelper.PlayGlitchEffect(MainGrid, MainGridTranslate, MainGridSkew, MainGridGlitchShadow);
+        }
 
-            var skewAnim = new System.Windows.Media.Animation.DoubleAnimation(0, -3, TimeSpan.FromMilliseconds(30))
+        private void ProcessLogMessage(string message)
+        {
+            Dispatcher.Invoke(() =>
             {
-                AutoReverse = true,
-                RepeatBehavior = new System.Windows.Media.Animation.RepeatBehavior(5)
-            };
-            MainGridSkew.BeginAnimation(SkewTransform.AngleXProperty, skewAnim);
+                Log(message);
 
-            var opacityAnim = new System.Windows.Media.Animation.DoubleAnimation(1, 0.6, TimeSpan.FromMilliseconds(50))
-            {
-                AutoReverse = true,
-                RepeatBehavior = new System.Windows.Media.Animation.RepeatBehavior(4)
-            };
-            MainGrid.BeginAnimation(UIElement.OpacityProperty, opacityAnim);
+                var match = Regex.Match(message, @"([a-zA-Z0-9_\-\(\)\s]+\.bat).*?Успешно:\s*(\d+)(?:,\s*Ошибок:\s*(\d+))?");
+                if (match.Success)
+                {
+                    string batName = match.Groups[1].Value.Trim();
+                    string okCount = match.Groups[2].Value;
+                    string errCount = match.Groups[3].Success ? match.Groups[3].Value : "0";
 
-            MainGridGlitchShadow.Opacity = 1;
-            var shadowAnim = new System.Windows.Media.Animation.DoubleAnimation(0, -15, TimeSpan.FromMilliseconds(40))
-            {
-                AutoReverse = true,
-                RepeatBehavior = new System.Windows.Media.Animation.RepeatBehavior(4)
-            };
-
-            shadowAnim.Completed += (s, e) => MainGridGlitchShadow.Opacity = 0;
-            MainGridGlitchShadow.BeginAnimation(DropShadowEffect.ShadowDepthProperty, shadowAnim);
+                    int total = int.Parse(okCount) + int.Parse(errCount);
+                    UpdateConfigTests(batName, okCount, total.ToString());
+                }
+            });
         }
 
         private void Log(string message)
@@ -4044,7 +4189,7 @@ namespace ZapretGUI.Views
             }
         }
 
-        public bool IsRunning => _zapretManager.IsRunning() || _tgProxyManager.IsRunning();
+        public bool IsRunning => BypassController.Current.IsRunning;
 
         public void ToggleFromTray()
         {
@@ -4072,8 +4217,8 @@ namespace ZapretGUI.Views
                 LogsPanel.IsHitTestVisible = !isCompact;
             }
 
-            var isZapret = _zapretManager != null && _zapretManager.IsRunning();
-            var isProxy = _tgProxyManager != null && _tgProxyManager.IsRunning();
+            var isZapret = BypassController.Current.Zapret.IsRunning();
+            var isProxy = BypassController.Current.TgProxy.IsRunning();
 
             UpdateUIState(isZapret || isProxy);
 
@@ -4102,48 +4247,6 @@ namespace ZapretGUI.Views
             return UIHelper.GetBrushFromHex(hex);
         }
 
-        private async void RestartServices()
-        {
-            try
-            {
-                _zapretManager.Stop();
-                _tgProxyManager.Stop();
-
-                await Task.Delay(1000);
-
-                if (SettingsManager.Current.ZapretEnabled)
-                    _zapretManager.Start(TxtMainProfile.Text);
-
-                if (SettingsManager.Current.TgProxyEnabled)
-                    _tgProxyManager.Start();
-
-                Log("✅ Службы успешно перезапущены.");
-            }
-            catch (Exception ex)
-            {
-                Log($"ОШИБКА ПРИ ПЕРЕЗАПУСКЕ: {ex.Message}");
-            }
-        }
-
-        private void ProcessLogMessage(string message)
-        {
-            Dispatcher.Invoke(() =>
-            {
-                Log(message);
-
-                var match = Regex.Match(message, @"([a-zA-Z0-9_\-\(\)\s]+\.bat).*?Успешно:\s*(\d+)(?:,\s*Ошибок:\s*(\d+))?");
-                if (match.Success)
-                {
-                    string batName = match.Groups[1].Value.Trim();
-                    string okCount = match.Groups[2].Value;
-                    string errCount = match.Groups[3].Success ? match.Groups[3].Value : "0";
-
-                    int total = int.Parse(okCount) + int.Parse(errCount);
-                    UpdateConfigTests(batName, okCount, total.ToString());
-                }
-            });
-        }
-
         public void ShowUpdateProgress(string message)
         {
             Dispatcher.Invoke(() => Log($"[Updater] {message}"));
@@ -4152,46 +4255,13 @@ namespace ZapretGUI.Views
         private void BtnOpenConfigMenu_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
             AudioHelper.PlayClick();
-
             OverlayProfileListBox.Visibility = Visibility.Visible;
-
-            ConfigOverlay.Visibility = Visibility.Visible;
-            ConfigOverlay.Opacity = 0;
-
-            var fadeIn = new System.Windows.Media.Animation.DoubleAnimation(0, 1, TimeSpan.FromSeconds(0.2));
-            var scaleUp = new System.Windows.Media.Animation.DoubleAnimation(0.95, 1, TimeSpan.FromSeconds(0.2)) { EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut } };
-            var slideUp = new System.Windows.Media.Animation.DoubleAnimation(10, 0, TimeSpan.FromSeconds(0.2)) { EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut } };
-
-            ConfigOverlay.BeginAnimation(UIElement.OpacityProperty, fadeIn);
-
-            if (OverlayContentBorder.RenderTransform as System.Windows.Media.TransformGroup is System.Windows.Media.TransformGroup transformGroup)
-            {
-                var scale = transformGroup.Children[0] as System.Windows.Media.ScaleTransform;
-                var translate = transformGroup.Children[1] as System.Windows.Media.TranslateTransform;
-                scale?.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, scaleUp);
-                scale?.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, scaleUp);
-                translate?.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, slideUp);
-            }
+            AnimationHelper.ShowOverlay(ConfigOverlay, OverlayContentBorder);
         }
 
         private void CloseOverlay()
         {
-            var fadeOut = new System.Windows.Media.Animation.DoubleAnimation(1, 0, TimeSpan.FromSeconds(0.15));
-            var scaleDown = new System.Windows.Media.Animation.DoubleAnimation(1, 0.95, TimeSpan.FromSeconds(0.15)) { EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseIn } };
-            var slideDown = new System.Windows.Media.Animation.DoubleAnimation(0, 10, TimeSpan.FromSeconds(0.15)) { EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseIn } };
-
-            fadeOut.Completed += (s, ev) => { ConfigOverlay.Visibility = Visibility.Collapsed; };
-
-            ConfigOverlay.BeginAnimation(UIElement.OpacityProperty, fadeOut);
-
-            if (OverlayContentBorder.RenderTransform as System.Windows.Media.TransformGroup is System.Windows.Media.TransformGroup transformGroup)
-            {
-                var scale = transformGroup.Children[0] as System.Windows.Media.ScaleTransform;
-                var translate = transformGroup.Children[1] as System.Windows.Media.TranslateTransform;
-                scale?.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, scaleDown);
-                scale?.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, scaleDown);
-                translate?.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, slideDown);
-            }
+            AnimationHelper.HideOverlay(ConfigOverlay, OverlayContentBorder);
         }
 
         private void BtnCloseOverlay_Click(object sender, RoutedEventArgs e) => CloseOverlay();
@@ -4255,10 +4325,10 @@ namespace ZapretGUI.Views
                         }
                     }
 
-                    if (_zapretManager.IsRunning() && ZapretToggle.IsChecked == true)
+                    if (BypassController.Current.Zapret.IsRunning() && ZapretToggle.IsChecked == true)
                     {
                         Log("🔄 Перезапуск служб с новой конфигурацией...");
-                        _zapretManager.Start(bestConfig);
+                        BypassController.Current.Zapret.Start(bestConfig);
                     }
                 }
                 else
@@ -4283,9 +4353,9 @@ namespace ZapretGUI.Views
         {
             AudioHelper.PlayClick();
 
-            if (_zapretScanner.IsScanning)
+            if (BypassController.Current.Scanner.IsScanning)
             {
-                _zapretScanner.CancelScan();
+                BypassController.Current.Scanner.CancelScan();
                 return;
             }
 
@@ -4298,7 +4368,7 @@ namespace ZapretGUI.Views
             Log("🚀 Инициализация умного сканирования конфигурации...");
             Log("Мы скрыли всплывающие окна консоли, чтобы они не мешали. Процесс займет пару минут...");
 
-            await _zapretScanner.StartScanAsync();
+            await BypassController.Current.Scanner.StartScanAsync();
         }
 
         private void UpdateAllConfigsPing(string currentPing)
@@ -4614,7 +4684,7 @@ namespace ZapretGUI.Views
 
         <!-- ОВЕРЛЕЙ РЕДАКТОРА -->
         <Grid x:Name="EditorOverlay" Grid.ColumnSpan="3" Background="#CC000000" Visibility="Collapsed" Panel.ZIndex="200">
-            <Border Background="#141414" BorderBrush="#2A2A2A" BorderThickness="1" CornerRadius="12" Width="600" Height="500" Padding="20">
+            <Border x:Name="EditorContentBorder" Background="#141414" BorderBrush="#2A2A2A" BorderThickness="1" CornerRadius="12" Width="600" Height="500" Padding="20">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
@@ -4645,7 +4715,7 @@ namespace ZapretGUI.Views
 
         <!-- ОВЕРЛЕЙ СОЗДАНИЯ МОДА -->
         <Grid x:Name="CreateModOverlay" Grid.ColumnSpan="3" Background="#CC000000" Visibility="Collapsed" Panel.ZIndex="200">
-            <Border Background="#141414" BorderBrush="#2A2A2A" BorderThickness="1" CornerRadius="12" Width="450" Padding="20" HorizontalAlignment="Center" VerticalAlignment="Center">
+            <Border x:Name="CreateContentBorder" Background="#141414" BorderBrush="#2A2A2A" BorderThickness="1" CornerRadius="12" Width="450" Padding="20" HorizontalAlignment="Center" VerticalAlignment="Center">
                 <StackPanel>
                     <TextBlock Text="Создать новый мод" FontSize="18" FontWeight="Bold" Margin="0,0,0,15"/>
                     <TextBlock Text="Название (ID папки, англ.):" Foreground="#A0A0A0" FontSize="12" Margin="0,0,0,5"/>
@@ -4678,7 +4748,7 @@ namespace ZapretGUI.Views
 
         <!-- ОВЕРЛЕЙ ПОДТВЕРЖДЕНИЯ ДЕЙСТВИЙ (Новый) -->
         <Grid x:Name="ConfirmOverlay" Grid.ColumnSpan="3" Background="#CC000000" Visibility="Collapsed" Panel.ZIndex="300">
-            <Border Background="#141414" BorderBrush="#2A2A2A" BorderThickness="1" CornerRadius="12" Width="400" Padding="20" HorizontalAlignment="Center" VerticalAlignment="Center">
+            <Border x:Name="ConfirmContentBorder" Background="#141414" BorderBrush="#2A2A2A" BorderThickness="1" CornerRadius="12" Width="400" Padding="20" HorizontalAlignment="Center" VerticalAlignment="Center">
                 <StackPanel>
                     <TextBlock x:Name="TxtConfirmTitle" Text="Подтверждение" FontSize="18" FontWeight="Bold" Margin="0,0,0,10"/>
                     <TextBlock x:Name="TxtConfirmMessage" Text="Вы уверены?" Foreground="#CCCCCC" FontSize="14" TextWrapping="Wrap" Margin="0,0,0,20"/>
@@ -4746,10 +4816,10 @@ namespace ZapretGUI.Views
             AvailableModsList.ItemsSource = _availableMods;
             ActiveModsList.ItemsSource = _activeMods;
 
-            SwitchTab(ModType.BatStrategy);
+            _ = SwitchTabAsync(ModType.BatStrategy);
         }
 
-        private void SwitchTab(ModType type)
+        private async Task SwitchTabAsync(ModType type)
         {
             _currentTab = type;
 
@@ -4781,7 +4851,7 @@ namespace ZapretGUI.Views
                     BtnDomainLists.Foreground = System.Windows.Media.Brushes.White;
                 }
 
-                LoadCurrentMods();
+                await LoadCurrentModsAsync();
             }
             else
             {
@@ -4796,12 +4866,12 @@ namespace ZapretGUI.Views
             }
         }
 
-        private void LoadCurrentMods()
+        private async Task LoadCurrentModsAsync()
         {
             _availableMods.Clear();
             _activeMods.Clear();
 
-            var allMods = _modManager.GetAvailableMods(_currentTab);
+            var allMods = await _modManager.GetAvailableModsAsync(_currentTab);
 
             foreach (var mod in allMods)
             {
@@ -4822,16 +4892,15 @@ namespace ZapretGUI.Views
             EmptyStatePanel.Visibility = (_activeMods.Count == 0 && _availableMods.Count == 0) ? Visibility.Visible : Visibility.Collapsed;
         }
 
-        private void BtnStrategies_Click(object sender, RoutedEventArgs e) { AudioHelper.PlayClick(); SwitchTab(ModType.BatStrategy); }
-        private void BtnDomainLists_Click(object sender, RoutedEventArgs e) { AudioHelper.PlayClick(); SwitchTab(ModType.DomainList); }
-        private void BtnGuide_Click(object sender, RoutedEventArgs e) { AudioHelper.PlayClick(); SwitchTab((ModType)99); }
+        private async void BtnStrategies_Click(object sender, RoutedEventArgs e) { AudioHelper.PlayClick(); await SwitchTabAsync(ModType.BatStrategy); }
+        private async void BtnDomainLists_Click(object sender, RoutedEventArgs e) { AudioHelper.PlayClick(); await SwitchTabAsync(ModType.DomainList); }
+        private async void BtnGuide_Click(object sender, RoutedEventArgs e) { AudioHelper.PlayClick(); await SwitchTabAsync((ModType)99); }
 
         private void BtnOpenModsFolder_Click(object sender, RoutedEventArgs e)
         {
             AudioHelper.PlayClick();
             var path = Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory);
-            if (Directory.Exists(path)) 
-                Process.Start("explorer.exe", path);
+            if (Directory.Exists(path)) Process.Start("explorer.exe", path);
         }
 
         private void BtnCreateMod_Click(object sender, RoutedEventArgs e)
@@ -4843,28 +4912,28 @@ namespace ZapretGUI.Views
             TxtNewModAuthor.Text = "You";
             TxtNewModDesc.Text = "Описание мода";
 
-            CreateModOverlay.Visibility = Visibility.Visible;
+            AnimationHelper.ShowOverlay(CreateModOverlay, CreateContentBorder);
         }
 
         private void BtnCloseCreateMod_Click(object sender, RoutedEventArgs e)
         {
             AudioHelper.PlayClick();
-            CreateModOverlay.Visibility = Visibility.Collapsed;
+            AnimationHelper.HideOverlay(CreateModOverlay, CreateContentBorder);
         }
 
-        private void BtnConfirmCreateMod_Click(object sender, RoutedEventArgs e)
+        private async void BtnConfirmCreateMod_Click(object sender, RoutedEventArgs e)
         {
             AudioHelper.PlayClick();
 
-            var id = TxtNewModId.Text.Trim().Replace(" ", "_").ToLower();
+            string id = TxtNewModId.Text.Trim().Replace(" ", "_").ToLower();
             var invalidChars = System.IO.Path.GetInvalidFileNameChars();
             id = new string(id.Where(c => !invalidChars.Contains(c)).ToArray());
 
             if (string.IsNullOrEmpty(id))
                 id = $"mod_{DateTime.Now:HHmmss}";
 
-            var folderName = _currentTab == ModType.BatStrategy ? "strategies" : "lists";
-            var modFolderPath = Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, folderName, id);
+            string folderName = _currentTab == ModType.BatStrategy ? "strategies" : "lists";
+            string modFolderPath = Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, folderName, id);
 
             if (Directory.Exists(modFolderPath))
             {
@@ -4885,16 +4954,16 @@ namespace ZapretGUI.Views
                     IsBatStrategy = _currentTab == ModType.BatStrategy
                 };
 
-                var jsonPath = Path.Combine(modFolderPath, "mod.json");
-                File.WriteAllText(jsonPath, System.Text.Json.JsonSerializer.Serialize(meta, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+                string jsonPath = Path.Combine(modFolderPath, "mod.json");
+                await File.WriteAllTextAsync(jsonPath, System.Text.Json.JsonSerializer.Serialize(meta, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
 
                 if (_currentTab == ModType.BatStrategy)
-                    File.WriteAllText(Path.Combine(modFolderPath, "strategy.bat"), ":: Ваш код обхода здесь\r\n");
+                    await File.WriteAllTextAsync(Path.Combine(modFolderPath, "strategy.bat"), ":: Ваш код обхода здесь\r\n");
                 else
-                    File.WriteAllText(Path.Combine(modFolderPath, "list.txt"), "");
+                    await File.WriteAllTextAsync(Path.Combine(modFolderPath, "list.txt"), "");
 
-                CreateModOverlay.Visibility = Visibility.Collapsed;
-                LoadCurrentMods();
+                AnimationHelper.HideOverlay(CreateModOverlay, CreateContentBorder);
+                await LoadCurrentModsAsync();
             }
             catch (Exception ex)
             {
@@ -4909,19 +4978,10 @@ namespace ZapretGUI.Views
             if ((sender as FrameworkElement)?.DataContext is UIModItem mod)
             {
                 var btn = sender as System.Windows.Controls.Button;
-                var border = FindParent<System.Windows.Controls.Border>(btn, "ModCardContainer");
+                var border = UIHelper.FindParent<System.Windows.Controls.Border>(btn, "ModCardContainer");
 
                 if (border != null)
-                {
-                    var fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(150));
-                    var slideOut = new DoubleAnimation(0, mod.IsActive ? 30 : -30, TimeSpan.FromMilliseconds(150));
-
-                    border.RenderTransform = new TranslateTransform();
-                    border.BeginAnimation(OpacityProperty, fadeOut);
-                    border.RenderTransform.BeginAnimation(TranslateTransform.XProperty, slideOut);
-
-                    await Task.Delay(150);
-                }
+                    await AnimationHelper.SlideOutAndHideAsync(border, mod.IsActive);
 
                 mod.IsActive = !mod.IsActive;
 
@@ -4936,24 +4996,12 @@ namespace ZapretGUI.Views
                     _availableMods.Add(mod);
                 }
 
-                SaveAndApplyMods();
+                await SaveAndApplyModsAsync();
                 UpdateHeadersVisibility();
             }
         }
 
-        private T? FindParent<T>(DependencyObject child, string? name = null) where T : FrameworkElement
-        {
-            DependencyObject parent = VisualTreeHelper.GetParent(child);
-            while (parent != null)
-            {
-                if (parent is T typed && (name == null || typed.Name == name))
-                    return typed;
-                parent = VisualTreeHelper.GetParent(parent);
-            }
-            return null;
-        }
-
-        private void SaveAndApplyMods()
+        private async Task SaveAndApplyModsAsync()
         {
             var activeStrategies = new List<string>();
             var activeLists = new List<string>();
@@ -4962,18 +5010,17 @@ namespace ZapretGUI.Views
             {
                 foreach (var mod in _activeMods) activeStrategies.Add(mod.Id);
                 SettingsManager.Current.ActiveBatMods = activeStrategies;
-                _modManager.SyncActiveBatMods();
+                await _modManager.SyncActiveBatModsAsync();
             }
             else
             {
                 foreach (var mod in _activeMods) activeLists.Add(mod.Id);
                 SettingsManager.Current.ActiveListMods = activeLists;
-                _modManager.ApplyListMods();
+                await _modManager.ApplyListModsAsync();
             }
 
             SettingsManager.Save();
         }
-
 
         private void ShowConfirmDialog(string title, string message, string confirmBtnText, System.Windows.Media.Brush confirmBtnBrush, Action onConfirm)
         {
@@ -4982,20 +5029,20 @@ namespace ZapretGUI.Views
             BtnExecuteConfirm.Content = confirmBtnText;
             BtnExecuteConfirm.Background = confirmBtnBrush;
             _pendingConfirmAction = onConfirm;
-            ConfirmOverlay.Visibility = Visibility.Visible;
+            AnimationHelper.ShowOverlay(ConfirmOverlay, ConfirmContentBorder);
         }
 
         private void BtnCancelConfirm_Click(object sender, RoutedEventArgs e)
         {
             AudioHelper.PlayClick();
-            ConfirmOverlay.Visibility = Visibility.Collapsed;
+            AnimationHelper.HideOverlay(ConfirmOverlay, ConfirmContentBorder);
             _pendingConfirmAction = null;
         }
 
         private void BtnExecuteConfirm_Click(object sender, RoutedEventArgs e)
         {
             AudioHelper.PlayClick();
-            ConfirmOverlay.Visibility = Visibility.Collapsed;
+            AnimationHelper.HideOverlay(ConfirmOverlay, ConfirmContentBorder);
             _pendingConfirmAction?.Invoke();
             _pendingConfirmAction = null;
         }
@@ -5010,7 +5057,7 @@ namespace ZapretGUI.Views
                 "Вы уверены, что хотите отключить все моды в этой категории?",
                 "Отключить",
                 UIHelper.GetBrushFromHex("#F44336"),
-                () => {
+                async () => {
                     var modsToDisable = _activeMods.ToList();
                     foreach (var mod in modsToDisable)
                     {
@@ -5018,7 +5065,7 @@ namespace ZapretGUI.Views
                         _activeMods.Remove(mod);
                         _availableMods.Add(mod);
                     }
-                    SaveAndApplyMods();
+                    await SaveAndApplyModsAsync();
                     UpdateHeadersVisibility();
                 });
         }
@@ -5033,11 +5080,11 @@ namespace ZapretGUI.Views
                     $"Удалить мод '{mod.Meta.Name}' навсегда?\nЭто удалит все файлы мода с диска.",
                     "Удалить",
                     UIHelper.GetBrushFromHex("#F44336"),
-                    () => {
+                    async () => {
                         try
                         {
-                            var folderName = _currentTab == ModType.BatStrategy ? "strategies" : "lists";
-                            var modFolderPath = Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, folderName, mod.Id);
+                            string folderName = _currentTab == ModType.BatStrategy ? "strategies" : "lists";
+                            string modFolderPath = Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, folderName, mod.Id);
 
                             if (Directory.Exists(modFolderPath))
                                 Directory.Delete(modFolderPath, true);
@@ -5045,10 +5092,12 @@ namespace ZapretGUI.Views
                             if (mod.IsActive)
                             {
                                 _activeMods.Remove(mod);
-                                SaveAndApplyMods();
+                                await SaveAndApplyModsAsync();
                             }
                             else
+                            {
                                 _availableMods.Remove(mod);
+                            }
 
                             UpdateHeadersVisibility();
                         }
@@ -5060,15 +5109,14 @@ namespace ZapretGUI.Views
             }
         }
 
-
         private void BtnEditMod_Click(object sender, RoutedEventArgs e)
         {
             AudioHelper.PlayClick();
 
             if ((sender as FrameworkElement)?.DataContext is UIModItem mod)
             {
-                var folderName = _currentTab == ModType.BatStrategy ? "strategies" : "lists";
-                var fileName = _currentTab == ModType.BatStrategy ? "strategy.bat" : "list.txt";
+                string folderName = _currentTab == ModType.BatStrategy ? "strategies" : "lists";
+                string fileName = _currentTab == ModType.BatStrategy ? "strategy.bat" : "list.txt";
 
                 _currentEditingFilePath = Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, folderName, mod.Id, fileName);
 
@@ -5076,21 +5124,23 @@ namespace ZapretGUI.Views
                 {
                     TxtEditorTitle.Text = $"Редактор: {mod.Meta.Name} ({fileName})";
                     EditorTextBox.Text = File.ReadAllText(_currentEditingFilePath);
-                    EditorOverlay.Visibility = Visibility.Visible;
+                    AnimationHelper.ShowOverlay(EditorOverlay, EditorContentBorder);
                 }
                 else
+                {
                     System.Windows.MessageBox.Show($"Файл {fileName} не найден в папке мода!", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
             }
         }
 
-        private void BtnSaveEditor_Click(object sender, RoutedEventArgs e)
+        private async void BtnSaveEditor_Click(object sender, RoutedEventArgs e)
         {
             AudioHelper.PlayClick();
             try
             {
-                File.WriteAllText(_currentEditingFilePath, EditorTextBox.Text);
-                SaveAndApplyMods();
-                EditorOverlay.Visibility = Visibility.Collapsed;
+                await File.WriteAllTextAsync(_currentEditingFilePath, EditorTextBox.Text);
+                await SaveAndApplyModsAsync();
+                AnimationHelper.HideOverlay(EditorOverlay, EditorContentBorder);
             }
             catch (Exception ex)
             {
@@ -5101,10 +5151,10 @@ namespace ZapretGUI.Views
         private void BtnCloseEditor_Click(object sender, RoutedEventArgs e)
         {
             AudioHelper.PlayClick();
-            EditorOverlay.Visibility = Visibility.Collapsed;
+            AnimationHelper.HideOverlay(EditorOverlay, EditorContentBorder);
         }
 
-        private void BtnImportMod_Click(object sender, RoutedEventArgs e)
+        private async void BtnImportMod_Click(object sender, RoutedEventArgs e)
         {
             AudioHelper.PlayClick();
 
@@ -5120,7 +5170,7 @@ namespace ZapretGUI.Views
                 try
                 {
                     Directory.CreateDirectory(tempDir);
-                    ZipFile.ExtractToDirectory(openFileDialog.FileName, tempDir);
+                    await Task.Run(() => ZipFile.ExtractToDirectory(openFileDialog.FileName, tempDir));
 
                     string[] jsonFiles = Directory.GetFiles(tempDir, "mod.json", SearchOption.AllDirectories);
                     if (jsonFiles.Length == 0)
@@ -5133,7 +5183,7 @@ namespace ZapretGUI.Views
                     var modRootPath = Path.GetDirectoryName(jsonPath);
 
                     var meta = System.Text.Json.JsonSerializer.Deserialize<ModMetaData>(
-                        File.ReadAllText(jsonPath),
+                        await File.ReadAllTextAsync(jsonPath),
                         new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }
                     );
 
@@ -5146,7 +5196,7 @@ namespace ZapretGUI.Views
                     var safeId = Path.GetFileNameWithoutExtension(openFileDialog.FileName).Replace(" ", "_").ToLower();
                     var invalidChars = Path.GetInvalidFileNameChars();
                     safeId = new string(safeId.Where(c => !invalidChars.Contains(c)).ToArray());
-                    if (string.IsNullOrEmpty(safeId)) 
+                    if (string.IsNullOrEmpty(safeId))
                         safeId = $"mod_{DateTime.Now:HHmmss}";
 
                     var folderType = meta.IsBatStrategy ? "strategies" : "lists";
@@ -5163,18 +5213,21 @@ namespace ZapretGUI.Views
 
                     Directory.CreateDirectory(destPath);
 
-                    foreach (var file in Directory.GetFiles(modRootPath, "*.*", SearchOption.AllDirectories))
+                    await Task.Run(() =>
                     {
-                        var relativePath = file.Substring(modRootPath.Length + 1);
-                        var targetPath = Path.Combine(destPath, relativePath);
-                        Directory.CreateDirectory(Path.GetDirectoryName(targetPath));
-                        File.Copy(file, targetPath, true);
-                    }
+                        foreach (var file in Directory.GetFiles(modRootPath, "*.*", SearchOption.AllDirectories))
+                        {
+                            var relativePath = file.Substring(modRootPath.Length + 1);
+                            var targetPath = Path.Combine(destPath, relativePath);
+                            Directory.CreateDirectory(Path.GetDirectoryName(targetPath));
+                            File.Copy(file, targetPath, true);
+                        }
+                    });
 
                     if ((meta.IsBatStrategy && _currentTab != ModType.BatStrategy) || (!meta.IsBatStrategy && _currentTab != ModType.DomainList))
                         System.Windows.MessageBox.Show($"Мод '{meta.Name}' успешно установлен, но он относится к другой категории. Переключите вкладку, чтобы увидеть его.", "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
                     else
-                        LoadCurrentMods();
+                        await LoadCurrentModsAsync();
                 }
                 catch (Exception ex)
                 {
@@ -5188,7 +5241,7 @@ namespace ZapretGUI.Views
             }
         }
 
-        private void BtnExportMod_Click(object sender, RoutedEventArgs e)
+        private async void BtnExportMod_Click(object sender, RoutedEventArgs e)
         {
             AudioHelper.PlayClick();
 
@@ -5217,7 +5270,7 @@ namespace ZapretGUI.Views
                         if (File.Exists(saveFileDialog.FileName))
                             File.Delete(saveFileDialog.FileName);
 
-                        System.IO.Compression.ZipFile.CreateFromDirectory(modFolderPath, saveFileDialog.FileName);
+                        await Task.Run(() => System.IO.Compression.ZipFile.CreateFromDirectory(modFolderPath, saveFileDialog.FileName));
 
                         System.Windows.MessageBox.Show($"Мод '{mod.Meta.Name}' успешно экспортирован и готов к публикации!", "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
                     }

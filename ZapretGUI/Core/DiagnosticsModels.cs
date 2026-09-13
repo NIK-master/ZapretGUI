@@ -15,24 +15,7 @@ namespace ZapretGUI.Core
         public string Error { get; set; } = "";
 
         public string Title => $"DC {DcId} :{Port}";
-
         public string PingText => Ok && LatencyMs.HasValue ? $"{LatencyMs.Value:0} мс" : "Ошибка";
-
-        public string StatusColorBrush
-        {
-            get
-            {
-                bool isColorblind = SettingsManager.Current.ColorblindMode;
-
-                if (!Ok || !LatencyMs.HasValue)
-                    return isColorblind ? "#FF8C00" : "#D13438";
-
-                if (LatencyMs.Value < 120)
-                    return isColorblind ? "#0078D7" : "#107C10";
-
-                return isColorblind ? "#FFB900" : "#FF8C00";
-            }
-        }
     }
 
     public class PingResult
@@ -100,22 +83,6 @@ namespace ZapretGUI.Core
         public bool IsLoading { get; set; } = false;
         public string Title => Label;
         public string PingText => Ok && LatencyMs.HasValue ? $"{LatencyMs.Value:0} мс" : "Ошибка";
-
-        public string StatusColorBrush
-        {
-            get
-            {
-                bool isColorblind = SettingsManager.Current.ColorblindMode;
-
-                if (!Ok || !LatencyMs.HasValue)
-                    return isColorblind ? "#FF8C00" : "#D13438";
-
-                if (LatencyMs.Value < 120)
-                    return isColorblind ? "#0078D7" : "#107C10";
-
-                return isColorblind ? "#FFB900" : "#FF8C00";
-            }
-        }
     }
 
     public class DiagReport

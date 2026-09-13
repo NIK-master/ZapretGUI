@@ -10,27 +10,25 @@ namespace ZapretGUI
 {
     public partial class MainWindow : Window
     {
-        private readonly ZapretManager _zapretManager;
         private readonly TrayIconManager _trayIconManager;
 
+        // Делаем представления Nullable. Они будут создаваться только при клике.
         private Views.HomeView _homeView;
-        private Views.SettingsView _settingsView;
-        private Views.DiagnosticsView _diagnosticsView = new Views.DiagnosticsView();
-        private Views.ModsView _modsView;
+        private Views.SettingsView? _settingsView;
+        private Views.DiagnosticsView? _diagnosticsView;
+        private Views.ModsView? _modsView;
 
         public MainWindow()
         {
             InitializeComponent();
             SettingsManager.Load();
 
-            _ = InitializeModsAsync(); // Асинхронный запуск без блокировки UI
+            _ = InitializeModsAsync();
 
+            // Загружаем только главную страницу при старте
             _homeView = new Views.HomeView();
-            _settingsView = new Views.SettingsView();
-            _modsView = new Views.ModsView();
             MainContentContainer.Content = _homeView;
 
-            _zapretManager = new ZapretManager();
             _trayIconManager = new TrayIconManager(this);
 
             var configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.json");
@@ -51,7 +49,6 @@ namespace ZapretGUI
             await modManager.ApplyListModsAsync();
         }
 
-        // ... Остальной код MainWindow.xaml.cs остается БЕЗ ИЗМЕНЕНИЙ (начиная с CheckUpdatesOnStartupAsync)
         private async Task CheckUpdatesOnStartupAsync()
         {
             var appUpdate = await Core.UpdateManager.CheckForAppUpdateAsync();
@@ -114,28 +111,37 @@ namespace ZapretGUI
             }
         }
 
+        // --- ЛЕНИВАЯ ЗАГРУЗКА ВКЛАДОК ---
+
         private void BtnHome_Click(object sender, RoutedEventArgs e)
         {
-            if (MainContentContainer.Content == _homeView)
-                return;
+            if (MainContentContainer.Content == _homeView) return;
             MainContentContainer.Content = _homeView;
             SetActiveTab(BtnHome);
         }
 
-        private void BtnSettings_Click(object sender, RoutedEventArgs e)
+        private void BtnMods_Click(object sender, RoutedEventArgs e)
         {
-            if (MainContentContainer.Content == _settingsView)
-                return;
-            MainContentContainer.Content = _settingsView;
-            SetActiveTab(BtnSettings);
+            if (_modsView == null) _modsView = new Views.ModsView();
+            if (MainContentContainer.Content == _modsView) return;
+            MainContentContainer.Content = _modsView;
+            SetActiveTab(BtnMods);
         }
 
         private void BtnDiagnostics_Click(object sender, RoutedEventArgs e)
         {
-            if (MainContentContainer.Content == _diagnosticsView)
-                return;
+            if (_diagnosticsView == null) _diagnosticsView = new Views.DiagnosticsView();
+            if (MainContentContainer.Content == _diagnosticsView) return;
             MainContentContainer.Content = _diagnosticsView;
             SetActiveTab(BtnDiagnostics);
+        }
+
+        private void BtnSettings_Click(object sender, RoutedEventArgs e)
+        {
+            if (_settingsView == null) _settingsView = new Views.SettingsView();
+            if (MainContentContainer.Content == _settingsView) return;
+            MainContentContainer.Content = _settingsView;
+            SetActiveTab(BtnSettings);
         }
 
         private void SetActiveTab(System.Windows.Controls.Button activeBtn)
@@ -193,7 +199,7 @@ namespace ZapretGUI
             }
         }
 
-        public bool IsBypassRunning() => _homeView.IsRunning;
+        public bool IsBypassRunning() => BypassController.Current.IsRunning;
 
         public void ToggleBypass() => _homeView.ToggleFromTray();
 
@@ -232,14 +238,6 @@ namespace ZapretGUI
         {
             _trayIconManager.Dispose();
             base.OnClosed(e);
-        }
-
-        private void BtnMods_Click(object sender, RoutedEventArgs e)
-        {
-            if (MainContentContainer.Content == _modsView)
-                return;
-            MainContentContainer.Content = _modsView;
-            SetActiveTab(BtnMods);
         }
     }
 }

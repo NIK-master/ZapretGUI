@@ -394,36 +394,7 @@ namespace ZapretGUI.Views
             if (SettingsManager.Current.FocusMode)
                 return;
 
-            var shakeAnim = new System.Windows.Media.Animation.DoubleAnimation(0, 10, TimeSpan.FromMilliseconds(40))
-            {
-                AutoReverse = true,
-                RepeatBehavior = new System.Windows.Media.Animation.RepeatBehavior(4)
-            };
-            MainGridTranslate.BeginAnimation(TranslateTransform.XProperty, shakeAnim);
-
-            var skewAnim = new System.Windows.Media.Animation.DoubleAnimation(0, -3, TimeSpan.FromMilliseconds(30))
-            {
-                AutoReverse = true,
-                RepeatBehavior = new System.Windows.Media.Animation.RepeatBehavior(5)
-            };
-            MainGridSkew.BeginAnimation(SkewTransform.AngleXProperty, skewAnim);
-
-            var opacityAnim = new System.Windows.Media.Animation.DoubleAnimation(1, 0.6, TimeSpan.FromMilliseconds(50))
-            {
-                AutoReverse = true,
-                RepeatBehavior = new System.Windows.Media.Animation.RepeatBehavior(4)
-            };
-            MainGrid.BeginAnimation(UIElement.OpacityProperty, opacityAnim);
-
-            MainGridGlitchShadow.Opacity = 1;
-            var shadowAnim = new System.Windows.Media.Animation.DoubleAnimation(0, -15, TimeSpan.FromMilliseconds(40))
-            {
-                AutoReverse = true,
-                RepeatBehavior = new System.Windows.Media.Animation.RepeatBehavior(4)
-            };
-
-            shadowAnim.Completed += (s, e) => MainGridGlitchShadow.Opacity = 0;
-            MainGridGlitchShadow.BeginAnimation(DropShadowEffect.ShadowDepthProperty, shadowAnim);
+            AnimationHelper.PlayGlitchEffect(MainGrid, MainGridTranslate, MainGridSkew, MainGridGlitchShadow);
         }
 
         private void ProcessLogMessage(string message)
@@ -579,46 +550,13 @@ namespace ZapretGUI.Views
         private void BtnOpenConfigMenu_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
             AudioHelper.PlayClick();
-
             OverlayProfileListBox.Visibility = Visibility.Visible;
-
-            ConfigOverlay.Visibility = Visibility.Visible;
-            ConfigOverlay.Opacity = 0;
-
-            var fadeIn = new System.Windows.Media.Animation.DoubleAnimation(0, 1, TimeSpan.FromSeconds(0.2));
-            var scaleUp = new System.Windows.Media.Animation.DoubleAnimation(0.95, 1, TimeSpan.FromSeconds(0.2)) { EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut } };
-            var slideUp = new System.Windows.Media.Animation.DoubleAnimation(10, 0, TimeSpan.FromSeconds(0.2)) { EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut } };
-
-            ConfigOverlay.BeginAnimation(UIElement.OpacityProperty, fadeIn);
-
-            if (OverlayContentBorder.RenderTransform as System.Windows.Media.TransformGroup is System.Windows.Media.TransformGroup transformGroup)
-            {
-                var scale = transformGroup.Children[0] as System.Windows.Media.ScaleTransform;
-                var translate = transformGroup.Children[1] as System.Windows.Media.TranslateTransform;
-                scale?.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, scaleUp);
-                scale?.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, scaleUp);
-                translate?.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, slideUp);
-            }
+            AnimationHelper.ShowOverlay(ConfigOverlay, OverlayContentBorder);
         }
 
         private void CloseOverlay()
         {
-            var fadeOut = new System.Windows.Media.Animation.DoubleAnimation(1, 0, TimeSpan.FromSeconds(0.15));
-            var scaleDown = new System.Windows.Media.Animation.DoubleAnimation(1, 0.95, TimeSpan.FromSeconds(0.15)) { EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseIn } };
-            var slideDown = new System.Windows.Media.Animation.DoubleAnimation(0, 10, TimeSpan.FromSeconds(0.15)) { EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseIn } };
-
-            fadeOut.Completed += (s, ev) => { ConfigOverlay.Visibility = Visibility.Collapsed; };
-
-            ConfigOverlay.BeginAnimation(UIElement.OpacityProperty, fadeOut);
-
-            if (OverlayContentBorder.RenderTransform as System.Windows.Media.TransformGroup is System.Windows.Media.TransformGroup transformGroup)
-            {
-                var scale = transformGroup.Children[0] as System.Windows.Media.ScaleTransform;
-                var translate = transformGroup.Children[1] as System.Windows.Media.TranslateTransform;
-                scale?.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, scaleDown);
-                scale?.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, scaleDown);
-                translate?.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, slideDown);
-            }
+            AnimationHelper.HideOverlay(ConfigOverlay, OverlayContentBorder);
         }
 
         private void BtnCloseOverlay_Click(object sender, RoutedEventArgs e) => CloseOverlay();

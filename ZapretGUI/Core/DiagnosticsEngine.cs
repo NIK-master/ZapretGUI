@@ -44,6 +44,13 @@ namespace ZapretGUI.Core
             ["tgwsproxy"] = [AppConstants.TgProxyProcessName.ToLower(), "tg_ws_proxy", "flowseal"],
         };
 
+        private static readonly HttpClient _httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(12) };
+
+        static DiagnosticsEngine()
+        {
+            _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+        }
+
         public static async Task<(bool ok, double latencyMs, string error)> TcpConnectAsync(string ip, int port, double timeoutSec = 3.0)
         {
             var sw = Stopwatch.StartNew();
@@ -269,10 +276,8 @@ namespace ZapretGUI.Core
                 if (!result.SystemIps.Intersect(result.DohIps).Any())
                     result.Spoofed = true;
             }
-            else if 
-                (result.SystemIps.Count == 0) result.Spoofed = true;
-            else if 
-                (result.DohIps.Count == 0) result.Error = "1.1.1.1 недоступен";
+            else if (result.SystemIps.Count == 0) result.Spoofed = true;
+            else if (result.DohIps.Count == 0) result.Error = "1.1.1.1 недоступен";
             progress?.Invoke(1.0);
             return result;
         }
@@ -303,16 +308,12 @@ namespace ZapretGUI.Core
             ];
             progress?.Invoke(0.1);
 
-            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(12) };
-            http.DefaultRequestHeaders.UserAgent.ParseAdd(
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
-
             foreach (var url in urls)
             {
                 try
                 {
                     var sw = Stopwatch.StartNew();
-                    var data = await http.GetByteArrayAsync(url);
+                    var data = await _httpClient.GetByteArrayAsync(url);
                     sw.Stop();
                     double sizeKb = data.Length / 1024.0;
                     if (sizeKb < 5) continue;
@@ -375,11 +376,8 @@ namespace ZapretGUI.Core
             var dcOk = r.DcResults.Where(x => x.Ok).ToList();
             var pingOk = r.PingResults.Where(x => x.Ok).ToList();
 
-            if (r.DnsResult?.Spoofed == true) 
-                blocks.Add(BlockType.DnsSpoof);
-
-            if (r.DpiResult?.DpiDetected == true) 
-                blocks.Add(BlockType.SniBlock);
+            if (r.DnsResult?.Spoofed == true) blocks.Add(BlockType.DnsSpoof);
+            if (r.DpiResult?.DpiDetected == true) blocks.Add(BlockType.SniBlock);
 
             if (dcOk.Count == 0 && pingOk.Count > 0 && !blocks.Contains(BlockType.SniBlock))
                 blocks.Add(BlockType.IpBlock);
@@ -400,8 +398,7 @@ namespace ZapretGUI.Core
                 }
             }
 
-            if (r.MediaResult?.Throttled == true) 
-                blocks.Add(BlockType.MediaThrottle);
+            if (r.MediaResult?.Throttled == true) blocks.Add(BlockType.MediaThrottle);
             return [.. blocks];
         }
 
@@ -445,65 +442,6 @@ namespace ZapretGUI.Core
                 recs.Add("🎮  Discord UDP: доступен ✓, голос работает без дополнительных настроек.");
 
             return recs;
-        }
-
-        public static (string emoji, string title, string detail, string color) HumanVerdict(DiagReport r)
-        {
-            var blocks = new HashSet<BlockType>(r.BlockTypes);
-            var app = r.AppStatus;
-            var dcOk = r.DcResults.Count(x => x.Ok);
-            var dcTot = r.DcResults.Count;
-            var pingOk = r.PingResults.Any(p => p.Ok);
-            var bypass = app != null && app.ZapretRunning;
-
-            var isCb = SettingsManager.Current.ColorblindMode;
-            var successColor = isCb ? "#0078D7" : "#107C10";
-            var errorColor = isCb ? "#FF8C00" : "#D13438";
-            var warningColor = isCb ? "#FFB900" : "#FF8C00";
-
-            if (app?.TgWsProxyRunning == true)
-                return ("🟢", "tg-ws-proxy активен", "Telegram работает через прокси локально.", successColor);
-
-            if (!pingOk && dcOk == 0)
-                return ("🔴", "Интернета нет", "Ни один сервер не отвечает.", errorColor);
-
-            if (blocks.Contains(BlockType.SniBlock))
-                return bypass
-                    ? ("🟢", "Telegram работает (обходчик активен)", "DPI обнаружен, но обходчик запущен.", successColor)
-                    : ("🔴", "Telegram заблокирован (DPI)", "Нужен Zapret.", errorColor);
-
-            if (blocks.Contains(BlockType.IpBlock))
-                return bypass
-                    ? ("🟢", "Telegram работает", "IP заблокированы, но обходчик компенсирует.", successColor)
-                    : ("🔴", "Серверы заблокированы", "Нужен VPN.", errorColor);
-
-            if (dcOk >= Math.Max(dcTot / 2, 1))
-                return ("🟢", "Telegram работает нормально", "Серверы отвечают быстро.", successColor);
-
-            return ("🟡", "Ситуация неоднозначная", "Проблемы со связью.", warningColor);
-        }
-
-        public static (string emoji, string title, string detail, string color) DiscordVerdict(DiagReport r)
-        {
-            var app = r.AppStatus;
-            var bypass = app != null && app.ZapretRunning;
-
-            var isCb = SettingsManager.Current.ColorblindMode;
-            var successColor = isCb ? "#0078D7" : "#107C10";
-            var errorColor = isCb ? "#FF8C00" : "#D13438";
-            var warningColor = isCb ? "#FFB900" : "#FF8C00";
-
-            if (r.DiscordPing != null && r.DiscordPing.Count > 0 && r.DiscordPing.All(p => !p.Ok))
-                return bypass
-                    ? ("🟡", "Сбои в Discord", "Обходчик работает, но серверы недоступны. Возможно, стоит сменить профиль.", warningColor)
-                    : ("🔴", "Discord полностью заблокирован", "API и Gateway не отвечают. Включи Zapret.", errorColor);
-
-            if (r.UdpResult?.Blocked == true)
-                return bypass
-                    ? ("🟢", "Discord работает (обходчик активен)", "UDP заблокирован, но Zapret маршрутизирует трафик.", successColor)
-                    : ("🟡", "Проблемы с голосом", "Чаты работают, но UDP заблокирован. Звонки не пройдут.", warningColor);
-
-            return ("🟢", "Discord работает нормально", "Все нужные порты и серверы доступны.", successColor);
         }
 
         public static async Task<DiagReport> RunFullDiagnosticsAsync(Action<double, string>? progress = null)

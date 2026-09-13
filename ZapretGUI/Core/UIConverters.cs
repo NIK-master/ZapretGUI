@@ -30,4 +30,23 @@ namespace ZapretGUI.Core
 
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotImplementedException();
     }
+    public class PingToBrushConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            var isColorblind = SettingsManager.Current.ColorblindMode;
+
+            if (value is double latency)
+            {
+                if (latency < 120) 
+                    return UIHelper.GetBrushFromHex(isColorblind ? "#0078D7" : "#107C10");
+
+                return UIHelper.GetBrushFromHex(isColorblind ? "#FFB900" : "#FF8C00");
+            }
+
+            return UIHelper.GetBrushFromHex(isColorblind ? "#FF8C00" : "#D13438");
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotImplementedException();
+    }
 }

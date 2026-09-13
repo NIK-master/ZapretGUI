@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using ZapretGUI.Core;
@@ -76,13 +77,14 @@ namespace ZapretGUI.Views
 
         private void UpdateUI(DiagReport report)
         {
-            var tgVerdict = DiagnosticsEngine.HumanVerdict(report);
+            // Теперь мы вызываем методы прямо из этого же класса
+            var tgVerdict = HumanVerdict(report);
             TxtTgMainStatus.Text = tgVerdict.title;
             TxtTgSubStatus.Text = tgVerdict.detail;
             TelegramCard.BorderBrush = UIHelper.GetBrushFromHex(tgVerdict.color);
             TxtTgEmoji.Foreground = UIHelper.GetBrushFromHex(tgVerdict.color);
 
-            var dsVerdict = DiagnosticsEngine.DiscordVerdict(report);
+            var dsVerdict = DiscordVerdict(report);
             TxtDiscordMainStatus.Text = dsVerdict.title;
             TxtDiscordSubStatus.Text = dsVerdict.detail;
             DiscordCard.BorderBrush = UIHelper.GetBrushFromHex(dsVerdict.color);
@@ -99,10 +101,70 @@ namespace ZapretGUI.Views
 
             RecItemsControl.ItemsSource = report.Recommendations;
             DcItemsControl.ItemsSource = report.DcResults;
-            RecItemsControl.ItemsSource = report.Recommendations;
-            DcItemsControl.ItemsSource = report.DcResults;
-            DiscordItemsControl.ItemsSource = report.DiscordPing; 
+            DiscordItemsControl.ItemsSource = report.DiscordPing;
         }
+
+        // --- ПЕРЕНЕСЕННЫЕ ИЗ ДВИЖКА МЕТОДЫ ОФОРМЛЕНИЯ ---
+        private (string emoji, string title, string detail, string color) HumanVerdict(DiagReport r)
+        {
+            var blocks = new HashSet<BlockType>(r.BlockTypes);
+            var app = r.AppStatus;
+            int dcOk = r.DcResults.Count(x => x.Ok);
+            int dcTot = r.DcResults.Count;
+            bool pingOk = r.PingResults.Any(p => p.Ok);
+            bool bypass = app != null && app.ZapretRunning;
+
+            bool isCb = SettingsManager.Current.ColorblindMode;
+            string successColor = isCb ? "#0078D7" : "#107C10";
+            string errorColor = isCb ? "#FF8C00" : "#D13438";
+            string warningColor = isCb ? "#FFB900" : "#FF8C00";
+
+            if (app?.TgWsProxyRunning == true)
+                return ("🟢", "tg-ws-proxy активен", "Telegram работает через прокси локально.", successColor);
+
+            if (!pingOk && dcOk == 0)
+                return ("🔴", "Интернета нет", "Ни один сервер не отвечает.", errorColor);
+
+            if (blocks.Contains(BlockType.SniBlock))
+                return bypass
+                    ? ("🟢", "Telegram работает (обходчик активен)", "DPI обнаружен, но обходчик запущен.", successColor)
+                    : ("🔴", "Telegram заблокирован (DPI)", "Нужен Zapret.", errorColor);
+
+            if (blocks.Contains(BlockType.IpBlock))
+                return bypass
+                    ? ("🟢", "Telegram работает", "IP заблокированы, но обходчик компенсирует.", successColor)
+                    : ("🔴", "Серверы заблокированы", "Нужен VPN.", errorColor);
+
+            if (dcOk >= Math.Max(dcTot / 2, 1))
+                return ("🟢", "Telegram работает нормально", "Серверы отвечают быстро.", successColor);
+
+            return ("🟡", "Ситуация неоднозначная", "Проблемы со связью.", warningColor);
+        }
+
+        private (string emoji, string title, string detail, string color) DiscordVerdict(DiagReport r)
+        {
+            var app = r.AppStatus;
+            bool bypass = app != null && app.ZapretRunning;
+
+            bool isCb = SettingsManager.Current.ColorblindMode;
+            string successColor = isCb ? "#0078D7" : "#107C10";
+            string errorColor = isCb ? "#FF8C00" : "#D13438";
+            string warningColor = isCb ? "#FFB900" : "#FF8C00";
+
+            if (r.DiscordPing != null && r.DiscordPing.Count > 0 && r.DiscordPing.All(p => !p.Ok))
+                return bypass
+                    ? ("🟡", "Сбои в Discord", "Обходчик работает, но серверы недоступны. Возможно, стоит сменить профиль.", warningColor)
+                    : ("🔴", "Discord полностью заблокирован", "API и Gateway не отвечают. Включи Zapret.", errorColor);
+
+            if (r.UdpResult?.Blocked == true)
+                return bypass
+                    ? ("🟢", "Discord работает (обходчик активен)", "UDP заблокирован, но Zapret маршрутизирует трафик.", successColor)
+                    : ("🟡", "Проблемы с голосом", "Чаты работают, но UDP заблокирован. Звонки не пройдут.", warningColor);
+
+            return ("🟢", "Discord работает нормально", "Все нужные порты и серверы доступны.", successColor);
+        }
+
+        // --- ЛОГИКА ПАСХАЛОК ---
 
         private void TxtDiscordEmoji_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
@@ -162,7 +224,7 @@ namespace ZapretGUI.Views
             AudioHelper.PlaySuccess();
 
             TxtTgMainStatus.Text = "Telegram (Режим Дурова)";
-            TxtTgMainStatus.Foreground = UIHelper.GetBrushFromHex("#00E5FF"); 
+            TxtTgMainStatus.Foreground = UIHelper.GetBrushFromHex("#00E5FF");
             TxtTgSubStatus.Text = "Свободу интернету! Трафик летит напрямую.";
 
             var flyX = new System.Windows.Media.Animation.DoubleAnimation(0, 150, TimeSpan.FromSeconds(0.3))

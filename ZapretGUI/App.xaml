@@ -14,6 +14,7 @@
 
             <localCore:ActiveStatusToBrushConverter x:Key="ActiveStatusToBrushConverter" />
             <localCore:ActiveStatusToIconConverter x:Key="ActiveStatusToIconConverter" />
+            <localCore:PingToBrushConverter x:Key="PingToBrushConverter" />
 
             <SolidColorBrush x:Key="BrandSuccessBrush" Color="#107C10" />
             <SolidColorBrush x:Key="BrandErrorBrush" Color="#D13438" />
@@ -22,6 +23,8 @@
             <SolidColorBrush x:Key="SurfaceBackgroundBrush" Color="#151515" />
             <SolidColorBrush x:Key="CardBorderBrush" Color="#2A2A2A" />
             <SolidColorBrush x:Key="CardHoverBorderBrush" Color="#4A4A4A" />
+            
+            
 
         </ResourceDictionary>
     </Application.Resources>
