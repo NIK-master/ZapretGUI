@@ -17,7 +17,7 @@
                     <TextBlock Text="Автозагрузка Windows" FontSize="16" FontWeight="SemiBold" Foreground="White"/>
                     <TextBlock Text="Запускать программу при включении компьютера, чтобы сразу чинить интернет." Foreground="#888888" FontSize="13" TextWrapping="Wrap" Margin="0,4,0,0"/>
                 </StackPanel>
-                <ui:ToggleSwitch x:Name="ToggleAutoStart" IsChecked="True" Grid.Column="1" VerticalAlignment="Center"/>
+                <CheckBox x:Name="ToggleAutoStart" Style="{StaticResource CyberToggleStyle}" IsChecked="True" Grid.Column="1" VerticalAlignment="Center"/>
             </Grid>
         </Border>
 
@@ -31,7 +31,7 @@
                     <TextBlock Text="Режим фокусировки" FontSize="16" FontWeight="SemiBold" Foreground="White"/>
                     <TextBlock Text="Отключить тряску интерфейса и глитчи при ошибках." Foreground="#888888" FontSize="13" TextWrapping="Wrap" Margin="0,4,0,0"/>
                 </StackPanel>
-                <ui:ToggleSwitch x:Name="ToggleFocusMode" IsChecked="False" Grid.Column="1" VerticalAlignment="Center"/>
+                <CheckBox x:Name="ToggleFocusMode" Style="{StaticResource CyberToggleStyle}" IsChecked="False" Grid.Column="1" VerticalAlignment="Center"/>
             </Grid>
         </Border>
 
@@ -45,7 +45,7 @@
                     <TextBlock Text="Режим цветовой слепоты" FontSize="16" FontWeight="SemiBold" Foreground="White"/>
                     <TextBlock Text="Заменить красно-зеленые индикаторы на сине-оранжевые." Foreground="#888888" FontSize="13" TextWrapping="Wrap" Margin="0,4,0,0"/>
                 </StackPanel>
-                <ui:ToggleSwitch x:Name="ToggleColorblind" IsChecked="False" Grid.Column="1" VerticalAlignment="Center"/>
+                <CheckBox x:Name="ToggleColorblind" Style="{StaticResource CyberToggleStyle}" IsChecked="False" Grid.Column="1" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </StackPanel>

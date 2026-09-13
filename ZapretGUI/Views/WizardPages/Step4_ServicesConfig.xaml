@@ -16,7 +16,7 @@
                     <TextBlock Text="Zapret (Обход блокировок)" FontSize="16" FontWeight="SemiBold" Foreground="White"/>
                     <TextBlock Text="Основной модуль для починки YouTube, Discord и других сервисов. Рекомендуется оставить включенным." Foreground="#888888" FontSize="13" TextWrapping="Wrap" Margin="0,5,0,0"/>
                 </StackPanel>
-                <ui:ToggleSwitch x:Name="ToggleZapret" IsChecked="True" Grid.Column="1" VerticalAlignment="Center"/>
+                <CheckBox x:Name="ToggleZapret" Style="{StaticResource CyberToggleStyle}" IsChecked="True" Grid.Column="1" VerticalAlignment="Center"/>
             </Grid>
         </Border>
 
@@ -30,7 +30,7 @@
                     <TextBlock Text="TgWsProxy (Прокси для Telegram)" FontSize="16" FontWeight="SemiBold" Foreground="White"/>
                     <TextBlock Text="Отдельный модуль для стабилизации работы десктопного клиента Telegram." Foreground="#888888" FontSize="13" TextWrapping="Wrap" Margin="0,5,0,0"/>
                 </StackPanel>
-                <ui:ToggleSwitch x:Name="ToggleTgProxy" IsChecked="True" Grid.Column="1" VerticalAlignment="Center"/>
+                <CheckBox x:Name="ToggleTgProxy" Style="{StaticResource CyberToggleStyle}" IsChecked="True" Grid.Column="1" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </StackPanel>

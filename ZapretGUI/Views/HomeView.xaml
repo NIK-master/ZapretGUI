@@ -210,7 +210,7 @@
                         <StackPanel Margin="20">
                             <Grid Margin="0,0,0,10">
                                 <TextBlock Text="Настройки Zapret" FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Left" VerticalAlignment="Center"/>
-                                <ui:ToggleSwitch x:Name="ZapretToggle" IsChecked="True" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Settings_Changed"/>
+                                <CheckBox x:Name="ZapretToggle" Style="{StaticResource CyberToggleStyle}" IsChecked="True" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Settings_Changed"/>
                             </Grid>
                             <TextBlock x:Name="StatusText" Text="Остановлен" Foreground="#D13438" Margin="0,0,0,15"/>
 
@@ -243,7 +243,7 @@
                         <StackPanel Margin="20">
                             <Grid Margin="0,0,0,5">
                                 <TextBlock Text="TgWsProxy" FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Left" VerticalAlignment="Center"/>
-                                <ui:ToggleSwitch x:Name="TgProxyToggle" IsChecked="True" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Settings_Changed"/>
+                                <CheckBox x:Name="TgProxyToggle" Style="{StaticResource CyberToggleStyle}" IsChecked="True" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Settings_Changed"/>
                             </Grid>
                             <TextBlock Text="Прокси для Telegram" Foreground="#A0A0A0" FontSize="12" Margin="0,0,0,15"/>
                         </StackPanel>
