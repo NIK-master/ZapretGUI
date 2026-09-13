@@ -90,7 +90,6 @@
                         <TextBlock Text="{Binding Meta.Description}" FontSize="13" Foreground="#AAAAAA" TextWrapping="Wrap"/>
                     </StackPanel>
 
-                    <!-- Блок с кнопками Включить, Изменить, Экспорт, Удалить -->
                     <StackPanel Grid.Column="1" VerticalAlignment="Center" MinWidth="130">
                         <Button Style="{StaticResource ModActionButton}" Click="BtnToggleMod_Click" HorizontalAlignment="Stretch"/>
                         <StackPanel Orientation="Horizontal" Margin="0,8,0,0" HorizontalAlignment="Center">
@@ -143,141 +142,139 @@
         </Style>
     </UserControl.Resources>
 
-    <Grid x:Name="MainGrid" Margin="20">
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="220"/>
-            <ColumnDefinition Width="20"/>
-            <ColumnDefinition Width="*"/>
-        </Grid.ColumnDefinitions>
+    <Grid Margin="20">
+        <!-- Сетка с основным контентом (именно она будет размываться) -->
+        <Grid x:Name="ContentGrid">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="220"/>
+                <ColumnDefinition Width="20"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
 
-        <Border Grid.Column="0" Background="#0C0C0C" CornerRadius="12" BorderBrush="#2A2A2A" BorderThickness="1" Padding="15">
-            <StackPanel>
-                <TextBlock Text="Модификации" FontSize="20" FontWeight="Bold" Margin="0,0,0,20"/>
-                <Button x:Name="BtnStrategies" Style="{StaticResource SidebarButtonStyle}" Click="BtnStrategies_Click">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="&#xE8B7;" FontFamily="Segoe MDL2 Assets" FontSize="16" Margin="0,0,10,0" VerticalAlignment="Center"/>
-                        <TextBlock Text=".bat Стратегии" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                    </StackPanel>
-                </Button>
-                <Button x:Name="BtnDomainLists" Style="{StaticResource SidebarButtonStyle}" Click="BtnDomainLists_Click">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="&#xE71C;" FontFamily="Segoe MDL2 Assets" FontSize="16" Margin="0,0,10,0" VerticalAlignment="Center"/>
-                        <TextBlock Text="Листы доменов" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                    </StackPanel>
-                </Button>
-                <Border Height="1" Background="#2A2A2A" Margin="0,10"/>
-                <Button x:Name="BtnGuide" Style="{StaticResource SidebarButtonStyle}" Click="BtnGuide_Click">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="&#xE9CE;" FontFamily="Segoe MDL2 Assets" FontSize="16" Margin="0,0,10,0" VerticalAlignment="Center"/>
-                        <TextBlock Text="Руководство" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                    </StackPanel>
-                </Button>
-            </StackPanel>
-        </Border>
-
-        <Grid Grid.Column="2">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/>
-            </Grid.RowDefinitions>
-
-            <!-- Шапка и Action Bar (Перенесены друг под друга) -->
-            <StackPanel Grid.Row="0" Margin="0,0,0,10">
-                <TextBlock x:Name="TxtCategoryTitle" Text=".bat Стратегии" FontSize="22" FontWeight="Bold"/>
-                <TextBlock x:Name="TxtCategoryDesc" Text="Пользовательские скрипты обхода для специфичных задач." Foreground="#888888" FontSize="13" Margin="0,5,0,15" TextWrapping="Wrap"/>
-
-                <!-- WrapPanel автоматически переносит кнопки, если не хватает ширины -->
-                <WrapPanel x:Name="ActionButtonsPanel" Orientation="Horizontal">
-                    <Button Background="Transparent" Foreground="#F44336" BorderBrush="#333333" BorderThickness="1" Padding="12,6" Margin="0,0,10,10" Cursor="Hand" Click="BtnDisableAll_Click">
-                        <Button.Resources>
-                            <Style TargetType="Border">
-                                <Setter Property="CornerRadius" Value="6"/>
-                            </Style>
-                        </Button.Resources>
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="&#xE711;" FontFamily="Segoe MDL2 Assets" Margin="0,1,6,0" FontSize="11" VerticalAlignment="Center" FontWeight="Bold"/>
-                            <TextBlock Text="Отключить всё" VerticalAlignment="Center" FontWeight="SemiBold"/>
-                        </StackPanel>
-                    </Button>
-
-                    <Button Background="Transparent" Foreground="#60A5FA" BorderBrush="#333333" BorderThickness="1" Padding="12,6" Margin="0,0,10,10" Cursor="Hand" Click="BtnImportMod_Click">
-                        <Button.Resources>
-                            <Style TargetType="Border">
-                                <Setter Property="CornerRadius" Value="6"/>
-                            </Style>
-                        </Button.Resources>
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="&#xE8B5;" FontFamily="Segoe MDL2 Assets" Margin="0,1,6,0" FontSize="14" VerticalAlignment="Center"/>
-                            <TextBlock Text="Импорт (.zip)" VerticalAlignment="Center" FontWeight="SemiBold"/>
-                        </StackPanel>
-                    </Button>
-
-                    <Button Background="Transparent" Foreground="#A0A0A0" BorderBrush="#333333" BorderThickness="1" Padding="12,6" Margin="0,0,10,10" Cursor="Hand" Click="BtnOpenModsFolder_Click">
-                        <Button.Resources>
-                            <Style TargetType="Border">
-                                <Setter Property="CornerRadius" Value="6"/>
-                            </Style>
-                        </Button.Resources>
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="&#xE8B7;" FontFamily="Segoe MDL2 Assets" Margin="0,1,6,0" FontSize="14" VerticalAlignment="Center"/>
-                            <TextBlock Text="Папка" VerticalAlignment="Center" FontWeight="SemiBold"/>
-                        </StackPanel>
-                    </Button>
-
-                    <Button Background="{DynamicResource BrandSuccessBrush}" Foreground="White" BorderThickness="0" Padding="12,6" Margin="0,0,10,10" Cursor="Hand" Click="BtnCreateMod_Click">
-                        <Button.Resources>
-                            <Style TargetType="Border">
-                                <Setter Property="CornerRadius" Value="6"/>
-                            </Style>
-                        </Button.Resources>
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="&#xE710;" FontFamily="Segoe MDL2 Assets" Margin="0,1,6,0" FontSize="12" VerticalAlignment="Center" FontWeight="Bold"/>
-                            <TextBlock Text="Создать" VerticalAlignment="Center" FontWeight="Bold"/>
-                        </StackPanel>
-                    </Button>
-                </WrapPanel>
-            </StackPanel>
-
-            <ScrollViewer x:Name="ModsListsPanel" Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="0,0,15,0">
+            <Border Grid.Column="0" Background="#0C0C0C" CornerRadius="12" BorderBrush="#2A2A2A" BorderThickness="1" Padding="15">
                 <StackPanel>
-                    <!-- Секция Включенных -->
-                    <TextBlock x:Name="ActiveModsHeader" Text="ВКЛЮЧЕННЫЕ МОДЫ" Foreground="{DynamicResource BrandSuccessBrush}" FontSize="12" FontWeight="Bold" Margin="0,0,0,10"/>
-                    <ItemsControl x:Name="ActiveModsList" ItemTemplate="{StaticResource ModItemTemplate}"/>
-
-                    <Border x:Name="ModsDivider" Height="1" Background="#2A2A2A" Margin="0,10,0,20"/>
-
-                    <!-- Секция Доступных -->
-                    <TextBlock x:Name="AvailableModsHeader" Text="ДОСТУПНЫЕ МОДЫ" Foreground="#888888" FontSize="12" FontWeight="Bold" Margin="0,0,0,10"/>
-                    <ItemsControl x:Name="AvailableModsList" ItemTemplate="{StaticResource ModItemTemplate}"/>
-
-                    <!-- Пустое состояние -->
-                    <StackPanel x:Name="EmptyStatePanel" HorizontalAlignment="Center" Margin="0,60,0,0" Visibility="Collapsed">
-                        <TextBlock Text="&#xE711;" FontFamily="Segoe MDL2 Assets" FontSize="48" Foreground="#333333" HorizontalAlignment="Center" Margin="0,0,0,10"/>
-                        <TextBlock Text="В этой категории нет установленных модов" FontSize="16" Foreground="#666666" FontWeight="SemiBold" HorizontalAlignment="Center"/>
-                    </StackPanel>
-                </StackPanel>
-            </ScrollViewer>
-
-            <ScrollViewer x:Name="GuidePanel" Grid.Row="1" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" Padding="0,0,20,0">
-                <StackPanel>
-                    <Border Background="#1A1A00" BorderBrush="{DynamicResource BrandSuccessBrush}" BorderThickness="1" CornerRadius="8" Padding="15" Margin="0,0,0,20">
-                        <StackPanel>
-                            <TextBlock Text="⚠️ ВАЖНАЯ ИНФОРМАЦИЯ!" Foreground="{DynamicResource BrandSuccessBrush}" FontWeight="Bold" FontSize="16" Margin="0,0,0,10"/>
-                            <TextBlock Text="Добро пожаловать в раздел модификаций! Здесь вы можете гибко настраивать обход блокировок, добавлять свои скрипты для игр и управлять списками сайтов. Все изменения сохраняются локально и автоматически объединяются." Foreground="#CCCCCC" TextWrapping="Wrap" LineHeight="20"/>
+                    <TextBlock Text="Модификации" FontSize="20" FontWeight="Bold" Margin="0,0,0,20"/>
+                    <Button x:Name="BtnStrategies" Style="{StaticResource SidebarButtonStyle}" Click="BtnStrategies_Click">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE8B7;" FontFamily="Segoe MDL2 Assets" FontSize="16" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                            <TextBlock Text=".bat Стратегии" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
                         </StackPanel>
-                    </Border>
-                    <TextBlock Text="1. .BAT-СТРАТЕГИИ (Обход для игр)" FontWeight="Bold" FontSize="16" Foreground="White" Margin="0,0,0,10"/>
-                    <TextBlock Text="Этот раздел предназначен для добавления готовых батников (.bat), которые создают индивидуальные стратегии обхода (например, для Battle.net, EA App, League of Legends). Вы можете скачать готовые моды или написать свои через встроенный редактор." Foreground="#AAAAAA" TextWrapping="Wrap" Margin="0,0,0,15" LineHeight="20"/>
-                    <TextBlock Text="2. ЛИСТЫ ДОМЕНОВ" FontWeight="Bold" FontSize="16" Foreground="White" Margin="0,0,0,10"/>
-                    <TextBlock Text="Позволяет создавать именованные списки сайтов. Программа сама соберет все активные листы и объединит их в единый список без дубликатов. Если выключить мод, домены автоматически удалятся из главного списка." Foreground="#AAAAAA" TextWrapping="Wrap" Margin="0,0,0,15" LineHeight="20"/>
-                    <TextBlock Text="Как включить мод:" FontWeight="Bold" FontSize="14" Foreground="White" Margin="0,0,0,5"/>
-                    <TextBlock Text="1. Нажмите «Включить» в колонке доступных модов.&#x0a;2. Перейдите на вкладку «Главная» и перезапустите обход.&#x0a;3. Моды-стратегии появятся в списке конфигов на главном экране." Foreground="#AAAAAA" TextWrapping="Wrap" LineHeight="22"/>
+                    </Button>
+                    <Button x:Name="BtnDomainLists" Style="{StaticResource SidebarButtonStyle}" Click="BtnDomainLists_Click">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE71C;" FontFamily="Segoe MDL2 Assets" FontSize="16" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="Листы доменов" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Border Height="1" Background="#2A2A2A" Margin="0,10"/>
+                    <Button x:Name="BtnGuide" Style="{StaticResource SidebarButtonStyle}" Click="BtnGuide_Click">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE9CE;" FontFamily="Segoe MDL2 Assets" FontSize="16" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="Руководство" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
                 </StackPanel>
-            </ScrollViewer>
+            </Border>
+
+            <Grid Grid.Column="2">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <StackPanel Grid.Row="0" Margin="0,0,0,10">
+                    <TextBlock x:Name="TxtCategoryTitle" Text=".bat Стратегии" FontSize="22" FontWeight="Bold"/>
+                    <TextBlock x:Name="TxtCategoryDesc" Text="Пользовательские скрипты обхода для специфичных задач." Foreground="#888888" FontSize="13" Margin="0,5,0,15" TextWrapping="Wrap"/>
+
+                    <WrapPanel x:Name="ActionButtonsPanel" Orientation="Horizontal">
+                        <Button Background="Transparent" Foreground="#F44336" BorderBrush="#333333" BorderThickness="1" Padding="12,6" Margin="0,0,10,10" Cursor="Hand" Click="BtnDisableAll_Click">
+                            <Button.Resources>
+                                <Style TargetType="Border">
+                                    <Setter Property="CornerRadius" Value="6"/>
+                                </Style>
+                            </Button.Resources>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE711;" FontFamily="Segoe MDL2 Assets" Margin="0,1,6,0" FontSize="11" VerticalAlignment="Center" FontWeight="Bold"/>
+                                <TextBlock Text="Отключить всё" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                            </StackPanel>
+                        </Button>
+
+                        <Button Background="Transparent" Foreground="#60A5FA" BorderBrush="#333333" BorderThickness="1" Padding="12,6" Margin="0,0,10,10" Cursor="Hand" Click="BtnImportMod_Click">
+                            <Button.Resources>
+                                <Style TargetType="Border">
+                                    <Setter Property="CornerRadius" Value="6"/>
+                                </Style>
+                            </Button.Resources>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE8B5;" FontFamily="Segoe MDL2 Assets" Margin="0,1,6,0" FontSize="14" VerticalAlignment="Center"/>
+                                <TextBlock Text="Импорт (.zip)" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                            </StackPanel>
+                        </Button>
+
+                        <Button Background="Transparent" Foreground="#A0A0A0" BorderBrush="#333333" BorderThickness="1" Padding="12,6" Margin="0,0,10,10" Cursor="Hand" Click="BtnOpenModsFolder_Click">
+                            <Button.Resources>
+                                <Style TargetType="Border">
+                                    <Setter Property="CornerRadius" Value="6"/>
+                                </Style>
+                            </Button.Resources>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE8B7;" FontFamily="Segoe MDL2 Assets" Margin="0,1,6,0" FontSize="14" VerticalAlignment="Center"/>
+                                <TextBlock Text="Папка" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                            </StackPanel>
+                        </Button>
+
+                        <Button Background="{DynamicResource BrandSuccessBrush}" Foreground="White" BorderThickness="0" Padding="12,6" Margin="0,0,10,10" Cursor="Hand" Click="BtnCreateMod_Click">
+                            <Button.Resources>
+                                <Style TargetType="Border">
+                                    <Setter Property="CornerRadius" Value="6"/>
+                                </Style>
+                            </Button.Resources>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE710;" FontFamily="Segoe MDL2 Assets" Margin="0,1,6,0" FontSize="12" VerticalAlignment="Center" FontWeight="Bold"/>
+                                <TextBlock Text="Создать" VerticalAlignment="Center" FontWeight="Bold"/>
+                            </StackPanel>
+                        </Button>
+                    </WrapPanel>
+                </StackPanel>
+
+                <ScrollViewer x:Name="ModsListsPanel" Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="0,0,15,0">
+                    <StackPanel>
+                        <TextBlock x:Name="ActiveModsHeader" Text="ВКЛЮЧЕННЫЕ МОДЫ" Foreground="{DynamicResource BrandSuccessBrush}" FontSize="12" FontWeight="Bold" Margin="0,0,0,10"/>
+                        <ItemsControl x:Name="ActiveModsList" ItemTemplate="{StaticResource ModItemTemplate}"/>
+
+                        <Border x:Name="ModsDivider" Height="1" Background="#2A2A2A" Margin="0,10,0,20"/>
+
+                        <TextBlock x:Name="AvailableModsHeader" Text="ДОСТУПНЫЕ МОДЫ" Foreground="#888888" FontSize="12" FontWeight="Bold" Margin="0,0,0,10"/>
+                        <ItemsControl x:Name="AvailableModsList" ItemTemplate="{StaticResource ModItemTemplate}"/>
+
+                        <StackPanel x:Name="EmptyStatePanel" HorizontalAlignment="Center" Margin="0,60,0,0" Visibility="Collapsed">
+                            <TextBlock Text="&#xE711;" FontFamily="Segoe MDL2 Assets" FontSize="48" Foreground="#333333" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                            <TextBlock Text="В этой категории нет установленных модов" FontSize="16" Foreground="#666666" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <ScrollViewer x:Name="GuidePanel" Grid.Row="1" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" Padding="0,0,20,0">
+                    <StackPanel>
+                        <Border Background="#1A1A00" BorderBrush="{DynamicResource BrandSuccessBrush}" BorderThickness="1" CornerRadius="8" Padding="15" Margin="0,0,0,20">
+                            <StackPanel>
+                                <TextBlock Text="⚠️ ВАЖНАЯ ИНФОРМАЦИЯ!" Foreground="{DynamicResource BrandSuccessBrush}" FontWeight="Bold" FontSize="16" Margin="0,0,0,10"/>
+                                <TextBlock Text="Добро пожаловать в раздел модификаций! Здесь вы можете гибко настраивать обход блокировок, добавлять свои скрипты для игр и управлять списками сайтов. Все изменения сохраняются локально и автоматически объединяются." Foreground="#CCCCCC" TextWrapping="Wrap" LineHeight="20"/>
+                            </StackPanel>
+                        </Border>
+                        <TextBlock Text="1. .BAT-СТРАТЕГИИ (Обход для игр)" FontWeight="Bold" FontSize="16" Foreground="White" Margin="0,0,0,10"/>
+                        <TextBlock Text="Этот раздел предназначен для добавления готовых батников (.bat), которые создают индивидуальные стратегии обхода (например, для Battle.net, EA App, League of Legends). Вы можете скачать готовые моды или написать свои через встроенный редактор." Foreground="#AAAAAA" TextWrapping="Wrap" Margin="0,0,0,15" LineHeight="20"/>
+                        <TextBlock Text="2. ЛИСТЫ ДОМЕНОВ" FontWeight="Bold" FontSize="16" Foreground="White" Margin="0,0,0,10"/>
+                        <TextBlock Text="Позволяет создавать именованные списки сайтов. Программа сама соберет все активные листы и объединит их в единый список без дубликатов. Если выключить мод, домены автоматически удалятся из главного списка." Foreground="#AAAAAA" TextWrapping="Wrap" Margin="0,0,0,15" LineHeight="20"/>
+                        <TextBlock Text="Как включить мод:" FontWeight="Bold" FontSize="14" Foreground="White" Margin="0,0,0,5"/>
+                        <TextBlock Text="1. Нажмите «Включить» в колонке доступных модов.&#x0a;2. Перейдите на вкладку «Главная» и перезапустите обход.&#x0a;3. Моды-стратегии появятся в списке конфигов на главном экране." Foreground="#AAAAAA" TextWrapping="Wrap" LineHeight="22"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
         </Grid>
 
-        <!-- ОВЕРЛЕЙ РЕДАКТОРА -->
-        <Grid x:Name="EditorOverlay" Grid.ColumnSpan="3" Background="#CC000000" Visibility="Collapsed" Panel.ZIndex="200">
+        <!-- ОВЕРЛЕИ (ВНЕ ContentGrid) -->
+        <Grid x:Name="EditorOverlay" Background="#CC000000" Visibility="Collapsed" Panel.ZIndex="200">
             <Border x:Name="EditorContentBorder" Background="#141414" BorderBrush="#2A2A2A" BorderThickness="1" CornerRadius="12" Width="600" Height="500" Padding="20">
                 <Grid>
                     <Grid.RowDefinitions>
@@ -307,8 +304,7 @@
             </Border>
         </Grid>
 
-        <!-- ОВЕРЛЕЙ СОЗДАНИЯ МОДА -->
-        <Grid x:Name="CreateModOverlay" Grid.ColumnSpan="3" Background="#CC000000" Visibility="Collapsed" Panel.ZIndex="200">
+        <Grid x:Name="CreateModOverlay" Background="#CC000000" Visibility="Collapsed" Panel.ZIndex="200">
             <Border x:Name="CreateContentBorder" Background="#141414" BorderBrush="#2A2A2A" BorderThickness="1" CornerRadius="12" Width="450" Padding="20" HorizontalAlignment="Center" VerticalAlignment="Center">
                 <StackPanel>
                     <TextBlock Text="Создать новый мод" FontSize="18" FontWeight="Bold" Margin="0,0,0,15"/>
@@ -340,13 +336,11 @@
             </Border>
         </Grid>
 
-        <!-- ОВЕРЛЕЙ ПОДТВЕРЖДЕНИЯ ДЕЙСТВИЙ (Новый) -->
-        <Grid x:Name="ConfirmOverlay" Grid.ColumnSpan="3" Background="#CC000000" Visibility="Collapsed" Panel.ZIndex="300">
+        <Grid x:Name="ConfirmOverlay" Background="#CC000000" Visibility="Collapsed" Panel.ZIndex="300">
             <Border x:Name="ConfirmContentBorder" Background="#141414" BorderBrush="#2A2A2A" BorderThickness="1" CornerRadius="12" Width="400" Padding="20" HorizontalAlignment="Center" VerticalAlignment="Center">
                 <StackPanel>
                     <TextBlock x:Name="TxtConfirmTitle" Text="Подтверждение" FontSize="18" FontWeight="Bold" Margin="0,0,0,10"/>
                     <TextBlock x:Name="TxtConfirmMessage" Text="Вы уверены?" Foreground="#CCCCCC" FontSize="14" TextWrapping="Wrap" Margin="0,0,0,20"/>
-
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                         <Button Content="Отмена" Background="Transparent" Foreground="#A0A0A0" BorderBrush="#333333" BorderThickness="1" Padding="15,6" Margin="0,0,10,0" Cursor="Hand" Click="BtnCancelConfirm_Click">
                             <Button.Resources>

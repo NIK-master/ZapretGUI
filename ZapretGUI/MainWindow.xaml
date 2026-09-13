@@ -7,6 +7,52 @@
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         WindowStartupLocation="CenterScreen">
 
+    <Window.Resources>
+        <!-- СТИЛЬ ДЛЯ ПРУЖИНЯЩИХ КНОПОК МЕНЮ -->
+        <Style x:Key="SpringyNavButton" TargetType="ui:Button" BasedOn="{StaticResource {x:Type ui:Button}}">
+            <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
+            <Setter Property="RenderTransform">
+                <Setter.Value>
+                    <ScaleTransform ScaleX="1" ScaleY="1"/>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <EventTrigger RoutedEvent="PreviewMouseDown">
+                    <BeginStoryboard>
+                        <Storyboard>
+                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" To="0.95" Duration="0:0:0.1"/>
+                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" To="0.95" Duration="0:0:0.1"/>
+                        </Storyboard>
+                    </BeginStoryboard>
+                </EventTrigger>
+                <EventTrigger RoutedEvent="PreviewMouseUp">
+                    <BeginStoryboard>
+                        <Storyboard>
+                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" To="1" Duration="0:0:0.3">
+                                <DoubleAnimation.EasingFunction>
+                                    <BackEase Amplitude="0.5" EasingMode="EaseOut"/>
+                                </DoubleAnimation.EasingFunction>
+                            </DoubleAnimation>
+                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" To="1" Duration="0:0:0.3">
+                                <DoubleAnimation.EasingFunction>
+                                    <BackEase Amplitude="0.5" EasingMode="EaseOut"/>
+                                </DoubleAnimation.EasingFunction>
+                            </DoubleAnimation>
+                        </Storyboard>
+                    </BeginStoryboard>
+                </EventTrigger>
+                <EventTrigger RoutedEvent="MouseLeave">
+                    <BeginStoryboard>
+                        <Storyboard>
+                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" To="1" Duration="0:0:0.2"/>
+                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" To="1" Duration="0:0:0.2"/>
+                        </Storyboard>
+                    </BeginStoryboard>
+                </EventTrigger>
+            </Style.Triggers>
+        </Style>
+    </Window.Resources>
+
     <Border x:Name="RootBorder" Width="1100" Height="760" Background="#0A0A0A" CornerRadius="12" BorderBrush="#2A2A2A" BorderThickness="1" ClipToBounds="True">
         <Grid>
             <Grid.RowDefinitions>
@@ -76,16 +122,16 @@
 
                 <Border x:Name="Sidebar" Grid.Column="0" Width="220" Background="#181818" ClipToBounds="True">
                     <StackPanel Width="220" Margin="10,20,10,0">
-                        <ui:Button x:Name="BtnHome" Content="Главная" Foreground="White" Background="#2A2A2A" BorderBrush="#107C10" BorderThickness="3,0,0,0"
+                        <ui:Button x:Name="BtnHome" Style="{StaticResource SpringyNavButton}" Content="Главная" Foreground="White" Background="#2A2A2A" BorderBrush="#107C10" BorderThickness="3,0,0,0"
                HorizontalAlignment="Stretch" Margin="0,0,0,10" Height="40" Click="BtnHome_Click"/>
 
-                        <ui:Button x:Name="BtnMods" Content="Модификации" Foreground="White" Appearance="Transparent" BorderThickness="0"
+                        <ui:Button x:Name="BtnMods" Style="{StaticResource SpringyNavButton}" Content="Модификации" Foreground="White" Appearance="Transparent" BorderThickness="0"
            HorizontalAlignment="Stretch" Margin="0,0,0,10" Height="40" Click="BtnMods_Click"/>
 
-                        <ui:Button x:Name="BtnDiagnostics" Content="Диагностика" Foreground="White" Appearance="Transparent" BorderThickness="0"
+                        <ui:Button x:Name="BtnDiagnostics" Style="{StaticResource SpringyNavButton}" Content="Диагностика" Foreground="White" Appearance="Transparent" BorderThickness="0"
                HorizontalAlignment="Stretch" Margin="0,0,0,10" Height="40" Click="BtnDiagnostics_Click"/>
 
-                        <ui:Button x:Name="BtnSettings" Content="Настройки" Foreground="White" Appearance="Transparent" BorderThickness="0"
+                        <ui:Button x:Name="BtnSettings" Style="{StaticResource SpringyNavButton}" Content="Настройки" Foreground="White" Appearance="Transparent" BorderThickness="0"
                HorizontalAlignment="Stretch" Margin="0,0,0,10" Height="40" Click="BtnSettings_Click"/>
                     </StackPanel>
                 </Border>

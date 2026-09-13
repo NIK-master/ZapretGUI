@@ -25,12 +25,36 @@ namespace ZapretGUI.Core
             shadow.BeginAnimation(DropShadowEffect.ShadowDepthProperty, shadowAnim);
         }
 
-        public static void ShowOverlay(UIElement overlayGrid, FrameworkElement contentBorder)
+        public static void ApplyBlur(UIElement element, double radius, TimeSpan duration)
+        {
+            if (!(element.Effect is BlurEffect blur))
+            {
+                blur = new BlurEffect { Radius = 0, KernelType = KernelType.Gaussian };
+                element.Effect = blur;
+            }
+            var anim = new DoubleAnimation(radius, duration) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
+            blur.BeginAnimation(BlurEffect.RadiusProperty, anim);
+        }
+
+        public static void RemoveBlur(UIElement element, TimeSpan duration)
+        {
+            if (element.Effect is BlurEffect blur)
+            {
+                var anim = new DoubleAnimation(0, duration) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn } };
+                anim.Completed += (s, e) => element.Effect = null;
+                blur.BeginAnimation(BlurEffect.RadiusProperty, anim);
+            }
+        }
+
+        public static void ShowOverlay(UIElement overlayGrid, FrameworkElement contentBorder, UIElement? backgroundToBlur = null)
         {
             overlayGrid.Visibility = Visibility.Visible;
             overlayGrid.Opacity = 0;
 
             overlayGrid.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromSeconds(0.2)));
+
+            if (backgroundToBlur != null)
+                ApplyBlur(backgroundToBlur, 12, TimeSpan.FromSeconds(0.2));
 
             if (contentBorder.RenderTransform is TransformGroup transformGroup)
             {
@@ -48,11 +72,14 @@ namespace ZapretGUI.Core
             }
         }
 
-        public static void HideOverlay(UIElement overlayGrid, FrameworkElement contentBorder)
+        public static void HideOverlay(UIElement overlayGrid, FrameworkElement contentBorder, UIElement? blurredBackground = null)
         {
             var fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromSeconds(0.15));
             fadeOut.Completed += (s, ev) => overlayGrid.Visibility = Visibility.Collapsed;
             overlayGrid.BeginAnimation(UIElement.OpacityProperty, fadeOut);
+
+            if (blurredBackground != null)
+                RemoveBlur(blurredBackground, TimeSpan.FromSeconds(0.15));
 
             if (contentBorder.RenderTransform is TransformGroup transformGroup)
             {

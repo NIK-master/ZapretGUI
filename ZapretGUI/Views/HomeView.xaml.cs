@@ -48,11 +48,13 @@ namespace ZapretGUI.Views
     {
         private System.Windows.Documents.Run? _lastProgressRun = null;
 
+        // ФЛАГ-ПРЕДОХРАНИТЕЛЬ ДЛЯ ЗАЩИТЫ ОТ STACK OVERFLOW
+        private bool _isUpdatingUI = false;
+
         public HomeView()
         {
             InitializeComponent();
 
-            // Подписываемся на единый лог-центр контроллера
             BypassController.Current.OnLog += ProcessLogMessage;
             BypassController.Current.NetMonitor.StatsUpdated += NetworkMonitor_StatsUpdated;
             BypassController.Current.NetMonitor.StatusChanged += NetworkMonitor_StatusChanged;
@@ -87,6 +89,8 @@ namespace ZapretGUI.Views
         {
             Dispatcher.Invoke(() =>
             {
+                _isUpdatingUI = true; // БЛОКИРУЕМ ИВЕНТЫ
+
                 var currentProfile = TxtMainProfile.Text;
                 LoadProfiles();
 
@@ -103,6 +107,8 @@ namespace ZapretGUI.Views
 
                 if (!found && OverlayProfileListBox.Items.Count > 0)
                     OverlayProfileListBox.SelectedIndex = 0;
+
+                _isUpdatingUI = false; // РАЗБЛОКИРУЕМ
             });
         }
 
@@ -227,7 +233,6 @@ namespace ZapretGUI.Views
                     Log("Инициализация запуска...");
                     AnimateProgressBar(30);
 
-                    // Передаем команду контроллеру
                     await BypassController.Current.StartServicesAsync(TxtMainProfile.Text, isZapretSelected, isTgProxySelected);
 
                     AnimateProgressBar(100);
@@ -346,6 +351,8 @@ namespace ZapretGUI.Views
 
         private void LoadSettings()
         {
+            _isUpdatingUI = true; // БЛОКИРУЕМ ИВЕНТЫ
+
             ZapretToggle.IsChecked = SettingsManager.Current.ZapretEnabled;
             TgProxyToggle.IsChecked = SettingsManager.Current.TgProxyEnabled;
 
@@ -360,6 +367,7 @@ namespace ZapretGUI.Views
             }
 
             RefreshListActiveStates(TxtMainProfile.Text);
+            _isUpdatingUI = false; // РАЗБЛОКИРУЕМ
         }
 
         private void RefreshListActiveStates(string activeFileName)
@@ -371,7 +379,7 @@ namespace ZapretGUI.Views
                     configItem.IsActive = (configItem.FileName == activeFileName);
                 }
             }
-            OverlayProfileListBox.Items.Refresh();
+            // Удален вызов Items.Refresh() для предотвращения цикла сброса выделения
         }
 
         private void SaveSettings()
@@ -385,7 +393,7 @@ namespace ZapretGUI.Views
 
         private void Settings_Changed(object sender, RoutedEventArgs e)
         {
-            if (IsLoaded)
+            if (IsLoaded && !_isUpdatingUI)
                 SaveSettings();
         }
 
@@ -551,12 +559,12 @@ namespace ZapretGUI.Views
         {
             AudioHelper.PlayClick();
             OverlayProfileListBox.Visibility = Visibility.Visible;
-            AnimationHelper.ShowOverlay(ConfigOverlay, OverlayContentBorder);
+            AnimationHelper.ShowOverlay(ConfigOverlay, OverlayContentBorder, ContentGrid);
         }
 
         private void CloseOverlay()
         {
-            AnimationHelper.HideOverlay(ConfigOverlay, OverlayContentBorder);
+            AnimationHelper.HideOverlay(ConfigOverlay, OverlayContentBorder, ContentGrid);
         }
 
         private void BtnCloseOverlay_Click(object sender, RoutedEventArgs e) => CloseOverlay();
@@ -571,6 +579,9 @@ namespace ZapretGUI.Views
 
         private void OverlayProfileListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
+            // ПРЕДОТВРАЩАЕМ ЦИКЛ
+            if (_isUpdatingUI) return;
+
             if (OverlayProfileListBox.SelectedItem is ConfigItem selectedItem && IsLoaded)
             {
                 TxtMainProfile.Text = selectedItem.FileName;
@@ -589,7 +600,7 @@ namespace ZapretGUI.Views
                 ScanIcon.Text = "\xE721";
                 ScanIcon.Foreground = UIHelper.GetBrushFromHex("#A0A0A0");
                 ScanText.Text = "Запустить авто-подбор (Smart DPI Scan)";
-                UpdateUIState(IsRunning);
+                UpdateUIState(BypassController.Current.IsRunning);
             });
         }
 

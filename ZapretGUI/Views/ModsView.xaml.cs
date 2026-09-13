@@ -130,13 +130,13 @@ namespace ZapretGUI.Views
             TxtNewModAuthor.Text = "You";
             TxtNewModDesc.Text = "Описание мода";
 
-            AnimationHelper.ShowOverlay(CreateModOverlay, CreateContentBorder);
+            AnimationHelper.ShowOverlay(CreateModOverlay, CreateContentBorder, ContentGrid);
         }
 
         private void BtnCloseCreateMod_Click(object sender, RoutedEventArgs e)
         {
             AudioHelper.PlayClick();
-            AnimationHelper.HideOverlay(CreateModOverlay, CreateContentBorder);
+            AnimationHelper.HideOverlay(CreateModOverlay, CreateContentBorder, ContentGrid);
         }
 
         private async void BtnConfirmCreateMod_Click(object sender, RoutedEventArgs e)
@@ -180,7 +180,7 @@ namespace ZapretGUI.Views
                 else
                     await File.WriteAllTextAsync(Path.Combine(modFolderPath, "list.txt"), "");
 
-                AnimationHelper.HideOverlay(CreateModOverlay, CreateContentBorder);
+                AnimationHelper.HideOverlay(CreateModOverlay, CreateContentBorder, ContentGrid);
                 await LoadCurrentModsAsync();
             }
             catch (Exception ex)
@@ -247,20 +247,20 @@ namespace ZapretGUI.Views
             BtnExecuteConfirm.Content = confirmBtnText;
             BtnExecuteConfirm.Background = confirmBtnBrush;
             _pendingConfirmAction = onConfirm;
-            AnimationHelper.ShowOverlay(ConfirmOverlay, ConfirmContentBorder);
+            AnimationHelper.ShowOverlay(ConfirmOverlay, ConfirmContentBorder, ContentGrid);
         }
 
         private void BtnCancelConfirm_Click(object sender, RoutedEventArgs e)
         {
             AudioHelper.PlayClick();
-            AnimationHelper.HideOverlay(ConfirmOverlay, ConfirmContentBorder);
+            AnimationHelper.HideOverlay(ConfirmOverlay, ConfirmContentBorder, ContentGrid);
             _pendingConfirmAction = null;
         }
 
         private void BtnExecuteConfirm_Click(object sender, RoutedEventArgs e)
         {
             AudioHelper.PlayClick();
-            AnimationHelper.HideOverlay(ConfirmOverlay, ConfirmContentBorder);
+            AnimationHelper.HideOverlay(ConfirmOverlay, ConfirmContentBorder, ContentGrid);
             _pendingConfirmAction?.Invoke();
             _pendingConfirmAction = null;
         }
@@ -342,7 +342,7 @@ namespace ZapretGUI.Views
                 {
                     TxtEditorTitle.Text = $"Редактор: {mod.Meta.Name} ({fileName})";
                     EditorTextBox.Text = File.ReadAllText(_currentEditingFilePath);
-                    AnimationHelper.ShowOverlay(EditorOverlay, EditorContentBorder);
+                    AnimationHelper.ShowOverlay(EditorOverlay, EditorContentBorder, ContentGrid);
                 }
                 else
                 {
@@ -358,7 +358,7 @@ namespace ZapretGUI.Views
             {
                 await File.WriteAllTextAsync(_currentEditingFilePath, EditorTextBox.Text);
                 await SaveAndApplyModsAsync();
-                AnimationHelper.HideOverlay(EditorOverlay, EditorContentBorder);
+                AnimationHelper.HideOverlay(EditorOverlay, EditorContentBorder, ContentGrid);
             }
             catch (Exception ex)
             {
@@ -369,7 +369,7 @@ namespace ZapretGUI.Views
         private void BtnCloseEditor_Click(object sender, RoutedEventArgs e)
         {
             AudioHelper.PlayClick();
-            AnimationHelper.HideOverlay(EditorOverlay, EditorContentBorder);
+            AnimationHelper.HideOverlay(EditorOverlay, EditorContentBorder, ContentGrid);
         }
 
         private async void BtnImportMod_Click(object sender, RoutedEventArgs e)
