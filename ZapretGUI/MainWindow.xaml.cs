@@ -71,7 +71,7 @@ namespace ZapretGUI
                 }
             }
 
-            Action stopServicesAction = () => { if (IsBypassRunning()) ToggleBypass(); };
+            var stopServicesAction = () => { if (IsBypassRunning()) ToggleBypass(); };
             var progress = new Progress<string>(status => _homeView.ShowUpdateProgress(status));
 
             var zapretUpdate = await Core.UpdateManager.CheckForCoreUpdateAsync("https://api.github.com/repos/flowseal/zapret-discord-youtube/releases/latest", SettingsManager.Current.ZapretCoreVersion, "Zapret", true);
@@ -165,13 +165,23 @@ namespace ZapretGUI
 
         public void UpdateIndicators(bool isZapretRunning, bool isProxyRunning)
         {
-            ZapretDot.Fill = isZapretRunning ? GetSuccessColor() : GetErrorColor();
-            TgProxyDot.Fill = isProxyRunning ? GetSuccessColor() : GetErrorColor();
+            var zColor = isZapretRunning ? GetSuccessColor() : GetErrorColor();
+            ZapretDot.Fill = zColor;
+            if (ZapretDot.Effect is System.Windows.Media.Effects.DropShadowEffect zShadow) 
+                zShadow.Color = zColor.Color;
+
+            var pColor = isProxyRunning ? GetSuccessColor() : GetErrorColor();
+            TgProxyDot.Fill = pColor;
+            if (TgProxyDot.Effect is System.Windows.Media.Effects.DropShadowEffect pShadow) 
+                pShadow.Color = pColor.Color;
         }
 
         public void UpdateNetworkIndicator(bool isOnline)
         {
-            NetworkDot.Fill = isOnline ? GetSuccessColor() : GetErrorColor();
+            var nColor = isOnline ? GetSuccessColor() : GetErrorColor();
+            NetworkDot.Fill = nColor;
+            if (NetworkDot.Effect is System.Windows.Media.Effects.DropShadowEffect nShadow) 
+                nShadow.Color = nColor.Color;
         }
 
         private void TitleBar_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)

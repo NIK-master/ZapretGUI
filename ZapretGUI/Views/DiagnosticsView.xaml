@@ -45,7 +45,7 @@
                         </Grid.RowDefinitions>
 
                         <TextBlock Text="{Binding Title}" FontSize="12" Foreground="#A0A0A0" FontWeight="Bold"/>
-                        <TextBlock Grid.Row="1" Text="{Binding PingText}" FontSize="14" FontWeight="Bold" 
+                        <TextBlock Grid.Row="1" Text="{Binding PingText}" FontFamily="Consolas" FontSize="14" FontWeight="Bold" 
                             Foreground="{Binding LatencyMs, Converter={StaticResource PingToBrushConverter}}" Margin="0,4,0,0"/>
                     </Grid>
 

@@ -1,14 +1,15 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
-using System.ComponentModel;
-using System.Text.RegularExpressions;
 using ZapretGUI.Core;
 
 namespace ZapretGUI.Views
@@ -44,12 +45,24 @@ namespace ZapretGUI.Views
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
     }
 
+    public class LogEntry
+    {
+        public string Text { get; set; } = "";
+        public System.Windows.Media.Brush Color { get; set; } = System.Windows.Media.Brushes.White;
+        public FontWeight Weight { get; set; } = FontWeights.Normal;
+        public bool IsProgress { get; set; } = false;
+    }
+
     public partial class HomeView : System.Windows.Controls.UserControl
     {
         private System.Windows.Documents.Run? _lastProgressRun = null;
 
         // ФЛАГ-ПРЕДОХРАНИТЕЛЬ ДЛЯ ЗАЩИТЫ ОТ STACK OVERFLOW
         private bool _isUpdatingUI = false;
+
+        private Queue<LogEntry> _logQueue = new Queue<LogEntry>();
+        private bool _isTyping = false;
+        private System.Windows.Documents.Run _cursorRun;
 
         public HomeView()
         {
@@ -351,7 +364,7 @@ namespace ZapretGUI.Views
 
         private void LoadSettings()
         {
-            _isUpdatingUI = true; // БЛОКИРУЕМ ИВЕНТЫ
+            _isUpdatingUI = true;
 
             ZapretToggle.IsChecked = SettingsManager.Current.ZapretEnabled;
             TgProxyToggle.IsChecked = SettingsManager.Current.TgProxyEnabled;
@@ -367,7 +380,7 @@ namespace ZapretGUI.Views
             }
 
             RefreshListActiveStates(TxtMainProfile.Text);
-            _isUpdatingUI = false; // РАЗБЛОКИРУЕМ
+            _isUpdatingUI = false;
         }
 
         private void RefreshListActiveStates(string activeFileName)
@@ -379,7 +392,6 @@ namespace ZapretGUI.Views
                     configItem.IsActive = (configItem.FileName == activeFileName);
                 }
             }
-            // Удален вызов Items.Refresh() для предотвращения цикла сброса выделения
         }
 
         private void SaveSettings()
@@ -427,42 +439,91 @@ namespace ZapretGUI.Views
         private void Log(string message)
         {
             var isProgress = message.Contains("Скачивание:") || message.Contains("Скачано:");
+            var text = $"[{DateTime.Now:HH:mm:ss}] {message}";
 
-            if (isProgress && _lastProgressRun != null)
-            {
-                _lastProgressRun.Text = $"[{DateTime.Now:HH:mm:ss}] {message}";
-                return;
-            }
-
-            var run = new System.Windows.Documents.Run($"[{DateTime.Now:HH:mm:ss}] {message}");
+            System.Windows.Media.Brush color = UIHelper.GetBrushFromHex("#888888");
+            FontWeight weight = FontWeights.Normal;
 
             if (message.Contains("ОШИБКА") || message.Contains("⚠") || message.Contains("🛑") || message.Contains("❌"))
             {
-                run.Foreground = GetErrorColor();
-                run.FontWeight = FontWeights.Bold;
+                color = GetErrorColor();
+                weight = FontWeights.Bold;
             }
             else if (message.Contains("✅") || message.Contains("✨") || message.Contains("🏆"))
-                run.Foreground = GetSuccessColor();
+                color = GetSuccessColor();
             else if (message.Contains("🔍"))
-                run.Foreground = UIHelper.GetBrushFromHex("#55AAFF");
-            else
-                run.Foreground = UIHelper.GetBrushFromHex("#888888");
+                color = UIHelper.GetBrushFromHex("#55AAFF");
 
-            var paragraph = new System.Windows.Documents.Paragraph(run)
+            _logQueue.Enqueue(new LogEntry { Text = text, Color = color, Weight = weight, IsProgress = isProgress });
+
+            if (!_isTyping)
+                _ = ProcessLogQueueAsync();
+        }
+
+        private async Task ProcessLogQueueAsync()
+        {
+            _isTyping = true;
+
+            if (_cursorRun == null)
             {
-                Margin = new Thickness(0, 0, 0, 2)
-            };
+                var cursorBrush = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#00EA65"));
+                _cursorRun = new System.Windows.Documents.Run(" █") { Foreground = cursorBrush };
+                var blink = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(400)) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever };
+                cursorBrush.BeginAnimation(SolidColorBrush.OpacityProperty, blink);
+            }
 
-            LogDocument.Blocks.Add(paragraph);
-            LogRichTextBox.ScrollToEnd();
+            while (_logQueue.Count > 0)
+            {
+                var entry = _logQueue.Dequeue();
 
-            _lastProgressRun = isProgress ? run : null;
+                if (entry.IsProgress && _lastProgressRun != null)
+                {
+                    _lastProgressRun.Text = entry.Text;
+                    continue;
+                }
+
+                var run = new System.Windows.Documents.Run("") { Foreground = entry.Color, FontWeight = entry.Weight };
+                var paragraph = new System.Windows.Documents.Paragraph(run) { Margin = new Thickness(0, 0, 0, 2) };
+
+                if (_cursorRun.Parent is System.Windows.Documents.Paragraph parent)
+                    parent.Inlines.Remove(_cursorRun);
+
+                paragraph.Inlines.Add(_cursorRun);
+                LogDocument.Blocks.Add(paragraph);
+                LogRichTextBox.ScrollToEnd();
+
+                _lastProgressRun = entry.IsProgress ? run : null;
+
+                if (SettingsManager.Current.FocusMode)
+                {
+                    run.Text = entry.Text;
+                }
+                else
+                {
+                    int chunkSize = entry.Text.Length > 40 ? 3 : 2;
+                    for (int i = 0; i < entry.Text.Length; i += chunkSize)
+                    {
+                        int length = Math.Min(chunkSize, entry.Text.Length - i);
+                        run.Text += entry.Text.Substring(i, length);
+                        LogRichTextBox.ScrollToEnd();
+                        await Task.Delay(15);
+                    }
+                }
+            }
+            _isTyping = false;
         }
 
         private void BtnClearLogs_Click(object sender, RoutedEventArgs e)
         {
             LogDocument.Blocks.Clear();
             _lastProgressRun = null;
+            _logQueue.Clear();
+
+            if (_cursorRun != null)
+            {
+                var paragraph = new System.Windows.Documents.Paragraph(_cursorRun) { Margin = new Thickness(0, 0, 0, 2) };
+                LogDocument.Blocks.Add(paragraph);
+            }
         }
 
         private void BtnExportLogs_Click(object sender, RoutedEventArgs e)
@@ -588,7 +649,10 @@ namespace ZapretGUI.Views
                 OverlayTxtProfile.Text = selectedItem.FileName;
 
                 RefreshListActiveStates(selectedItem.FileName);
+
+                _isUpdatingUI = true;
                 SaveSettings();
+                _isUpdatingUI = false;
             }
         }
 
@@ -626,7 +690,11 @@ namespace ZapretGUI.Views
                             OverlayProfileListBox.SelectedIndex = i;
                             TxtMainProfile.Text = bestConfig;
                             OverlayTxtProfile.Text = bestConfig;
+
+                            _isUpdatingUI = true;
                             SaveSettings();
+                            _isUpdatingUI = false;
+
                             break;
                         }
                     }

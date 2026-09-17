@@ -27,10 +27,81 @@
             <SolidColorBrush x:Key="BrandWarningBrush" Color="#FF8C00" />
 
             <SolidColorBrush x:Key="SurfaceBackgroundBrush" Color="#151515" />
-            <SolidColorBrush x:Key="CardBorderBrush" Color="#2A2A2A" />
-            <SolidColorBrush x:Key="CardHoverBorderBrush" Color="#4A4A4A" />
-            
-            
+            <LinearGradientBrush x:Key="CardBorderBrush" StartPoint="0,0" EndPoint="0,1">
+                <GradientStop Color="#3A3A3A" Offset="0.0" />
+                <GradientStop Color="#1A1A1A" Offset="1.0" />
+            </LinearGradientBrush>
+            <LinearGradientBrush x:Key="CardHoverBorderBrush" StartPoint="0,0" EndPoint="0,1">
+                <GradientStop Color="#555555" Offset="0.0" />
+                <GradientStop Color="#2A2A2A" Offset="1.0" />
+            </LinearGradientBrush>
+
+            <Style x:Key="CyberToggleStyle" TargetType="CheckBox">
+                <Setter Property="Cursor" Value="Hand"/>
+                <Setter Property="Background" Value="#2A2A2A"/>
+                <Setter Property="BorderBrush" Value="#3A3A3A"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="CheckBox">
+                            <Border x:Name="BgBorder" Width="44" Height="24" CornerRadius="12" 
+                                    Background="{TemplateBinding Background}" 
+                                    BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1"
+                                    HorizontalAlignment="{TemplateBinding HorizontalAlignment}"
+                                    VerticalAlignment="{TemplateBinding VerticalAlignment}">
+                                <Ellipse x:Name="Thumb" Width="18" Height="18" Fill="#888888" HorizontalAlignment="Left" Margin="2,0,0,0">
+                                    <Ellipse.RenderTransform>
+                                        <TranslateTransform x:Name="ThumbTransform" X="0"/>
+                                    </Ellipse.RenderTransform>
+                                </Ellipse>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsChecked" Value="True">
+                                    <!-- Динамически берем наш зеленый (или синий) цвет -->
+                                    <Setter TargetName="BgBorder" Property="Background" Value="{DynamicResource BrandSuccessBrush}"/>
+                                    <Setter TargetName="BgBorder" Property="BorderBrush" Value="{DynamicResource BrandSuccessBrush}"/>
+                                    <Setter TargetName="Thumb" Property="Fill" Value="White"/>
+                                    <Trigger.EnterActions>
+                                        <BeginStoryboard>
+                                            <Storyboard>
+                                                <!-- Плавный выезд кружка -->
+                                                <DoubleAnimation Storyboard.TargetName="ThumbTransform" Storyboard.TargetProperty="X" To="20" Duration="0:0:0.25">
+                                                    <DoubleAnimation.EasingFunction>
+                                                        <CubicEase EasingMode="EaseOut"/>
+                                                    </DoubleAnimation.EasingFunction>
+                                                </DoubleAnimation>
+                                            </Storyboard>
+                                        </BeginStoryboard>
+                                    </Trigger.EnterActions>
+                                    <Trigger.ExitActions>
+                                        <BeginStoryboard>
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetName="ThumbTransform" Storyboard.TargetProperty="X" To="0" Duration="0:0:0.25">
+                                                    <DoubleAnimation.EasingFunction>
+                                                        <CubicEase EasingMode="EaseOut"/>
+                                                    </DoubleAnimation.EasingFunction>
+                                                </DoubleAnimation>
+                                            </Storyboard>
+                                        </BeginStoryboard>
+                                    </Trigger.ExitActions>
+                                </Trigger>
+                                <!-- Фикс черного ховера -->
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Thumb" Property="Fill" Value="#E0E0E0"/>
+                                    <Setter TargetName="BgBorder" Property="BorderBrush" Value="#555555"/>
+                                </Trigger>
+                                <MultiTrigger>
+                                    <MultiTrigger.Conditions>
+                                        <Condition Property="IsMouseOver" Value="True"/>
+                                        <Condition Property="IsChecked" Value="True"/>
+                                    </MultiTrigger.Conditions>
+                                    <Setter TargetName="BgBorder" Property="Opacity" Value="0.85"/>
+                                    <Setter TargetName="Thumb" Property="Fill" Value="White"/>
+                                </MultiTrigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
 
         </ResourceDictionary>
     </Application.Resources>
@@ -104,7 +175,6 @@ using System.Windows;
         WindowStartupLocation="CenterScreen">
 
     <Window.Resources>
-        <!-- СТИЛЬ ДЛЯ ПРУЖИНЯЩИХ КНОПОК МЕНЮ -->
         <Style x:Key="SpringyNavButton" TargetType="ui:Button" BasedOn="{StaticResource {x:Type ui:Button}}">
             <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
             <Setter Property="RenderTransform">
@@ -142,6 +212,24 @@ using System.Windows;
                         <Storyboard>
                             <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" To="1" Duration="0:0:0.2"/>
                             <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" To="1" Duration="0:0:0.2"/>
+                        </Storyboard>
+                    </BeginStoryboard>
+                </EventTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- СТИЛЬ ДЛЯ ДЫШАЩИХ СЕНСОРОВ -->
+        <Style x:Key="BreathingDot" TargetType="Ellipse">
+            <Setter Property="Opacity" Value="1"/>
+            <Style.Triggers>
+                <EventTrigger RoutedEvent="Loaded">
+                    <BeginStoryboard>
+                        <Storyboard AutoReverse="True" RepeatBehavior="Forever">
+                            <DoubleAnimation Storyboard.TargetProperty="Opacity" From="1.0" To="0.3" Duration="0:0:1.5">
+                                <DoubleAnimation.EasingFunction>
+                                    <SineEase EasingMode="EaseInOut"/>
+                                </DoubleAnimation.EasingFunction>
+                            </DoubleAnimation>
                         </Storyboard>
                     </BeginStoryboard>
                 </EventTrigger>
@@ -190,13 +278,25 @@ using System.Windows;
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="10,0,0,0">
                     <TextBlock Text="Zapret for ADHD" Foreground="#888888" FontSize="14" FontWeight="SemiBold" Margin="0,0,20,0"/>
 
-                    <Ellipse x:Name="NetworkDot" Width="8" Height="8" Fill="#107C10" Margin="0,0,5,0"/>
+                    <Ellipse x:Name="NetworkDot" Style="{StaticResource BreathingDot}" Width="8" Height="8" Fill="#107C10" Margin="0,0,5,0">
+                        <Ellipse.Effect>
+                            <DropShadowEffect Color="#107C10" BlurRadius="6" ShadowDepth="0"/>
+                        </Ellipse.Effect>
+                    </Ellipse>
                     <TextBlock Text="Сеть" Foreground="#888888" FontSize="12" Margin="0,0,15,0" VerticalAlignment="Center"/>
 
-                    <Ellipse x:Name="ZapretDot" Width="8" Height="8" Fill="#D13438" Margin="0,0,5,0"/>
+                    <Ellipse x:Name="ZapretDot" Style="{StaticResource BreathingDot}" Width="8" Height="8" Fill="#D13438" Margin="0,0,5,0">
+                        <Ellipse.Effect>
+                            <DropShadowEffect Color="#D13438" BlurRadius="6" ShadowDepth="0"/>
+                        </Ellipse.Effect>
+                    </Ellipse>
                     <TextBlock Text="Zapret" Foreground="#888888" FontSize="12" Margin="0,0,15,0" VerticalAlignment="Center"/>
 
-                    <Ellipse x:Name="TgProxyDot" Width="8" Height="8" Fill="#D13438" Margin="0,0,5,0"/>
+                    <Ellipse x:Name="TgProxyDot" Style="{StaticResource BreathingDot}" Width="8" Height="8" Fill="#D13438" Margin="0,0,5,0">
+                        <Ellipse.Effect>
+                            <DropShadowEffect Color="#D13438" BlurRadius="6" ShadowDepth="0"/>
+                        </Ellipse.Effect>
+                    </Ellipse>
                     <TextBlock Text="TgWsProxy" Foreground="#888888" FontSize="12" VerticalAlignment="Center"/>
                 </StackPanel>
 
@@ -316,7 +416,7 @@ namespace ZapretGUI
                 }
             }
 
-            Action stopServicesAction = () => { if (IsBypassRunning()) ToggleBypass(); };
+            var stopServicesAction = () => { if (IsBypassRunning()) ToggleBypass(); };
             var progress = new Progress<string>(status => _homeView.ShowUpdateProgress(status));
 
             var zapretUpdate = await Core.UpdateManager.CheckForCoreUpdateAsync("https://api.github.com/repos/flowseal/zapret-discord-youtube/releases/latest", SettingsManager.Current.ZapretCoreVersion, "Zapret", true);
@@ -410,13 +510,23 @@ namespace ZapretGUI
 
         public void UpdateIndicators(bool isZapretRunning, bool isProxyRunning)
         {
-            ZapretDot.Fill = isZapretRunning ? GetSuccessColor() : GetErrorColor();
-            TgProxyDot.Fill = isProxyRunning ? GetSuccessColor() : GetErrorColor();
+            var zColor = isZapretRunning ? GetSuccessColor() : GetErrorColor();
+            ZapretDot.Fill = zColor;
+            if (ZapretDot.Effect is System.Windows.Media.Effects.DropShadowEffect zShadow) 
+                zShadow.Color = zColor.Color;
+
+            var pColor = isProxyRunning ? GetSuccessColor() : GetErrorColor();
+            TgProxyDot.Fill = pColor;
+            if (TgProxyDot.Effect is System.Windows.Media.Effects.DropShadowEffect pShadow) 
+                pShadow.Color = pColor.Color;
         }
 
         public void UpdateNetworkIndicator(bool isOnline)
         {
-            NetworkDot.Fill = isOnline ? GetSuccessColor() : GetErrorColor();
+            var nColor = isOnline ? GetSuccessColor() : GetErrorColor();
+            NetworkDot.Fill = nColor;
+            if (NetworkDot.Effect is System.Windows.Media.Effects.DropShadowEffect nShadow) 
+                nShadow.Color = nColor.Color;
         }
 
         private void TitleBar_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
@@ -2812,7 +2922,7 @@ namespace ZapretGUI.Core
                         </Grid.RowDefinitions>
 
                         <TextBlock Text="{Binding Title}" FontSize="12" Foreground="#A0A0A0" FontWeight="Bold"/>
-                        <TextBlock Grid.Row="1" Text="{Binding PingText}" FontSize="14" FontWeight="Bold" 
+                        <TextBlock Grid.Row="1" Text="{Binding PingText}" FontFamily="Consolas" FontSize="14" FontWeight="Bold" 
                             Foreground="{Binding LatencyMs, Converter={StaticResource PingToBrushConverter}}" Margin="0,4,0,0"/>
                     </Grid>
 
@@ -3545,11 +3655,13 @@ namespace ZapretGUI.Views
                 </StackPanel>
 
                 <StackPanel Grid.Column="2" VerticalAlignment="Center">
-                    <Border Background="#181818" CornerRadius="12" BorderBrush="#2A2A2A" BorderThickness="1" Margin="0,0,0,15">
+                    <Border 
+                        CornerRadius="12" 
+                            BorderThickness="1" Margin="0,0,0,15">
                         <StackPanel Margin="20">
                             <Grid Margin="0,0,0,10">
                                 <TextBlock Text="Настройки Zapret" FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Left" VerticalAlignment="Center"/>
-                                <ui:ToggleSwitch x:Name="ZapretToggle" IsChecked="True" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Settings_Changed"/>
+                                <CheckBox x:Name="ZapretToggle" Style="{StaticResource CyberToggleStyle}" IsChecked="True" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Settings_Changed"/>
                             </Grid>
                             <TextBlock x:Name="StatusText" Text="Остановлен" Foreground="#D13438" Margin="0,0,0,15"/>
 
@@ -3570,7 +3682,7 @@ namespace ZapretGUI.Views
                                     </Grid.ColumnDefinitions>
                                     <StackPanel>
                                         <TextBlock Text="Текущий конфиг:" Foreground="#888888" FontSize="12" Margin="0,0,0,4"/>
-                                        <TextBlock x:Name="TxtMainProfile" Text="general.bat" Foreground="White" FontSize="13" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock x:Name="TxtMainProfile" FontFamily="Consolas" Text="general.bat" Foreground="White" FontSize="13" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
                                     </StackPanel>
                                     <TextBlock Grid.Column="1" Text="&#xE713;" FontFamily="Segoe MDL2 Assets" Foreground="#888888" FontSize="16" VerticalAlignment="Center" Margin="10,0,0,0"/>
                                 </Grid>
@@ -3578,11 +3690,11 @@ namespace ZapretGUI.Views
                         </StackPanel>
                     </Border>
 
-                    <Border Background="#181818" CornerRadius="12" BorderBrush="#2A2A2A" BorderThickness="1">
+                    <Border Background="#181818" CornerRadius="12" BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="1" Margin="0,0,0,15">
                         <StackPanel Margin="20">
                             <Grid Margin="0,0,0,5">
                                 <TextBlock Text="TgWsProxy" FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Left" VerticalAlignment="Center"/>
-                                <ui:ToggleSwitch x:Name="TgProxyToggle" IsChecked="True" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Settings_Changed"/>
+                                <CheckBox x:Name="TgProxyToggle" Style="{StaticResource CyberToggleStyle}" IsChecked="True" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Settings_Changed"/>
                             </Grid>
                             <TextBlock Text="Прокси для Telegram" Foreground="#A0A0A0" FontSize="12" Margin="0,0,0,15"/>
                         </StackPanel>
@@ -3817,6 +3929,9 @@ namespace ZapretGUI.Views
     {
         private System.Windows.Documents.Run? _lastProgressRun = null;
 
+        // ФЛАГ-ПРЕДОХРАНИТЕЛЬ ДЛЯ ЗАЩИТЫ ОТ STACK OVERFLOW
+        private bool _isUpdatingUI = false;
+
         public HomeView()
         {
             InitializeComponent();
@@ -3855,6 +3970,8 @@ namespace ZapretGUI.Views
         {
             Dispatcher.Invoke(() =>
             {
+                _isUpdatingUI = true; // БЛОКИРУЕМ ИВЕНТЫ
+
                 var currentProfile = TxtMainProfile.Text;
                 LoadProfiles();
 
@@ -3871,6 +3988,8 @@ namespace ZapretGUI.Views
 
                 if (!found && OverlayProfileListBox.Items.Count > 0)
                     OverlayProfileListBox.SelectedIndex = 0;
+
+                _isUpdatingUI = false; // РАЗБЛОКИРУЕМ
             });
         }
 
@@ -4113,6 +4232,8 @@ namespace ZapretGUI.Views
 
         private void LoadSettings()
         {
+            _isUpdatingUI = true; // БЛОКИРУЕМ ИВЕНТЫ
+
             ZapretToggle.IsChecked = SettingsManager.Current.ZapretEnabled;
             TgProxyToggle.IsChecked = SettingsManager.Current.TgProxyEnabled;
 
@@ -4127,6 +4248,7 @@ namespace ZapretGUI.Views
             }
 
             RefreshListActiveStates(TxtMainProfile.Text);
+            _isUpdatingUI = false; // РАЗБЛОКИРУЕМ
         }
 
         private void RefreshListActiveStates(string activeFileName)
@@ -4138,7 +4260,7 @@ namespace ZapretGUI.Views
                     configItem.IsActive = (configItem.FileName == activeFileName);
                 }
             }
-            OverlayProfileListBox.Items.Refresh();
+            // Удален вызов Items.Refresh() для предотвращения цикла сброса выделения
         }
 
         private void SaveSettings()
@@ -4152,7 +4274,7 @@ namespace ZapretGUI.Views
 
         private void Settings_Changed(object sender, RoutedEventArgs e)
         {
-            if (IsLoaded)
+            if (IsLoaded && !_isUpdatingUI)
                 SaveSettings();
         }
 
@@ -4338,6 +4460,9 @@ namespace ZapretGUI.Views
 
         private void OverlayProfileListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
+            // ПРЕДОТВРАЩАЕМ ЦИКЛ
+            if (_isUpdatingUI) return;
+
             if (OverlayProfileListBox.SelectedItem is ConfigItem selectedItem && IsLoaded)
             {
                 TxtMainProfile.Text = selectedItem.FileName;
@@ -5416,7 +5541,7 @@ namespace ZapretGUI.Views
                                     <TextBlock Text="Автозагрузка Windows" FontSize="14" FontWeight="SemiBold"/>
                                     <TextBlock Text="Запускать программу при включении компьютера" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
                                 </StackPanel>
-                                <ui:ToggleSwitch x:Name="ToggleAutoStart" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
+                                <CheckBox x:Name="ToggleAutoStart" Style="{StaticResource CyberToggleStyle}" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
                             </Grid>
                         </Border>
 
@@ -5430,7 +5555,7 @@ namespace ZapretGUI.Views
                                     <TextBlock Text="Запускать свернутым" FontSize="14" FontWeight="SemiBold"/>
                                     <TextBlock Text="Прятать окно в системный трей при старте программы" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
                                 </StackPanel>
-                                <ui:ToggleSwitch x:Name="ToggleStartMinimized" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
+                                <CheckBox x:Name="ToggleStartMinimized" Style="{StaticResource CyberToggleStyle}" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
                             </Grid>
                         </Border>
 
@@ -5444,7 +5569,7 @@ namespace ZapretGUI.Views
                                     <TextBlock Text="Сворачивать при закрытии" FontSize="14" FontWeight="SemiBold"/>
                                     <TextBlock Text="Кнопка [X] не закрывает программу, а прячет её в трей" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
                                 </StackPanel>
-                                <ui:ToggleSwitch x:Name="ToggleMinimizeOnClose" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
+                                <CheckBox x:Name="ToggleMinimizeOnClose" Style="{StaticResource CyberToggleStyle}" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
                             </Grid>
                         </Border>
 
@@ -5459,7 +5584,7 @@ namespace ZapretGUI.Views
                                     <TextBlock Text="Уведомления Windows (Тихий режим)" FontSize="14" FontWeight="SemiBold"/>
                                     <TextBlock Text="Показывать всплывающие окна при обрыве сети или запуске/остановке служб" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
                                 </StackPanel>
-                                <ui:ToggleSwitch x:Name="ToggleNotifications" IsChecked="True" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
+                                <CheckBox x:Name="ToggleNotifications" Style="{StaticResource CyberToggleStyle}" IsChecked="True" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
                             </Grid>
                         </Border>
                     </StackPanel>
@@ -5483,7 +5608,7 @@ namespace ZapretGUI.Views
                                     <TextBlock Text="Режим фокусировки (Без глитчей)" FontSize="14" FontWeight="SemiBold"/>
                                     <TextBlock Text="Отключить тряску камеры, эффект VHS и резкие вспышки" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
                                 </StackPanel>
-                                <ui:ToggleSwitch x:Name="ToggleFocusMode" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
+                                <CheckBox x:Name="ToggleFocusMode" Style="{StaticResource CyberToggleStyle}" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
                             </Grid>
                         </Border>
 
@@ -5497,7 +5622,7 @@ namespace ZapretGUI.Views
                                     <TextBlock Text="Минималистичный интерфейс" FontSize="14" FontWeight="SemiBold"/>
                                     <TextBlock Text="Скрыть графики скорости и логи, оставив только кнопки" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
                                 </StackPanel>
-                                <ui:ToggleSwitch x:Name="ToggleCompactMode" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
+                                <CheckBox x:Name="ToggleCompactMode" Style="{StaticResource CyberToggleStyle}" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
                             </Grid>
                         </Border>
 
@@ -5511,7 +5636,7 @@ namespace ZapretGUI.Views
                                     <TextBlock Text="Аппаратное ускорение (GPU)" FontSize="14" FontWeight="SemiBold"/>
                                     <TextBlock Text="Использовать видеокарту для отрисовки интерфейса" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
                                 </StackPanel>
-                                <ui:ToggleSwitch x:Name="ToggleHardwareAccel" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
+                                <CheckBox x:Name="ToggleHardwareAccel" Style="{StaticResource CyberToggleStyle}" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
                             </Grid>
                         </Border>
 
@@ -5525,7 +5650,7 @@ namespace ZapretGUI.Views
                                     <TextBlock Text="Режим цветовой слепоты" FontSize="14" FontWeight="SemiBold"/>
                                     <TextBlock Text="Заменить красно-зеленые точки индикаторов на оранжево-синие" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
                                 </StackPanel>
-                                <ui:ToggleSwitch x:Name="ToggleColorblind" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
+                                <CheckBox x:Name="ToggleColorblind" Style="{StaticResource CyberToggleStyle}" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
                             </Grid>
                         </Border>
                     </StackPanel>
@@ -5581,7 +5706,7 @@ namespace ZapretGUI.Views
                                     <TextBlock Text="Авто-перезапуск при обрыве" FontSize="14" FontWeight="SemiBold"/>
                                     <TextBlock Text="Автоматически перезапускать службы при восстановлении сети" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
                                 </StackPanel>
-                                <ui:ToggleSwitch x:Name="ToggleAutoRestart" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
+                                <CheckBox x:Name="ToggleAutoRestart" Style="{StaticResource CyberToggleStyle}" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
                             </Grid>
                         </Border>
                     </StackPanel>
@@ -6785,7 +6910,7 @@ namespace ZapretGUI.Views.WizardPages
                     <TextBlock Text="Автозагрузка Windows" FontSize="16" FontWeight="SemiBold" Foreground="White"/>
                     <TextBlock Text="Запускать программу при включении компьютера, чтобы сразу чинить интернет." Foreground="#888888" FontSize="13" TextWrapping="Wrap" Margin="0,4,0,0"/>
                 </StackPanel>
-                <ui:ToggleSwitch x:Name="ToggleAutoStart" IsChecked="True" Grid.Column="1" VerticalAlignment="Center"/>
+                <CheckBox x:Name="ToggleAutoStart" Style="{StaticResource CyberToggleStyle}" IsChecked="True" Grid.Column="1" VerticalAlignment="Center"/>
             </Grid>
         </Border>
 
@@ -6799,7 +6924,7 @@ namespace ZapretGUI.Views.WizardPages
                     <TextBlock Text="Режим фокусировки" FontSize="16" FontWeight="SemiBold" Foreground="White"/>
                     <TextBlock Text="Отключить тряску интерфейса и глитчи при ошибках." Foreground="#888888" FontSize="13" TextWrapping="Wrap" Margin="0,4,0,0"/>
                 </StackPanel>
-                <ui:ToggleSwitch x:Name="ToggleFocusMode" IsChecked="False" Grid.Column="1" VerticalAlignment="Center"/>
+                <CheckBox x:Name="ToggleFocusMode" Style="{StaticResource CyberToggleStyle}" IsChecked="False" Grid.Column="1" VerticalAlignment="Center"/>
             </Grid>
         </Border>
 
@@ -6813,7 +6938,7 @@ namespace ZapretGUI.Views.WizardPages
                     <TextBlock Text="Режим цветовой слепоты" FontSize="16" FontWeight="SemiBold" Foreground="White"/>
                     <TextBlock Text="Заменить красно-зеленые индикаторы на сине-оранжевые." Foreground="#888888" FontSize="13" TextWrapping="Wrap" Margin="0,4,0,0"/>
                 </StackPanel>
-                <ui:ToggleSwitch x:Name="ToggleColorblind" IsChecked="False" Grid.Column="1" VerticalAlignment="Center"/>
+                <CheckBox x:Name="ToggleColorblind" Style="{StaticResource CyberToggleStyle}" IsChecked="False" Grid.Column="1" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </StackPanel>
@@ -6862,7 +6987,7 @@ namespace ZapretGUI.Views.WizardPages
                     <TextBlock Text="Zapret (Обход блокировок)" FontSize="16" FontWeight="SemiBold" Foreground="White"/>
                     <TextBlock Text="Основной модуль для починки YouTube, Discord и других сервисов. Рекомендуется оставить включенным." Foreground="#888888" FontSize="13" TextWrapping="Wrap" Margin="0,5,0,0"/>
                 </StackPanel>
-                <ui:ToggleSwitch x:Name="ToggleZapret" IsChecked="True" Grid.Column="1" VerticalAlignment="Center"/>
+                <CheckBox x:Name="ToggleZapret" Style="{StaticResource CyberToggleStyle}" IsChecked="True" Grid.Column="1" VerticalAlignment="Center"/>
             </Grid>
         </Border>
 
@@ -6876,7 +7001,7 @@ namespace ZapretGUI.Views.WizardPages
                     <TextBlock Text="TgWsProxy (Прокси для Telegram)" FontSize="16" FontWeight="SemiBold" Foreground="White"/>
                     <TextBlock Text="Отдельный модуль для стабилизации работы десктопного клиента Telegram." Foreground="#888888" FontSize="13" TextWrapping="Wrap" Margin="0,5,0,0"/>
                 </StackPanel>
-                <ui:ToggleSwitch x:Name="ToggleTgProxy" IsChecked="True" Grid.Column="1" VerticalAlignment="Center"/>
+                <CheckBox x:Name="ToggleTgProxy" Style="{StaticResource CyberToggleStyle}" IsChecked="True" Grid.Column="1" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </StackPanel>

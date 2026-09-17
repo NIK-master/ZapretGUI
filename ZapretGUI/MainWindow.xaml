@@ -8,7 +8,6 @@
         WindowStartupLocation="CenterScreen">
 
     <Window.Resources>
-        <!-- СТИЛЬ ДЛЯ ПРУЖИНЯЩИХ КНОПОК МЕНЮ -->
         <Style x:Key="SpringyNavButton" TargetType="ui:Button" BasedOn="{StaticResource {x:Type ui:Button}}">
             <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
             <Setter Property="RenderTransform">
@@ -46,6 +45,24 @@
                         <Storyboard>
                             <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" To="1" Duration="0:0:0.2"/>
                             <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" To="1" Duration="0:0:0.2"/>
+                        </Storyboard>
+                    </BeginStoryboard>
+                </EventTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- СТИЛЬ ДЛЯ ДЫШАЩИХ СЕНСОРОВ -->
+        <Style x:Key="BreathingDot" TargetType="Ellipse">
+            <Setter Property="Opacity" Value="1"/>
+            <Style.Triggers>
+                <EventTrigger RoutedEvent="Loaded">
+                    <BeginStoryboard>
+                        <Storyboard AutoReverse="True" RepeatBehavior="Forever">
+                            <DoubleAnimation Storyboard.TargetProperty="Opacity" From="1.0" To="0.3" Duration="0:0:1.5">
+                                <DoubleAnimation.EasingFunction>
+                                    <SineEase EasingMode="EaseInOut"/>
+                                </DoubleAnimation.EasingFunction>
+                            </DoubleAnimation>
                         </Storyboard>
                     </BeginStoryboard>
                 </EventTrigger>
@@ -94,13 +111,25 @@
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="10,0,0,0">
                     <TextBlock Text="Zapret for ADHD" Foreground="#888888" FontSize="14" FontWeight="SemiBold" Margin="0,0,20,0"/>
 
-                    <Ellipse x:Name="NetworkDot" Width="8" Height="8" Fill="#107C10" Margin="0,0,5,0"/>
+                    <Ellipse x:Name="NetworkDot" Style="{StaticResource BreathingDot}" Width="8" Height="8" Fill="#107C10" Margin="0,0,5,0">
+                        <Ellipse.Effect>
+                            <DropShadowEffect Color="#107C10" BlurRadius="6" ShadowDepth="0"/>
+                        </Ellipse.Effect>
+                    </Ellipse>
                     <TextBlock Text="Сеть" Foreground="#888888" FontSize="12" Margin="0,0,15,0" VerticalAlignment="Center"/>
 
-                    <Ellipse x:Name="ZapretDot" Width="8" Height="8" Fill="#D13438" Margin="0,0,5,0"/>
+                    <Ellipse x:Name="ZapretDot" Style="{StaticResource BreathingDot}" Width="8" Height="8" Fill="#D13438" Margin="0,0,5,0">
+                        <Ellipse.Effect>
+                            <DropShadowEffect Color="#D13438" BlurRadius="6" ShadowDepth="0"/>
+                        </Ellipse.Effect>
+                    </Ellipse>
                     <TextBlock Text="Zapret" Foreground="#888888" FontSize="12" Margin="0,0,15,0" VerticalAlignment="Center"/>
 
-                    <Ellipse x:Name="TgProxyDot" Width="8" Height="8" Fill="#D13438" Margin="0,0,5,0"/>
+                    <Ellipse x:Name="TgProxyDot" Style="{StaticResource BreathingDot}" Width="8" Height="8" Fill="#D13438" Margin="0,0,5,0">
+                        <Ellipse.Effect>
+                            <DropShadowEffect Color="#D13438" BlurRadius="6" ShadowDepth="0"/>
+                        </Ellipse.Effect>
+                    </Ellipse>
                     <TextBlock Text="TgWsProxy" Foreground="#888888" FontSize="12" VerticalAlignment="Center"/>
                 </StackPanel>
 

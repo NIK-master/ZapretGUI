@@ -83,7 +83,7 @@
                     <ToggleButton x:Name="MainToggle" Width="200" Height="200" Click="MainToggle_Click" Cursor="Hand" Background="Transparent" BorderThickness="0">
                         <ToggleButton.Template>
                             <ControlTemplate TargetType="ToggleButton">
-                                <Border x:Name="BtnBorder" Background="#121212" BorderBrush="#2A2A2A" BorderThickness="3" CornerRadius="100" RenderTransformOrigin="0.5,0.5">
+                                <Border x:Name="BtnBorder" Background="#121212" BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="3" CornerRadius="100" RenderTransformOrigin="0.5,0.5">
                                     <Border.RenderTransform>
                                         <ScaleTransform ScaleX="1" ScaleY="1"/>
                                     </Border.RenderTransform>
@@ -206,7 +206,7 @@
                 </StackPanel>
 
                 <StackPanel Grid.Column="2" VerticalAlignment="Center">
-                    <Border Background="#181818" CornerRadius="12" BorderBrush="#2A2A2A" BorderThickness="1" Margin="0,0,0,15">
+                    <Border Background="#181818" CornerRadius="12" BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="1" Margin="0,0,0,15">
                         <StackPanel Margin="20">
                             <Grid Margin="0,0,0,10">
                                 <TextBlock Text="Настройки Zapret" FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Left" VerticalAlignment="Center"/>
@@ -231,7 +231,7 @@
                                     </Grid.ColumnDefinitions>
                                     <StackPanel>
                                         <TextBlock Text="Текущий конфиг:" Foreground="#888888" FontSize="12" Margin="0,0,0,4"/>
-                                        <TextBlock x:Name="TxtMainProfile" Text="general.bat" Foreground="White" FontSize="13" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock x:Name="TxtMainProfile" FontFamily="Consolas" Text="general.bat" Foreground="White" FontSize="13" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
                                     </StackPanel>
                                     <TextBlock Grid.Column="1" Text="&#xE713;" FontFamily="Segoe MDL2 Assets" Foreground="#888888" FontSize="16" VerticalAlignment="Center" Margin="10,0,0,0"/>
                                 </Grid>
@@ -239,7 +239,7 @@
                         </StackPanel>
                     </Border>
 
-                    <Border Background="#181818" CornerRadius="12" BorderBrush="#2A2A2A" BorderThickness="1">
+                    <Border Background="#181818" CornerRadius="12" BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="1">
                         <StackPanel Margin="20">
                             <Grid Margin="0,0,0,5">
                                 <TextBlock Text="TgWsProxy" FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Left" VerticalAlignment="Center"/>
@@ -257,7 +257,7 @@
                 </ProgressBar.Effect>
             </ProgressBar>
 
-            <Border x:Name="LogsPanel" Height="250" Grid.Row="2" Background="#0A0A0A" CornerRadius="8" BorderBrush="#2A2A2A" BorderThickness="1" Margin="0,20,0,0">
+            <Border x:Name="LogsPanel" Height="250" Grid.Row="2" Background="#0A0A0A" CornerRadius="8" BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="1" Margin="0,20,0,0">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
@@ -339,13 +339,13 @@
 
                     <WrapPanel Grid.Row="1" Margin="0,0,0,25">
                         <TextBlock Text="Активный конфиг: " Foreground="White" FontSize="15" FontWeight="Bold"/>
-                        <TextBlock x:Name="OverlayTxtProfile" Text="general.bat" Foreground="{DynamicResource BrandSuccessBrush}" FontSize="15" FontWeight="Bold"/>
+                        <TextBlock x:Name="OverlayTxtProfile" FontFamily="Consolas" Text="general.bat" Foreground="{DynamicResource BrandSuccessBrush}" FontSize="15" FontWeight="Bold"/>
                     </WrapPanel>
 
                     <Grid Grid.Row="2" Margin="0,0,0,10">
                         <TextBlock Text="Доступные конфиги" Foreground="#AAAAAA" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
                         <Border HorizontalAlignment="Right" Background="#1E293B" CornerRadius="6" Padding="8,4">
-                            <TextBlock x:Name="TxtConfigsCount" Text="0 конфигов" Foreground="#60A5FA" FontSize="12" FontWeight="SemiBold"/>
+                            <TextBlock x:Name="TxtConfigsCount" FontFamily="Consolas" Text="0 конфигов" Foreground="#60A5FA" FontSize="12" FontWeight="SemiBold"/>
                         </Border>
                     </Grid>
 
@@ -369,7 +369,7 @@
 
                                                     <StackPanel Grid.Column="0" VerticalAlignment="Center">
                                                         <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                                                            <TextBlock Text="{Binding FileName}" Foreground="{DynamicResource BrandSuccessBrush}" FontSize="15" FontWeight="SemiBold"/>
+                                                            <TextBlock Text="{Binding FileName}" FontFamily="Consolas" Foreground="{DynamicResource BrandSuccessBrush}" FontSize="15" FontWeight="SemiBold"/>
                                                             <Border x:Name="ActiveBadge" Background="#1E3A8A" CornerRadius="4" Padding="6,2" Margin="10,0,0,0" Visibility="Collapsed">
                                                                 <TextBlock Text="активный" Foreground="#60A5FA" FontSize="11" FontWeight="SemiBold"/>
                                                             </Border>
