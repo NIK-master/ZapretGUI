@@ -161,6 +161,20 @@ namespace ZapretGUI
             activeBtn.Background = UIHelper.GetBrushFromHex("#2A2A2A");
             activeBtn.BorderBrush = UIHelper.GetBrushFromHex("#107C10");
             activeBtn.BorderThickness = new Thickness(3, 0, 0, 0);
+
+            if (MainContentContainer.Content is FrameworkElement element)
+            {
+                element.RenderTransform = new System.Windows.Media.TranslateTransform();
+
+                var fadeIn = new System.Windows.Media.Animation.DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(300)) 
+                    { EasingFunction = new System.Windows.Media.Animation.CubicEase 
+                        { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut } 
+                    };
+                var slideUp = new System.Windows.Media.Animation.DoubleAnimation(15, 0, TimeSpan.FromMilliseconds(300)) { EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut } };
+
+                element.BeginAnimation(UIElement.OpacityProperty, fadeIn);
+                element.RenderTransform.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, slideUp);
+            }
         }
 
         public void UpdateIndicators(bool isZapretRunning, bool isProxyRunning)

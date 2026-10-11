@@ -466,10 +466,16 @@ namespace ZapretGUI.Views
 
             if (_cursorRun == null)
             {
-                var cursorBrush = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#00EA65"));
+                var cursorColor = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#A0A0A0");
+                var cursorBrush = new System.Windows.Media.SolidColorBrush(cursorColor);
                 _cursorRun = new System.Windows.Documents.Run(" █") { Foreground = cursorBrush };
-                var blink = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(400)) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever };
-                cursorBrush.BeginAnimation(SolidColorBrush.OpacityProperty, blink);
+
+                var blink = new System.Windows.Media.Animation.DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(400))
+                {
+                    AutoReverse = true,
+                    RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever
+                };
+                cursorBrush.BeginAnimation(System.Windows.Media.SolidColorBrush.OpacityProperty, blink);
             }
 
             while (_logQueue.Count > 0)
@@ -495,21 +501,20 @@ namespace ZapretGUI.Views
                 _lastProgressRun = entry.IsProgress ? run : null;
 
                 if (SettingsManager.Current.FocusMode)
-                {
                     run.Text = entry.Text;
-                }
                 else
                 {
-                    int chunkSize = entry.Text.Length > 40 ? 3 : 2;
-                    for (int i = 0; i < entry.Text.Length; i += chunkSize)
+                    var chunkSize = entry.Text.Length > 40 ? 3 : 2;
+                    for (var i = 0; i < entry.Text.Length; i += chunkSize)
                     {
-                        int length = Math.Min(chunkSize, entry.Text.Length - i);
+                        var length = Math.Min(chunkSize, entry.Text.Length - i);
                         run.Text += entry.Text.Substring(i, length);
                         LogRichTextBox.ScrollToEnd();
                         await Task.Delay(15);
                     }
                 }
             }
+
             _isTyping = false;
         }
 
