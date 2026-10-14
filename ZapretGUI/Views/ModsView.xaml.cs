@@ -37,6 +37,8 @@ namespace ZapretGUI.Views
         private bool _isInternalFileOperation = false;
         private bool _isAutoGeneratingId = false;
 
+        private int _lastEditorLineCount = -1;
+
         public ModsView()
         {
             InitializeComponent();
@@ -760,18 +762,27 @@ namespace ZapretGUI.Views
             if (EditorTextBox == null || TxtLineNumbers == null || TxtStatsInfo == null) return;
 
             var lines = EditorTextBox.Text.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
-            int lineCount = Math.Max(1, lines.Length);
+            var lineCount = Math.Max(1, lines.Length);
 
-            var sb = new StringBuilder();
-            for (int i = 1; i <= lineCount; i++)
-                sb.AppendLine(i.ToString());
+            if (lineCount != _lastEditorLineCount)
+            {
+                _lastEditorLineCount = lineCount;
+                var sb = new StringBuilder(lineCount * 4);
+                for (int i = 1; i <= lineCount; i++)
+                    sb.AppendLine(i.ToString());
 
-            TxtLineNumbers.Text = sb.ToString().TrimEnd();
+                TxtLineNumbers.Text = sb.ToString().TrimEnd();
+            }
 
-            int nonEmptyCount = lines.Count(l => !string.IsNullOrWhiteSpace(l));
-            TxtStatsInfo.Text = _currentTab == ModType.DomainList
-                ? $"Строк: {lineCount} (Доменов: {nonEmptyCount})"
-                : $"Строк: {lineCount} • Символов: {EditorTextBox.Text.Length}";
+            if (_currentTab == ModType.DomainList)
+            {
+                int nonEmptyCount = lines.Count(l => !string.IsNullOrWhiteSpace(l));
+                TxtStatsInfo.Text = $"Строк: {lineCount} (Доменов: {nonEmptyCount})";
+            }
+            else
+            {
+                TxtStatsInfo.Text = $"Строк: {lineCount} • Символов: {EditorTextBox.Text.Length}";
+            }
         }
 
         private void BtnEditorUndo_Click(object sender, RoutedEventArgs e)

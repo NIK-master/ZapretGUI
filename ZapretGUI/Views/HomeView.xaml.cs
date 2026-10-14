@@ -9,7 +9,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
-using System.Windows.Media.Effects;
 using ZapretGUI.Core;
 
 namespace ZapretGUI.Views
@@ -55,14 +54,14 @@ namespace ZapretGUI.Views
 
     public partial class HomeView : System.Windows.Controls.UserControl
     {
-        private System.Windows.Documents.Run? _lastProgressRun = null;
+        private const int MaxLogBlocks = 250;
 
-        // ФЛАГ-ПРЕДОХРАНИТЕЛЬ ДЛЯ ЗАЩИТЫ ОТ STACK OVERFLOW
+        private System.Windows.Documents.Run? _lastProgressRun = null;
         private bool _isUpdatingUI = false;
 
-        private Queue<LogEntry> _logQueue = new Queue<LogEntry>();
+        private readonly Queue<LogEntry> _logQueue = new Queue<LogEntry>();
         private bool _isTyping = false;
-        private System.Windows.Documents.Run _cursorRun;
+        private System.Windows.Documents.Run? _cursorRun;
 
         public HomeView()
         {
@@ -102,7 +101,7 @@ namespace ZapretGUI.Views
         {
             Dispatcher.Invoke(() =>
             {
-                _isUpdatingUI = true; // БЛОКИРУЕМ ИВЕНТЫ
+                _isUpdatingUI = true;
 
                 var currentProfile = TxtMainProfile.Text;
                 LoadProfiles();
@@ -121,7 +120,7 @@ namespace ZapretGUI.Views
                 if (!found && OverlayProfileListBox.Items.Count > 0)
                     OverlayProfileListBox.SelectedIndex = 0;
 
-                _isUpdatingUI = false; // РАЗБЛОКИРУЕМ
+                _isUpdatingUI = false;
             });
         }
 
@@ -169,9 +168,9 @@ namespace ZapretGUI.Views
                 BtnRefreshPing.IsEnabled = false;
                 PingText.Text = "...";
 
-                var rotateAnim = new System.Windows.Media.Animation.DoubleAnimation(0, 360, TimeSpan.FromSeconds(1))
+                var rotateAnim = new DoubleAnimation(0, 360, TimeSpan.FromSeconds(1))
                 {
-                    RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever
+                    RepeatBehavior = RepeatBehavior.Forever
                 };
                 PingIconTransform.BeginAnimation(RotateTransform.AngleProperty, rotateAnim);
 
@@ -315,11 +314,11 @@ namespace ZapretGUI.Views
 
         private void AnimateProgressBar(double targetValue)
         {
-            var animation = new System.Windows.Media.Animation.DoubleAnimation
+            var animation = new DoubleAnimation
             {
                 To = targetValue,
                 Duration = TimeSpan.FromMilliseconds(400),
-                EasingFunction = new System.Windows.Media.Animation.QuadraticEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut }
+                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
             };
 
             LaunchProgressBar.BeginAnimation(System.Windows.Controls.ProgressBar.ValueProperty, animation);
@@ -330,14 +329,14 @@ namespace ZapretGUI.Views
             if (isRunning)
             {
                 StatusText.Text = "Работает";
-                StatusText.Foreground = GetSuccessColor();
+                StatusText.Foreground = UIHelper.GetSuccessBrush();
                 BtnOpenConfigMenu.IsEnabled = false;
                 BtnOpenConfigMenu.Opacity = 0.5;
             }
             else
             {
                 StatusText.Text = "Остановлен";
-                StatusText.Foreground = GetErrorColor();
+                StatusText.Foreground = UIHelper.GetErrorBrush();
                 BtnOpenConfigMenu.IsEnabled = true;
                 BtnOpenConfigMenu.Opacity = 1.0;
             }
@@ -350,10 +349,10 @@ namespace ZapretGUI.Views
 
             if (Directory.Exists(folderPath))
             {
-                var batFiles = System.IO.Directory.GetFiles(folderPath, "*.bat")
+                var batFiles = Directory.GetFiles(folderPath, "*.bat")
                     .Where(f =>
                     {
-                        var name = System.IO.Path.GetFileName(f);
+                        var name = Path.GetFileName(f);
                         return name.StartsWith("general", StringComparison.OrdinalIgnoreCase) ||
                                name.StartsWith("mod_", StringComparison.OrdinalIgnoreCase);
                     }).ToArray();
@@ -403,9 +402,7 @@ namespace ZapretGUI.Views
             foreach (var item in OverlayProfileListBox.Items)
             {
                 if (item is ConfigItem configItem)
-                {
                     configItem.IsActive = (configItem.FileName == activeFileName);
-                }
             }
         }
 
@@ -461,11 +458,11 @@ namespace ZapretGUI.Views
 
             if (message.Contains("ОШИБКА") || message.Contains("⚠") || message.Contains("🛑") || message.Contains("❌"))
             {
-                color = GetErrorColor();
+                color = UIHelper.GetErrorBrush();
                 weight = FontWeights.Bold;
             }
             else if (message.Contains("✅") || message.Contains("✨") || message.Contains("🏆"))
-                color = GetSuccessColor();
+                color = UIHelper.GetSuccessBrush();
             else if (message.Contains("🔍"))
                 color = UIHelper.GetBrushFromHex("#55AAFF");
 
@@ -482,15 +479,15 @@ namespace ZapretGUI.Views
             if (_cursorRun == null)
             {
                 var cursorColor = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#A0A0A0");
-                var cursorBrush = new System.Windows.Media.SolidColorBrush(cursorColor);
+                var cursorBrush = new SolidColorBrush(cursorColor);
                 _cursorRun = new System.Windows.Documents.Run(" █") { Foreground = cursorBrush };
 
-                var blink = new System.Windows.Media.Animation.DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(400))
+                var blink = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(400))
                 {
                     AutoReverse = true,
-                    RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever
+                    RepeatBehavior = RepeatBehavior.Forever
                 };
-                cursorBrush.BeginAnimation(System.Windows.Media.SolidColorBrush.OpacityProperty, blink);
+                cursorBrush.BeginAnimation(SolidColorBrush.OpacityProperty, blink);
             }
 
             while (_logQueue.Count > 0)
@@ -501,6 +498,12 @@ namespace ZapretGUI.Views
                 {
                     _lastProgressRun.Text = entry.Text;
                     continue;
+                }
+
+                // Ограничиваем количество параграфов в документе, чтобы не раздувать память
+                while (LogDocument.Blocks.Count >= MaxLogBlocks && LogDocument.Blocks.FirstBlock != null)
+                {
+                    LogDocument.Blocks.Remove(LogDocument.Blocks.FirstBlock);
                 }
 
                 var run = new System.Windows.Documents.Run("") { Foreground = entry.Color, FontWeight = entry.Weight };
@@ -590,9 +593,9 @@ namespace ZapretGUI.Views
 
             if (LogsPanel != null)
             {
-                var opacityAnim = new System.Windows.Media.Animation.DoubleAnimation { To = isCompact ? 0 : 1, Duration = TimeSpan.FromSeconds(0.3) };
-                var heightAnim = new System.Windows.Media.Animation.DoubleAnimation { To = isCompact ? 0 : 250, Duration = TimeSpan.FromSeconds(0.4), EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut } };
-                var marginAnim = new System.Windows.Media.Animation.ThicknessAnimation { To = isCompact ? new Thickness(0) : new Thickness(0, 20, 0, 0), Duration = TimeSpan.FromSeconds(0.4), EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut } };
+                var opacityAnim = new DoubleAnimation { To = isCompact ? 0 : 1, Duration = TimeSpan.FromSeconds(0.3) };
+                var heightAnim = new DoubleAnimation { To = isCompact ? 0 : 250, Duration = TimeSpan.FromSeconds(0.4), EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
+                var marginAnim = new ThicknessAnimation { To = isCompact ? new Thickness(0) : new Thickness(0, 20, 0, 0), Duration = TimeSpan.FromSeconds(0.4), EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
 
                 LogsPanel.BeginAnimation(UIElement.OpacityProperty, opacityAnim);
                 LogsPanel.BeginAnimation(FrameworkElement.HeightProperty, heightAnim);
@@ -606,7 +609,7 @@ namespace ZapretGUI.Views
 
             UpdateUIState(isZapret || isProxy);
 
-            this.Resources["MainBtnColor"] = GetSuccessColor().Color;
+            this.Resources["MainBtnColor"] = UIHelper.GetSuccessBrush().Color;
 
             if (System.Windows.Application.Current.MainWindow is MainWindow mainWindow)
             {
@@ -617,18 +620,6 @@ namespace ZapretGUI.Views
 
                 mainWindow.AnimateWindowSize(isCompact);
             }
-        }
-
-        private SolidColorBrush GetSuccessColor()
-        {
-            var hex = SettingsManager.Current.ColorblindMode ? "#0078D7" : "#107C10";
-            return UIHelper.GetBrushFromHex(hex);
-        }
-
-        private SolidColorBrush GetErrorColor()
-        {
-            var hex = SettingsManager.Current.ColorblindMode ? "#FF8C00" : "#D13438";
-            return UIHelper.GetBrushFromHex(hex);
         }
 
         public void ShowUpdateProgress(string message)
@@ -652,15 +643,8 @@ namespace ZapretGUI.Views
         private void OverlayBackground_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e) => CloseOverlay();
         private void OverlayContent_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e) => e.Handled = true;
 
-        private void BtnShowConfigList_Click(object sender, RoutedEventArgs e)
-        {
-            AudioHelper.PlayClick();
-            OverlayProfileListBox.Visibility = OverlayProfileListBox.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
-        }
-
         private void OverlayProfileListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            // ПРЕДОТВРАЩАЕМ ЦИКЛ
             if (_isUpdatingUI) return;
 
             if (OverlayProfileListBox.SelectedItem is ConfigItem selectedItem && IsLoaded)

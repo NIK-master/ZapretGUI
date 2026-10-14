@@ -401,64 +401,9 @@ namespace ZapretGUI
 
         private async Task CheckUpdatesOnStartupAsync()
         {
-            var appUpdate = await Core.UpdateManager.CheckForAppUpdateAsync();
-            if (appUpdate.UpdateAvailable)
-            {
-                var prompt = new Views.UpdateWindow("Обновление программы", $"Доступна новая версия панели управления {appUpdate.Version}!\n\nПрограмма будет закрыта для установки обновления. Продолжить?");
-                prompt.ShowDialog();
-
-                if (prompt.Result)
-                {
-                    if (!string.IsNullOrEmpty(appUpdate.DownloadUrl))
-                    {
-                        try { await Core.UpdateManager.ApplyAppUpdateAsync(appUpdate.DownloadUrl, () => System.Windows.Application.Current.Shutdown()); }
-                        catch (Exception ex) { UIHelper.ShowAlert("Ошибка обновления", $"Не удалось обновить программу: {ex.Message}", isError: true); }
-                    }
-                    else if (!string.IsNullOrEmpty(appUpdate.ReleaseUrl))
-                    {
-                        Process.Start(new ProcessStartInfo(appUpdate.ReleaseUrl) { UseShellExecute = true });
-                    }
-                }
-            }
-
             var stopServicesAction = () => { if (IsBypassRunning()) ToggleBypass(); };
             var progress = new Progress<string>(status => _homeView.ShowUpdateProgress(status));
-
-            var zapretUpdate = await Core.UpdateManager.CheckForCoreUpdateAsync(AppConstants.ZapretCoreRepoUrl, SettingsManager.Current.ZapretCoreVersion, "Zapret", true);
-            if (zapretUpdate.UpdateAvailable)
-            {
-                var prompt = new Views.UpdateWindow("Обновление ядра Zapret", $"Найдено обновление обхода Zapret от flowseal ({zapretUpdate.Version})!\n\nТекущая версия: {zapretUpdate.CurrentVersion}\nОбновить автоматически?");
-                prompt.ShowDialog();
-                if (prompt.Result)
-                {
-                    try
-                    {
-                        await Core.UpdateManager.InstallCoreAsync(zapretUpdate, stopServicesAction, progress);
-                        SettingsManager.Current.ZapretCoreVersion = zapretUpdate.Version;
-                        SettingsManager.Save();
-                        UIHelper.ShowAlert("Успех", $"Модуль Zapret успешно обновлен до версии {zapretUpdate.Version}!");
-                    }
-                    catch (Exception ex) { UIHelper.ShowAlert("Ошибка", $"Ошибка при установке обновления Zapret: {ex.Message}", isError: true); }
-                }
-            }
-
-            var proxyUpdate = await Core.UpdateManager.CheckForCoreUpdateAsync(AppConstants.TgProxyCoreRepoUrl, SettingsManager.Current.TgProxyCoreVersion, "TgWsProxy", false);
-            if (proxyUpdate.UpdateAvailable)
-            {
-                var prompt = new Views.UpdateWindow("Обновление ядра TgWsProxy", $"Найдено обновление прокси Telegram от flowseal ({proxyUpdate.Version})!\n\nТекущая версия: {proxyUpdate.CurrentVersion}\nОбновить автоматически?");
-                prompt.ShowDialog();
-                if (prompt.Result)
-                {
-                    try
-                    {
-                        await Core.UpdateManager.InstallCoreAsync(proxyUpdate, stopServicesAction, progress);
-                        SettingsManager.Current.TgProxyCoreVersion = proxyUpdate.Version;
-                        SettingsManager.Save();
-                        UIHelper.ShowAlert("Успех", $"Модуль TgWsProxy успешно обновлен до версии {proxyUpdate.Version}!");
-                    }
-                    catch (Exception ex) { UIHelper.ShowAlert("Ошибка", $"Ошибка при установке обновления TgWsProxy: {ex.Message}", isError: true); }
-                }
-            }
+            await Core.UpdateManager.RunUpdateWorkflowAsync(isManualCheck: false, stopServicesAction, progress);
         }
 
         private void BtnHome_Click(object sender, RoutedEventArgs e)
@@ -1762,33 +1707,16 @@ namespace ZapretGUI.Core
 
         public (bool isValid, string errorMessage) ValidateBatMod(string modName, string batContent)
         {
-            if (string.IsNullOrWhiteSpace(batContent))
-                return (false, $"Мод «{modName}»: файл скрипта пуст.");
-
-            var lines = batContent.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
-            bool hasWinws = false;
-
-            for (int i = 0; i < lines.Length; i++)
+            try
             {
-                int lineNum = i + 1;
-                string rawLine = lines[i];
-                string trimmed = rawLine.Trim();
-
-                if (string.IsNullOrWhiteSpace(trimmed) || trimmed.StartsWith("::") || trimmed.StartsWith("rem ", StringComparison.OrdinalIgnoreCase))
-                    continue;
-
-                if (trimmed.Contains(AppConstants.ZapretProcessName, StringComparison.OrdinalIgnoreCase))
-                    hasWinws = true;
-
-                int quotes = trimmed.Count(c => c == '\"');
-                if (quotes % 2 != 0)
-                    return (false, $"Мод «{modName}» [Строка {lineNum}]: Не закрыта кавычка (\") в строке:\n«{trimmed}»");
+                var lines = (batContent ?? "").Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+                ZapretManager.ParseAndValidateBatLines(lines, $"моде «{modName}»", _zapretFilesPath, checkReferencedFiles: true);
+                return (true, "");
             }
-
-            if (!hasWinws)
-                return (false, $"Мод «{modName}»: В скрипте отсутствует вызов «{AppConstants.ZapretProcessName}.exe». Такой батник не подходит для Zapret.");
-
-            return (true, "");
+            catch (Exception ex)
+            {
+                return (false, ex.Message);
+            }
         }
     }
 }
@@ -2509,6 +2437,104 @@ namespace ZapretGUI.Core
             return version.Trim().TrimStart('v', 'V');
         }
 
+        /// <summary>
+        /// Единый сценарий проверки и установки обновлений для старта программы и кнопки в Настройках.
+        /// </summary>
+        public static async Task RunUpdateWorkflowAsync(bool isManualCheck, Action? stopServicesCallback, IProgress<string>? progress = null)
+        {
+            // 1. Проверка обновлений самого приложения (GUI)
+            var appUpdate = await CheckForAppUpdateAsync();
+            if (appUpdate.UpdateAvailable)
+            {
+                bool acceptApp = UIHelper.ShowConfirm(
+                    "Обновление программы",
+                    $"Доступна новая версия панели управления {appUpdate.Version}!\n\nПрограмма будет закрыта для установки обновления. Продолжить?",
+                    confirmText: "Обновить");
+
+                if (acceptApp)
+                {
+                    if (!string.IsNullOrEmpty(appUpdate.DownloadUrl))
+                    {
+                        try
+                        {
+                            await ApplyAppUpdateAsync(appUpdate.DownloadUrl, () => System.Windows.Application.Current.Shutdown());
+                            return;
+                        }
+                        catch (Exception ex)
+                        {
+                            UIHelper.ShowAlert("Ошибка обновления", $"Не удалось обновить программу: {ex.Message}", isError: true);
+                        }
+                    }
+                    else if (!string.IsNullOrEmpty(appUpdate.ReleaseUrl))
+                    {
+                        Process.Start(new ProcessStartInfo(appUpdate.ReleaseUrl) { UseShellExecute = true });
+                    }
+                }
+            }
+            else if (isManualCheck)
+            {
+                UIHelper.ShowAlert("Проверка обновлений", "У вас уже установлена самая последняя версия панели управления!");
+            }
+
+            // 2. Проверка обновлений ядра Zapret
+            var zapretUpdate = await CheckForCoreUpdateAsync(AppConstants.ZapretCoreRepoUrl, SettingsManager.Current.ZapretCoreVersion, "Zapret", true);
+            if (zapretUpdate.UpdateAvailable)
+            {
+                bool acceptZapret = UIHelper.ShowConfirm(
+                    "Обновление ядра Zapret",
+                    $"Найдено обновление обхода Zapret от flowseal ({zapretUpdate.Version})!\n\nТекущая версия: {zapretUpdate.CurrentVersion}\nОбновить автоматически?",
+                    confirmText: "Обновить");
+
+                if (acceptZapret)
+                {
+                    try
+                    {
+                        await InstallCoreAsync(zapretUpdate, stopServicesCallback, progress);
+                        SettingsManager.Current.ZapretCoreVersion = zapretUpdate.Version;
+                        SettingsManager.Save();
+                        UIHelper.ShowAlert("Успех", $"Модуль Zapret успешно обновлен до версии {zapretUpdate.Version}!");
+                    }
+                    catch (Exception ex)
+                    {
+                        UIHelper.ShowAlert("Ошибка", $"Ошибка при установке обновления Zapret: {ex.Message}", isError: true);
+                    }
+                }
+            }
+            else if (isManualCheck)
+            {
+                UIHelper.ShowAlert("Проверка ядра Zapret", "Ядро Zapret обновлено до последней версии.");
+            }
+
+            // 3. Проверка обновлений ядра TgWsProxy
+            var proxyUpdate = await CheckForCoreUpdateAsync(AppConstants.TgProxyCoreRepoUrl, SettingsManager.Current.TgProxyCoreVersion, "TgWsProxy", false);
+            if (proxyUpdate.UpdateAvailable)
+            {
+                bool acceptProxy = UIHelper.ShowConfirm(
+                    "Обновление ядра TgWsProxy",
+                    $"Найдено обновление прокси Telegram от flowseal ({proxyUpdate.Version})!\n\nТекущая версия: {proxyUpdate.CurrentVersion}\nОбновить автоматически?",
+                    confirmText: "Обновить");
+
+                if (acceptProxy)
+                {
+                    try
+                    {
+                        await InstallCoreAsync(proxyUpdate, stopServicesCallback, progress);
+                        SettingsManager.Current.TgProxyCoreVersion = proxyUpdate.Version;
+                        SettingsManager.Save();
+                        UIHelper.ShowAlert("Успех", $"Модуль TgWsProxy успешно обновлен до версии {proxyUpdate.Version}!");
+                    }
+                    catch (Exception ex)
+                    {
+                        UIHelper.ShowAlert("Ошибка", $"Ошибка при установке обновления TgWsProxy: {ex.Message}", isError: true);
+                    }
+                }
+            }
+            else if (isManualCheck)
+            {
+                UIHelper.ShowAlert("Проверка ядра TgWsProxy", "Ядро TgWsProxy обновлено до последней версии.");
+            }
+        }
+
         public static async Task<AppUpdateResult> CheckForAppUpdateAsync()
         {
             try
@@ -2648,28 +2674,28 @@ namespace ZapretGUI.Core
 
                     foreach (var entry in archive.Entries)
                     {
-                        if (string.IsNullOrEmpty(entry.FullName)) 
+                        if (string.IsNullOrEmpty(entry.FullName))
                             continue;
 
                         var slashIndex = entry.FullName.IndexOf('/');
 
-                        if (slashIndex == -1) 
-                        { 
-                            hasFilesAtRoot = true; 
-                            break; 
+                        if (slashIndex == -1)
+                        {
+                            hasFilesAtRoot = true;
+                            break;
                         }
                         var currentRoot = entry.FullName.Substring(0, slashIndex + 1);
 
-                        if (rootDirToStrip == null) 
+                        if (rootDirToStrip == null)
                             rootDirToStrip = currentRoot;
-                        else if (rootDirToStrip != currentRoot) 
-                        { 
-                            rootDirToStrip = null; 
-                            break; 
+                        else if (rootDirToStrip != currentRoot)
+                        {
+                            rootDirToStrip = null;
+                            break;
                         }
                     }
 
-                    if (hasFilesAtRoot) 
+                    if (hasFilesAtRoot)
                         rootDirToStrip = null;
 
                     foreach (var entry in archive.Entries)
@@ -2706,7 +2732,7 @@ namespace ZapretGUI.Core
             var tempZip = Path.Combine(tempDir, "update.zip");
             var extractDir = Path.Combine(tempDir, "Extracted");
 
-            if (Directory.Exists(tempDir)) 
+            if (Directory.Exists(tempDir))
                 Directory.Delete(tempDir, true);
 
             Directory.CreateDirectory(tempDir);
@@ -2747,7 +2773,7 @@ del ""%~f0""
             if (installZapret)
             {
                 progress.Report("Поиск последней версии Zapret...");
-                var zapretUpdate = await CheckForCoreUpdateAsync("https://api.github.com/repos/flowseal/zapret-discord-youtube/releases/latest", "0.0.0", "Zapret", true);
+                var zapretUpdate = await CheckForCoreUpdateAsync(AppConstants.ZapretCoreRepoUrl, "0.0.0", "Zapret", true);
                 if (zapretUpdate.UpdateAvailable)
                 {
                     await InstallCoreAsync(zapretUpdate, null, progress);
@@ -2758,7 +2784,7 @@ del ""%~f0""
             if (installProxy)
             {
                 progress.Report("Поиск последней версии TgWsProxy...");
-                var proxyUpdate = await CheckForCoreUpdateAsync("https://api.github.com/repos/flowseal/tg-ws-proxy/releases/latest", "0.0.0", "TgWsProxy", false);
+                var proxyUpdate = await CheckForCoreUpdateAsync(AppConstants.TgProxyCoreRepoUrl, "0.0.0", "TgWsProxy", false);
                 if (proxyUpdate.UpdateAvailable)
                 {
                     await InstallCoreAsync(proxyUpdate, null, progress);
@@ -2785,7 +2811,7 @@ del ""%~f0""
             do
             {
                 var read = await contentStream.ReadAsync(buffer, 0, buffer.Length);
-                if (read == 0) 
+                if (read == 0)
                     isMoreToRead = false;
                 else
                 {
@@ -2822,7 +2848,7 @@ namespace ZapretGUI.Core
 {
     public class ZapretManager
     {
-        private string _basePath;
+        private readonly string _basePath;
         private Process? _process;
 
         public event Action<string>? LogMessage;
@@ -2853,18 +2879,12 @@ namespace ZapretGUI.Core
             return $"профиле «{profileName}»";
         }
 
-        public void Start(string profileName)
+        /// <summary>
+        /// Единый глубокий анализатор и сборщик аргументов .bat скрипта для ZapretManager и редактора модов.
+        /// </summary>
+        public static string ParseAndValidateBatLines(string[] lines, string sourceName, string zapretBasePath, bool checkReferencedFiles = true)
         {
-            Stop();
-
-            var batFilePath = Path.Combine(_basePath, profileName);
-            var sourceName = GetSourceDisplayName(profileName);
-
-            if (!File.Exists(batFilePath))
-                throw new FileNotFoundException($"Конфигурационный файл не найден в {sourceName} по пути: {batFilePath}");
-
-            var lines = File.ReadAllLines(batFilePath);
-            if (lines.Length == 0 || lines.All(string.IsNullOrWhiteSpace))
+            if (lines == null || lines.Length == 0 || lines.All(string.IsNullOrWhiteSpace))
                 throw new Exception($"Ошибка в {sourceName}: Файл стратегии пуст.");
 
             var arguments = "";
@@ -2929,26 +2949,29 @@ namespace ZapretGUI.Core
                             if (token.StartsWith("---") || token == "--" || token == "-")
                                 throw new Exception($"Ошибка синтаксиса в {sourceName} [Строка {lineNum}]:\nНекорректный формат флага «{token}».\nСтрока: «{rawLine.Trim()}»");
 
-                            var fileMatch = Regex.Match(token, @"^--(hostlist|hostlist-exclude|ipset|ipset-exclude|dpi-desync-fake-tls|dpi-desync-fake-quic|dpi-desync-fake-unknown-udp|dpi-desync-split-seqovl-pattern)=(.+)$", RegexOptions.IgnoreCase);
-                            if (fileMatch.Success)
+                            if (checkReferencedFiles && Directory.Exists(zapretBasePath))
                             {
-                                var paramName = fileMatch.Groups[1].Value;
-                                var rawFilePath = fileMatch.Groups[2].Value.Trim('\"', '\'');
-
-                                if (!rawFilePath.StartsWith("0x", StringComparison.OrdinalIgnoreCase) && !rawFilePath.StartsWith("!"))
+                                var fileMatch = Regex.Match(token, @"^--(hostlist|hostlist-exclude|ipset|ipset-exclude|dpi-desync-fake-tls|dpi-desync-fake-quic|dpi-desync-fake-unknown-udp|dpi-desync-split-seqovl-pattern)=(.+)$", RegexOptions.IgnoreCase);
+                                if (fileMatch.Success)
                                 {
-                                    var resolvedPath = rawFilePath
-                                        .Replace("%BIN%", @"bin\")
-                                        .Replace("%LISTS%", @"lists\")
-                                        .Replace("%~dp0", "");
+                                    var paramName = fileMatch.Groups[1].Value;
+                                    var rawFilePath = fileMatch.Groups[2].Value.Trim('\"', '\'');
 
-                                    var fullCheckPath = Path.IsPathRooted(resolvedPath)
-                                        ? resolvedPath
-                                        : Path.Combine(_basePath, resolvedPath);
-
-                                    if (!File.Exists(fullCheckPath))
+                                    if (!rawFilePath.StartsWith("0x", StringComparison.OrdinalIgnoreCase) && !rawFilePath.StartsWith("!"))
                                     {
-                                        throw new Exception($"Ошибка в {sourceName} [Строка {lineNum}]:\nВ параметре «--{paramName}» указан несуществующий файл «{rawFilePath}».\nСтрока: «{rawLine.Trim()}»");
+                                        var resolvedPath = rawFilePath
+                                            .Replace("%BIN%", @"bin\")
+                                            .Replace("%LISTS%", @"lists\")
+                                            .Replace("%~dp0", "");
+
+                                        var fullCheckPath = Path.IsPathRooted(resolvedPath)
+                                            ? resolvedPath
+                                            : Path.Combine(zapretBasePath, resolvedPath);
+
+                                        if (!File.Exists(fullCheckPath))
+                                        {
+                                            throw new Exception($"Ошибка в {sourceName} [Строка {lineNum}]:\nВ параметре «--{paramName}» указан несуществующий файл «{rawFilePath}».\nСтрока: «{rawLine.Trim()}»");
+                                        }
                                     }
                                 }
                             }
@@ -2963,30 +2986,38 @@ namespace ZapretGUI.Core
             }
 
             if (!winwsFound)
-            {
                 throw new Exception($"Ошибка структуры в {sourceName}:\nВ батнике не найден вызов ядра «{AppConstants.ZapretProcessName}.exe». Этот скрипт не подходит для Zapret.");
-            }
 
-            arguments = arguments.Replace("%BIN%", @"bin\");
-            arguments = arguments.Replace("%LISTS%", @"lists\");
-            arguments = arguments.Replace("%~dp0", "");
-
-            arguments = arguments.Replace("%GameFilterTCP%", "65535");
-            arguments = arguments.Replace("%GameFilterUDP%", "65535");
-            arguments = arguments.Replace("%GameFilter%", "65535");
-
-            arguments = arguments.Trim();
+            arguments = arguments.Replace("%BIN%", @"bin\")
+                                 .Replace("%LISTS%", @"lists\")
+                                 .Replace("%~dp0", "")
+                                 .Replace("%GameFilterTCP%", "65535")
+                                 .Replace("%GameFilterUDP%", "65535")
+                                 .Replace("%GameFilter%", "65535")
+                                 .Trim();
 
             if (string.IsNullOrEmpty(arguments))
-            {
                 throw new Exception($"Ошибка в {sourceName} [Строка {winwsStartLine}]:\nКоманда «{AppConstants.ZapretProcessName}» вызвана без параметров фильтрации.");
-            }
 
             var unexpandedVar = Regex.Match(arguments, @"%[a-zA-Z0-9_]+%");
             if (unexpandedVar.Success)
-            {
                 throw new Exception($"Ошибка в {sourceName}:\nОбнаружена неизвестная переменная «{unexpandedVar.Value}», которая не поддерживается в прямом запуске Zapret.");
-            }
+
+            return arguments;
+        }
+
+        public void Start(string profileName)
+        {
+            Stop();
+
+            var batFilePath = Path.Combine(_basePath, profileName);
+            var sourceName = GetSourceDisplayName(profileName);
+
+            if (!File.Exists(batFilePath))
+                throw new FileNotFoundException($"Конфигурационный файл не найден в {sourceName} по пути: {batFilePath}");
+
+            var lines = File.ReadAllLines(batFilePath);
+            var arguments = ParseAndValidateBatLines(lines, sourceName, _basePath, checkReferencedFiles: true);
 
             var exePath = Path.Combine(_basePath, $"{AppConstants.ZapretProcessName}.exe");
             var binExePath = Path.Combine(_basePath, "bin", $"{AppConstants.ZapretProcessName}.exe");
@@ -2995,9 +3026,7 @@ namespace ZapretGUI.Core
                 exePath = binExePath;
 
             if (!File.Exists(exePath))
-            {
                 throw new FileNotFoundException($"Не найден исполняемый файл ядра по пути: {exePath}. Запустите проверку обновлений в настройках.");
-            }
 
             var startInfo = new ProcessStartInfo
             {
@@ -7325,17 +7354,7 @@ namespace ZapretGUI.Views
                 settings.HardwareAcceleration = useGpu;
                 settings.ColorblindMode = ToggleColorblind.IsChecked ?? false;
 
-                var res = System.Windows.Application.Current.Resources;
-                if (settings.ColorblindMode)
-                {
-                    res["BrandSuccessBrush"] = UIHelper.GetBrushFromHex("#0078D7");
-                    res["BrandErrorBrush"] = UIHelper.GetBrushFromHex("#FF8C00");
-                }
-                else
-                {
-                    res["BrandSuccessBrush"] = UIHelper.GetBrushFromHex("#107C10");
-                    res["BrandErrorBrush"] = UIHelper.GetBrushFromHex("#D13438");
-                }
+                UIHelper.ApplyThemeColors();
 
                 settings.PingUrl = string.IsNullOrWhiteSpace(TxtPingUrl.Text) ? AppConstants.DefaultPingUrl : TxtPingUrl.Text;
                 settings.AutoRestartServices = ToggleAutoRestart.IsChecked ?? false;
@@ -7377,12 +7396,13 @@ namespace ZapretGUI.Views
                 try
                 {
                     var settingsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.json");
-                    if (File.Exists(settingsPath)) 
+                    if (File.Exists(settingsPath))
                         File.Delete(settingsPath);
 
                     StartupHelper.SetAutoStart(false);
 
                     SettingsManager.Load();
+                    UIHelper.ApplyThemeColors();
                     LoadSettings();
 
                     UIHelper.ShowAlert("Готово", "Настройки успешно сброшены. Некоторые изменения вступят в силу после перезапуска программы.");
@@ -7404,66 +7424,15 @@ namespace ZapretGUI.Views
         {
             if (sender is System.Windows.Controls.Button btn) btn.IsEnabled = false;
 
-            var appUpdate = await Core.UpdateManager.CheckForAppUpdateAsync();
-            if (appUpdate.UpdateAvailable)
+            Action stopServicesAction = () =>
             {
-                var prompt = new Views.UpdateWindow("Обновление программы", $"Доступна новая версия панели управления {appUpdate.Version}!\n\nПрограмма будет закрыта для установки обновления. Продолжить?");
-                prompt.ShowDialog();
-                if (prompt.Result && !string.IsNullOrEmpty(appUpdate.DownloadUrl))
-                    await Core.UpdateManager.ApplyAppUpdateAsync(appUpdate.DownloadUrl, () => System.Windows.Application.Current.Shutdown());
-            }
-            else
-            {
-                new Views.UpdateWindow("Проверка обновлений", "У вас уже установлена самая последняя версия панели управления!", "ОК").ShowDialog();
-            }
+                if (System.Windows.Application.Current.MainWindow is MainWindow mw && mw.IsBypassRunning())
+                    mw.ToggleBypass();
+            };
 
-            Action stopServicesAction = () => { if (System.Windows.Application.Current.MainWindow is MainWindow mw && mw.IsBypassRunning()) mw.ToggleBypass(); };
+            await Core.UpdateManager.RunUpdateWorkflowAsync(isManualCheck: true, stopServicesAction, null);
 
-            var zapretUpdate = await Core.UpdateManager.CheckForCoreUpdateAsync("https://api.github.com/repos/flowseal/zapret-discord-youtube/releases/latest", SettingsManager.Current.ZapretCoreVersion, "Zapret", true);
-            if (zapretUpdate.UpdateAvailable)
-            {
-                var prompt = new Views.UpdateWindow("Обновление ядра Zapret", $"Найдено обновление обхода Zapret ({zapretUpdate.Version})!\n\nТекущая версия: {zapretUpdate.CurrentVersion}\nОбновить автоматически?");
-                prompt.ShowDialog();
-                if (prompt.Result)
-                {
-                    try
-                    {
-                        await Core.UpdateManager.InstallCoreAsync(zapretUpdate, stopServicesAction, null);
-                        SettingsManager.Current.ZapretCoreVersion = zapretUpdate.Version;
-                        SettingsManager.Save();
-                        new Views.UpdateWindow("Успех", "Модуль Zapret успешно обновлен!", "ОК").ShowDialog();
-                    }
-                    catch (Exception ex) { new Views.UpdateWindow("Ошибка", $"Ошибка: {ex.Message}", "ОК").ShowDialog(); }
-                }
-            }
-            else
-            {
-                new Views.UpdateWindow("Проверка ядра Zapret", "Ядро Zapret обновлено до последней версии.", "ОК").ShowDialog();
-            }
-
-            var proxyUpdate = await Core.UpdateManager.CheckForCoreUpdateAsync("https://api.github.com/repos/flowseal/tg-ws-proxy/releases/latest", SettingsManager.Current.TgProxyCoreVersion, "TgWsProxy", false);
-            if (proxyUpdate.UpdateAvailable)
-            {
-                var prompt = new Views.UpdateWindow("Обновление ядра TgWsProxy", $"Найдено обновление прокси Telegram ({proxyUpdate.Version})!\n\nОбновить автоматически?");
-                prompt.ShowDialog();
-                if (prompt.Result)
-                {
-                    try
-                    {
-                        await Core.UpdateManager.InstallCoreAsync(proxyUpdate, stopServicesAction, null);
-                        SettingsManager.Current.TgProxyCoreVersion = proxyUpdate.Version;
-                        SettingsManager.Save();
-                        new Views.UpdateWindow("Успех", "Модуль TgWsProxy успешно обновлен!", "ОК").ShowDialog();
-                    }
-                    catch (Exception ex) { new Views.UpdateWindow("Ошибка", $"Ошибка: {ex.Message}", "ОК").ShowDialog(); }
-                }
-            }
-            else
-            {
-                new Views.UpdateWindow("Проверка ядра TgWsProxy", "Ядро TgWsProxy обновлено до последней версии.", "ОК").ShowDialog();
-            }
-
-            if (sender is System.Windows.Controls.Button btnReEnable) 
+            if (sender is System.Windows.Controls.Button btnReEnable)
                 btnReEnable.IsEnabled = true;
         }
     }
@@ -7698,8 +7667,6 @@ namespace ZapretGUI.Views
 
 using System;
 using System.Diagnostics;
-using System.Net.Sockets;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media;
 using ZapretGUI.Core;
@@ -7733,70 +7700,30 @@ namespace ZapretGUI.Views
 
             try
             {
-                var hostToPing = AppConstants.AwsPingHost;
-                var portToPing = AppConstants.AwsPingPort;
-
-                var fullUrl = Core.SettingsManager.Current.PingUrl;
-                if (!string.IsNullOrWhiteSpace(fullUrl))
-                {
-                    if (Uri.TryCreate(fullUrl, UriKind.Absolute, out Uri? uri))
-                    {
-                        hostToPing = uri.Host;
-                        portToPing = uri.Port > 0 ? uri.Port : 443;
-                    }
-                    else
-                        hostToPing = fullUrl;
-                }
-
-                var pingMs = await TcpPingAsync(hostToPing, portToPing);
+                var pingMs = await BypassController.Current.CheckPingAsync();
 
                 if (pingMs >= 0)
                 {
                     PingText.Text = $"{pingMs} мс";
 
                     if (pingMs < 80)
-                        PingText.Foreground = UIHelper.GetBrushFromHex("#4CAF50");
+                        PingText.Foreground = UIHelper.GetSuccessBrush();
                     else if (pingMs < 150)
                         PingText.Foreground = new SolidColorBrush(System.Windows.Media.Colors.Orange);
                     else
-                        PingText.Foreground = UIHelper.GetBrushFromHex("#F44336");
+                        PingText.Foreground = UIHelper.GetErrorBrush();
                 }
                 else
                 {
                     PingText.Text = "ошибка";
-                    PingText.Foreground = UIHelper.GetBrushFromHex("#F44336");
+                    PingText.Foreground = UIHelper.GetErrorBrush();
                 }
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"Ошибка проверки пинга из трея: {ex.Message}");
                 PingText.Text = "нет сети";
-                PingText.Foreground = UIHelper.GetBrushFromHex("#F44336");
-            }
-        }
-
-        private async Task<long> TcpPingAsync(string host, int port)
-        {
-            try
-            {
-                using var client = new TcpClient();
-                var stopwatch = new Stopwatch();
-
-                stopwatch.Start();
-                var connectTask = client.ConnectAsync(host, port);
-
-                if (await Task.WhenAny(connectTask, Task.Delay(2000)) == connectTask)
-                {
-                    stopwatch.Stop();
-                    return client.Connected ? stopwatch.ElapsedMilliseconds : -1;
-                }
-
-                return -1;
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"TCP Ping Failed: {ex.Message}");
-                return -1;
+                PingText.Foreground = UIHelper.GetErrorBrush();
             }
         }
 
@@ -7867,8 +7794,6 @@ namespace ZapretGUI.Views
         {
             System.Windows.Application.Current.Shutdown();
         }
-
-
     }
 }
 

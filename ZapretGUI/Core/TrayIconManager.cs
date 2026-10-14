@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Windows;
 using ZapretGUI.Views;
 
@@ -7,9 +8,13 @@ namespace ZapretGUI.Core
 {
     public class TrayIconManager : IDisposable
     {
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        private static extern bool DestroyIcon(IntPtr handle);
+
         private System.Windows.Forms.NotifyIcon? _notifyIcon;
         private TrayMenuWindow? _trayMenu;
         private readonly Window _mainWindow;
+        private IntPtr _hIcon = IntPtr.Zero;
 
         public TrayIconManager(Window mainWindow)
         {
@@ -26,9 +31,14 @@ namespace ZapretGUI.Core
             try
             {
                 var iconUri = new Uri("pack://application:,,,/Assets/freepik__толстая,_сплошная,_монолитная_буква_z_белого.png");
-                var stream = System.Windows.Application.GetResourceStream(iconUri).Stream;
-                var bitmap = new System.Drawing.Bitmap(stream);
-                _notifyIcon.Icon = System.Drawing.Icon.FromHandle(bitmap.GetHicon());
+                var resourceInfo = System.Windows.Application.GetResourceStream(iconUri);
+                if (resourceInfo != null)
+                {
+                    using var stream = resourceInfo.Stream;
+                    using var bitmap = new System.Drawing.Bitmap(stream);
+                    _hIcon = bitmap.GetHicon();
+                    _notifyIcon.Icon = System.Drawing.Icon.FromHandle(_hIcon);
+                }
             }
             catch (Exception ex)
             {
@@ -80,7 +90,19 @@ namespace ZapretGUI.Core
 
         public void Dispose()
         {
-            _notifyIcon?.Dispose();
+            if (_notifyIcon != null)
+            {
+                _notifyIcon.Visible = false;
+                _notifyIcon.Dispose();
+                _notifyIcon = null;
+            }
+
+            if (_hIcon != IntPtr.Zero)
+            {
+                DestroyIcon(_hIcon);
+                _hIcon = IntPtr.Zero;
+            }
+
             _trayMenu?.Close();
         }
     }
