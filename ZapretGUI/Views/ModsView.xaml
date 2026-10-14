@@ -729,27 +729,30 @@
             </Border>
         </Grid>
 
-        <!-- ОКНО ПОДТВЕРЖДЕНИЯ -->
+        <!-- ОКНО ПОДТВЕРЖДЕНИЯ И УВЕДОМЛЕНИЙ -->
         <Grid x:Name="ConfirmOverlay" Background="#CC000000" Visibility="Collapsed" Panel.ZIndex="300">
-            <Border x:Name="ConfirmContentBorder" Background="#141414" BorderBrush="#2A2A2A" BorderThickness="1" CornerRadius="12" Width="400" Padding="20" HorizontalAlignment="Center" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
+            <Border x:Name="ConfirmContentBorder" Background="#141414" BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="1" CornerRadius="12" Width="420" Padding="22" HorizontalAlignment="Center" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
                 <Border.RenderTransform>
                     <TransformGroup>
                         <ScaleTransform ScaleX="0.95" ScaleY="0.95"/>
                         <TranslateTransform Y="10"/>
                     </TransformGroup>
                 </Border.RenderTransform>
+                <Border.Effect>
+                    <DropShadowEffect Color="Black" BlurRadius="35" ShadowDepth="10" Opacity="0.8"/>
+                </Border.Effect>
                 <StackPanel>
                     <TextBlock x:Name="TxtConfirmTitle" Text="Подтверждение" FontSize="18" FontWeight="Bold" Margin="0,0,0,10"/>
-                    <TextBlock x:Name="TxtConfirmMessage" Text="Вы уверены?" Foreground="#CCCCCC" FontSize="14" TextWrapping="Wrap" Margin="0,0,0,20"/>
+                    <TextBlock x:Name="TxtConfirmMessage" Text="Вы уверены?" Foreground="#CCCCCC" FontSize="14" LineHeight="20" TextWrapping="Wrap" Margin="0,0,0,22"/>
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                        <Button Content="Отмена" Background="Transparent" Foreground="#A0A0A0" BorderBrush="#333333" BorderThickness="1" Padding="15,6" Margin="0,0,10,0" Cursor="Hand" Click="BtnCancelConfirm_Click">
+                        <Button x:Name="BtnCancelConfirm" Content="Отмена" Background="Transparent" Foreground="#A0A0A0" BorderBrush="#333333" BorderThickness="1" Padding="15,6" Margin="0,0,10,0" Cursor="Hand" Click="BtnCancelConfirm_Click">
                             <Button.Resources>
                                 <Style TargetType="Border">
                                     <Setter Property="CornerRadius" Value="6"/>
                                 </Style>
                             </Button.Resources>
                         </Button>
-                        <Button x:Name="BtnExecuteConfirm" Content="Да" Background="#F44336" Foreground="White" BorderThickness="0" Padding="15,6" Cursor="Hand" Click="BtnExecuteConfirm_Click">
+                        <Button x:Name="BtnExecuteConfirm" Content="Да" Background="#F44336" Foreground="White" FontWeight="SemiBold" BorderThickness="0" Padding="16,6" Cursor="Hand" Click="BtnExecuteConfirm_Click">
                             <Button.Resources>
                                 <Style TargetType="Border">
                                     <Setter Property="CornerRadius" Value="6"/>

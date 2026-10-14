@@ -101,7 +101,7 @@ namespace ZapretGUI.Views
             }
             catch (Exception ex)
             {
-                System.Windows.MessageBox.Show($"Не удалось сохранить настройки: {ex.Message}", "Ошибка", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+                UIHelper.ShowAlert("Ошибка сохранения", $"Не удалось сохранить настройки: {ex.Message}", isError: true);
             }
         }
 
@@ -115,33 +115,36 @@ namespace ZapretGUI.Views
             }
             catch (Exception ex)
             {
-                System.Windows.MessageBox.Show($"Не удалось открыть папку: {ex.Message}", "Ошибка", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
+                UIHelper.ShowAlert("Ошибка", $"Не удалось открыть папку: {ex.Message}", isError: true);
             }
         }
 
         private void BtnResetSettings_Click(object sender, RoutedEventArgs e)
         {
-            var result = System.Windows.MessageBox.Show(
+            var confirmed = UIHelper.ShowConfirm(
+                "Сброс настроек",
                 "Вы уверены, что хотите вернуть все настройки к состоянию по умолчанию? Это действие нельзя отменить.",
-                "Сброс настроек", System.Windows.MessageBoxButton.YesNo, System.Windows.MessageBoxImage.Warning);
+                confirmText: "Сбросить",
+                isDanger: true);
 
-            if (result == System.Windows.MessageBoxResult.Yes)
+            if (confirmed)
             {
                 try
                 {
                     var settingsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.json");
-                    if (File.Exists(settingsPath)) File.Delete(settingsPath);
+                    if (File.Exists(settingsPath)) 
+                        File.Delete(settingsPath);
 
                     StartupHelper.SetAutoStart(false);
 
                     SettingsManager.Load();
                     LoadSettings();
 
-                    System.Windows.MessageBox.Show("Настройки успешно сброшены. Некоторые изменения вступят в силу после перезапуска программы.", "Готово", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
+                    UIHelper.ShowAlert("Готово", "Настройки успешно сброшены. Некоторые изменения вступят в силу после перезапуска программы.");
                 }
                 catch (Exception ex)
                 {
-                    System.Windows.MessageBox.Show($"Ошибка при сбросе: {ex.Message}", "Ошибка", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+                    UIHelper.ShowAlert("Ошибка сброса", $"Ошибка при сбросе: {ex.Message}", isError: true);
                 }
             }
         }

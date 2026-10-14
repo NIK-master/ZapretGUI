@@ -12,7 +12,6 @@ namespace ZapretGUI
     {
         private readonly TrayIconManager _trayIconManager;
 
-        // Делаем представления Nullable. Они будут создаваться только при клике.
         private Views.HomeView _homeView;
         private Views.SettingsView? _settingsView;
         private Views.DiagnosticsView? _diagnosticsView;
@@ -25,7 +24,6 @@ namespace ZapretGUI
 
             _ = InitializeModsAsync();
 
-            // Загружаем только главную страницу при старте
             _homeView = new Views.HomeView();
             MainContentContainer.Content = _homeView;
 
@@ -62,7 +60,7 @@ namespace ZapretGUI
                     if (!string.IsNullOrEmpty(appUpdate.DownloadUrl))
                     {
                         try { await Core.UpdateManager.ApplyAppUpdateAsync(appUpdate.DownloadUrl, () => System.Windows.Application.Current.Shutdown()); }
-                        catch (Exception ex) { new Views.UpdateWindow("Ошибка обновления", $"Не удалось обновить программу: {ex.Message}", "ОК").ShowDialog(); }
+                        catch (Exception ex) { UIHelper.ShowAlert("Ошибка обновления", $"Не удалось обновить программу: {ex.Message}", isError: true); }
                     }
                     else if (!string.IsNullOrEmpty(appUpdate.ReleaseUrl))
                     {
@@ -86,9 +84,9 @@ namespace ZapretGUI
                         await Core.UpdateManager.InstallCoreAsync(zapretUpdate, stopServicesAction, progress);
                         SettingsManager.Current.ZapretCoreVersion = zapretUpdate.Version;
                         SettingsManager.Save();
-                        new Views.UpdateWindow("Успех", $"Модуль Zapret успешно обновлен до версии {zapretUpdate.Version}!", "ОК").ShowDialog();
+                        UIHelper.ShowAlert("Успех", $"Модуль Zapret успешно обновлен до версии {zapretUpdate.Version}!");
                     }
-                    catch (Exception ex) { new Views.UpdateWindow("Ошибка", $"Ошибка при установке обновления Zapret: {ex.Message}", "ОК").ShowDialog(); }
+                    catch (Exception ex) { UIHelper.ShowAlert("Ошибка", $"Ошибка при установке обновления Zapret: {ex.Message}", isError: true); }
                 }
             }
 
@@ -104,14 +102,12 @@ namespace ZapretGUI
                         await Core.UpdateManager.InstallCoreAsync(proxyUpdate, stopServicesAction, progress);
                         SettingsManager.Current.TgProxyCoreVersion = proxyUpdate.Version;
                         SettingsManager.Save();
-                        new Views.UpdateWindow("Успех", $"Модуль TgWsProxy успешно обновлен до версии {proxyUpdate.Version}!", "ОК").ShowDialog();
+                        UIHelper.ShowAlert("Успех", $"Модуль TgWsProxy успешно обновлен до версии {proxyUpdate.Version}!");
                     }
-                    catch (Exception ex) { new Views.UpdateWindow("Ошибка", $"Ошибка при установке обновления TgWsProxy: {ex.Message}", "ОК").ShowDialog(); }
+                    catch (Exception ex) { UIHelper.ShowAlert("Ошибка", $"Ошибка при установке обновления TgWsProxy: {ex.Message}", isError: true); }
                 }
             }
         }
-
-        // --- ЛЕНИВАЯ ЗАГРУЗКА ВКЛАДОК ---
 
         private void BtnHome_Click(object sender, RoutedEventArgs e)
         {
@@ -166,11 +162,16 @@ namespace ZapretGUI
             {
                 element.RenderTransform = new System.Windows.Media.TranslateTransform();
 
-                var fadeIn = new System.Windows.Media.Animation.DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(300)) 
-                    { EasingFunction = new System.Windows.Media.Animation.CubicEase 
-                        { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut } 
-                    };
-                var slideUp = new System.Windows.Media.Animation.DoubleAnimation(15, 0, TimeSpan.FromMilliseconds(300)) { EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut } };
+                var fadeIn = new System.Windows.Media.Animation.DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(300))
+                {
+                    EasingFunction = new System.Windows.Media.Animation.CubicEase
+                    { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut }
+                };
+                var slideUp = new System.Windows.Media.Animation.DoubleAnimation(15, 0, TimeSpan.FromMilliseconds(300))
+                {
+                    EasingFunction = new System.Windows.Media.Animation.CubicEase
+                    { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut }
+                };
 
                 element.BeginAnimation(UIElement.OpacityProperty, fadeIn);
                 element.RenderTransform.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, slideUp);
@@ -181,12 +182,12 @@ namespace ZapretGUI
         {
             var zColor = isZapretRunning ? GetSuccessColor() : GetErrorColor();
             ZapretDot.Fill = zColor;
-            if (ZapretDot.Effect is System.Windows.Media.Effects.DropShadowEffect zShadow) 
+            if (ZapretDot.Effect is System.Windows.Media.Effects.DropShadowEffect zShadow)
                 zShadow.Color = zColor.Color;
 
             var pColor = isProxyRunning ? GetSuccessColor() : GetErrorColor();
             TgProxyDot.Fill = pColor;
-            if (TgProxyDot.Effect is System.Windows.Media.Effects.DropShadowEffect pShadow) 
+            if (TgProxyDot.Effect is System.Windows.Media.Effects.DropShadowEffect pShadow)
                 pShadow.Color = pColor.Color;
         }
 
@@ -194,7 +195,7 @@ namespace ZapretGUI
         {
             var nColor = isOnline ? GetSuccessColor() : GetErrorColor();
             NetworkDot.Fill = nColor;
-            if (NetworkDot.Effect is System.Windows.Media.Effects.DropShadowEffect nShadow) 
+            if (NetworkDot.Effect is System.Windows.Media.Effects.DropShadowEffect nShadow)
                 nShadow.Color = nColor.Color;
         }
 

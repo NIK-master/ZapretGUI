@@ -30,6 +30,7 @@ namespace ZapretGUI.Views
         private UIModItem? _currentEditingMod = null;
 
         private Action? _pendingConfirmAction;
+        private UIElement? _currentConfirmBlurTarget;
 
         // Live-мониторинг файлов модов и списков доменов
         private FileSystemWatcher? _modsWatcher;
@@ -84,7 +85,6 @@ namespace ZapretGUI.Views
                     await Task.Delay(350, token);
                     if (token.IsCancellationRequested) return;
 
-                    // В прямом эфире пересобираем list-general.txt и синхронизируем батники
                     await _modManager.ApplyListModsAsync();
                     await _modManager.SyncActiveBatModsAsync();
 
@@ -292,7 +292,7 @@ namespace ZapretGUI.Views
             string id = ModManager.SanitizeModId(TxtNewModId.Text);
             if (string.IsNullOrEmpty(id) || _modManager.IsModIdTaken(id))
             {
-                System.Windows.MessageBox.Show("Мод с таким ID уже существует в системе (в стратегиях или списках)! Нажмите 🎲 для генерации уникального ID.", "Конфликт ID", MessageBoxButton.OK, MessageBoxImage.Warning);
+                ShowAlertDialog("Конфликт ID", "Мод с таким ID уже существует в системе (в стратегиях или списках)! Нажмите 🎲 для генерации уникального ID.", isError: true);
                 return;
             }
 
@@ -336,7 +336,7 @@ namespace ZapretGUI.Views
             }
             catch (Exception ex)
             {
-                System.Windows.MessageBox.Show($"Ошибка при создании мода: {ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                ShowAlertDialog("Ошибка", $"Ошибка при создании мода: {ex.Message}", isError: true);
             }
             finally
             {
@@ -409,27 +409,58 @@ namespace ZapretGUI.Views
             }
         }
 
+        // =========================================================================
+        // ФИРМЕННЫЕ ДИАЛОГОВЫЕ ОКНА ВМЕСТО СИСТЕМНЫХ MESSAGEBOX
+        // =========================================================================
+
+        private UIElement GetCurrentBlurTarget()
+        {
+            if (EditorOverlay.Visibility == Visibility.Visible)
+                return EditorContentBorder;
+            if (CreateModOverlay.Visibility == Visibility.Visible)
+                return CreateContentBorder;
+            return ContentGrid;
+        }
+
         private void ShowConfirmDialog(string title, string message, string confirmBtnText, System.Windows.Media.Brush confirmBtnBrush, Action onConfirm)
         {
             TxtConfirmTitle.Text = title;
             TxtConfirmMessage.Text = message;
+            BtnCancelConfirm.Visibility = Visibility.Visible;
             BtnExecuteConfirm.Content = confirmBtnText;
             BtnExecuteConfirm.Background = confirmBtnBrush;
             _pendingConfirmAction = onConfirm;
-            AnimationHelper.ShowOverlay(ConfirmOverlay, ConfirmContentBorder, ContentGrid);
+
+            _currentConfirmBlurTarget = GetCurrentBlurTarget();
+            AnimationHelper.ShowOverlay(ConfirmOverlay, ConfirmContentBorder, _currentConfirmBlurTarget);
+        }
+
+        private void ShowAlertDialog(string title, string message, bool isError = false)
+        {
+            TxtConfirmTitle.Text = title;
+            TxtConfirmMessage.Text = message;
+            BtnCancelConfirm.Visibility = Visibility.Collapsed;
+            BtnExecuteConfirm.Content = "ОК";
+            BtnExecuteConfirm.Background = isError
+                ? UIHelper.GetBrushFromHex("#F44336")
+                : (System.Windows.Media.Brush)System.Windows.Application.Current.Resources["BrandSuccessBrush"];
+            _pendingConfirmAction = null;
+
+            _currentConfirmBlurTarget = GetCurrentBlurTarget();
+            AnimationHelper.ShowOverlay(ConfirmOverlay, ConfirmContentBorder, _currentConfirmBlurTarget);
         }
 
         private void BtnCancelConfirm_Click(object sender, RoutedEventArgs e)
         {
             AudioHelper.PlayClick();
-            AnimationHelper.HideOverlay(ConfirmOverlay, ConfirmContentBorder, ContentGrid);
+            AnimationHelper.HideOverlay(ConfirmOverlay, ConfirmContentBorder, _currentConfirmBlurTarget);
             _pendingConfirmAction = null;
         }
 
         private void BtnExecuteConfirm_Click(object sender, RoutedEventArgs e)
         {
             AudioHelper.PlayClick();
-            AnimationHelper.HideOverlay(ConfirmOverlay, ConfirmContentBorder, ContentGrid);
+            AnimationHelper.HideOverlay(ConfirmOverlay, ConfirmContentBorder, _currentConfirmBlurTarget);
             var action = _pendingConfirmAction;
             _pendingConfirmAction = null;
             action?.Invoke();
@@ -468,7 +499,7 @@ namespace ZapretGUI.Views
             {
                 ShowConfirmDialog(
                     "Удаление мода",
-                    $"Удалить мод '{mod.Meta.Name}' навсегда?\nЭто удалит все файлы мода с диска.",
+                    $"Удалить мод «{mod.Meta.Name}» навсегда?\nЭто удалит все файлы мода с диска.",
                     "Удалить",
                     UIHelper.GetBrushFromHex("#F44336"),
                     async () => {
@@ -500,7 +531,7 @@ namespace ZapretGUI.Views
                         }
                         catch (Exception ex)
                         {
-                            System.Windows.MessageBox.Show($"Не удалось удалить мод.\nОшибка: {ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                            ShowAlertDialog("Ошибка удаления", $"Не удалось удалить мод.\nОшибка: {ex.Message}", isError: true);
                         }
                         finally
                         {
@@ -511,7 +542,7 @@ namespace ZapretGUI.Views
         }
 
         // =========================================================================
-        // ПРОКАЧАННЫЙ РЕДАКТОР МОДОВ (МЕТАДАННЫЕ + ИНСТРУМЕНТЫ IDE)
+        // ПРОКАЧАННЫЙ РЕДАКТОР МОДОВ (АНИМАЦИИ ВЫПАДАЮЩИХ МЕНЮШЕК + ФИРМЕННЫЕ ОКНА)
         // =========================================================================
 
         private void BtnEditMod_Click(object sender, RoutedEventArgs e)
@@ -532,7 +563,7 @@ namespace ZapretGUI.Views
 
                 if (!File.Exists(_currentEditingFilePath))
                 {
-                    System.Windows.MessageBox.Show($"Файл {fileName} не найден в папке мода!", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                    ShowAlertDialog("Ошибка", $"Файл {fileName} не найден в папке мода!", isError: true);
                     return;
                 }
 
@@ -559,9 +590,8 @@ namespace ZapretGUI.Views
         private void BtnToggleMetaPanel_Click(object sender, RoutedEventArgs e)
         {
             AudioHelper.PlayClick();
-            MetaEditorPanel.Visibility = MetaEditorPanel.Visibility == Visibility.Visible
-                ? Visibility.Collapsed
-                : Visibility.Visible;
+            bool shouldShow = MetaEditorPanel.Visibility != Visibility.Visible;
+            AnimationHelper.ToggleExpandPanel(MetaEditorPanel, shouldShow);
         }
 
         private async void BtnSaveEditor_Click(object sender, RoutedEventArgs e)
@@ -570,31 +600,31 @@ namespace ZapretGUI.Views
             await SaveEditorChangesAsync();
         }
 
-        private async Task SaveEditorChangesAsync()
+        private async Task SaveEditorChangesAsync(bool bypassSyntaxWarning = false)
         {
             if (_currentEditingMod == null) return;
+
+            string editedModName = string.IsNullOrWhiteSpace(TxtEditModName.Text) ? _currentEditingMod.Id : TxtEditModName.Text.Trim();
+
+            if (_currentTab == ModType.BatStrategy && !bypassSyntaxWarning)
+            {
+                var (isValid, errMsg) = _modManager.ValidateBatMod(editedModName, EditorTextBox.Text);
+                if (!isValid)
+                {
+                    ShowConfirmDialog(
+                        "Предупреждение синтаксиса Zapret",
+                        $"В скрипте обнаружена проблема:\n\n{errMsg}\n\nВсё равно сохранить файл?",
+                        "Сохранить всё равно",
+                        UIHelper.GetBrushFromHex("#F59E0B"),
+                        async () => await SaveEditorChangesAsync(bypassSyntaxWarning: true));
+                    return;
+                }
+            }
 
             try
             {
                 _isInternalFileOperation = true;
                 bool wasActiveDomainList = _currentEditingMod.IsActive && _currentTab == ModType.DomainList;
-                string editedModName = string.IsNullOrWhiteSpace(TxtEditModName.Text) ? _currentEditingMod.Id : TxtEditModName.Text.Trim();
-
-                if (_currentTab == ModType.BatStrategy)
-                {
-                    var (isValid, errMsg) = _modManager.ValidateBatMod(editedModName, EditorTextBox.Text);
-                    if (!isValid)
-                    {
-                        var res = System.Windows.MessageBox.Show(
-                            $"В скрипте обнаружена проблема:\n\n{errMsg}\n\nВсё равно сохранить файл?",
-                            "Предупреждение синтаксиса Zapret",
-                            MessageBoxButton.YesNo,
-                            MessageBoxImage.Warning);
-
-                        if (res == MessageBoxResult.No)
-                            return;
-                    }
-                }
 
                 // 1. Обновляем метаданные мода (mod.json) с сохранением UniqueId
                 _currentEditingMod.Meta.UniqueId = _currentEditingMod.Id;
@@ -625,7 +655,7 @@ namespace ZapretGUI.Views
             }
             catch (Exception ex)
             {
-                System.Windows.MessageBox.Show($"Ошибка сохранения: {ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                ShowAlertDialog("Ошибка сохранения", $"Ошибка сохранения: {ex.Message}", isError: true);
             }
             finally
             {
@@ -710,16 +740,14 @@ namespace ZapretGUI.Views
         private void BtnToggleSearch_Click(object sender, RoutedEventArgs e)
         {
             AudioHelper.PlayClick();
-            if (SearchPanel.Visibility == Visibility.Visible)
+            bool shouldShow = SearchPanel.Visibility != Visibility.Visible;
+            AnimationHelper.ToggleExpandPanel(SearchPanel, shouldShow, () =>
             {
-                SearchPanel.Visibility = Visibility.Collapsed;
-                EditorTextBox.Focus();
-            }
-            else
-            {
-                SearchPanel.Visibility = Visibility.Visible;
-                TxtSearchQuery.Focus();
-            }
+                if (shouldShow)
+                    TxtSearchQuery.Focus();
+                else
+                    EditorTextBox.Focus();
+            });
         }
 
         private void BtnFindNext_Click(object sender, RoutedEventArgs e)
@@ -849,7 +877,7 @@ namespace ZapretGUI.Views
             else
             {
                 SetEditorStatus("⚠ Ошибка в скрипте", "#F44336");
-                System.Windows.MessageBox.Show(errMsg, "Проверка синтаксиса Zapret", MessageBoxButton.OK, MessageBoxImage.Warning);
+                ShowAlertDialog("Проверка синтаксиса Zapret", errMsg, isError: true);
             }
         }
 
@@ -919,7 +947,7 @@ namespace ZapretGUI.Views
                     string[] jsonFiles = Directory.GetFiles(tempDir, "mod.json", SearchOption.AllDirectories);
                     if (jsonFiles.Length == 0)
                     {
-                        System.Windows.MessageBox.Show("В архиве не найден файл mod.json. Убедитесь, что это корректный мод.", "Ошибка импорта", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        ShowAlertDialog("Ошибка импорта", "В архиве не найден файл mod.json. Убедитесь, что это корректный мод.", isError: true);
                         return;
                     }
 
@@ -933,11 +961,10 @@ namespace ZapretGUI.Views
 
                     if (meta == null)
                     {
-                        System.Windows.MessageBox.Show("Файл mod.json поврежден.", "Ошибка импорта", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        ShowAlertDialog("Ошибка импорта", "Файл mod.json поврежден.", isError: true);
                         return;
                     }
 
-                    // Берем UniqueId из паспорта мода (или генерируем из имени) и проверяем на глобальную уникальность
                     string baseCandidate = !string.IsNullOrWhiteSpace(meta.UniqueId)
                         ? ModManager.SanitizeModId(meta.UniqueId)
                         : ModManager.SanitizeModId(meta.Name);
@@ -969,13 +996,13 @@ namespace ZapretGUI.Views
                     });
 
                     if ((meta.IsBatStrategy && _currentTab != ModType.BatStrategy) || (!meta.IsBatStrategy && _currentTab != ModType.DomainList))
-                        System.Windows.MessageBox.Show($"Мод '{meta.Name}' (ID: {finalUniqueId}) успешно установлен в соседнюю категорию.", "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
+                        ShowAlertDialog("Импорт завершен", $"Мод «{meta.Name}» (ID: {finalUniqueId}) успешно установлен в соседнюю категорию.");
                     else
                         await LoadCurrentModsAsync();
                 }
                 catch (Exception ex)
                 {
-                    System.Windows.MessageBox.Show($"Ошибка при импорте мода:\n{ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                    ShowAlertDialog("Ошибка импорта", $"Ошибка при импорте мода:\n{ex.Message}", isError: true);
                 }
                 finally
                 {
@@ -1008,7 +1035,7 @@ namespace ZapretGUI.Views
 
                         if (!Directory.Exists(modFolderPath))
                         {
-                            System.Windows.MessageBox.Show("Папка мода не найдена на диске!", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                            ShowAlertDialog("Ошибка", "Папка мода не найдена на диске!", isError: true);
                             return;
                         }
 
@@ -1017,11 +1044,11 @@ namespace ZapretGUI.Views
 
                         await Task.Run(() => ZipFile.CreateFromDirectory(modFolderPath, saveFileDialog.FileName));
 
-                        System.Windows.MessageBox.Show($"Мод '{mod.Meta.Name}' (ID: {mod.Id}) успешно экспортирован!", "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
+                        ShowAlertDialog("Экспорт завершен", $"Мод «{mod.Meta.Name}» (ID: {mod.Id}) успешно экспортирован и готов к отправке!");
                     }
                     catch (Exception ex)
                     {
-                        System.Windows.MessageBox.Show($"Ошибка при экспорте мода:\n{ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                        ShowAlertDialog("Ошибка экспорта", $"Ошибка при экспорте мода:\n{ex.Message}", isError: true);
                     }
                 }
             }

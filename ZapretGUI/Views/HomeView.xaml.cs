@@ -564,12 +564,12 @@ namespace ZapretGUI.Views
                     var textRange = new System.Windows.Documents.TextRange(LogDocument.ContentStart, LogDocument.ContentEnd);
                     File.WriteAllText(saveFileDialog.FileName, textRange.Text);
 
-                    System.Windows.MessageBox.Show("Лог успешно сохранен!", "Экспорт", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
+                    UIHelper.ShowAlert("Экспорт завершен", "Лог событий успешно сохранен в файл!");
                 }
             }
             catch (Exception ex)
             {
-                System.Windows.MessageBox.Show($"Ошибка при экспорте лога: {ex.Message}", "Ошибка", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+                UIHelper.ShowAlert("Ошибка экспорта", $"Ошибка при экспорте лога: {ex.Message}", isError: true);
             }
         }
 

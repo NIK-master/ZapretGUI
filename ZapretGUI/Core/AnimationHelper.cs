@@ -97,6 +97,51 @@ namespace ZapretGUI.Core
             }
         }
 
+        public static void ToggleExpandPanel(FrameworkElement panel, bool show, Action? onCompleted = null)
+        {
+            panel.RenderTransformOrigin = new System.Windows.Point(0.5, 0);
+            if (!(panel.RenderTransform is TransformGroup group) || group.Children.Count < 2)
+            {
+                group = new TransformGroup();
+                group.Children.Add(new ScaleTransform(1, show ? 0.85 : 1));
+                group.Children.Add(new TranslateTransform(0, show ? -8 : 0));
+                panel.RenderTransform = group;
+            }
+
+            var scale = (ScaleTransform)group.Children[0];
+            var translate = (TranslateTransform)group.Children[1];
+
+            if (show)
+            {
+                panel.Visibility = Visibility.Visible;
+                var fadeIn = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(220)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
+                var scaleIn = new DoubleAnimation(0.85, 1, TimeSpan.FromMilliseconds(220)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
+                var slideIn = new DoubleAnimation(-8, 0, TimeSpan.FromMilliseconds(220)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
+
+                fadeIn.Completed += (s, e) => onCompleted?.Invoke();
+
+                panel.BeginAnimation(UIElement.OpacityProperty, fadeIn);
+                scale.BeginAnimation(ScaleTransform.ScaleYProperty, scaleIn);
+                translate.BeginAnimation(TranslateTransform.YProperty, slideIn);
+            }
+            else
+            {
+                var fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(160)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn } };
+                var scaleOut = new DoubleAnimation(1, 0.85, TimeSpan.FromMilliseconds(160)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn } };
+                var slideOut = new DoubleAnimation(0, -8, TimeSpan.FromMilliseconds(160)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn } };
+
+                fadeOut.Completed += (s, e) =>
+                {
+                    panel.Visibility = Visibility.Collapsed;
+                    onCompleted?.Invoke();
+                };
+
+                panel.BeginAnimation(UIElement.OpacityProperty, fadeOut);
+                scale.BeginAnimation(ScaleTransform.ScaleYProperty, scaleOut);
+                translate.BeginAnimation(TranslateTransform.YProperty, slideOut);
+            }
+        }
+
         public static async Task SlideOutAndHideAsync(FrameworkElement element, bool isRightDirection, int durationMs = 150)
         {
             var fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(durationMs));
