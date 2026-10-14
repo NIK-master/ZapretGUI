@@ -5,7 +5,8 @@
         Title="Zapret for ADHD" Height="760" Width="1100"
         Icon="Assets/freepik__толстая,_сплошная,_монолитная_буква_z_белого.png"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
-        WindowStartupLocation="CenterScreen">
+        WindowStartupLocation="CenterScreen"
+        Closing="Window_Closing">
 
     <Window.Resources>
         <Style x:Key="SpringyNavButton" TargetType="ui:Button" BasedOn="{StaticResource {x:Type ui:Button}}">

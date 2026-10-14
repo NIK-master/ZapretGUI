@@ -14,6 +14,25 @@ namespace ZapretGUI.Core
             return (SolidColorBrush)_brushConverter.ConvertFromString(hex)!;
         }
 
+        public static SolidColorBrush GetSuccessBrush()
+        {
+            return GetBrushFromHex(SettingsManager.Current.ColorblindMode ? "#0078D7" : "#107C10");
+        }
+
+        public static SolidColorBrush GetErrorBrush()
+        {
+            return GetBrushFromHex(SettingsManager.Current.ColorblindMode ? "#FF8C00" : "#D13438");
+        }
+
+        public static void ApplyThemeColors()
+        {
+            var res = System.Windows.Application.Current?.Resources;
+            if (res == null) return;
+
+            res["BrandSuccessBrush"] = GetSuccessBrush();
+            res["BrandErrorBrush"] = GetErrorBrush();
+        }
+
         public static T? FindParent<T>(DependencyObject? child, string? name = null) where T : FrameworkElement
         {
             if (child == null) return null;

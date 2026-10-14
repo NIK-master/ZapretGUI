@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics;
 using System.Net.NetworkInformation;
 using System.Windows.Threading;
 
@@ -7,6 +8,7 @@ namespace ZapretGUI.Core
     public class NetworkMonitor
     {
         private readonly DispatcherTimer _networkTimer;
+        private readonly Stopwatch _elapsedStopwatch = new Stopwatch();
         private long _lastBytesReceived = 0;
         private long _lastBytesSent = 0;
         private bool _wasNetworkAvailable = true;
@@ -16,16 +18,31 @@ namespace ZapretGUI.Core
 
         public NetworkMonitor()
         {
-            _networkTimer = new DispatcherTimer
-            {
-                Interval = TimeSpan.FromSeconds(1)
-            };
+            _networkTimer = new DispatcherTimer();
+            UpdateIntervalFromSettings();
             _networkTimer.Tick += Timer_Tick;
+
+            SettingsManager.SettingsSaved += UpdateIntervalFromSettings;
         }
 
-        public void Start() => _networkTimer.Start();
+        public void UpdateIntervalFromSettings()
+        {
+            int seconds = Math.Max(1, SettingsManager.Current.StatsUpdateInterval);
+            _networkTimer.Interval = TimeSpan.FromSeconds(seconds);
+        }
 
-        public void Stop() => _networkTimer.Stop();
+        public void Start()
+        {
+            UpdateIntervalFromSettings();
+            _elapsedStopwatch.Restart();
+            _networkTimer.Start();
+        }
+
+        public void Stop()
+        {
+            _networkTimer.Stop();
+            _elapsedStopwatch.Stop();
+        }
 
         private void Timer_Tick(object? sender, EventArgs e)
         {
@@ -52,13 +69,16 @@ namespace ZapretGUI.Core
                 }
             }
 
+            double elapsedSeconds = Math.Max(0.1, _elapsedStopwatch.Elapsed.TotalSeconds);
+            _elapsedStopwatch.Restart();
+
             if (_lastBytesReceived != 0 && _lastBytesSent != 0)
             {
-                var diffReceived = currentReceived - _lastBytesReceived;
-                var diffSent = currentSent - _lastBytesSent;
+                var diffReceived = Math.Max(0L, currentReceived - _lastBytesReceived);
+                var diffSent = Math.Max(0L, currentSent - _lastBytesSent);
 
-                var mbpsReceived = (diffReceived * 8.0) / 1000000.0;
-                var mbpsSent = (diffSent * 8.0) / 1000000.0;
+                var mbpsReceived = (diffReceived * 8.0) / (1000000.0 * elapsedSeconds);
+                var mbpsSent = (diffSent * 8.0) / (1000000.0 * elapsedSeconds);
 
                 StatsUpdated?.Invoke(mbpsReceived, mbpsSent);
             }

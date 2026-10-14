@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Interop;
 using System.Windows.Media;
 using ZapretGUI.Core;
 
@@ -21,6 +22,10 @@ namespace ZapretGUI
         {
             InitializeComponent();
             SettingsManager.Load();
+            UIHelper.ApplyThemeColors();
+            RenderOptions.ProcessRenderMode = SettingsManager.Current.HardwareAcceleration
+                ? RenderMode.Default
+                : RenderMode.SoftwareOnly;
 
             _ = InitializeModsAsync();
 
@@ -34,6 +39,7 @@ namespace ZapretGUI
             {
                 var wizard = new Views.WizardWindow();
                 wizard.ShowDialog();
+                UIHelper.ApplyThemeColors();
             }
 
             _ = CheckUpdatesOnStartupAsync();
@@ -72,7 +78,7 @@ namespace ZapretGUI
             var stopServicesAction = () => { if (IsBypassRunning()) ToggleBypass(); };
             var progress = new Progress<string>(status => _homeView.ShowUpdateProgress(status));
 
-            var zapretUpdate = await Core.UpdateManager.CheckForCoreUpdateAsync("https://api.github.com/repos/flowseal/zapret-discord-youtube/releases/latest", SettingsManager.Current.ZapretCoreVersion, "Zapret", true);
+            var zapretUpdate = await Core.UpdateManager.CheckForCoreUpdateAsync(AppConstants.ZapretCoreRepoUrl, SettingsManager.Current.ZapretCoreVersion, "Zapret", true);
             if (zapretUpdate.UpdateAvailable)
             {
                 var prompt = new Views.UpdateWindow("Обновление ядра Zapret", $"Найдено обновление обхода Zapret от flowseal ({zapretUpdate.Version})!\n\nТекущая версия: {zapretUpdate.CurrentVersion}\nОбновить автоматически?");
@@ -90,7 +96,7 @@ namespace ZapretGUI
                 }
             }
 
-            var proxyUpdate = await Core.UpdateManager.CheckForCoreUpdateAsync("https://api.github.com/repos/flowseal/tg-ws-proxy/releases/latest", SettingsManager.Current.TgProxyCoreVersion, "TgWsProxy", false);
+            var proxyUpdate = await Core.UpdateManager.CheckForCoreUpdateAsync(AppConstants.TgProxyCoreRepoUrl, SettingsManager.Current.TgProxyCoreVersion, "TgWsProxy", false);
             if (proxyUpdate.UpdateAvailable)
             {
                 var prompt = new Views.UpdateWindow("Обновление ядра TgWsProxy", $"Найдено обновление прокси Telegram от flowseal ({proxyUpdate.Version})!\n\nТекущая версия: {proxyUpdate.CurrentVersion}\nОбновить автоматически?");
@@ -155,7 +161,7 @@ namespace ZapretGUI
             BtnSettings.BorderThickness = zeroThickness;
 
             activeBtn.Background = UIHelper.GetBrushFromHex("#2A2A2A");
-            activeBtn.BorderBrush = UIHelper.GetBrushFromHex("#107C10");
+            activeBtn.BorderBrush = UIHelper.GetSuccessBrush();
             activeBtn.BorderThickness = new Thickness(3, 0, 0, 0);
 
             if (MainContentContainer.Content is FrameworkElement element)
@@ -180,12 +186,12 @@ namespace ZapretGUI
 
         public void UpdateIndicators(bool isZapretRunning, bool isProxyRunning)
         {
-            var zColor = isZapretRunning ? GetSuccessColor() : GetErrorColor();
+            var zColor = isZapretRunning ? UIHelper.GetSuccessBrush() : UIHelper.GetErrorBrush();
             ZapretDot.Fill = zColor;
             if (ZapretDot.Effect is System.Windows.Media.Effects.DropShadowEffect zShadow)
                 zShadow.Color = zColor.Color;
 
-            var pColor = isProxyRunning ? GetSuccessColor() : GetErrorColor();
+            var pColor = isProxyRunning ? UIHelper.GetSuccessBrush() : UIHelper.GetErrorBrush();
             TgProxyDot.Fill = pColor;
             if (TgProxyDot.Effect is System.Windows.Media.Effects.DropShadowEffect pShadow)
                 pShadow.Color = pColor.Color;
@@ -193,7 +199,7 @@ namespace ZapretGUI
 
         public void UpdateNetworkIndicator(bool isOnline)
         {
-            var nColor = isOnline ? GetSuccessColor() : GetErrorColor();
+            var nColor = isOnline ? UIHelper.GetSuccessBrush() : UIHelper.GetErrorBrush();
             NetworkDot.Fill = nColor;
             if (NetworkDot.Effect is System.Windows.Media.Effects.DropShadowEffect nShadow)
                 nShadow.Color = nColor.Color;
@@ -207,7 +213,7 @@ namespace ZapretGUI
 
         private void BtnMinimize_Click(object sender, RoutedEventArgs e) => this.WindowState = WindowState.Minimized;
 
-        private void BtnClose_Click(object sender, RoutedEventArgs e) => this.Hide();
+        private void BtnClose_Click(object sender, RoutedEventArgs e) => this.Close();
 
         public void ShowNotification(string title, string message, System.Windows.Forms.ToolTipIcon icon = System.Windows.Forms.ToolTipIcon.Info)
         {
@@ -220,7 +226,7 @@ namespace ZapretGUI
             {
                 e.Cancel = true;
                 this.Hide();
-                ShowNotification("Программа работает в фоне", "Zapret свернут в системный трей. Дважды кликните по иконке щита, чтобы открыть окно.");
+                ShowNotification("Программа работает в фоне", "Zapret свернут в системный трей. Дважды кликните по иконке в трее, чтобы открыть окно.");
             }
         }
 
@@ -233,18 +239,6 @@ namespace ZapretGUI
             var profile = _homeView.TxtMainProfile.Text;
             await BypassController.Current.RestartServicesAsync(profile);
             UpdateIndicators(BypassController.Current.Zapret.IsRunning(), BypassController.Current.TgProxy.IsRunning());
-        }
-
-        private SolidColorBrush GetSuccessColor()
-        {
-            var hex = SettingsManager.Current.ColorblindMode ? "#0078D7" : "#107C10";
-            return UIHelper.GetBrushFromHex(hex);
-        }
-
-        private SolidColorBrush GetErrorColor()
-        {
-            var hex = SettingsManager.Current.ColorblindMode ? "#FF8C00" : "#D13438";
-            return UIHelper.GetBrushFromHex(hex);
         }
 
         public void AnimateWindowSize(bool isCompact)
@@ -268,6 +262,7 @@ namespace ZapretGUI
 
         protected override void OnClosed(EventArgs e)
         {
+            BypassController.Current.NetMonitor.Stop();
             _trayIconManager.Dispose();
             base.OnClosed(e);
         }

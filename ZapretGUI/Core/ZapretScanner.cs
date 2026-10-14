@@ -113,11 +113,14 @@ namespace ZapretGUI.Core
             try
             {
                 if (_scanProcess != null && !_scanProcess.HasExited)
-                    _scanProcess.Kill();
+                {
+                    _scanProcess.Kill(entireProcessTree: true);
+                    _scanProcess.Dispose();
+                    _scanProcess = null;
+                }
             }
             catch { }
 
-            ProcessHelper.KillProcessesByName("powershell");
             ProcessHelper.KillProcessesByName(AppConstants.ZapretProcessName);
         }
 
