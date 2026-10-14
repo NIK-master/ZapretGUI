@@ -4900,6 +4900,34 @@ namespace ZapretGUI.Views
             </Setter>
         </Style>
 
+        <!-- Стиль для компактных кнопок панели инструментов редактора -->
+        <Style x:Key="EditorToolBtn" TargetType="Button">
+            <Setter Property="Background" Value="#1F1F23"/>
+            <Setter Property="Foreground" Value="#D4D4D8"/>
+            <Setter Property="BorderBrush" Value="#2E2E34"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="Margin" Value="0,0,5,0"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bdr" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="5" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bdr" Property="Background" Value="#2E2E36"/>
+                                <Setter TargetName="bdr" Property="BorderBrush" Value="#4A4A55"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <DataTemplate x:Key="ModItemTemplate">
             <Border x:Name="ModCardContainer" Style="{StaticResource ModCardStyle}" Opacity="0" RenderTransformOrigin="0.5,0.5">
                 <Border.RenderTransform>
@@ -4926,7 +4954,12 @@ namespace ZapretGUI.Views
                     </Grid.ColumnDefinitions>
 
                     <StackPanel Grid.Column="0" Margin="0,0,20,0" VerticalAlignment="Center">
-                        <TextBlock Text="{Binding Meta.Name}" FontSize="16" FontWeight="Bold" Foreground="White" TextTrimming="CharacterEllipsis"/>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding Meta.Name}" FontSize="16" FontWeight="Bold" Foreground="White" TextTrimming="CharacterEllipsis"/>
+                            <Border Background="#27272A" CornerRadius="4" Padding="5,1" Margin="8,0,0,0" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding Meta.Version, StringFormat='v{0}'}" FontFamily="Consolas" FontSize="11" Foreground="#A1A1AA"/>
+                            </Border>
+                        </StackPanel>
                         <TextBlock Text="{Binding Meta.Author, StringFormat='Автор: {0}'}" FontSize="12" Foreground="{DynamicResource BrandSuccessBrush}" Margin="0,2,0,6" TextTrimming="CharacterEllipsis"/>
                         <TextBlock Text="{Binding Meta.Description}" FontSize="13" Foreground="#AAAAAA" TextWrapping="Wrap"/>
                     </StackPanel>
@@ -4992,7 +5025,7 @@ namespace ZapretGUI.Views
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
-            <Border Grid.Column="0" Background="#0C0C0C" CornerRadius="12" BorderBrush="#2A2A2A" BorderThickness="1" Padding="15">
+            <Border Grid.Column="0" Background="#0C0C0C" CornerRadius="12" BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="1" Padding="15">
                 <StackPanel>
                     <TextBlock Text="Модификации" FontSize="20" FontWeight="Bold" Margin="0,0,0,20"/>
                     <Button x:Name="BtnStrategies" Style="{StaticResource SidebarButtonStyle}" Click="BtnStrategies_Click">
@@ -5114,39 +5147,265 @@ namespace ZapretGUI.Views
             </Grid>
         </Grid>
 
-        <!-- ОВЕРЛЕИ (ВНЕ ContentGrid) -->
+        <!-- ПРОКАЧАННАЯ СТУДИЯ РЕДАКТИРОВАНИЯ МОДА -->
         <Grid x:Name="EditorOverlay" Background="#CC000000" Visibility="Collapsed" Panel.ZIndex="200">
-            <Border x:Name="EditorContentBorder" Background="#141414" BorderBrush="#2A2A2A" BorderThickness="1" CornerRadius="12" Width="600" Height="500" Padding="20">
+            <Border x:Name="EditorContentBorder" Background="#141414" BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="1" CornerRadius="12" Width="820" Height="640" Padding="20" RenderTransformOrigin="0.5,0.5">
+                <Border.RenderTransform>
+                    <TransformGroup>
+                        <ScaleTransform ScaleX="0.95" ScaleY="0.95"/>
+                        <TranslateTransform Y="10"/>
+                    </TransformGroup>
+                </Border.RenderTransform>
+                <Border.Effect>
+                    <DropShadowEffect Color="Black" BlurRadius="40" ShadowDepth="10" Opacity="0.8"/>
+                </Border.Effect>
+
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
+                        <!-- 0: Шапка -->
                         <RowDefinition Height="Auto"/>
+                        <!-- 1: Метаданные мода (Имя, Автор, Версия, Описание) -->
+                        <RowDefinition Height="Auto"/>
+                        <!-- 2: Тулбар редактора -->
+                        <RowDefinition Height="Auto"/>
+                        <!-- 3: Панель поиска и замены -->
+                        <RowDefinition Height="Auto"/>
+                        <!-- 4: Панель быстрых сниппетов -->
+                        <RowDefinition Height="*"/>
+                        <!-- 5: Редактор кода с номерами строк -->
+                        <RowDefinition Height="Auto"/>
+                        <!-- 6: Статус-бар и кнопки сохранения -->
                     </Grid.RowDefinitions>
-                    <TextBlock x:Name="TxtEditorTitle" Text="Редактор: mod.bat" FontSize="18" FontWeight="Bold" Margin="0,0,0,15"/>
-                    <TextBox x:Name="EditorTextBox" Grid.Row="1" Background="#0C0C0C" Foreground="#4ADE80" FontFamily="Consolas" FontSize="13" TextWrapping="Wrap" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" BorderBrush="#2A2A2A" Padding="10"/>
-                    <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,15,0,0">
-                        <Button Content="Отмена" Background="Transparent" Foreground="#A0A0A0" BorderBrush="#333333" BorderThickness="1" Padding="15,6" Margin="0,0,10,0" Cursor="Hand" Click="BtnCloseEditor_Click">
-                            <Button.Resources>
-                                <Style TargetType="Border">
-                                    <Setter Property="CornerRadius" Value="6"/>
-                                </Style>
-                            </Button.Resources>
+
+                    <!-- 0. ШАПКА -->
+                    <Grid Grid.Row="0" Margin="0,0,0,12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Border Background="#1E3A8A" CornerRadius="6" Padding="7,5" Margin="0,0,10,0">
+                                <TextBlock Text="&#xE70F;" FontFamily="Segoe MDL2 Assets" Foreground="#60A5FA" FontSize="14"/>
+                            </Border>
+                            <StackPanel>
+                                <TextBlock x:Name="TxtEditorTitle" Text="Редактор мода" FontSize="17" FontWeight="Bold"/>
+                                <TextBlock x:Name="TxtEditorSubTitle" Text="ID: mod_folder • strategy.bat" FontFamily="Consolas" FontSize="11" Foreground="#888888"/>
+                            </StackPanel>
+                        </StackPanel>
+
+                        <Button Grid.Column="1" Style="{StaticResource EditorToolBtn}" Click="BtnToggleMetaPanel_Click" ToolTip="Показать/скрыть настройки паспорта мода">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE713;" FontFamily="Segoe MDL2 Assets" Margin="0,1,6,0" FontSize="12"/>
+                                <TextBlock Text="Свойства мода (Название / Автор)"/>
+                            </StackPanel>
                         </Button>
-                        <Button Content="💾 Сохранить файл" Background="{DynamicResource BrandSuccessBrush}" Foreground="White" BorderThickness="0" Padding="15,6" Cursor="Hand" Click="BtnSaveEditor_Click">
-                            <Button.Resources>
-                                <Style TargetType="Border">
-                                    <Setter Property="CornerRadius" Value="6"/>
-                                </Style>
-                            </Button.Resources>
-                        </Button>
-                    </StackPanel>
+                    </Grid>
+
+                    <!-- 1. ПАНЕЛЬ РЕДАКТИРОВАНИЯ МЕТАДАННЫХ МОДА (Название, Автор, Версия, Описание) -->
+                    <Border x:Name="MetaEditorPanel" Grid.Row="1" Background="#1A1A1E" BorderBrush="#2A2A32" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,0,0,10" Visibility="Visible">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="2*"/>
+                                <ColumnDefinition Width="10"/>
+                                <ColumnDefinition Width="1.2*"/>
+                                <ColumnDefinition Width="10"/>
+                                <ColumnDefinition Width="0.8*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Row="0" Grid.Column="0">
+                                <TextBlock Text="Название мода:" Foreground="#A0A0A0" FontSize="11" Margin="0,0,0,3"/>
+                                <ui:TextBox x:Name="TxtEditModName" FontSize="13"/>
+                            </StackPanel>
+
+                            <StackPanel Grid.Row="0" Grid.Column="2">
+                                <TextBlock Text="Автор:" Foreground="#A0A0A0" FontSize="11" Margin="0,0,0,3"/>
+                                <ui:TextBox x:Name="TxtEditModAuthor" FontSize="13"/>
+                            </StackPanel>
+
+                            <StackPanel Grid.Row="0" Grid.Column="4">
+                                <TextBlock Text="Версия:" Foreground="#A0A0A0" FontSize="11" Margin="0,0,0,3"/>
+                                <ui:TextBox x:Name="TxtEditModVersion" FontFamily="Consolas" FontSize="13"/>
+                            </StackPanel>
+
+                            <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="5" Margin="0,8,0,0">
+                                <TextBlock Text="Описание:" Foreground="#A0A0A0" FontSize="11" Margin="0,0,0,3"/>
+                                <ui:TextBox x:Name="TxtEditModDesc" FontSize="13"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <!-- 2. ПАНЕЛЬ ИНСТРУМЕНТОВ РЕДАКТОРА -->
+                    <Border Grid.Row="2" Background="#18181B" BorderBrush="#27272A" BorderThickness="1" CornerRadius="6" Padding="6" Margin="0,0,0,8">
+                        <Grid>
+                            <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <Button Style="{StaticResource EditorToolBtn}" Click="BtnEditorUndo_Click" ToolTip="Отменить (Ctrl+Z)">
+                                    <TextBlock Text="&#xE7A7;" FontFamily="Segoe MDL2 Assets"/>
+                                </Button>
+                                <Button Style="{StaticResource EditorToolBtn}" Click="BtnEditorRedo_Click" ToolTip="Повторить (Ctrl+Y)">
+                                    <TextBlock Text="&#xE7A6;" FontFamily="Segoe MDL2 Assets"/>
+                                </Button>
+
+                                <Border Width="1" Background="#2E2E34" Margin="4,2,8,2"/>
+
+                                <Button Style="{StaticResource EditorToolBtn}" Click="BtnToggleSearch_Click" ToolTip="Поиск и замена (Ctrl+F)">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="&#xE721;" FontFamily="Segoe MDL2 Assets" Margin="0,1,5,0" FontSize="11"/>
+                                        <TextBlock Text="Поиск"/>
+                                    </StackPanel>
+                                </Button>
+
+                                <Button Style="{StaticResource EditorToolBtn}" Click="BtnToggleWordWrap_Click" ToolTip="Перенос по словам">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="&#xE8AB;" FontFamily="Segoe MDL2 Assets" Margin="0,1,5,0" FontSize="11"/>
+                                        <TextBlock x:Name="TxtWordWrapStatus" Text="Перенос: Вкл"/>
+                                    </StackPanel>
+                                </Button>
+
+                                <Border Width="1" Background="#2E2E34" Margin="4,2,8,2"/>
+
+                                <!-- Контекстные инструменты для .bat -->
+                                <StackPanel x:Name="BatToolsPanel" Orientation="Horizontal">
+                                    <Button Style="{StaticResource EditorToolBtn}" Click="BtnCommentLine_Click" ToolTip="Закомментировать / раскомментировать строку (::)">
+                                        <TextBlock Text=":: Коммент" FontFamily="Consolas"/>
+                                    </Button>
+                                    <Button Style="{StaticResource EditorToolBtn}" Click="BtnValidateBat_Click" Foreground="#4ADE80" ToolTip="Проверить скрипт на ошибки для Zapret">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="&#xE73E;" FontFamily="Segoe MDL2 Assets" Margin="0,1,5,0" FontSize="11"/>
+                                            <TextBlock Text="Проверить синтаксис"/>
+                                        </StackPanel>
+                                    </Button>
+                                </StackPanel>
+
+                                <!-- Контекстные инструменты для списков доменов -->
+                                <StackPanel x:Name="ListToolsPanel" Orientation="Horizontal" Visibility="Collapsed">
+                                    <Button Style="{StaticResource EditorToolBtn}" Click="BtnCleanDomains_Click" Foreground="#60A5FA" ToolTip="Удалить https://, пути, пробелы, пустые строки, дубликаты и отсортировать по алфавиту">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="&#xE894;" FontFamily="Segoe MDL2 Assets" Margin="0,1,5,0" FontSize="11"/>
+                                            <TextBlock Text="Очистить дубли и URL (Сортировка A-Z)"/>
+                                        </StackPanel>
+                                    </Button>
+                                </StackPanel>
+                            </WrapPanel>
+
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                <Button Style="{StaticResource EditorToolBtn}" Click="BtnZoomOut_Click" ToolTip="Уменьшить шрифт">
+                                    <TextBlock Text="A-" FontFamily="Consolas" FontWeight="Bold"/>
+                                </Button>
+                                <Button Style="{StaticResource EditorToolBtn}" Click="BtnZoomIn_Click" Margin="0" ToolTip="Увеличить шрифт">
+                                    <TextBlock Text="A+" FontFamily="Consolas" FontWeight="Bold"/>
+                                </Button>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <!-- 3. ПАНЕЛЬ ПОИСКА И ЗАМЕНЫ (По умолчанию скрыта) -->
+                    <Border x:Name="SearchPanel" Grid.Row="3" Background="#1C1C22" BorderBrush="#3B82F6" BorderThickness="1" CornerRadius="6" Padding="8" Margin="0,0,0,8" Visibility="Collapsed">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="8"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <ui:TextBox x:Name="TxtSearchQuery" Grid.Column="0" PlaceholderText="Найти текст..." FontFamily="Consolas" FontSize="12"/>
+                            <ui:TextBox x:Name="TxtReplaceQuery" Grid.Column="2" PlaceholderText="Заменить на..." FontFamily="Consolas" FontSize="12"/>
+
+                            <StackPanel Grid.Column="3" Orientation="Horizontal" Margin="8,0,0,0">
+                                <Button Style="{StaticResource EditorToolBtn}" Content="Найти далее" Click="BtnFindNext_Click"/>
+                                <Button Style="{StaticResource EditorToolBtn}" Content="Заменить всё" Click="BtnReplaceAll_Click"/>
+                                <Button Style="{StaticResource EditorToolBtn}" Content="✕" Margin="0" Click="BtnToggleSearch_Click"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <!-- 4. БЫСТРЫЕ СНИППЕТЫ ДЛЯ ЗАПРЕТА (Только для .bat) -->
+                    <ScrollViewer x:Name="SnippetsBar" Grid.Row="4" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Margin="0,0,0,8">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Вставка:" Foreground="#71717A" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <Button Style="{StaticResource EditorToolBtn}" Content="winws.exe" Tag="&quot;%BIN%winws.exe&quot; " Click="BtnInsertSnippet_Click" FontFamily="Consolas"/>
+                            <Button Style="{StaticResource EditorToolBtn}" Content="--new ^" Tag="--new ^&#x0d;&#x0a;" Click="BtnInsertSnippet_Click" FontFamily="Consolas"/>
+                            <Button Style="{StaticResource EditorToolBtn}" Content="--filter-tcp" Tag="--filter-tcp=80,443 " Click="BtnInsertSnippet_Click" FontFamily="Consolas"/>
+                            <Button Style="{StaticResource EditorToolBtn}" Content="--filter-udp" Tag="--filter-udp=443,50000-50100 " Click="BtnInsertSnippet_Click" FontFamily="Consolas"/>
+                            <Button Style="{StaticResource EditorToolBtn}" Content="--hostlist" Tag="--hostlist=&quot;%LISTS%list-general.txt&quot; " Click="BtnInsertSnippet_Click" FontFamily="Consolas"/>
+                            <Button Style="{StaticResource EditorToolBtn}" Content="--dpi-desync" Tag="--dpi-desync=fake,split2 " Click="BtnInsertSnippet_Click" FontFamily="Consolas"/>
+                            <Button Style="{StaticResource EditorToolBtn}" Content="%BIN%" Tag="%BIN%" Click="BtnInsertSnippet_Click" FontFamily="Consolas"/>
+                            <Button Style="{StaticResource EditorToolBtn}" Content="%LISTS%" Tag="%LISTS%" Click="BtnInsertSnippet_Click" FontFamily="Consolas"/>
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <!-- 5. ТЕКСТОВЫЙ РЕДАКТОР С НОМЕРАМИ СТРОК -->
+                    <Border Grid.Row="5" Background="#0C0C0C" BorderBrush="#2A2A2A" BorderThickness="1" CornerRadius="8" ClipToBounds="True">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Колонка с номерами строк -->
+                            <Border Grid.Column="0" Background="#121216" BorderBrush="#222226" BorderThickness="0,0,1,0" Padding="8,10,8,10" MinWidth="42">
+                                <ScrollViewer x:Name="LineNumbersScrollViewer" VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Hidden" IsHitTestVisible="False">
+                                    <TextBlock x:Name="TxtLineNumbers" Text="1" FontFamily="Consolas" FontSize="13" Foreground="#52525B" TextAlignment="Right"/>
+                                </ScrollViewer>
+                            </Border>
+
+                            <!-- Основное поле кода -->
+                            <TextBox x:Name="EditorTextBox" Grid.Column="1" Background="Transparent" Foreground="#4ADE80" CaretBrush="White"
+                                     FontFamily="Consolas" FontSize="13" TextWrapping="Wrap" AcceptsReturn="True" AcceptsTab="True"
+                                     VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" BorderThickness="0" Padding="10"
+                                     TextChanged="EditorTextBox_TextChanged" SelectionChanged="EditorTextBox_SelectionChanged"
+                                     ScrollViewer.ScrollChanged="EditorTextBox_ScrollChanged" PreviewKeyDown="EditorTextBox_PreviewKeyDown"/>
+                        </Grid>
+                    </Border>
+
+                    <!-- 6. СТАТУС-БАР И КНОПКИ СОХРАНЕНИЯ -->
+                    <Grid Grid.Row="6" Margin="0,12,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock x:Name="TxtCursorPos" Text="Стр: 1, Столб: 1" FontFamily="Consolas" FontSize="12" Foreground="#888888" Margin="0,0,15,0"/>
+                            <TextBlock x:Name="TxtStatsInfo" Text="Строк: 1" FontFamily="Consolas" FontSize="12" Foreground="#888888" Margin="0,0,15,0"/>
+                            <TextBlock x:Name="TxtEditorStatusMsg" Text="" FontFamily="Consolas" FontSize="12" Foreground="#4ADE80" TextTrimming="CharacterEllipsis" MaxWidth="300"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Button Content="Отмена" Background="Transparent" Foreground="#A0A0A0" BorderBrush="#333333" BorderThickness="1" Padding="15,7" Margin="0,0,10,0" Cursor="Hand" Click="BtnCloseEditor_Click">
+                                <Button.Resources>
+                                    <Style TargetType="Border">
+                                        <Setter Property="CornerRadius" Value="6"/>
+                                    </Style>
+                                </Button.Resources>
+                            </Button>
+                            <Button Content="💾 Сохранить мод" Background="{DynamicResource BrandSuccessBrush}" Foreground="White" FontWeight="SemiBold" BorderThickness="0" Padding="15,7" Cursor="Hand" Click="BtnSaveEditor_Click">
+                                <Button.Resources>
+                                    <Style TargetType="Border">
+                                        <Setter Property="CornerRadius" Value="6"/>
+                                    </Style>
+                                </Button.Resources>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
                 </Grid>
             </Border>
         </Grid>
 
+        <!-- ОКНО СОЗДАНИЯ НОВОГО МОДА -->
         <Grid x:Name="CreateModOverlay" Background="#CC000000" Visibility="Collapsed" Panel.ZIndex="200">
-            <Border x:Name="CreateContentBorder" Background="#141414" BorderBrush="#2A2A2A" BorderThickness="1" CornerRadius="12" Width="450" Padding="20" HorizontalAlignment="Center" VerticalAlignment="Center">
+            <Border x:Name="CreateContentBorder" Background="#141414" BorderBrush="#2A2A2A" BorderThickness="1" CornerRadius="12" Width="450" Padding="20" HorizontalAlignment="Center" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
+                <Border.RenderTransform>
+                    <TransformGroup>
+                        <ScaleTransform ScaleX="0.95" ScaleY="0.95"/>
+                        <TranslateTransform Y="10"/>
+                    </TransformGroup>
+                </Border.RenderTransform>
                 <StackPanel>
                     <TextBlock Text="Создать новый мод" FontSize="18" FontWeight="Bold" Margin="0,0,0,15"/>
                     <TextBlock Text="Название (ID папки, англ.):" Foreground="#A0A0A0" FontSize="12" Margin="0,0,0,5"/>
@@ -5177,8 +5436,15 @@ namespace ZapretGUI.Views
             </Border>
         </Grid>
 
+        <!-- ОКНО ПОДТВЕРЖДЕНИЯ -->
         <Grid x:Name="ConfirmOverlay" Background="#CC000000" Visibility="Collapsed" Panel.ZIndex="300">
-            <Border x:Name="ConfirmContentBorder" Background="#141414" BorderBrush="#2A2A2A" BorderThickness="1" CornerRadius="12" Width="400" Padding="20" HorizontalAlignment="Center" VerticalAlignment="Center">
+            <Border x:Name="ConfirmContentBorder" Background="#141414" BorderBrush="#2A2A2A" BorderThickness="1" CornerRadius="12" Width="400" Padding="20" HorizontalAlignment="Center" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
+                <Border.RenderTransform>
+                    <TransformGroup>
+                        <ScaleTransform ScaleX="0.95" ScaleY="0.95"/>
+                        <TranslateTransform Y="10"/>
+                    </TransformGroup>
+                </Border.RenderTransform>
                 <StackPanel>
                     <TextBlock x:Name="TxtConfirmTitle" Text="Подтверждение" FontSize="18" FontWeight="Bold" Margin="0,0,0,10"/>
                     <TextBlock x:Name="TxtConfirmMessage" Text="Вы уверены?" Foreground="#CCCCCC" FontSize="14" TextWrapping="Wrap" Margin="0,0,0,20"/>
@@ -5216,11 +5482,13 @@ using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Media.Animation;
 using ZapretGUI.Core;
 
 namespace ZapretGUI.Views
@@ -5234,8 +5502,10 @@ namespace ZapretGUI.Views
         private ObservableCollection<UIModItem> _activeMods = new();
 
         private string _currentEditingFilePath = "";
+        private string _currentEditingJsonPath = "";
+        private UIModItem? _currentEditingMod = null;
 
-        private Action _pendingConfirmAction;
+        private Action? _pendingConfirmAction;
 
         public ModsView()
         {
@@ -5376,20 +5646,29 @@ namespace ZapretGUI.Views
 
                 var meta = new ModMetaData
                 {
-                    Name = string.IsNullOrWhiteSpace(TxtNewModName.Text) ? id : TxtNewModName.Text,
-                    Author = string.IsNullOrWhiteSpace(TxtNewModAuthor.Text) ? "Аноним" : TxtNewModAuthor.Text,
+                    Name = string.IsNullOrWhiteSpace(TxtNewModName.Text) ? id : TxtNewModName.Text.Trim(),
+                    Author = string.IsNullOrWhiteSpace(TxtNewModAuthor.Text) ? "Аноним" : TxtNewModAuthor.Text.Trim(),
                     Version = "1.0",
-                    Description = TxtNewModDesc.Text,
+                    Description = TxtNewModDesc.Text.Trim(),
                     IsBatStrategy = _currentTab == ModType.BatStrategy
                 };
 
                 string jsonPath = Path.Combine(modFolderPath, "mod.json");
-                await File.WriteAllTextAsync(jsonPath, System.Text.Json.JsonSerializer.Serialize(meta, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+                await File.WriteAllTextAsync(jsonPath, JsonSerializer.Serialize(meta, new JsonSerializerOptions { WriteIndented = true }));
 
                 if (_currentTab == ModType.BatStrategy)
-                    await File.WriteAllTextAsync(Path.Combine(modFolderPath, "strategy.bat"), ":: Ваш код обхода здесь\r\n");
+                {
+                    string defaultBat = ":: Шаблон стратегии обхода\r\n" +
+                                        "\"%BIN%winws.exe\" --wf-tcp=80,443 --wf-udp=443,50000-50100 ^\r\n" +
+                                        "--filter-udp=443 --hostlist=\"%LISTS%list-general.txt\" --dpi-desync=fake --dpi-desync-repeats=6 ^\r\n" +
+                                        "--new ^\r\n" +
+                                        "--filter-tcp=80,443 --hostlist=\"%LISTS%list-general.txt\" --dpi-desync=fake,split2\r\n";
+                    await File.WriteAllTextAsync(Path.Combine(modFolderPath, "strategy.bat"), defaultBat);
+                }
                 else
+                {
                     await File.WriteAllTextAsync(Path.Combine(modFolderPath, "list.txt"), "");
+                }
 
                 AnimationHelper.HideOverlay(CreateModOverlay, CreateContentBorder, ContentGrid);
                 await LoadCurrentModsAsync();
@@ -5538,37 +5817,112 @@ namespace ZapretGUI.Views
             }
         }
 
+        // =========================================================================
+        // ПРОКАЧАННЫЙ РЕДАКТОР МОДОВ (МЕТАДАННЫЕ + ИНСТРУМЕНТЫ IDE)
+        // =========================================================================
+
         private void BtnEditMod_Click(object sender, RoutedEventArgs e)
         {
             AudioHelper.PlayClick();
 
             if ((sender as FrameworkElement)?.DataContext is UIModItem mod)
             {
-                string folderName = _currentTab == ModType.BatStrategy ? "strategies" : "lists";
-                string fileName = _currentTab == ModType.BatStrategy ? "strategy.bat" : "list.txt";
+                _currentEditingMod = mod;
+                bool isBat = _currentTab == ModType.BatStrategy;
 
-                _currentEditingFilePath = Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, folderName, mod.Id, fileName);
+                string folderName = isBat ? "strategies" : "lists";
+                string fileName = isBat ? "strategy.bat" : "list.txt";
+                string modFolder = Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, folderName, mod.Id);
 
-                if (File.Exists(_currentEditingFilePath))
-                {
-                    TxtEditorTitle.Text = $"Редактор: {mod.Meta.Name} ({fileName})";
-                    EditorTextBox.Text = File.ReadAllText(_currentEditingFilePath);
-                    AnimationHelper.ShowOverlay(EditorOverlay, EditorContentBorder, ContentGrid);
-                }
-                else
+                _currentEditingFilePath = Path.Combine(modFolder, fileName);
+                _currentEditingJsonPath = Path.Combine(modFolder, "mod.json");
+
+                if (!File.Exists(_currentEditingFilePath))
                 {
                     System.Windows.MessageBox.Show($"Файл {fileName} не найден в папке мода!", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
                 }
+
+                // Загружаем метаданные в поля редактирования
+                TxtEditModName.Text = mod.Meta.Name;
+                TxtEditModAuthor.Text = mod.Meta.Author;
+                TxtEditModVersion.Text = string.IsNullOrWhiteSpace(mod.Meta.Version) ? "1.0" : mod.Meta.Version;
+                TxtEditModDesc.Text = mod.Meta.Description;
+
+                TxtEditorTitle.Text = $"Редактор: {mod.Meta.Name}";
+                TxtEditorSubTitle.Text = $"ID: {mod.Id} • Файл: {fileName}";
+                TxtEditorStatusMsg.Text = "";
+
+                // Настраиваем контекстные панели (Батник vs Список доменов)
+                BatToolsPanel.Visibility = isBat ? Visibility.Visible : Visibility.Collapsed;
+                SnippetsBar.Visibility = isBat ? Visibility.Visible : Visibility.Collapsed;
+                ListToolsPanel.Visibility = isBat ? Visibility.Collapsed : Visibility.Visible;
+
+                // Загружаем содержимое файла
+                EditorTextBox.Text = File.ReadAllText(_currentEditingFilePath);
+                UpdateLineNumbersAndStats();
+
+                AnimationHelper.ShowOverlay(EditorOverlay, EditorContentBorder, ContentGrid);
             }
+        }
+
+        private void BtnToggleMetaPanel_Click(object sender, RoutedEventArgs e)
+        {
+            AudioHelper.PlayClick();
+            MetaEditorPanel.Visibility = MetaEditorPanel.Visibility == Visibility.Visible
+                ? Visibility.Collapsed
+                : Visibility.Visible;
         }
 
         private async void BtnSaveEditor_Click(object sender, RoutedEventArgs e)
         {
             AudioHelper.PlayClick();
+            await SaveEditorChangesAsync();
+        }
+
+        private async Task SaveEditorChangesAsync()
+        {
+            if (_currentEditingMod == null) return;
+
             try
             {
+                // Если это .bat мод, проверяем синтаксис перед сохранением
+                if (_currentTab == ModType.BatStrategy)
+                {
+                    string modDisplayName = string.IsNullOrWhiteSpace(TxtEditModName.Text) ? _currentEditingMod.Id : TxtEditModName.Text.Trim();
+                    var (isValid, errMsg) = _modManager.ValidateBatMod(modDisplayName, EditorTextBox.Text);
+                    if (!isValid)
+                    {
+                        var res = System.Windows.MessageBox.Show(
+                            $"В скрипте обнаружена проблема:\n\n{errMsg}\n\nВсё равно сохранить файл?",
+                            "Предупреждение синтаксиса Zapret",
+                            MessageBoxButton.YesNo,
+                            MessageBoxImage.Warning);
+
+                        if (res == MessageBoxResult.No)
+                            return;
+                    }
+                }
+
+                // 1. Обновляем метаданные мода (mod.json)
+                _currentEditingMod.Meta.Name = string.IsNullOrWhiteSpace(TxtEditModName.Text) ? _currentEditingMod.Id : TxtEditModName.Text.Trim();
+                _currentEditingMod.Meta.Author = string.IsNullOrWhiteSpace(TxtEditModAuthor.Text) ? "Аноним" : TxtEditModAuthor.Text.Trim();
+                _currentEditingMod.Meta.Version = string.IsNullOrWhiteSpace(TxtEditModVersion.Text) ? "1.0" : TxtEditModVersion.Text.Trim();
+                _currentEditingMod.Meta.Description = TxtEditModDesc.Text.Trim();
+
+                if (!string.IsNullOrEmpty(_currentEditingJsonPath))
+                {
+                    var jsonContent = JsonSerializer.Serialize(_currentEditingMod.Meta, new JsonSerializerOptions { WriteIndented = true });
+                    await File.WriteAllTextAsync(_currentEditingJsonPath, jsonContent);
+                }
+
+                // 2. Сохраняем сам скрипт или список
                 await File.WriteAllTextAsync(_currentEditingFilePath, EditorTextBox.Text);
+
+                // 3. Применяем изменения и обновляем карточки в UI
                 await SaveAndApplyModsAsync();
+                await LoadCurrentModsAsync();
+
                 AnimationHelper.HideOverlay(EditorOverlay, EditorContentBorder, ContentGrid);
             }
             catch (Exception ex)
@@ -5582,6 +5936,267 @@ namespace ZapretGUI.Views
             AudioHelper.PlayClick();
             AnimationHelper.HideOverlay(EditorOverlay, EditorContentBorder, ContentGrid);
         }
+
+        // --- Инструменты текстового редактора ---
+
+        private void EditorTextBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            UpdateLineNumbersAndStats();
+        }
+
+        private void EditorTextBox_SelectionChanged(object sender, RoutedEventArgs e)
+        {
+            int caretIndex = EditorTextBox.CaretIndex;
+            int lineIndex = EditorTextBox.GetLineIndexFromCharacterIndex(caretIndex);
+            int colIndex = caretIndex - EditorTextBox.GetCharacterIndexFromLineIndex(Math.Max(0, lineIndex));
+
+            if (TxtCursorPos != null)
+                TxtCursorPos.Text = $"Стр: {lineIndex + 1}, Столб: {colIndex + 1}";
+        }
+
+        private void EditorTextBox_ScrollChanged(object sender, ScrollChangedEventArgs e)
+        {
+            LineNumbersScrollViewer?.ScrollToVerticalOffset(e.VerticalOffset);
+        }
+
+        private async void EditorTextBox_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            if (Keyboard.Modifiers == ModifierKeys.Control)
+            {
+                if (e.Key == Key.F)
+                {
+                    e.Handled = true;
+                    BtnToggleSearch_Click(this, new RoutedEventArgs());
+                }
+                else if (e.Key == Key.S)
+                {
+                    e.Handled = true;
+                    await SaveEditorChangesAsync();
+                }
+            }
+        }
+
+        private void UpdateLineNumbersAndStats()
+        {
+            if (EditorTextBox == null || TxtLineNumbers == null || TxtStatsInfo == null) return;
+
+            var lines = EditorTextBox.Text.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+            int lineCount = Math.Max(1, lines.Length);
+
+            var sb = new StringBuilder();
+            for (int i = 1; i <= lineCount; i++)
+                sb.AppendLine(i.ToString());
+
+            TxtLineNumbers.Text = sb.ToString().TrimEnd();
+
+            int nonEmptyCount = lines.Count(l => !string.IsNullOrWhiteSpace(l));
+            TxtStatsInfo.Text = _currentTab == ModType.DomainList
+                ? $"Строк: {lineCount} (Доменов: {nonEmptyCount})"
+                : $"Строк: {lineCount} • Символов: {EditorTextBox.Text.Length}";
+        }
+
+        private void BtnEditorUndo_Click(object sender, RoutedEventArgs e)
+        {
+            if (EditorTextBox.CanUndo) EditorTextBox.Undo();
+        }
+
+        private void BtnEditorRedo_Click(object sender, RoutedEventArgs e)
+        {
+            if (EditorTextBox.CanRedo) EditorTextBox.Redo();
+        }
+
+        private void BtnToggleSearch_Click(object sender, RoutedEventArgs e)
+        {
+            AudioHelper.PlayClick();
+            if (SearchPanel.Visibility == Visibility.Visible)
+            {
+                SearchPanel.Visibility = Visibility.Collapsed;
+                EditorTextBox.Focus();
+            }
+            else
+            {
+                SearchPanel.Visibility = Visibility.Visible;
+                TxtSearchQuery.Focus();
+            }
+        }
+
+        private void BtnFindNext_Click(object sender, RoutedEventArgs e)
+        {
+            string query = TxtSearchQuery.Text;
+            if (string.IsNullOrEmpty(query)) return;
+
+            int startIndex = EditorTextBox.SelectionStart + EditorTextBox.SelectionLength;
+            if (startIndex >= EditorTextBox.Text.Length) startIndex = 0;
+
+            int matchIndex = EditorTextBox.Text.IndexOf(query, startIndex, StringComparison.OrdinalIgnoreCase);
+            if (matchIndex == -1 && startIndex > 0)
+                matchIndex = EditorTextBox.Text.IndexOf(query, 0, StringComparison.OrdinalIgnoreCase);
+
+            if (matchIndex >= 0)
+            {
+                EditorTextBox.Focus();
+                EditorTextBox.Select(matchIndex, query.Length);
+                int line = EditorTextBox.GetLineIndexFromCharacterIndex(matchIndex);
+                EditorTextBox.ScrollToLine(line);
+                SetEditorStatus($"Найдено на строке {line + 1}", "#60A5FA");
+            }
+            else
+            {
+                SetEditorStatus("Совпадений не найдено", "#F44336");
+            }
+        }
+
+        private void BtnReplaceAll_Click(object sender, RoutedEventArgs e)
+        {
+            string query = TxtSearchQuery.Text;
+            string replacement = TxtReplaceQuery.Text ?? "";
+            if (string.IsNullOrEmpty(query)) return;
+
+            string current = EditorTextBox.Text;
+            int count = (current.Length - current.Replace(query, "", StringComparison.OrdinalIgnoreCase).Length) / query.Length;
+
+            if (count > 0)
+            {
+                EditorTextBox.Text = current.Replace(query, replacement, StringComparison.OrdinalIgnoreCase);
+                SetEditorStatus($"Заменено совпадений: {count}", "#4ADE80");
+            }
+            else
+            {
+                SetEditorStatus("Совпадений для замены нет", "#F44336");
+            }
+        }
+
+        private void BtnToggleWordWrap_Click(object sender, RoutedEventArgs e)
+        {
+            if (EditorTextBox.TextWrapping == TextWrapping.Wrap)
+            {
+                EditorTextBox.TextWrapping = TextWrapping.NoWrap;
+                TxtWordWrapStatus.Text = "Перенос: Выкл";
+            }
+            else
+            {
+                EditorTextBox.TextWrapping = TextWrapping.Wrap;
+                TxtWordWrapStatus.Text = "Перенос: Вкл";
+            }
+        }
+
+        private void BtnZoomIn_Click(object sender, RoutedEventArgs e)
+        {
+            if (EditorTextBox.FontSize < 24)
+            {
+                EditorTextBox.FontSize += 1;
+                TxtLineNumbers.FontSize = EditorTextBox.FontSize;
+            }
+        }
+
+        private void BtnZoomOut_Click(object sender, RoutedEventArgs e)
+        {
+            if (EditorTextBox.FontSize > 10)
+            {
+                EditorTextBox.FontSize -= 1;
+                TxtLineNumbers.FontSize = EditorTextBox.FontSize;
+            }
+        }
+
+        private void BtnInsertSnippet_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is System.Windows.Controls.Button btn && btn.Tag is string snippet)
+            {
+                int caret = EditorTextBox.CaretIndex;
+                EditorTextBox.Text = EditorTextBox.Text.Insert(caret, snippet);
+                EditorTextBox.CaretIndex = caret + snippet.Length;
+                EditorTextBox.Focus();
+            }
+        }
+
+        private void BtnCommentLine_Click(object sender, RoutedEventArgs e)
+        {
+            int caret = EditorTextBox.CaretIndex;
+            int lineIdx = EditorTextBox.GetLineIndexFromCharacterIndex(caret);
+            var lines = EditorTextBox.Text.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+
+            if (lineIdx >= 0 && lineIdx < lines.Length)
+            {
+                string line = lines[lineIdx];
+                if (line.TrimStart().StartsWith("::"))
+                {
+                    int idx = line.IndexOf("::");
+                    lines[lineIdx] = line.Remove(idx, 2).TrimStart();
+                }
+                else
+                {
+                    lines[lineIdx] = ":: " + line;
+                }
+
+                EditorTextBox.Text = string.Join("\r\n", lines);
+                EditorTextBox.CaretIndex = Math.Min(caret + 3, EditorTextBox.Text.Length);
+                EditorTextBox.Focus();
+            }
+        }
+
+        private void BtnValidateBat_Click(object sender, RoutedEventArgs e)
+        {
+            AudioHelper.PlayClick();
+            string modName = string.IsNullOrWhiteSpace(TxtEditModName.Text) ? "Текущий скрипт" : TxtEditModName.Text.Trim();
+            var (isValid, errMsg) = _modManager.ValidateBatMod(modName, EditorTextBox.Text);
+
+            if (isValid)
+            {
+                SetEditorStatus("✓ Синтаксис корректен!", "#4ADE80");
+            }
+            else
+            {
+                SetEditorStatus("⚠ Ошибка в скрипте", "#F44336");
+                System.Windows.MessageBox.Show(errMsg, "Проверка синтаксиса Zapret", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        private void BtnCleanDomains_Click(object sender, RoutedEventArgs e)
+        {
+            AudioHelper.PlayClick();
+            var rawLines = EditorTextBox.Text.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+            var cleaned = new List<string>();
+
+            foreach (var raw in rawLines)
+            {
+                string d = raw.Trim().ToLowerInvariant();
+                if (string.IsNullOrWhiteSpace(d) || d.StartsWith("#") || d.StartsWith("//"))
+                    continue;
+
+                // Отрезаем протоколы (http://, https://)
+                if (d.StartsWith("http://")) d = d.Substring(7);
+                else if (d.StartsWith("https://")) d = d.Substring(8);
+
+                // Отрезаем www.
+                if (d.StartsWith("www.")) d = d.Substring(4);
+
+                // Отрезаем пути и параметры после слеша или порта
+                int slashIdx = d.IndexOf('/');
+                if (slashIdx > 0) d = d.Substring(0, slashIdx);
+
+                int colonIdx = d.IndexOf(':');
+                if (colonIdx > 0) d = d.Substring(0, colonIdx);
+
+                if (!string.IsNullOrWhiteSpace(d) && d.Contains('.'))
+                    cleaned.Add(d);
+            }
+
+            var uniqueSorted = cleaned.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x).ToList();
+            int removedCount = rawLines.Length - uniqueSorted.Count;
+
+            EditorTextBox.Text = string.Join("\r\n", uniqueSorted);
+            SetEditorStatus($"Готово! Доменов: {uniqueSorted.Count} (удалено мусора/дублей: {Math.Max(0, removedCount)})", "#60A5FA");
+        }
+
+        private void SetEditorStatus(string message, string hexColor)
+        {
+            TxtEditorStatusMsg.Text = message;
+            TxtEditorStatusMsg.Foreground = UIHelper.GetBrushFromHex(hexColor);
+        }
+
+        // =========================================================================
+        // ИМПОРТ И ЭКСПОРТ МОДОВ
+        // =========================================================================
 
         private async void BtnImportMod_Click(object sender, RoutedEventArgs e)
         {
@@ -5609,11 +6224,11 @@ namespace ZapretGUI.Views
                     }
 
                     var jsonPath = jsonFiles[0];
-                    var modRootPath = Path.GetDirectoryName(jsonPath);
+                    var modRootPath = Path.GetDirectoryName(jsonPath)!;
 
-                    var meta = System.Text.Json.JsonSerializer.Deserialize<ModMetaData>(
+                    var meta = JsonSerializer.Deserialize<ModMetaData>(
                         await File.ReadAllTextAsync(jsonPath),
-                        new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }
+                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
                     );
 
                     if (meta == null)
@@ -5648,7 +6263,7 @@ namespace ZapretGUI.Views
                         {
                             var relativePath = file.Substring(modRootPath.Length + 1);
                             var targetPath = Path.Combine(destPath, relativePath);
-                            Directory.CreateDirectory(Path.GetDirectoryName(targetPath));
+                            Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
                             File.Copy(file, targetPath, true);
                         }
                     });
@@ -5699,7 +6314,7 @@ namespace ZapretGUI.Views
                         if (File.Exists(saveFileDialog.FileName))
                             File.Delete(saveFileDialog.FileName);
 
-                        await Task.Run(() => System.IO.Compression.ZipFile.CreateFromDirectory(modFolderPath, saveFileDialog.FileName));
+                        await Task.Run(() => ZipFile.CreateFromDirectory(modFolderPath, saveFileDialog.FileName));
 
                         System.Windows.MessageBox.Show($"Мод '{mod.Meta.Name}' успешно экспортирован и готов к публикации!", "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
                     }
