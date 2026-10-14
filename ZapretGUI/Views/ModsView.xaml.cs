@@ -5,11 +5,13 @@ using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Media.Animation;
 using ZapretGUI.Core;
 
 namespace ZapretGUI.Views
@@ -23,8 +25,10 @@ namespace ZapretGUI.Views
         private ObservableCollection<UIModItem> _activeMods = new();
 
         private string _currentEditingFilePath = "";
+        private string _currentEditingJsonPath = "";
+        private UIModItem? _currentEditingMod = null;
 
-        private Action _pendingConfirmAction;
+        private Action? _pendingConfirmAction;
 
         public ModsView()
         {
@@ -165,20 +169,29 @@ namespace ZapretGUI.Views
 
                 var meta = new ModMetaData
                 {
-                    Name = string.IsNullOrWhiteSpace(TxtNewModName.Text) ? id : TxtNewModName.Text,
-                    Author = string.IsNullOrWhiteSpace(TxtNewModAuthor.Text) ? "Аноним" : TxtNewModAuthor.Text,
+                    Name = string.IsNullOrWhiteSpace(TxtNewModName.Text) ? id : TxtNewModName.Text.Trim(),
+                    Author = string.IsNullOrWhiteSpace(TxtNewModAuthor.Text) ? "Аноним" : TxtNewModAuthor.Text.Trim(),
                     Version = "1.0",
-                    Description = TxtNewModDesc.Text,
+                    Description = TxtNewModDesc.Text.Trim(),
                     IsBatStrategy = _currentTab == ModType.BatStrategy
                 };
 
                 string jsonPath = Path.Combine(modFolderPath, "mod.json");
-                await File.WriteAllTextAsync(jsonPath, System.Text.Json.JsonSerializer.Serialize(meta, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+                await File.WriteAllTextAsync(jsonPath, JsonSerializer.Serialize(meta, new JsonSerializerOptions { WriteIndented = true }));
 
                 if (_currentTab == ModType.BatStrategy)
-                    await File.WriteAllTextAsync(Path.Combine(modFolderPath, "strategy.bat"), ":: Ваш код обхода здесь\r\n");
+                {
+                    string defaultBat = ":: Шаблон стратегии обхода\r\n" +
+                                        "\"%BIN%winws.exe\" --wf-tcp=80,443 --wf-udp=443,50000-50100 ^\r\n" +
+                                        "--filter-udp=443 --hostlist=\"%LISTS%list-general.txt\" --dpi-desync=fake --dpi-desync-repeats=6 ^\r\n" +
+                                        "--new ^\r\n" +
+                                        "--filter-tcp=80,443 --hostlist=\"%LISTS%list-general.txt\" --dpi-desync=fake,split2\r\n";
+                    await File.WriteAllTextAsync(Path.Combine(modFolderPath, "strategy.bat"), defaultBat);
+                }
                 else
+                {
                     await File.WriteAllTextAsync(Path.Combine(modFolderPath, "list.txt"), "");
+                }
 
                 AnimationHelper.HideOverlay(CreateModOverlay, CreateContentBorder, ContentGrid);
                 await LoadCurrentModsAsync();
@@ -327,37 +340,112 @@ namespace ZapretGUI.Views
             }
         }
 
+        // =========================================================================
+        // ПРОКАЧАННЫЙ РЕДАКТОР МОДОВ (МЕТАДАННЫЕ + ИНСТРУМЕНТЫ IDE)
+        // =========================================================================
+
         private void BtnEditMod_Click(object sender, RoutedEventArgs e)
         {
             AudioHelper.PlayClick();
 
             if ((sender as FrameworkElement)?.DataContext is UIModItem mod)
             {
-                string folderName = _currentTab == ModType.BatStrategy ? "strategies" : "lists";
-                string fileName = _currentTab == ModType.BatStrategy ? "strategy.bat" : "list.txt";
+                _currentEditingMod = mod;
+                bool isBat = _currentTab == ModType.BatStrategy;
 
-                _currentEditingFilePath = Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, folderName, mod.Id, fileName);
+                string folderName = isBat ? "strategies" : "lists";
+                string fileName = isBat ? "strategy.bat" : "list.txt";
+                string modFolder = Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, folderName, mod.Id);
 
-                if (File.Exists(_currentEditingFilePath))
-                {
-                    TxtEditorTitle.Text = $"Редактор: {mod.Meta.Name} ({fileName})";
-                    EditorTextBox.Text = File.ReadAllText(_currentEditingFilePath);
-                    AnimationHelper.ShowOverlay(EditorOverlay, EditorContentBorder, ContentGrid);
-                }
-                else
+                _currentEditingFilePath = Path.Combine(modFolder, fileName);
+                _currentEditingJsonPath = Path.Combine(modFolder, "mod.json");
+
+                if (!File.Exists(_currentEditingFilePath))
                 {
                     System.Windows.MessageBox.Show($"Файл {fileName} не найден в папке мода!", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
                 }
+
+                // Загружаем метаданные в поля редактирования
+                TxtEditModName.Text = mod.Meta.Name;
+                TxtEditModAuthor.Text = mod.Meta.Author;
+                TxtEditModVersion.Text = string.IsNullOrWhiteSpace(mod.Meta.Version) ? "1.0" : mod.Meta.Version;
+                TxtEditModDesc.Text = mod.Meta.Description;
+
+                TxtEditorTitle.Text = $"Редактор: {mod.Meta.Name}";
+                TxtEditorSubTitle.Text = $"ID: {mod.Id} • Файл: {fileName}";
+                TxtEditorStatusMsg.Text = "";
+
+                // Настраиваем контекстные панели (Батник vs Список доменов)
+                BatToolsPanel.Visibility = isBat ? Visibility.Visible : Visibility.Collapsed;
+                SnippetsBar.Visibility = isBat ? Visibility.Visible : Visibility.Collapsed;
+                ListToolsPanel.Visibility = isBat ? Visibility.Collapsed : Visibility.Visible;
+
+                // Загружаем содержимое файла
+                EditorTextBox.Text = File.ReadAllText(_currentEditingFilePath);
+                UpdateLineNumbersAndStats();
+
+                AnimationHelper.ShowOverlay(EditorOverlay, EditorContentBorder, ContentGrid);
             }
+        }
+
+        private void BtnToggleMetaPanel_Click(object sender, RoutedEventArgs e)
+        {
+            AudioHelper.PlayClick();
+            MetaEditorPanel.Visibility = MetaEditorPanel.Visibility == Visibility.Visible
+                ? Visibility.Collapsed
+                : Visibility.Visible;
         }
 
         private async void BtnSaveEditor_Click(object sender, RoutedEventArgs e)
         {
             AudioHelper.PlayClick();
+            await SaveEditorChangesAsync();
+        }
+
+        private async Task SaveEditorChangesAsync()
+        {
+            if (_currentEditingMod == null) return;
+
             try
             {
+                // Если это .bat мод, проверяем синтаксис перед сохранением
+                if (_currentTab == ModType.BatStrategy)
+                {
+                    string modDisplayName = string.IsNullOrWhiteSpace(TxtEditModName.Text) ? _currentEditingMod.Id : TxtEditModName.Text.Trim();
+                    var (isValid, errMsg) = _modManager.ValidateBatMod(modDisplayName, EditorTextBox.Text);
+                    if (!isValid)
+                    {
+                        var res = System.Windows.MessageBox.Show(
+                            $"В скрипте обнаружена проблема:\n\n{errMsg}\n\nВсё равно сохранить файл?",
+                            "Предупреждение синтаксиса Zapret",
+                            MessageBoxButton.YesNo,
+                            MessageBoxImage.Warning);
+
+                        if (res == MessageBoxResult.No)
+                            return;
+                    }
+                }
+
+                // 1. Обновляем метаданные мода (mod.json)
+                _currentEditingMod.Meta.Name = string.IsNullOrWhiteSpace(TxtEditModName.Text) ? _currentEditingMod.Id : TxtEditModName.Text.Trim();
+                _currentEditingMod.Meta.Author = string.IsNullOrWhiteSpace(TxtEditModAuthor.Text) ? "Аноним" : TxtEditModAuthor.Text.Trim();
+                _currentEditingMod.Meta.Version = string.IsNullOrWhiteSpace(TxtEditModVersion.Text) ? "1.0" : TxtEditModVersion.Text.Trim();
+                _currentEditingMod.Meta.Description = TxtEditModDesc.Text.Trim();
+
+                if (!string.IsNullOrEmpty(_currentEditingJsonPath))
+                {
+                    var jsonContent = JsonSerializer.Serialize(_currentEditingMod.Meta, new JsonSerializerOptions { WriteIndented = true });
+                    await File.WriteAllTextAsync(_currentEditingJsonPath, jsonContent);
+                }
+
+                // 2. Сохраняем сам скрипт или список
                 await File.WriteAllTextAsync(_currentEditingFilePath, EditorTextBox.Text);
+
+                // 3. Применяем изменения и обновляем карточки в UI
                 await SaveAndApplyModsAsync();
+                await LoadCurrentModsAsync();
+
                 AnimationHelper.HideOverlay(EditorOverlay, EditorContentBorder, ContentGrid);
             }
             catch (Exception ex)
@@ -371,6 +459,267 @@ namespace ZapretGUI.Views
             AudioHelper.PlayClick();
             AnimationHelper.HideOverlay(EditorOverlay, EditorContentBorder, ContentGrid);
         }
+
+        // --- Инструменты текстового редактора ---
+
+        private void EditorTextBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            UpdateLineNumbersAndStats();
+        }
+
+        private void EditorTextBox_SelectionChanged(object sender, RoutedEventArgs e)
+        {
+            int caretIndex = EditorTextBox.CaretIndex;
+            int lineIndex = EditorTextBox.GetLineIndexFromCharacterIndex(caretIndex);
+            int colIndex = caretIndex - EditorTextBox.GetCharacterIndexFromLineIndex(Math.Max(0, lineIndex));
+
+            if (TxtCursorPos != null)
+                TxtCursorPos.Text = $"Стр: {lineIndex + 1}, Столб: {colIndex + 1}";
+        }
+
+        private void EditorTextBox_ScrollChanged(object sender, ScrollChangedEventArgs e)
+        {
+            LineNumbersScrollViewer?.ScrollToVerticalOffset(e.VerticalOffset);
+        }
+
+        private async void EditorTextBox_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            if (Keyboard.Modifiers == ModifierKeys.Control)
+            {
+                if (e.Key == Key.F)
+                {
+                    e.Handled = true;
+                    BtnToggleSearch_Click(this, new RoutedEventArgs());
+                }
+                else if (e.Key == Key.S)
+                {
+                    e.Handled = true;
+                    await SaveEditorChangesAsync();
+                }
+            }
+        }
+
+        private void UpdateLineNumbersAndStats()
+        {
+            if (EditorTextBox == null || TxtLineNumbers == null || TxtStatsInfo == null) return;
+
+            var lines = EditorTextBox.Text.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+            int lineCount = Math.Max(1, lines.Length);
+
+            var sb = new StringBuilder();
+            for (int i = 1; i <= lineCount; i++)
+                sb.AppendLine(i.ToString());
+
+            TxtLineNumbers.Text = sb.ToString().TrimEnd();
+
+            int nonEmptyCount = lines.Count(l => !string.IsNullOrWhiteSpace(l));
+            TxtStatsInfo.Text = _currentTab == ModType.DomainList
+                ? $"Строк: {lineCount} (Доменов: {nonEmptyCount})"
+                : $"Строк: {lineCount} • Символов: {EditorTextBox.Text.Length}";
+        }
+
+        private void BtnEditorUndo_Click(object sender, RoutedEventArgs e)
+        {
+            if (EditorTextBox.CanUndo) EditorTextBox.Undo();
+        }
+
+        private void BtnEditorRedo_Click(object sender, RoutedEventArgs e)
+        {
+            if (EditorTextBox.CanRedo) EditorTextBox.Redo();
+        }
+
+        private void BtnToggleSearch_Click(object sender, RoutedEventArgs e)
+        {
+            AudioHelper.PlayClick();
+            if (SearchPanel.Visibility == Visibility.Visible)
+            {
+                SearchPanel.Visibility = Visibility.Collapsed;
+                EditorTextBox.Focus();
+            }
+            else
+            {
+                SearchPanel.Visibility = Visibility.Visible;
+                TxtSearchQuery.Focus();
+            }
+        }
+
+        private void BtnFindNext_Click(object sender, RoutedEventArgs e)
+        {
+            string query = TxtSearchQuery.Text;
+            if (string.IsNullOrEmpty(query)) return;
+
+            int startIndex = EditorTextBox.SelectionStart + EditorTextBox.SelectionLength;
+            if (startIndex >= EditorTextBox.Text.Length) startIndex = 0;
+
+            int matchIndex = EditorTextBox.Text.IndexOf(query, startIndex, StringComparison.OrdinalIgnoreCase);
+            if (matchIndex == -1 && startIndex > 0)
+                matchIndex = EditorTextBox.Text.IndexOf(query, 0, StringComparison.OrdinalIgnoreCase);
+
+            if (matchIndex >= 0)
+            {
+                EditorTextBox.Focus();
+                EditorTextBox.Select(matchIndex, query.Length);
+                int line = EditorTextBox.GetLineIndexFromCharacterIndex(matchIndex);
+                EditorTextBox.ScrollToLine(line);
+                SetEditorStatus($"Найдено на строке {line + 1}", "#60A5FA");
+            }
+            else
+            {
+                SetEditorStatus("Совпадений не найдено", "#F44336");
+            }
+        }
+
+        private void BtnReplaceAll_Click(object sender, RoutedEventArgs e)
+        {
+            string query = TxtSearchQuery.Text;
+            string replacement = TxtReplaceQuery.Text ?? "";
+            if (string.IsNullOrEmpty(query)) return;
+
+            string current = EditorTextBox.Text;
+            int count = (current.Length - current.Replace(query, "", StringComparison.OrdinalIgnoreCase).Length) / query.Length;
+
+            if (count > 0)
+            {
+                EditorTextBox.Text = current.Replace(query, replacement, StringComparison.OrdinalIgnoreCase);
+                SetEditorStatus($"Заменено совпадений: {count}", "#4ADE80");
+            }
+            else
+            {
+                SetEditorStatus("Совпадений для замены нет", "#F44336");
+            }
+        }
+
+        private void BtnToggleWordWrap_Click(object sender, RoutedEventArgs e)
+        {
+            if (EditorTextBox.TextWrapping == TextWrapping.Wrap)
+            {
+                EditorTextBox.TextWrapping = TextWrapping.NoWrap;
+                TxtWordWrapStatus.Text = "Перенос: Выкл";
+            }
+            else
+            {
+                EditorTextBox.TextWrapping = TextWrapping.Wrap;
+                TxtWordWrapStatus.Text = "Перенос: Вкл";
+            }
+        }
+
+        private void BtnZoomIn_Click(object sender, RoutedEventArgs e)
+        {
+            if (EditorTextBox.FontSize < 24)
+            {
+                EditorTextBox.FontSize += 1;
+                TxtLineNumbers.FontSize = EditorTextBox.FontSize;
+            }
+        }
+
+        private void BtnZoomOut_Click(object sender, RoutedEventArgs e)
+        {
+            if (EditorTextBox.FontSize > 10)
+            {
+                EditorTextBox.FontSize -= 1;
+                TxtLineNumbers.FontSize = EditorTextBox.FontSize;
+            }
+        }
+
+        private void BtnInsertSnippet_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is System.Windows.Controls.Button btn && btn.Tag is string snippet)
+            {
+                int caret = EditorTextBox.CaretIndex;
+                EditorTextBox.Text = EditorTextBox.Text.Insert(caret, snippet);
+                EditorTextBox.CaretIndex = caret + snippet.Length;
+                EditorTextBox.Focus();
+            }
+        }
+
+        private void BtnCommentLine_Click(object sender, RoutedEventArgs e)
+        {
+            int caret = EditorTextBox.CaretIndex;
+            int lineIdx = EditorTextBox.GetLineIndexFromCharacterIndex(caret);
+            var lines = EditorTextBox.Text.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+
+            if (lineIdx >= 0 && lineIdx < lines.Length)
+            {
+                string line = lines[lineIdx];
+                if (line.TrimStart().StartsWith("::"))
+                {
+                    int idx = line.IndexOf("::");
+                    lines[lineIdx] = line.Remove(idx, 2).TrimStart();
+                }
+                else
+                {
+                    lines[lineIdx] = ":: " + line;
+                }
+
+                EditorTextBox.Text = string.Join("\r\n", lines);
+                EditorTextBox.CaretIndex = Math.Min(caret + 3, EditorTextBox.Text.Length);
+                EditorTextBox.Focus();
+            }
+        }
+
+        private void BtnValidateBat_Click(object sender, RoutedEventArgs e)
+        {
+            AudioHelper.PlayClick();
+            string modName = string.IsNullOrWhiteSpace(TxtEditModName.Text) ? "Текущий скрипт" : TxtEditModName.Text.Trim();
+            var (isValid, errMsg) = _modManager.ValidateBatMod(modName, EditorTextBox.Text);
+
+            if (isValid)
+            {
+                SetEditorStatus("✓ Синтаксис корректен!", "#4ADE80");
+            }
+            else
+            {
+                SetEditorStatus("⚠ Ошибка в скрипте", "#F44336");
+                System.Windows.MessageBox.Show(errMsg, "Проверка синтаксиса Zapret", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        private void BtnCleanDomains_Click(object sender, RoutedEventArgs e)
+        {
+            AudioHelper.PlayClick();
+            var rawLines = EditorTextBox.Text.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+            var cleaned = new List<string>();
+
+            foreach (var raw in rawLines)
+            {
+                string d = raw.Trim().ToLowerInvariant();
+                if (string.IsNullOrWhiteSpace(d) || d.StartsWith("#") || d.StartsWith("//"))
+                    continue;
+
+                // Отрезаем протоколы (http://, https://)
+                if (d.StartsWith("http://")) d = d.Substring(7);
+                else if (d.StartsWith("https://")) d = d.Substring(8);
+
+                // Отрезаем www.
+                if (d.StartsWith("www.")) d = d.Substring(4);
+
+                // Отрезаем пути и параметры после слеша или порта
+                int slashIdx = d.IndexOf('/');
+                if (slashIdx > 0) d = d.Substring(0, slashIdx);
+
+                int colonIdx = d.IndexOf(':');
+                if (colonIdx > 0) d = d.Substring(0, colonIdx);
+
+                if (!string.IsNullOrWhiteSpace(d) && d.Contains('.'))
+                    cleaned.Add(d);
+            }
+
+            var uniqueSorted = cleaned.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x).ToList();
+            int removedCount = rawLines.Length - uniqueSorted.Count;
+
+            EditorTextBox.Text = string.Join("\r\n", uniqueSorted);
+            SetEditorStatus($"Готово! Доменов: {uniqueSorted.Count} (удалено мусора/дублей: {Math.Max(0, removedCount)})", "#60A5FA");
+        }
+
+        private void SetEditorStatus(string message, string hexColor)
+        {
+            TxtEditorStatusMsg.Text = message;
+            TxtEditorStatusMsg.Foreground = UIHelper.GetBrushFromHex(hexColor);
+        }
+
+        // =========================================================================
+        // ИМПОРТ И ЭКСПОРТ МОДОВ
+        // =========================================================================
 
         private async void BtnImportMod_Click(object sender, RoutedEventArgs e)
         {
@@ -398,11 +747,11 @@ namespace ZapretGUI.Views
                     }
 
                     var jsonPath = jsonFiles[0];
-                    var modRootPath = Path.GetDirectoryName(jsonPath);
+                    var modRootPath = Path.GetDirectoryName(jsonPath)!;
 
-                    var meta = System.Text.Json.JsonSerializer.Deserialize<ModMetaData>(
+                    var meta = JsonSerializer.Deserialize<ModMetaData>(
                         await File.ReadAllTextAsync(jsonPath),
-                        new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }
+                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
                     );
 
                     if (meta == null)
@@ -437,7 +786,7 @@ namespace ZapretGUI.Views
                         {
                             var relativePath = file.Substring(modRootPath.Length + 1);
                             var targetPath = Path.Combine(destPath, relativePath);
-                            Directory.CreateDirectory(Path.GetDirectoryName(targetPath));
+                            Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
                             File.Copy(file, targetPath, true);
                         }
                     });
@@ -488,7 +837,7 @@ namespace ZapretGUI.Views
                         if (File.Exists(saveFileDialog.FileName))
                             File.Delete(saveFileDialog.FileName);
 
-                        await Task.Run(() => System.IO.Compression.ZipFile.CreateFromDirectory(modFolderPath, saveFileDialog.FileName));
+                        await Task.Run(() => ZipFile.CreateFromDirectory(modFolderPath, saveFileDialog.FileName));
 
                         System.Windows.MessageBox.Show($"Мод '{mod.Meta.Name}' успешно экспортирован и готов к публикации!", "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
                     }
