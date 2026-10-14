@@ -32,7 +32,6 @@ namespace ZapretGUI.Views
         private Action? _pendingConfirmAction;
         private UIElement? _currentConfirmBlurTarget;
 
-        // Live-мониторинг файлов модов и списков доменов
         private FileSystemWatcher? _modsWatcher;
         private CancellationTokenSource? _watcherDebounceCts;
         private bool _isInternalFileOperation = false;
@@ -49,7 +48,54 @@ namespace ZapretGUI.Views
 
             SetupLiveFileWatcher();
 
+            SettingsManager.SettingsSaved += ApplyCompactLayout;
+            ApplyCompactLayout();
+
             _ = SwitchTabAsync(ModType.BatStrategy);
+        }
+
+        /// <summary>
+        /// Адаптирует вкладку Модификаций под Минималистичный интерфейс (CompactMode).
+        /// </summary>
+        private void ApplyCompactLayout()
+        {
+            Dispatcher.Invoke(() =>
+            {
+                bool isCompact = SettingsManager.Current.CompactMode;
+
+                // 1. Внешние отступы и подзаголовок категории
+                RootModsGrid.Margin = isCompact ? new Thickness(12, 10, 12, 10) : new Thickness(20);
+                TxtCategoryTitle.FontSize = isCompact ? 18 : 22;
+                TxtCategoryDesc.Visibility = isCompact ? Visibility.Collapsed : Visibility.Visible;
+                HeaderPanel.Margin = isCompact ? new Thickness(0, 0, 0, 4) : new Thickness(0, 0, 0, 10);
+
+                // 2. Трансформация левого меню категорий в компактный док с иконками
+                SidebarColumn.Width = new GridLength(isCompact ? 54 : 210);
+                SpacerColumn.Width = new GridLength(isCompact ? 12 : 18);
+                ModsSidebarBorder.Padding = isCompact ? new Thickness(6, 10, 6, 10) : new Thickness(12);
+
+                TxtSidebarHeader.Visibility = isCompact ? Visibility.Collapsed : Visibility.Visible;
+                TxtStrategies.Visibility = isCompact ? Visibility.Collapsed : Visibility.Visible;
+                TxtDomainLists.Visibility = isCompact ? Visibility.Collapsed : Visibility.Visible;
+                TxtGuide.Visibility = isCompact ? Visibility.Collapsed : Visibility.Visible;
+
+                IconStrategies.Margin = isCompact ? new Thickness(0) : new Thickness(0, 0, 10, 0);
+                IconDomainLists.Margin = isCompact ? new Thickness(0) : new Thickness(0, 0, 10, 0);
+                IconGuide.Margin = isCompact ? new Thickness(0) : new Thickness(0, 0, 10, 0);
+
+                BtnStrategies.HorizontalContentAlignment = isCompact ? System.Windows.HorizontalAlignment.Center : System.Windows.HorizontalAlignment.Left;
+                BtnDomainLists.HorizontalContentAlignment = isCompact ? System.Windows.HorizontalAlignment.Center : System.Windows.HorizontalAlignment.Left;
+                BtnGuide.HorizontalContentAlignment = isCompact ? System.Windows.HorizontalAlignment.Center : System.Windows.HorizontalAlignment.Left;
+
+                // 3. Компактные подписи кнопок и скрытие многострочных описаний в карточках модов
+                TxtBtnDisableAll.Text = isCompact ? "Откл. всё" : "Отключить всё";
+                TxtBtnImport.Text = isCompact ? "Импорт" : "Импорт (.zip)";
+                this.Resources["ModDetailsVisibility"] = isCompact ? Visibility.Collapsed : Visibility.Visible;
+
+                // 4. Адаптация окна редактора модов под размер компактного окна
+                EditorContentBorder.Padding = isCompact ? new Thickness(12) : new Thickness(18);
+                EditorContentBorder.Margin = isCompact ? new Thickness(4) : new Thickness(10);
+            });
         }
 
         private void SetupLiveFileWatcher()
@@ -542,7 +588,7 @@ namespace ZapretGUI.Views
         }
 
         // =========================================================================
-        // ПРОКАЧАННЫЙ РЕДАКТОР МОДОВ (АНИМАЦИИ ВЫПАДАЮЩИХ МЕНЮШЕК + ФИРМЕННЫЕ ОКНА)
+        // ПРОКАЧАННЫЙ РЕДАКТОР МОДОВ
         // =========================================================================
 
         private void BtnEditMod_Click(object sender, RoutedEventArgs e)
@@ -575,6 +621,10 @@ namespace ZapretGUI.Views
                 TxtEditorTitle.Text = $"Редактор: {mod.Meta.Name}";
                 TxtEditorSubTitle.Text = $"Уникальный ID: {mod.Id} • Файл: {fileName}";
                 TxtEditorStatusMsg.Text = "";
+
+                // В минималистичном режиме сворачиваем паспорт мода по умолчанию, чтобы оставить максимум места для кода
+                MetaEditorPanel.Visibility = SettingsManager.Current.CompactMode ? Visibility.Collapsed : Visibility.Visible;
+                MetaEditorPanel.Opacity = 1;
 
                 BatToolsPanel.Visibility = isBat ? Visibility.Visible : Visibility.Collapsed;
                 SnippetsBar.Visibility = isBat ? Visibility.Visible : Visibility.Collapsed;
@@ -626,7 +676,6 @@ namespace ZapretGUI.Views
                 _isInternalFileOperation = true;
                 bool wasActiveDomainList = _currentEditingMod.IsActive && _currentTab == ModType.DomainList;
 
-                // 1. Обновляем метаданные мода (mod.json) с сохранением UniqueId
                 _currentEditingMod.Meta.UniqueId = _currentEditingMod.Id;
                 _currentEditingMod.Meta.Name = editedModName;
                 _currentEditingMod.Meta.Author = string.IsNullOrWhiteSpace(TxtEditModAuthor.Text) ? "Аноним" : TxtEditModAuthor.Text.Trim();
@@ -639,10 +688,8 @@ namespace ZapretGUI.Views
                     await File.WriteAllTextAsync(_currentEditingJsonPath, jsonContent);
                 }
 
-                // 2. Сохраняем сам скрипт или список
                 await File.WriteAllTextAsync(_currentEditingFilePath, EditorTextBox.Text);
 
-                // 3. Применяем изменения и обновляем карточки в UI
                 await SaveAndApplyModsAsync();
                 await LoadCurrentModsAsync();
 

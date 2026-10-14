@@ -357,7 +357,6 @@ namespace ZapretGUI
     {
         private readonly TrayIconManager _trayIconManager;
 
-        // Делаем представления Nullable. Они будут создаваться только при клике.
         private Views.HomeView _homeView;
         private Views.SettingsView? _settingsView;
         private Views.DiagnosticsView? _diagnosticsView;
@@ -370,7 +369,6 @@ namespace ZapretGUI
 
             _ = InitializeModsAsync();
 
-            // Загружаем только главную страницу при старте
             _homeView = new Views.HomeView();
             MainContentContainer.Content = _homeView;
 
@@ -407,7 +405,7 @@ namespace ZapretGUI
                     if (!string.IsNullOrEmpty(appUpdate.DownloadUrl))
                     {
                         try { await Core.UpdateManager.ApplyAppUpdateAsync(appUpdate.DownloadUrl, () => System.Windows.Application.Current.Shutdown()); }
-                        catch (Exception ex) { new Views.UpdateWindow("Ошибка обновления", $"Не удалось обновить программу: {ex.Message}", "ОК").ShowDialog(); }
+                        catch (Exception ex) { UIHelper.ShowAlert("Ошибка обновления", $"Не удалось обновить программу: {ex.Message}", isError: true); }
                     }
                     else if (!string.IsNullOrEmpty(appUpdate.ReleaseUrl))
                     {
@@ -431,9 +429,9 @@ namespace ZapretGUI
                         await Core.UpdateManager.InstallCoreAsync(zapretUpdate, stopServicesAction, progress);
                         SettingsManager.Current.ZapretCoreVersion = zapretUpdate.Version;
                         SettingsManager.Save();
-                        new Views.UpdateWindow("Успех", $"Модуль Zapret успешно обновлен до версии {zapretUpdate.Version}!", "ОК").ShowDialog();
+                        UIHelper.ShowAlert("Успех", $"Модуль Zapret успешно обновлен до версии {zapretUpdate.Version}!");
                     }
-                    catch (Exception ex) { new Views.UpdateWindow("Ошибка", $"Ошибка при установке обновления Zapret: {ex.Message}", "ОК").ShowDialog(); }
+                    catch (Exception ex) { UIHelper.ShowAlert("Ошибка", $"Ошибка при установке обновления Zapret: {ex.Message}", isError: true); }
                 }
             }
 
@@ -449,14 +447,12 @@ namespace ZapretGUI
                         await Core.UpdateManager.InstallCoreAsync(proxyUpdate, stopServicesAction, progress);
                         SettingsManager.Current.TgProxyCoreVersion = proxyUpdate.Version;
                         SettingsManager.Save();
-                        new Views.UpdateWindow("Успех", $"Модуль TgWsProxy успешно обновлен до версии {proxyUpdate.Version}!", "ОК").ShowDialog();
+                        UIHelper.ShowAlert("Успех", $"Модуль TgWsProxy успешно обновлен до версии {proxyUpdate.Version}!");
                     }
-                    catch (Exception ex) { new Views.UpdateWindow("Ошибка", $"Ошибка при установке обновления TgWsProxy: {ex.Message}", "ОК").ShowDialog(); }
+                    catch (Exception ex) { UIHelper.ShowAlert("Ошибка", $"Ошибка при установке обновления TgWsProxy: {ex.Message}", isError: true); }
                 }
             }
         }
-
-        // --- ЛЕНИВАЯ ЗАГРУЗКА ВКЛАДОК ---
 
         private void BtnHome_Click(object sender, RoutedEventArgs e)
         {
@@ -511,11 +507,16 @@ namespace ZapretGUI
             {
                 element.RenderTransform = new System.Windows.Media.TranslateTransform();
 
-                var fadeIn = new System.Windows.Media.Animation.DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(300)) 
-                    { EasingFunction = new System.Windows.Media.Animation.CubicEase 
-                        { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut } 
-                    };
-                var slideUp = new System.Windows.Media.Animation.DoubleAnimation(15, 0, TimeSpan.FromMilliseconds(300)) { EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut } };
+                var fadeIn = new System.Windows.Media.Animation.DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(300))
+                {
+                    EasingFunction = new System.Windows.Media.Animation.CubicEase
+                    { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut }
+                };
+                var slideUp = new System.Windows.Media.Animation.DoubleAnimation(15, 0, TimeSpan.FromMilliseconds(300))
+                {
+                    EasingFunction = new System.Windows.Media.Animation.CubicEase
+                    { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut }
+                };
 
                 element.BeginAnimation(UIElement.OpacityProperty, fadeIn);
                 element.RenderTransform.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, slideUp);
@@ -526,12 +527,12 @@ namespace ZapretGUI
         {
             var zColor = isZapretRunning ? GetSuccessColor() : GetErrorColor();
             ZapretDot.Fill = zColor;
-            if (ZapretDot.Effect is System.Windows.Media.Effects.DropShadowEffect zShadow) 
+            if (ZapretDot.Effect is System.Windows.Media.Effects.DropShadowEffect zShadow)
                 zShadow.Color = zColor.Color;
 
             var pColor = isProxyRunning ? GetSuccessColor() : GetErrorColor();
             TgProxyDot.Fill = pColor;
-            if (TgProxyDot.Effect is System.Windows.Media.Effects.DropShadowEffect pShadow) 
+            if (TgProxyDot.Effect is System.Windows.Media.Effects.DropShadowEffect pShadow)
                 pShadow.Color = pColor.Color;
         }
 
@@ -539,7 +540,7 @@ namespace ZapretGUI
         {
             var nColor = isOnline ? GetSuccessColor() : GetErrorColor();
             NetworkDot.Fill = nColor;
-            if (NetworkDot.Effect is System.Windows.Media.Effects.DropShadowEffect nShadow) 
+            if (NetworkDot.Effect is System.Windows.Media.Effects.DropShadowEffect nShadow)
                 nShadow.Color = nColor.Color;
         }
 
@@ -718,6 +719,51 @@ namespace ZapretGUI.Core
                     scale.BeginAnimation(ScaleTransform.ScaleYProperty, scaleDown);
                     translate.BeginAnimation(TranslateTransform.YProperty, slideDown);
                 }
+            }
+        }
+
+        public static void ToggleExpandPanel(FrameworkElement panel, bool show, Action? onCompleted = null)
+        {
+            panel.RenderTransformOrigin = new System.Windows.Point(0.5, 0);
+            if (!(panel.RenderTransform is TransformGroup group) || group.Children.Count < 2)
+            {
+                group = new TransformGroup();
+                group.Children.Add(new ScaleTransform(1, show ? 0.85 : 1));
+                group.Children.Add(new TranslateTransform(0, show ? -8 : 0));
+                panel.RenderTransform = group;
+            }
+
+            var scale = (ScaleTransform)group.Children[0];
+            var translate = (TranslateTransform)group.Children[1];
+
+            if (show)
+            {
+                panel.Visibility = Visibility.Visible;
+                var fadeIn = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(220)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
+                var scaleIn = new DoubleAnimation(0.85, 1, TimeSpan.FromMilliseconds(220)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
+                var slideIn = new DoubleAnimation(-8, 0, TimeSpan.FromMilliseconds(220)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
+
+                fadeIn.Completed += (s, e) => onCompleted?.Invoke();
+
+                panel.BeginAnimation(UIElement.OpacityProperty, fadeIn);
+                scale.BeginAnimation(ScaleTransform.ScaleYProperty, scaleIn);
+                translate.BeginAnimation(TranslateTransform.YProperty, slideIn);
+            }
+            else
+            {
+                var fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(160)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn } };
+                var scaleOut = new DoubleAnimation(1, 0.85, TimeSpan.FromMilliseconds(160)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn } };
+                var slideOut = new DoubleAnimation(0, -8, TimeSpan.FromMilliseconds(160)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn } };
+
+                fadeOut.Completed += (s, e) =>
+                {
+                    panel.Visibility = Visibility.Collapsed;
+                    onCompleted?.Invoke();
+                };
+
+                panel.BeginAnimation(UIElement.OpacityProperty, fadeOut);
+                scale.BeginAnimation(ScaleTransform.ScaleYProperty, scaleOut);
+                translate.BeginAnimation(TranslateTransform.YProperty, slideOut);
             }
         }
 
@@ -2300,8 +2346,10 @@ namespace ZapretGUI.Core
 // ФАЙЛ: Core\UIHelper.cs
 ////////////////////////////////////////////////////////////////////////////////
 
+using System;
 using System.Windows;
 using System.Windows.Media;
+using ZapretGUI.Views;
 
 namespace ZapretGUI.Core
 {
@@ -2314,9 +2362,10 @@ namespace ZapretGUI.Core
             return (SolidColorBrush)_brushConverter.ConvertFromString(hex)!;
         }
 
-        public static T? FindParent<T>(DependencyObject child, string? name = null) where T : FrameworkElement
+        public static T? FindParent<T>(DependencyObject? child, string? name = null) where T : FrameworkElement
         {
-            DependencyObject parent = VisualTreeHelper.GetParent(child);
+            if (child == null) return null;
+            DependencyObject? parent = VisualTreeHelper.GetParent(child);
             while (parent != null)
             {
                 if (parent is T typed && (name == null || typed.Name == name))
@@ -2324,6 +2373,52 @@ namespace ZapretGUI.Core
                 parent = VisualTreeHelper.GetParent(parent);
             }
             return null;
+        }
+
+        public static void ShowAlert(string title, string message, bool isError = false)
+        {
+            System.Windows.Application.Current.Dispatcher.Invoke(() =>
+            {
+                string accent = isError ? "#F44336" : "#107C10";
+                string icon = isError ? "\xE783" : "\xE946";
+
+                var mainWin = System.Windows.Application.Current.MainWindow;
+                if (mainWin != null && mainWin.IsVisible)
+                    AnimationHelper.ApplyBlur(mainWin, 8, TimeSpan.FromSeconds(0.15));
+
+                var dlg = new UpdateWindow(title, message, "ОК", showCancel: false, accentHex: accent, iconGlyph: icon);
+                if (mainWin != null && mainWin.IsVisible)
+                    dlg.Owner = mainWin;
+
+                dlg.ShowDialog();
+
+                if (mainWin != null && mainWin.IsVisible)
+                    AnimationHelper.RemoveBlur(mainWin, TimeSpan.FromSeconds(0.15));
+            });
+        }
+
+        public static bool ShowConfirm(string title, string message, string confirmText = "Да", bool isDanger = false)
+        {
+            return System.Windows.Application.Current.Dispatcher.Invoke(() =>
+            {
+                string accent = isDanger ? "#F44336" : "#107C10";
+                string icon = isDanger ? "\xE7BA" : "\xE897";
+
+                var mainWin = System.Windows.Application.Current.MainWindow;
+                if (mainWin != null && mainWin.IsVisible)
+                    AnimationHelper.ApplyBlur(mainWin, 8, TimeSpan.FromSeconds(0.15));
+
+                var dlg = new UpdateWindow(title, message, confirmText, showCancel: true, accentHex: accent, iconGlyph: icon);
+                if (mainWin != null && mainWin.IsVisible)
+                    dlg.Owner = mainWin;
+
+                dlg.ShowDialog();
+
+                if (mainWin != null && mainWin.IsVisible)
+                    AnimationHelper.RemoveBlur(mainWin, TimeSpan.FromSeconds(0.15));
+
+                return dlg.Result;
+            });
         }
     }
 }
@@ -4695,12 +4790,12 @@ namespace ZapretGUI.Views
                     var textRange = new System.Windows.Documents.TextRange(LogDocument.ContentStart, LogDocument.ContentEnd);
                     File.WriteAllText(saveFileDialog.FileName, textRange.Text);
 
-                    System.Windows.MessageBox.Show("Лог успешно сохранен!", "Экспорт", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
+                    UIHelper.ShowAlert("Экспорт завершен", "Лог событий успешно сохранен в файл!");
                 }
             }
             catch (Exception ex)
             {
-                System.Windows.MessageBox.Show($"Ошибка при экспорте лога: {ex.Message}", "Ошибка", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+                UIHelper.ShowAlert("Ошибка экспорта", $"Ошибка при экспорте лога: {ex.Message}", isError: true);
             }
         }
 
@@ -5660,27 +5755,30 @@ namespace ZapretGUI.Views
             </Border>
         </Grid>
 
-        <!-- ОКНО ПОДТВЕРЖДЕНИЯ -->
+        <!-- ОКНО ПОДТВЕРЖДЕНИЯ И УВЕДОМЛЕНИЙ -->
         <Grid x:Name="ConfirmOverlay" Background="#CC000000" Visibility="Collapsed" Panel.ZIndex="300">
-            <Border x:Name="ConfirmContentBorder" Background="#141414" BorderBrush="#2A2A2A" BorderThickness="1" CornerRadius="12" Width="400" Padding="20" HorizontalAlignment="Center" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
+            <Border x:Name="ConfirmContentBorder" Background="#141414" BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="1" CornerRadius="12" Width="420" Padding="22" HorizontalAlignment="Center" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
                 <Border.RenderTransform>
                     <TransformGroup>
                         <ScaleTransform ScaleX="0.95" ScaleY="0.95"/>
                         <TranslateTransform Y="10"/>
                     </TransformGroup>
                 </Border.RenderTransform>
+                <Border.Effect>
+                    <DropShadowEffect Color="Black" BlurRadius="35" ShadowDepth="10" Opacity="0.8"/>
+                </Border.Effect>
                 <StackPanel>
                     <TextBlock x:Name="TxtConfirmTitle" Text="Подтверждение" FontSize="18" FontWeight="Bold" Margin="0,0,0,10"/>
-                    <TextBlock x:Name="TxtConfirmMessage" Text="Вы уверены?" Foreground="#CCCCCC" FontSize="14" TextWrapping="Wrap" Margin="0,0,0,20"/>
+                    <TextBlock x:Name="TxtConfirmMessage" Text="Вы уверены?" Foreground="#CCCCCC" FontSize="14" LineHeight="20" TextWrapping="Wrap" Margin="0,0,0,22"/>
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                        <Button Content="Отмена" Background="Transparent" Foreground="#A0A0A0" BorderBrush="#333333" BorderThickness="1" Padding="15,6" Margin="0,0,10,0" Cursor="Hand" Click="BtnCancelConfirm_Click">
+                        <Button x:Name="BtnCancelConfirm" Content="Отмена" Background="Transparent" Foreground="#A0A0A0" BorderBrush="#333333" BorderThickness="1" Padding="15,6" Margin="0,0,10,0" Cursor="Hand" Click="BtnCancelConfirm_Click">
                             <Button.Resources>
                                 <Style TargetType="Border">
                                     <Setter Property="CornerRadius" Value="6"/>
                                 </Style>
                             </Button.Resources>
                         </Button>
-                        <Button x:Name="BtnExecuteConfirm" Content="Да" Background="#F44336" Foreground="White" BorderThickness="0" Padding="15,6" Cursor="Hand" Click="BtnExecuteConfirm_Click">
+                        <Button x:Name="BtnExecuteConfirm" Content="Да" Background="#F44336" Foreground="White" FontWeight="SemiBold" BorderThickness="0" Padding="16,6" Cursor="Hand" Click="BtnExecuteConfirm_Click">
                             <Button.Resources>
                                 <Style TargetType="Border">
                                     <Setter Property="CornerRadius" Value="6"/>
@@ -5731,6 +5829,7 @@ namespace ZapretGUI.Views
         private UIModItem? _currentEditingMod = null;
 
         private Action? _pendingConfirmAction;
+        private UIElement? _currentConfirmBlurTarget;
 
         // Live-мониторинг файлов модов и списков доменов
         private FileSystemWatcher? _modsWatcher;
@@ -5785,7 +5884,6 @@ namespace ZapretGUI.Views
                     await Task.Delay(350, token);
                     if (token.IsCancellationRequested) return;
 
-                    // В прямом эфире пересобираем list-general.txt и синхронизируем батники
                     await _modManager.ApplyListModsAsync();
                     await _modManager.SyncActiveBatModsAsync();
 
@@ -5993,7 +6091,7 @@ namespace ZapretGUI.Views
             string id = ModManager.SanitizeModId(TxtNewModId.Text);
             if (string.IsNullOrEmpty(id) || _modManager.IsModIdTaken(id))
             {
-                System.Windows.MessageBox.Show("Мод с таким ID уже существует в системе (в стратегиях или списках)! Нажмите 🎲 для генерации уникального ID.", "Конфликт ID", MessageBoxButton.OK, MessageBoxImage.Warning);
+                ShowAlertDialog("Конфликт ID", "Мод с таким ID уже существует в системе (в стратегиях или списках)! Нажмите 🎲 для генерации уникального ID.", isError: true);
                 return;
             }
 
@@ -6037,7 +6135,7 @@ namespace ZapretGUI.Views
             }
             catch (Exception ex)
             {
-                System.Windows.MessageBox.Show($"Ошибка при создании мода: {ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                ShowAlertDialog("Ошибка", $"Ошибка при создании мода: {ex.Message}", isError: true);
             }
             finally
             {
@@ -6110,27 +6208,58 @@ namespace ZapretGUI.Views
             }
         }
 
+        // =========================================================================
+        // ФИРМЕННЫЕ ДИАЛОГОВЫЕ ОКНА ВМЕСТО СИСТЕМНЫХ MESSAGEBOX
+        // =========================================================================
+
+        private UIElement GetCurrentBlurTarget()
+        {
+            if (EditorOverlay.Visibility == Visibility.Visible)
+                return EditorContentBorder;
+            if (CreateModOverlay.Visibility == Visibility.Visible)
+                return CreateContentBorder;
+            return ContentGrid;
+        }
+
         private void ShowConfirmDialog(string title, string message, string confirmBtnText, System.Windows.Media.Brush confirmBtnBrush, Action onConfirm)
         {
             TxtConfirmTitle.Text = title;
             TxtConfirmMessage.Text = message;
+            BtnCancelConfirm.Visibility = Visibility.Visible;
             BtnExecuteConfirm.Content = confirmBtnText;
             BtnExecuteConfirm.Background = confirmBtnBrush;
             _pendingConfirmAction = onConfirm;
-            AnimationHelper.ShowOverlay(ConfirmOverlay, ConfirmContentBorder, ContentGrid);
+
+            _currentConfirmBlurTarget = GetCurrentBlurTarget();
+            AnimationHelper.ShowOverlay(ConfirmOverlay, ConfirmContentBorder, _currentConfirmBlurTarget);
+        }
+
+        private void ShowAlertDialog(string title, string message, bool isError = false)
+        {
+            TxtConfirmTitle.Text = title;
+            TxtConfirmMessage.Text = message;
+            BtnCancelConfirm.Visibility = Visibility.Collapsed;
+            BtnExecuteConfirm.Content = "ОК";
+            BtnExecuteConfirm.Background = isError
+                ? UIHelper.GetBrushFromHex("#F44336")
+                : (System.Windows.Media.Brush)System.Windows.Application.Current.Resources["BrandSuccessBrush"];
+            _pendingConfirmAction = null;
+
+            _currentConfirmBlurTarget = GetCurrentBlurTarget();
+            AnimationHelper.ShowOverlay(ConfirmOverlay, ConfirmContentBorder, _currentConfirmBlurTarget);
         }
 
         private void BtnCancelConfirm_Click(object sender, RoutedEventArgs e)
         {
             AudioHelper.PlayClick();
-            AnimationHelper.HideOverlay(ConfirmOverlay, ConfirmContentBorder, ContentGrid);
+            AnimationHelper.HideOverlay(ConfirmOverlay, ConfirmContentBorder, _currentConfirmBlurTarget);
             _pendingConfirmAction = null;
         }
 
         private void BtnExecuteConfirm_Click(object sender, RoutedEventArgs e)
         {
             AudioHelper.PlayClick();
-            AnimationHelper.HideOverlay(ConfirmOverlay, ConfirmContentBorder, ContentGrid);
+            AnimationHelper.HideOverlay(ConfirmOverlay, ConfirmContentBorder, _currentConfirmBlurTarget);
             var action = _pendingConfirmAction;
             _pendingConfirmAction = null;
             action?.Invoke();
@@ -6169,7 +6298,7 @@ namespace ZapretGUI.Views
             {
                 ShowConfirmDialog(
                     "Удаление мода",
-                    $"Удалить мод '{mod.Meta.Name}' навсегда?\nЭто удалит все файлы мода с диска.",
+                    $"Удалить мод «{mod.Meta.Name}» навсегда?\nЭто удалит все файлы мода с диска.",
                     "Удалить",
                     UIHelper.GetBrushFromHex("#F44336"),
                     async () => {
@@ -6201,7 +6330,7 @@ namespace ZapretGUI.Views
                         }
                         catch (Exception ex)
                         {
-                            System.Windows.MessageBox.Show($"Не удалось удалить мод.\nОшибка: {ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                            ShowAlertDialog("Ошибка удаления", $"Не удалось удалить мод.\nОшибка: {ex.Message}", isError: true);
                         }
                         finally
                         {
@@ -6212,7 +6341,7 @@ namespace ZapretGUI.Views
         }
 
         // =========================================================================
-        // ПРОКАЧАННЫЙ РЕДАКТОР МОДОВ (МЕТАДАННЫЕ + ИНСТРУМЕНТЫ IDE)
+        // ПРОКАЧАННЫЙ РЕДАКТОР МОДОВ (АНИМАЦИИ ВЫПАДАЮЩИХ МЕНЮШЕК + ФИРМЕННЫЕ ОКНА)
         // =========================================================================
 
         private void BtnEditMod_Click(object sender, RoutedEventArgs e)
@@ -6233,7 +6362,7 @@ namespace ZapretGUI.Views
 
                 if (!File.Exists(_currentEditingFilePath))
                 {
-                    System.Windows.MessageBox.Show($"Файл {fileName} не найден в папке мода!", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                    ShowAlertDialog("Ошибка", $"Файл {fileName} не найден в папке мода!", isError: true);
                     return;
                 }
 
@@ -6260,9 +6389,8 @@ namespace ZapretGUI.Views
         private void BtnToggleMetaPanel_Click(object sender, RoutedEventArgs e)
         {
             AudioHelper.PlayClick();
-            MetaEditorPanel.Visibility = MetaEditorPanel.Visibility == Visibility.Visible
-                ? Visibility.Collapsed
-                : Visibility.Visible;
+            bool shouldShow = MetaEditorPanel.Visibility != Visibility.Visible;
+            AnimationHelper.ToggleExpandPanel(MetaEditorPanel, shouldShow);
         }
 
         private async void BtnSaveEditor_Click(object sender, RoutedEventArgs e)
@@ -6271,31 +6399,31 @@ namespace ZapretGUI.Views
             await SaveEditorChangesAsync();
         }
 
-        private async Task SaveEditorChangesAsync()
+        private async Task SaveEditorChangesAsync(bool bypassSyntaxWarning = false)
         {
             if (_currentEditingMod == null) return;
+
+            string editedModName = string.IsNullOrWhiteSpace(TxtEditModName.Text) ? _currentEditingMod.Id : TxtEditModName.Text.Trim();
+
+            if (_currentTab == ModType.BatStrategy && !bypassSyntaxWarning)
+            {
+                var (isValid, errMsg) = _modManager.ValidateBatMod(editedModName, EditorTextBox.Text);
+                if (!isValid)
+                {
+                    ShowConfirmDialog(
+                        "Предупреждение синтаксиса Zapret",
+                        $"В скрипте обнаружена проблема:\n\n{errMsg}\n\nВсё равно сохранить файл?",
+                        "Сохранить всё равно",
+                        UIHelper.GetBrushFromHex("#F59E0B"),
+                        async () => await SaveEditorChangesAsync(bypassSyntaxWarning: true));
+                    return;
+                }
+            }
 
             try
             {
                 _isInternalFileOperation = true;
                 bool wasActiveDomainList = _currentEditingMod.IsActive && _currentTab == ModType.DomainList;
-                string editedModName = string.IsNullOrWhiteSpace(TxtEditModName.Text) ? _currentEditingMod.Id : TxtEditModName.Text.Trim();
-
-                if (_currentTab == ModType.BatStrategy)
-                {
-                    var (isValid, errMsg) = _modManager.ValidateBatMod(editedModName, EditorTextBox.Text);
-                    if (!isValid)
-                    {
-                        var res = System.Windows.MessageBox.Show(
-                            $"В скрипте обнаружена проблема:\n\n{errMsg}\n\nВсё равно сохранить файл?",
-                            "Предупреждение синтаксиса Zapret",
-                            MessageBoxButton.YesNo,
-                            MessageBoxImage.Warning);
-
-                        if (res == MessageBoxResult.No)
-                            return;
-                    }
-                }
 
                 // 1. Обновляем метаданные мода (mod.json) с сохранением UniqueId
                 _currentEditingMod.Meta.UniqueId = _currentEditingMod.Id;
@@ -6326,7 +6454,7 @@ namespace ZapretGUI.Views
             }
             catch (Exception ex)
             {
-                System.Windows.MessageBox.Show($"Ошибка сохранения: {ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                ShowAlertDialog("Ошибка сохранения", $"Ошибка сохранения: {ex.Message}", isError: true);
             }
             finally
             {
@@ -6411,16 +6539,14 @@ namespace ZapretGUI.Views
         private void BtnToggleSearch_Click(object sender, RoutedEventArgs e)
         {
             AudioHelper.PlayClick();
-            if (SearchPanel.Visibility == Visibility.Visible)
+            bool shouldShow = SearchPanel.Visibility != Visibility.Visible;
+            AnimationHelper.ToggleExpandPanel(SearchPanel, shouldShow, () =>
             {
-                SearchPanel.Visibility = Visibility.Collapsed;
-                EditorTextBox.Focus();
-            }
-            else
-            {
-                SearchPanel.Visibility = Visibility.Visible;
-                TxtSearchQuery.Focus();
-            }
+                if (shouldShow)
+                    TxtSearchQuery.Focus();
+                else
+                    EditorTextBox.Focus();
+            });
         }
 
         private void BtnFindNext_Click(object sender, RoutedEventArgs e)
@@ -6550,7 +6676,7 @@ namespace ZapretGUI.Views
             else
             {
                 SetEditorStatus("⚠ Ошибка в скрипте", "#F44336");
-                System.Windows.MessageBox.Show(errMsg, "Проверка синтаксиса Zapret", MessageBoxButton.OK, MessageBoxImage.Warning);
+                ShowAlertDialog("Проверка синтаксиса Zapret", errMsg, isError: true);
             }
         }
 
@@ -6620,7 +6746,7 @@ namespace ZapretGUI.Views
                     string[] jsonFiles = Directory.GetFiles(tempDir, "mod.json", SearchOption.AllDirectories);
                     if (jsonFiles.Length == 0)
                     {
-                        System.Windows.MessageBox.Show("В архиве не найден файл mod.json. Убедитесь, что это корректный мод.", "Ошибка импорта", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        ShowAlertDialog("Ошибка импорта", "В архиве не найден файл mod.json. Убедитесь, что это корректный мод.", isError: true);
                         return;
                     }
 
@@ -6634,11 +6760,10 @@ namespace ZapretGUI.Views
 
                     if (meta == null)
                     {
-                        System.Windows.MessageBox.Show("Файл mod.json поврежден.", "Ошибка импорта", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        ShowAlertDialog("Ошибка импорта", "Файл mod.json поврежден.", isError: true);
                         return;
                     }
 
-                    // Берем UniqueId из паспорта мода (или генерируем из имени) и проверяем на глобальную уникальность
                     string baseCandidate = !string.IsNullOrWhiteSpace(meta.UniqueId)
                         ? ModManager.SanitizeModId(meta.UniqueId)
                         : ModManager.SanitizeModId(meta.Name);
@@ -6670,13 +6795,13 @@ namespace ZapretGUI.Views
                     });
 
                     if ((meta.IsBatStrategy && _currentTab != ModType.BatStrategy) || (!meta.IsBatStrategy && _currentTab != ModType.DomainList))
-                        System.Windows.MessageBox.Show($"Мод '{meta.Name}' (ID: {finalUniqueId}) успешно установлен в соседнюю категорию.", "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
+                        ShowAlertDialog("Импорт завершен", $"Мод «{meta.Name}» (ID: {finalUniqueId}) успешно установлен в соседнюю категорию.");
                     else
                         await LoadCurrentModsAsync();
                 }
                 catch (Exception ex)
                 {
-                    System.Windows.MessageBox.Show($"Ошибка при импорте мода:\n{ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                    ShowAlertDialog("Ошибка импорта", $"Ошибка при импорте мода:\n{ex.Message}", isError: true);
                 }
                 finally
                 {
@@ -6709,7 +6834,7 @@ namespace ZapretGUI.Views
 
                         if (!Directory.Exists(modFolderPath))
                         {
-                            System.Windows.MessageBox.Show("Папка мода не найдена на диске!", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                            ShowAlertDialog("Ошибка", "Папка мода не найдена на диске!", isError: true);
                             return;
                         }
 
@@ -6718,11 +6843,11 @@ namespace ZapretGUI.Views
 
                         await Task.Run(() => ZipFile.CreateFromDirectory(modFolderPath, saveFileDialog.FileName));
 
-                        System.Windows.MessageBox.Show($"Мод '{mod.Meta.Name}' (ID: {mod.Id}) успешно экспортирован!", "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
+                        ShowAlertDialog("Экспорт завершен", $"Мод «{mod.Meta.Name}» (ID: {mod.Id}) успешно экспортирован и готов к отправке!");
                     }
                     catch (Exception ex)
                     {
-                        System.Windows.MessageBox.Show($"Ошибка при экспорте мода:\n{ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                        ShowAlertDialog("Ошибка экспорта", $"Ошибка при экспорте мода:\n{ex.Message}", isError: true);
                     }
                 }
             }
@@ -7127,7 +7252,7 @@ namespace ZapretGUI.Views
             }
             catch (Exception ex)
             {
-                System.Windows.MessageBox.Show($"Не удалось сохранить настройки: {ex.Message}", "Ошибка", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+                UIHelper.ShowAlert("Ошибка сохранения", $"Не удалось сохранить настройки: {ex.Message}", isError: true);
             }
         }
 
@@ -7141,33 +7266,36 @@ namespace ZapretGUI.Views
             }
             catch (Exception ex)
             {
-                System.Windows.MessageBox.Show($"Не удалось открыть папку: {ex.Message}", "Ошибка", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
+                UIHelper.ShowAlert("Ошибка", $"Не удалось открыть папку: {ex.Message}", isError: true);
             }
         }
 
         private void BtnResetSettings_Click(object sender, RoutedEventArgs e)
         {
-            var result = System.Windows.MessageBox.Show(
+            var confirmed = UIHelper.ShowConfirm(
+                "Сброс настроек",
                 "Вы уверены, что хотите вернуть все настройки к состоянию по умолчанию? Это действие нельзя отменить.",
-                "Сброс настроек", System.Windows.MessageBoxButton.YesNo, System.Windows.MessageBoxImage.Warning);
+                confirmText: "Сбросить",
+                isDanger: true);
 
-            if (result == System.Windows.MessageBoxResult.Yes)
+            if (confirmed)
             {
                 try
                 {
                     var settingsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.json");
-                    if (File.Exists(settingsPath)) File.Delete(settingsPath);
+                    if (File.Exists(settingsPath)) 
+                        File.Delete(settingsPath);
 
                     StartupHelper.SetAutoStart(false);
 
                     SettingsManager.Load();
                     LoadSettings();
 
-                    System.Windows.MessageBox.Show("Настройки успешно сброшены. Некоторые изменения вступят в силу после перезапуска программы.", "Готово", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
+                    UIHelper.ShowAlert("Готово", "Настройки успешно сброшены. Некоторые изменения вступят в силу после перезапуска программы.");
                 }
                 catch (Exception ex)
                 {
-                    System.Windows.MessageBox.Show($"Ошибка при сбросе: {ex.Message}", "Ошибка", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+                    UIHelper.ShowAlert("Ошибка сброса", $"Ошибка при сбросе: {ex.Message}", isError: true);
                 }
             }
         }
@@ -7657,12 +7785,39 @@ namespace ZapretGUI.Views
 <Window x:Class="ZapretGUI.Views.UpdateWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Обновление" Height="250" Width="450"
+        Title="Уведомление" Width="450" SizeToContent="Height"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         WindowStartupLocation="CenterScreen" Topmost="True">
 
-    <Border Background="#0A0A0A" CornerRadius="12" BorderBrush="#2A2A2A" BorderThickness="1">
-        <Grid Margin="20">
+    <Window.Triggers>
+        <EventTrigger RoutedEvent="Window.Loaded">
+            <BeginStoryboard>
+                <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName="RootBorder" Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.2"/>
+                    <DoubleAnimation Storyboard.TargetName="WinScale" Storyboard.TargetProperty="ScaleX" From="0.92" To="1" Duration="0:0:0.22">
+                        <DoubleAnimation.EasingFunction>
+                            <CubicEase EasingMode="EaseOut"/>
+                        </DoubleAnimation.EasingFunction>
+                    </DoubleAnimation>
+                    <DoubleAnimation Storyboard.TargetName="WinScale" Storyboard.TargetProperty="ScaleY" From="0.92" To="1" Duration="0:0:0.22">
+                        <DoubleAnimation.EasingFunction>
+                            <CubicEase EasingMode="EaseOut"/>
+                        </DoubleAnimation.EasingFunction>
+                    </DoubleAnimation>
+                </Storyboard>
+            </BeginStoryboard>
+        </EventTrigger>
+    </Window.Triggers>
+
+    <Border x:Name="RootBorder" Background="#141414" CornerRadius="12" BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="1" Margin="15" RenderTransformOrigin="0.5,0.5">
+        <Border.RenderTransform>
+            <ScaleTransform x:Name="WinScale" ScaleX="1" ScaleY="1"/>
+        </Border.RenderTransform>
+        <Border.Effect>
+            <DropShadowEffect Color="Black" BlurRadius="25" ShadowDepth="8" Opacity="0.7"/>
+        </Border.Effect>
+
+        <Grid Margin="22">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
@@ -7670,14 +7825,16 @@ namespace ZapretGUI.Views
             </Grid.RowDefinitions>
 
             <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,15">
-                <TextBlock Text="&#xE896;" FontFamily="Segoe MDL2 Assets" FontSize="20" Foreground="#107C10" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                <TextBlock x:Name="TxtTitle" Text="Доступно обновление" FontSize="18" FontWeight="Bold" Foreground="White" VerticalAlignment="Center"/>
+                <Border x:Name="IconBadge" Background="#1A2E1A" CornerRadius="8" Width="32" Height="32" Margin="0,0,12,0">
+                    <TextBlock x:Name="TxtIcon" Text="&#xE896;" FontFamily="Segoe MDL2 Assets" FontSize="16" Foreground="#107C10" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+                <TextBlock x:Name="TxtTitle" Text="Уведомление" FontSize="18" FontWeight="Bold" Foreground="White" VerticalAlignment="Center"/>
             </StackPanel>
 
-            <TextBlock x:Name="TxtMessage" Grid.Row="1" Foreground="#CCCCCC" FontSize="14" TextWrapping="Wrap" VerticalAlignment="Top"/>
+            <TextBlock x:Name="TxtMessage" Grid.Row="1" Foreground="#CCCCCC" FontSize="14" LineHeight="20" TextWrapping="Wrap" VerticalAlignment="Top" Margin="0,0,0,22"/>
 
-            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,15,0,0">
-                <Button Content="Отмена" Background="#1A1A1A" Foreground="White" BorderBrush="#333333" BorderThickness="1" Padding="15,6" Margin="0,0,10,0" Cursor="Hand" Click="BtnCancel_Click">
+            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button x:Name="BtnCancel" Content="Отмена" Background="Transparent" Foreground="#A0A0A0" BorderBrush="#333333" BorderThickness="1" Padding="16,7" Margin="0,0,10,0" Cursor="Hand" Click="BtnCancel_Click">
                     <Button.Resources>
                         <Style TargetType="Border">
                             <Setter Property="CornerRadius" Value="6"/>
@@ -7685,7 +7842,7 @@ namespace ZapretGUI.Views
                     </Button.Resources>
                 </Button>
 
-                <Button x:Name="BtnAccept" Content="Обновить" Background="#107C10" Foreground="White" BorderThickness="0" Padding="15,6" Cursor="Hand" Click="BtnAccept_Click">
+                <Button x:Name="BtnAccept" Content="Обновить" Background="#107C10" Foreground="White" FontWeight="SemiBold" BorderThickness="0" Padding="18,7" Cursor="Hand" Click="BtnAccept_Click">
                     <Button.Resources>
                         <Style TargetType="Border">
                             <Setter Property="CornerRadius" Value="6"/>
@@ -7702,6 +7859,7 @@ namespace ZapretGUI.Views
 ////////////////////////////////////////////////////////////////////////////////
 
 using System.Windows;
+using ZapretGUI.Core;
 
 namespace ZapretGUI.Views
 {
@@ -7709,22 +7867,33 @@ namespace ZapretGUI.Views
     {
         public bool Result { get; private set; } = false;
 
-        public UpdateWindow(string title, string message, string acceptButtonText = "Обновить")
+        public UpdateWindow(string title, string message, string acceptButtonText = "Обновить", bool showCancel = true, string accentHex = "#107C10", string iconGlyph = "\xE896")
         {
             InitializeComponent();
             TxtTitle.Text = title;
             TxtMessage.Text = message;
             BtnAccept.Content = acceptButtonText;
+
+            if (!showCancel || acceptButtonText == "ОК" || acceptButtonText == "Понятно")
+                BtnCancel.Visibility = Visibility.Collapsed;
+
+            var accentBrush = UIHelper.GetBrushFromHex(accentHex);
+            BtnAccept.Background = accentBrush;
+            TxtIcon.Foreground = accentBrush;
+            TxtIcon.Text = iconGlyph;
+            IconBadge.Background = UIHelper.GetBrushFromHex("#1F1F24");
         }
 
         private void BtnAccept_Click(object sender, RoutedEventArgs e)
         {
+            AudioHelper.PlayClick();
             Result = true;
             this.Close();
         }
 
         private void BtnCancel_Click(object sender, RoutedEventArgs e)
         {
+            AudioHelper.PlayClick();
             Result = false;
             this.Close();
         }
