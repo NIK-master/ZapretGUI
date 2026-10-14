@@ -45,6 +45,104 @@ namespace ZapretGUI.Core
             return version.Trim().TrimStart('v', 'V');
         }
 
+        /// <summary>
+        /// Единый сценарий проверки и установки обновлений для старта программы и кнопки в Настройках.
+        /// </summary>
+        public static async Task RunUpdateWorkflowAsync(bool isManualCheck, Action? stopServicesCallback, IProgress<string>? progress = null)
+        {
+            // 1. Проверка обновлений самого приложения (GUI)
+            var appUpdate = await CheckForAppUpdateAsync();
+            if (appUpdate.UpdateAvailable)
+            {
+                bool acceptApp = UIHelper.ShowConfirm(
+                    "Обновление программы",
+                    $"Доступна новая версия панели управления {appUpdate.Version}!\n\nПрограмма будет закрыта для установки обновления. Продолжить?",
+                    confirmText: "Обновить");
+
+                if (acceptApp)
+                {
+                    if (!string.IsNullOrEmpty(appUpdate.DownloadUrl))
+                    {
+                        try
+                        {
+                            await ApplyAppUpdateAsync(appUpdate.DownloadUrl, () => System.Windows.Application.Current.Shutdown());
+                            return;
+                        }
+                        catch (Exception ex)
+                        {
+                            UIHelper.ShowAlert("Ошибка обновления", $"Не удалось обновить программу: {ex.Message}", isError: true);
+                        }
+                    }
+                    else if (!string.IsNullOrEmpty(appUpdate.ReleaseUrl))
+                    {
+                        Process.Start(new ProcessStartInfo(appUpdate.ReleaseUrl) { UseShellExecute = true });
+                    }
+                }
+            }
+            else if (isManualCheck)
+            {
+                UIHelper.ShowAlert("Проверка обновлений", "У вас уже установлена самая последняя версия панели управления!");
+            }
+
+            // 2. Проверка обновлений ядра Zapret
+            var zapretUpdate = await CheckForCoreUpdateAsync(AppConstants.ZapretCoreRepoUrl, SettingsManager.Current.ZapretCoreVersion, "Zapret", true);
+            if (zapretUpdate.UpdateAvailable)
+            {
+                bool acceptZapret = UIHelper.ShowConfirm(
+                    "Обновление ядра Zapret",
+                    $"Найдено обновление обхода Zapret от flowseal ({zapretUpdate.Version})!\n\nТекущая версия: {zapretUpdate.CurrentVersion}\nОбновить автоматически?",
+                    confirmText: "Обновить");
+
+                if (acceptZapret)
+                {
+                    try
+                    {
+                        await InstallCoreAsync(zapretUpdate, stopServicesCallback, progress);
+                        SettingsManager.Current.ZapretCoreVersion = zapretUpdate.Version;
+                        SettingsManager.Save();
+                        UIHelper.ShowAlert("Успех", $"Модуль Zapret успешно обновлен до версии {zapretUpdate.Version}!");
+                    }
+                    catch (Exception ex)
+                    {
+                        UIHelper.ShowAlert("Ошибка", $"Ошибка при установке обновления Zapret: {ex.Message}", isError: true);
+                    }
+                }
+            }
+            else if (isManualCheck)
+            {
+                UIHelper.ShowAlert("Проверка ядра Zapret", "Ядро Zapret обновлено до последней версии.");
+            }
+
+            // 3. Проверка обновлений ядра TgWsProxy
+            var proxyUpdate = await CheckForCoreUpdateAsync(AppConstants.TgProxyCoreRepoUrl, SettingsManager.Current.TgProxyCoreVersion, "TgWsProxy", false);
+            if (proxyUpdate.UpdateAvailable)
+            {
+                bool acceptProxy = UIHelper.ShowConfirm(
+                    "Обновление ядра TgWsProxy",
+                    $"Найдено обновление прокси Telegram от flowseal ({proxyUpdate.Version})!\n\nТекущая версия: {proxyUpdate.CurrentVersion}\nОбновить автоматически?",
+                    confirmText: "Обновить");
+
+                if (acceptProxy)
+                {
+                    try
+                    {
+                        await InstallCoreAsync(proxyUpdate, stopServicesCallback, progress);
+                        SettingsManager.Current.TgProxyCoreVersion = proxyUpdate.Version;
+                        SettingsManager.Save();
+                        UIHelper.ShowAlert("Успех", $"Модуль TgWsProxy успешно обновлен до версии {proxyUpdate.Version}!");
+                    }
+                    catch (Exception ex)
+                    {
+                        UIHelper.ShowAlert("Ошибка", $"Ошибка при установке обновления TgWsProxy: {ex.Message}", isError: true);
+                    }
+                }
+            }
+            else if (isManualCheck)
+            {
+                UIHelper.ShowAlert("Проверка ядра TgWsProxy", "Ядро TgWsProxy обновлено до последней версии.");
+            }
+        }
+
         public static async Task<AppUpdateResult> CheckForAppUpdateAsync()
         {
             try
@@ -184,28 +282,28 @@ namespace ZapretGUI.Core
 
                     foreach (var entry in archive.Entries)
                     {
-                        if (string.IsNullOrEmpty(entry.FullName)) 
+                        if (string.IsNullOrEmpty(entry.FullName))
                             continue;
 
                         var slashIndex = entry.FullName.IndexOf('/');
 
-                        if (slashIndex == -1) 
-                        { 
-                            hasFilesAtRoot = true; 
-                            break; 
+                        if (slashIndex == -1)
+                        {
+                            hasFilesAtRoot = true;
+                            break;
                         }
                         var currentRoot = entry.FullName.Substring(0, slashIndex + 1);
 
-                        if (rootDirToStrip == null) 
+                        if (rootDirToStrip == null)
                             rootDirToStrip = currentRoot;
-                        else if (rootDirToStrip != currentRoot) 
-                        { 
-                            rootDirToStrip = null; 
-                            break; 
+                        else if (rootDirToStrip != currentRoot)
+                        {
+                            rootDirToStrip = null;
+                            break;
                         }
                     }
 
-                    if (hasFilesAtRoot) 
+                    if (hasFilesAtRoot)
                         rootDirToStrip = null;
 
                     foreach (var entry in archive.Entries)
@@ -242,7 +340,7 @@ namespace ZapretGUI.Core
             var tempZip = Path.Combine(tempDir, "update.zip");
             var extractDir = Path.Combine(tempDir, "Extracted");
 
-            if (Directory.Exists(tempDir)) 
+            if (Directory.Exists(tempDir))
                 Directory.Delete(tempDir, true);
 
             Directory.CreateDirectory(tempDir);
@@ -283,7 +381,7 @@ del ""%~f0""
             if (installZapret)
             {
                 progress.Report("Поиск последней версии Zapret...");
-                var zapretUpdate = await CheckForCoreUpdateAsync("https://api.github.com/repos/flowseal/zapret-discord-youtube/releases/latest", "0.0.0", "Zapret", true);
+                var zapretUpdate = await CheckForCoreUpdateAsync(AppConstants.ZapretCoreRepoUrl, "0.0.0", "Zapret", true);
                 if (zapretUpdate.UpdateAvailable)
                 {
                     await InstallCoreAsync(zapretUpdate, null, progress);
@@ -294,7 +392,7 @@ del ""%~f0""
             if (installProxy)
             {
                 progress.Report("Поиск последней версии TgWsProxy...");
-                var proxyUpdate = await CheckForCoreUpdateAsync("https://api.github.com/repos/flowseal/tg-ws-proxy/releases/latest", "0.0.0", "TgWsProxy", false);
+                var proxyUpdate = await CheckForCoreUpdateAsync(AppConstants.TgProxyCoreRepoUrl, "0.0.0", "TgWsProxy", false);
                 if (proxyUpdate.UpdateAvailable)
                 {
                     await InstallCoreAsync(proxyUpdate, null, progress);
@@ -321,7 +419,7 @@ del ""%~f0""
             do
             {
                 var read = await contentStream.ReadAsync(buffer, 0, buffer.Length);
-                if (read == 0) 
+                if (read == 0)
                     isMoreToRead = false;
                 else
                 {

@@ -55,64 +55,9 @@ namespace ZapretGUI
 
         private async Task CheckUpdatesOnStartupAsync()
         {
-            var appUpdate = await Core.UpdateManager.CheckForAppUpdateAsync();
-            if (appUpdate.UpdateAvailable)
-            {
-                var prompt = new Views.UpdateWindow("Обновление программы", $"Доступна новая версия панели управления {appUpdate.Version}!\n\nПрограмма будет закрыта для установки обновления. Продолжить?");
-                prompt.ShowDialog();
-
-                if (prompt.Result)
-                {
-                    if (!string.IsNullOrEmpty(appUpdate.DownloadUrl))
-                    {
-                        try { await Core.UpdateManager.ApplyAppUpdateAsync(appUpdate.DownloadUrl, () => System.Windows.Application.Current.Shutdown()); }
-                        catch (Exception ex) { UIHelper.ShowAlert("Ошибка обновления", $"Не удалось обновить программу: {ex.Message}", isError: true); }
-                    }
-                    else if (!string.IsNullOrEmpty(appUpdate.ReleaseUrl))
-                    {
-                        Process.Start(new ProcessStartInfo(appUpdate.ReleaseUrl) { UseShellExecute = true });
-                    }
-                }
-            }
-
             var stopServicesAction = () => { if (IsBypassRunning()) ToggleBypass(); };
             var progress = new Progress<string>(status => _homeView.ShowUpdateProgress(status));
-
-            var zapretUpdate = await Core.UpdateManager.CheckForCoreUpdateAsync(AppConstants.ZapretCoreRepoUrl, SettingsManager.Current.ZapretCoreVersion, "Zapret", true);
-            if (zapretUpdate.UpdateAvailable)
-            {
-                var prompt = new Views.UpdateWindow("Обновление ядра Zapret", $"Найдено обновление обхода Zapret от flowseal ({zapretUpdate.Version})!\n\nТекущая версия: {zapretUpdate.CurrentVersion}\nОбновить автоматически?");
-                prompt.ShowDialog();
-                if (prompt.Result)
-                {
-                    try
-                    {
-                        await Core.UpdateManager.InstallCoreAsync(zapretUpdate, stopServicesAction, progress);
-                        SettingsManager.Current.ZapretCoreVersion = zapretUpdate.Version;
-                        SettingsManager.Save();
-                        UIHelper.ShowAlert("Успех", $"Модуль Zapret успешно обновлен до версии {zapretUpdate.Version}!");
-                    }
-                    catch (Exception ex) { UIHelper.ShowAlert("Ошибка", $"Ошибка при установке обновления Zapret: {ex.Message}", isError: true); }
-                }
-            }
-
-            var proxyUpdate = await Core.UpdateManager.CheckForCoreUpdateAsync(AppConstants.TgProxyCoreRepoUrl, SettingsManager.Current.TgProxyCoreVersion, "TgWsProxy", false);
-            if (proxyUpdate.UpdateAvailable)
-            {
-                var prompt = new Views.UpdateWindow("Обновление ядра TgWsProxy", $"Найдено обновление прокси Telegram от flowseal ({proxyUpdate.Version})!\n\nТекущая версия: {proxyUpdate.CurrentVersion}\nОбновить автоматически?");
-                prompt.ShowDialog();
-                if (prompt.Result)
-                {
-                    try
-                    {
-                        await Core.UpdateManager.InstallCoreAsync(proxyUpdate, stopServicesAction, progress);
-                        SettingsManager.Current.TgProxyCoreVersion = proxyUpdate.Version;
-                        SettingsManager.Save();
-                        UIHelper.ShowAlert("Успех", $"Модуль TgWsProxy успешно обновлен до версии {proxyUpdate.Version}!");
-                    }
-                    catch (Exception ex) { UIHelper.ShowAlert("Ошибка", $"Ошибка при установке обновления TgWsProxy: {ex.Message}", isError: true); }
-                }
-            }
+            await Core.UpdateManager.RunUpdateWorkflowAsync(isManualCheck: false, stopServicesAction, progress);
         }
 
         private void BtnHome_Click(object sender, RoutedEventArgs e)

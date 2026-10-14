@@ -80,17 +80,7 @@ namespace ZapretGUI.Views
                 settings.HardwareAcceleration = useGpu;
                 settings.ColorblindMode = ToggleColorblind.IsChecked ?? false;
 
-                var res = System.Windows.Application.Current.Resources;
-                if (settings.ColorblindMode)
-                {
-                    res["BrandSuccessBrush"] = UIHelper.GetBrushFromHex("#0078D7");
-                    res["BrandErrorBrush"] = UIHelper.GetBrushFromHex("#FF8C00");
-                }
-                else
-                {
-                    res["BrandSuccessBrush"] = UIHelper.GetBrushFromHex("#107C10");
-                    res["BrandErrorBrush"] = UIHelper.GetBrushFromHex("#D13438");
-                }
+                UIHelper.ApplyThemeColors();
 
                 settings.PingUrl = string.IsNullOrWhiteSpace(TxtPingUrl.Text) ? AppConstants.DefaultPingUrl : TxtPingUrl.Text;
                 settings.AutoRestartServices = ToggleAutoRestart.IsChecked ?? false;
@@ -132,12 +122,13 @@ namespace ZapretGUI.Views
                 try
                 {
                     var settingsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.json");
-                    if (File.Exists(settingsPath)) 
+                    if (File.Exists(settingsPath))
                         File.Delete(settingsPath);
 
                     StartupHelper.SetAutoStart(false);
 
                     SettingsManager.Load();
+                    UIHelper.ApplyThemeColors();
                     LoadSettings();
 
                     UIHelper.ShowAlert("Готово", "Настройки успешно сброшены. Некоторые изменения вступят в силу после перезапуска программы.");
@@ -159,66 +150,15 @@ namespace ZapretGUI.Views
         {
             if (sender is System.Windows.Controls.Button btn) btn.IsEnabled = false;
 
-            var appUpdate = await Core.UpdateManager.CheckForAppUpdateAsync();
-            if (appUpdate.UpdateAvailable)
+            Action stopServicesAction = () =>
             {
-                var prompt = new Views.UpdateWindow("Обновление программы", $"Доступна новая версия панели управления {appUpdate.Version}!\n\nПрограмма будет закрыта для установки обновления. Продолжить?");
-                prompt.ShowDialog();
-                if (prompt.Result && !string.IsNullOrEmpty(appUpdate.DownloadUrl))
-                    await Core.UpdateManager.ApplyAppUpdateAsync(appUpdate.DownloadUrl, () => System.Windows.Application.Current.Shutdown());
-            }
-            else
-            {
-                new Views.UpdateWindow("Проверка обновлений", "У вас уже установлена самая последняя версия панели управления!", "ОК").ShowDialog();
-            }
+                if (System.Windows.Application.Current.MainWindow is MainWindow mw && mw.IsBypassRunning())
+                    mw.ToggleBypass();
+            };
 
-            Action stopServicesAction = () => { if (System.Windows.Application.Current.MainWindow is MainWindow mw && mw.IsBypassRunning()) mw.ToggleBypass(); };
+            await Core.UpdateManager.RunUpdateWorkflowAsync(isManualCheck: true, stopServicesAction, null);
 
-            var zapretUpdate = await Core.UpdateManager.CheckForCoreUpdateAsync("https://api.github.com/repos/flowseal/zapret-discord-youtube/releases/latest", SettingsManager.Current.ZapretCoreVersion, "Zapret", true);
-            if (zapretUpdate.UpdateAvailable)
-            {
-                var prompt = new Views.UpdateWindow("Обновление ядра Zapret", $"Найдено обновление обхода Zapret ({zapretUpdate.Version})!\n\nТекущая версия: {zapretUpdate.CurrentVersion}\nОбновить автоматически?");
-                prompt.ShowDialog();
-                if (prompt.Result)
-                {
-                    try
-                    {
-                        await Core.UpdateManager.InstallCoreAsync(zapretUpdate, stopServicesAction, null);
-                        SettingsManager.Current.ZapretCoreVersion = zapretUpdate.Version;
-                        SettingsManager.Save();
-                        new Views.UpdateWindow("Успех", "Модуль Zapret успешно обновлен!", "ОК").ShowDialog();
-                    }
-                    catch (Exception ex) { new Views.UpdateWindow("Ошибка", $"Ошибка: {ex.Message}", "ОК").ShowDialog(); }
-                }
-            }
-            else
-            {
-                new Views.UpdateWindow("Проверка ядра Zapret", "Ядро Zapret обновлено до последней версии.", "ОК").ShowDialog();
-            }
-
-            var proxyUpdate = await Core.UpdateManager.CheckForCoreUpdateAsync("https://api.github.com/repos/flowseal/tg-ws-proxy/releases/latest", SettingsManager.Current.TgProxyCoreVersion, "TgWsProxy", false);
-            if (proxyUpdate.UpdateAvailable)
-            {
-                var prompt = new Views.UpdateWindow("Обновление ядра TgWsProxy", $"Найдено обновление прокси Telegram ({proxyUpdate.Version})!\n\nОбновить автоматически?");
-                prompt.ShowDialog();
-                if (prompt.Result)
-                {
-                    try
-                    {
-                        await Core.UpdateManager.InstallCoreAsync(proxyUpdate, stopServicesAction, null);
-                        SettingsManager.Current.TgProxyCoreVersion = proxyUpdate.Version;
-                        SettingsManager.Save();
-                        new Views.UpdateWindow("Успех", "Модуль TgWsProxy успешно обновлен!", "ОК").ShowDialog();
-                    }
-                    catch (Exception ex) { new Views.UpdateWindow("Ошибка", $"Ошибка: {ex.Message}", "ОК").ShowDialog(); }
-                }
-            }
-            else
-            {
-                new Views.UpdateWindow("Проверка ядра TgWsProxy", "Ядро TgWsProxy обновлено до последней версии.", "ОК").ShowDialog();
-            }
-
-            if (sender is System.Windows.Controls.Button btnReEnable) 
+            if (sender is System.Windows.Controls.Button btnReEnable)
                 btnReEnable.IsEnabled = true;
         }
     }

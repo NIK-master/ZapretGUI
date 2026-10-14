@@ -172,7 +172,8 @@ using System.Windows;
         Title="Zapret for ADHD" Height="760" Width="1100"
         Icon="Assets/freepik__толстая,_сплошная,_монолитная_буква_z_белого.png"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
-        WindowStartupLocation="CenterScreen">
+        WindowStartupLocation="CenterScreen"
+        Closing="Window_Closing">
 
     <Window.Resources>
         <Style x:Key="SpringyNavButton" TargetType="ui:Button" BasedOn="{StaticResource {x:Type ui:Button}}">
@@ -348,6 +349,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Interop;
 using System.Windows.Media;
 using ZapretGUI.Core;
 
@@ -366,6 +368,10 @@ namespace ZapretGUI
         {
             InitializeComponent();
             SettingsManager.Load();
+            UIHelper.ApplyThemeColors();
+            RenderOptions.ProcessRenderMode = SettingsManager.Current.HardwareAcceleration
+                ? RenderMode.Default
+                : RenderMode.SoftwareOnly;
 
             _ = InitializeModsAsync();
 
@@ -379,6 +385,7 @@ namespace ZapretGUI
             {
                 var wizard = new Views.WizardWindow();
                 wizard.ShowDialog();
+                UIHelper.ApplyThemeColors();
             }
 
             _ = CheckUpdatesOnStartupAsync();
@@ -417,7 +424,7 @@ namespace ZapretGUI
             var stopServicesAction = () => { if (IsBypassRunning()) ToggleBypass(); };
             var progress = new Progress<string>(status => _homeView.ShowUpdateProgress(status));
 
-            var zapretUpdate = await Core.UpdateManager.CheckForCoreUpdateAsync("https://api.github.com/repos/flowseal/zapret-discord-youtube/releases/latest", SettingsManager.Current.ZapretCoreVersion, "Zapret", true);
+            var zapretUpdate = await Core.UpdateManager.CheckForCoreUpdateAsync(AppConstants.ZapretCoreRepoUrl, SettingsManager.Current.ZapretCoreVersion, "Zapret", true);
             if (zapretUpdate.UpdateAvailable)
             {
                 var prompt = new Views.UpdateWindow("Обновление ядра Zapret", $"Найдено обновление обхода Zapret от flowseal ({zapretUpdate.Version})!\n\nТекущая версия: {zapretUpdate.CurrentVersion}\nОбновить автоматически?");
@@ -435,7 +442,7 @@ namespace ZapretGUI
                 }
             }
 
-            var proxyUpdate = await Core.UpdateManager.CheckForCoreUpdateAsync("https://api.github.com/repos/flowseal/tg-ws-proxy/releases/latest", SettingsManager.Current.TgProxyCoreVersion, "TgWsProxy", false);
+            var proxyUpdate = await Core.UpdateManager.CheckForCoreUpdateAsync(AppConstants.TgProxyCoreRepoUrl, SettingsManager.Current.TgProxyCoreVersion, "TgWsProxy", false);
             if (proxyUpdate.UpdateAvailable)
             {
                 var prompt = new Views.UpdateWindow("Обновление ядра TgWsProxy", $"Найдено обновление прокси Telegram от flowseal ({proxyUpdate.Version})!\n\nТекущая версия: {proxyUpdate.CurrentVersion}\nОбновить автоматически?");
@@ -500,7 +507,7 @@ namespace ZapretGUI
             BtnSettings.BorderThickness = zeroThickness;
 
             activeBtn.Background = UIHelper.GetBrushFromHex("#2A2A2A");
-            activeBtn.BorderBrush = UIHelper.GetBrushFromHex("#107C10");
+            activeBtn.BorderBrush = UIHelper.GetSuccessBrush();
             activeBtn.BorderThickness = new Thickness(3, 0, 0, 0);
 
             if (MainContentContainer.Content is FrameworkElement element)
@@ -525,12 +532,12 @@ namespace ZapretGUI
 
         public void UpdateIndicators(bool isZapretRunning, bool isProxyRunning)
         {
-            var zColor = isZapretRunning ? GetSuccessColor() : GetErrorColor();
+            var zColor = isZapretRunning ? UIHelper.GetSuccessBrush() : UIHelper.GetErrorBrush();
             ZapretDot.Fill = zColor;
             if (ZapretDot.Effect is System.Windows.Media.Effects.DropShadowEffect zShadow)
                 zShadow.Color = zColor.Color;
 
-            var pColor = isProxyRunning ? GetSuccessColor() : GetErrorColor();
+            var pColor = isProxyRunning ? UIHelper.GetSuccessBrush() : UIHelper.GetErrorBrush();
             TgProxyDot.Fill = pColor;
             if (TgProxyDot.Effect is System.Windows.Media.Effects.DropShadowEffect pShadow)
                 pShadow.Color = pColor.Color;
@@ -538,7 +545,7 @@ namespace ZapretGUI
 
         public void UpdateNetworkIndicator(bool isOnline)
         {
-            var nColor = isOnline ? GetSuccessColor() : GetErrorColor();
+            var nColor = isOnline ? UIHelper.GetSuccessBrush() : UIHelper.GetErrorBrush();
             NetworkDot.Fill = nColor;
             if (NetworkDot.Effect is System.Windows.Media.Effects.DropShadowEffect nShadow)
                 nShadow.Color = nColor.Color;
@@ -552,7 +559,7 @@ namespace ZapretGUI
 
         private void BtnMinimize_Click(object sender, RoutedEventArgs e) => this.WindowState = WindowState.Minimized;
 
-        private void BtnClose_Click(object sender, RoutedEventArgs e) => this.Hide();
+        private void BtnClose_Click(object sender, RoutedEventArgs e) => this.Close();
 
         public void ShowNotification(string title, string message, System.Windows.Forms.ToolTipIcon icon = System.Windows.Forms.ToolTipIcon.Info)
         {
@@ -565,7 +572,7 @@ namespace ZapretGUI
             {
                 e.Cancel = true;
                 this.Hide();
-                ShowNotification("Программа работает в фоне", "Zapret свернут в системный трей. Дважды кликните по иконке щита, чтобы открыть окно.");
+                ShowNotification("Программа работает в фоне", "Zapret свернут в системный трей. Дважды кликните по иконке в трее, чтобы открыть окно.");
             }
         }
 
@@ -578,18 +585,6 @@ namespace ZapretGUI
             var profile = _homeView.TxtMainProfile.Text;
             await BypassController.Current.RestartServicesAsync(profile);
             UpdateIndicators(BypassController.Current.Zapret.IsRunning(), BypassController.Current.TgProxy.IsRunning());
-        }
-
-        private SolidColorBrush GetSuccessColor()
-        {
-            var hex = SettingsManager.Current.ColorblindMode ? "#0078D7" : "#107C10";
-            return UIHelper.GetBrushFromHex(hex);
-        }
-
-        private SolidColorBrush GetErrorColor()
-        {
-            var hex = SettingsManager.Current.ColorblindMode ? "#FF8C00" : "#D13438";
-            return UIHelper.GetBrushFromHex(hex);
         }
 
         public void AnimateWindowSize(bool isCompact)
@@ -613,6 +608,7 @@ namespace ZapretGUI
 
         protected override void OnClosed(EventArgs e)
         {
+            BypassController.Current.NetMonitor.Stop();
             _trayIconManager.Dispose();
             base.OnClosed(e);
         }
@@ -1891,6 +1887,7 @@ namespace ZapretGUI.Core
 ////////////////////////////////////////////////////////////////////////////////
 
 using System;
+using System.Diagnostics;
 using System.Net.NetworkInformation;
 using System.Windows.Threading;
 
@@ -1899,6 +1896,7 @@ namespace ZapretGUI.Core
     public class NetworkMonitor
     {
         private readonly DispatcherTimer _networkTimer;
+        private readonly Stopwatch _elapsedStopwatch = new Stopwatch();
         private long _lastBytesReceived = 0;
         private long _lastBytesSent = 0;
         private bool _wasNetworkAvailable = true;
@@ -1908,16 +1906,31 @@ namespace ZapretGUI.Core
 
         public NetworkMonitor()
         {
-            _networkTimer = new DispatcherTimer
-            {
-                Interval = TimeSpan.FromSeconds(1)
-            };
+            _networkTimer = new DispatcherTimer();
+            UpdateIntervalFromSettings();
             _networkTimer.Tick += Timer_Tick;
+
+            SettingsManager.SettingsSaved += UpdateIntervalFromSettings;
         }
 
-        public void Start() => _networkTimer.Start();
+        public void UpdateIntervalFromSettings()
+        {
+            int seconds = Math.Max(1, SettingsManager.Current.StatsUpdateInterval);
+            _networkTimer.Interval = TimeSpan.FromSeconds(seconds);
+        }
 
-        public void Stop() => _networkTimer.Stop();
+        public void Start()
+        {
+            UpdateIntervalFromSettings();
+            _elapsedStopwatch.Restart();
+            _networkTimer.Start();
+        }
+
+        public void Stop()
+        {
+            _networkTimer.Stop();
+            _elapsedStopwatch.Stop();
+        }
 
         private void Timer_Tick(object? sender, EventArgs e)
         {
@@ -1944,13 +1957,16 @@ namespace ZapretGUI.Core
                 }
             }
 
+            double elapsedSeconds = Math.Max(0.1, _elapsedStopwatch.Elapsed.TotalSeconds);
+            _elapsedStopwatch.Restart();
+
             if (_lastBytesReceived != 0 && _lastBytesSent != 0)
             {
-                var diffReceived = currentReceived - _lastBytesReceived;
-                var diffSent = currentSent - _lastBytesSent;
+                var diffReceived = Math.Max(0L, currentReceived - _lastBytesReceived);
+                var diffSent = Math.Max(0L, currentSent - _lastBytesSent);
 
-                var mbpsReceived = (diffReceived * 8.0) / 1000000.0;
-                var mbpsSent = (diffSent * 8.0) / 1000000.0;
+                var mbpsReceived = (diffReceived * 8.0) / (1000000.0 * elapsedSeconds);
+                var mbpsSent = (diffSent * 8.0) / (1000000.0 * elapsedSeconds);
 
                 StatsUpdated?.Invoke(mbpsReceived, mbpsSent);
             }
@@ -2360,6 +2376,25 @@ namespace ZapretGUI.Core
         public static SolidColorBrush GetBrushFromHex(string hex)
         {
             return (SolidColorBrush)_brushConverter.ConvertFromString(hex)!;
+        }
+
+        public static SolidColorBrush GetSuccessBrush()
+        {
+            return GetBrushFromHex(SettingsManager.Current.ColorblindMode ? "#0078D7" : "#107C10");
+        }
+
+        public static SolidColorBrush GetErrorBrush()
+        {
+            return GetBrushFromHex(SettingsManager.Current.ColorblindMode ? "#FF8C00" : "#D13438");
+        }
+
+        public static void ApplyThemeColors()
+        {
+            var res = System.Windows.Application.Current?.Resources;
+            if (res == null) return;
+
+            res["BrandSuccessBrush"] = GetSuccessBrush();
+            res["BrandErrorBrush"] = GetErrorBrush();
         }
 
         public static T? FindParent<T>(DependencyObject? child, string? name = null) where T : FrameworkElement
@@ -3161,11 +3196,14 @@ namespace ZapretGUI.Core
             try
             {
                 if (_scanProcess != null && !_scanProcess.HasExited)
-                    _scanProcess.Kill();
+                {
+                    _scanProcess.Kill(entireProcessTree: true);
+                    _scanProcess.Dispose();
+                    _scanProcess = null;
+                }
             }
             catch { }
 
-            ProcessHelper.KillProcessesByName("powershell");
             ProcessHelper.KillProcessesByName(AppConstants.ZapretProcessName);
         }
 

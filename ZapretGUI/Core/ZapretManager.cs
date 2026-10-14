@@ -10,7 +10,7 @@ namespace ZapretGUI.Core
 {
     public class ZapretManager
     {
-        private string _basePath;
+        private readonly string _basePath;
         private Process? _process;
 
         public event Action<string>? LogMessage;
@@ -41,18 +41,12 @@ namespace ZapretGUI.Core
             return $"профиле «{profileName}»";
         }
 
-        public void Start(string profileName)
+        /// <summary>
+        /// Единый глубокий анализатор и сборщик аргументов .bat скрипта для ZapretManager и редактора модов.
+        /// </summary>
+        public static string ParseAndValidateBatLines(string[] lines, string sourceName, string zapretBasePath, bool checkReferencedFiles = true)
         {
-            Stop();
-
-            var batFilePath = Path.Combine(_basePath, profileName);
-            var sourceName = GetSourceDisplayName(profileName);
-
-            if (!File.Exists(batFilePath))
-                throw new FileNotFoundException($"Конфигурационный файл не найден в {sourceName} по пути: {batFilePath}");
-
-            var lines = File.ReadAllLines(batFilePath);
-            if (lines.Length == 0 || lines.All(string.IsNullOrWhiteSpace))
+            if (lines == null || lines.Length == 0 || lines.All(string.IsNullOrWhiteSpace))
                 throw new Exception($"Ошибка в {sourceName}: Файл стратегии пуст.");
 
             var arguments = "";
@@ -117,26 +111,29 @@ namespace ZapretGUI.Core
                             if (token.StartsWith("---") || token == "--" || token == "-")
                                 throw new Exception($"Ошибка синтаксиса в {sourceName} [Строка {lineNum}]:\nНекорректный формат флага «{token}».\nСтрока: «{rawLine.Trim()}»");
 
-                            var fileMatch = Regex.Match(token, @"^--(hostlist|hostlist-exclude|ipset|ipset-exclude|dpi-desync-fake-tls|dpi-desync-fake-quic|dpi-desync-fake-unknown-udp|dpi-desync-split-seqovl-pattern)=(.+)$", RegexOptions.IgnoreCase);
-                            if (fileMatch.Success)
+                            if (checkReferencedFiles && Directory.Exists(zapretBasePath))
                             {
-                                var paramName = fileMatch.Groups[1].Value;
-                                var rawFilePath = fileMatch.Groups[2].Value.Trim('\"', '\'');
-
-                                if (!rawFilePath.StartsWith("0x", StringComparison.OrdinalIgnoreCase) && !rawFilePath.StartsWith("!"))
+                                var fileMatch = Regex.Match(token, @"^--(hostlist|hostlist-exclude|ipset|ipset-exclude|dpi-desync-fake-tls|dpi-desync-fake-quic|dpi-desync-fake-unknown-udp|dpi-desync-split-seqovl-pattern)=(.+)$", RegexOptions.IgnoreCase);
+                                if (fileMatch.Success)
                                 {
-                                    var resolvedPath = rawFilePath
-                                        .Replace("%BIN%", @"bin\")
-                                        .Replace("%LISTS%", @"lists\")
-                                        .Replace("%~dp0", "");
+                                    var paramName = fileMatch.Groups[1].Value;
+                                    var rawFilePath = fileMatch.Groups[2].Value.Trim('\"', '\'');
 
-                                    var fullCheckPath = Path.IsPathRooted(resolvedPath)
-                                        ? resolvedPath
-                                        : Path.Combine(_basePath, resolvedPath);
-
-                                    if (!File.Exists(fullCheckPath))
+                                    if (!rawFilePath.StartsWith("0x", StringComparison.OrdinalIgnoreCase) && !rawFilePath.StartsWith("!"))
                                     {
-                                        throw new Exception($"Ошибка в {sourceName} [Строка {lineNum}]:\nВ параметре «--{paramName}» указан несуществующий файл «{rawFilePath}».\nСтрока: «{rawLine.Trim()}»");
+                                        var resolvedPath = rawFilePath
+                                            .Replace("%BIN%", @"bin\")
+                                            .Replace("%LISTS%", @"lists\")
+                                            .Replace("%~dp0", "");
+
+                                        var fullCheckPath = Path.IsPathRooted(resolvedPath)
+                                            ? resolvedPath
+                                            : Path.Combine(zapretBasePath, resolvedPath);
+
+                                        if (!File.Exists(fullCheckPath))
+                                        {
+                                            throw new Exception($"Ошибка в {sourceName} [Строка {lineNum}]:\nВ параметре «--{paramName}» указан несуществующий файл «{rawFilePath}».\nСтрока: «{rawLine.Trim()}»");
+                                        }
                                     }
                                 }
                             }
@@ -151,30 +148,38 @@ namespace ZapretGUI.Core
             }
 
             if (!winwsFound)
-            {
                 throw new Exception($"Ошибка структуры в {sourceName}:\nВ батнике не найден вызов ядра «{AppConstants.ZapretProcessName}.exe». Этот скрипт не подходит для Zapret.");
-            }
 
-            arguments = arguments.Replace("%BIN%", @"bin\");
-            arguments = arguments.Replace("%LISTS%", @"lists\");
-            arguments = arguments.Replace("%~dp0", "");
-
-            arguments = arguments.Replace("%GameFilterTCP%", "65535");
-            arguments = arguments.Replace("%GameFilterUDP%", "65535");
-            arguments = arguments.Replace("%GameFilter%", "65535");
-
-            arguments = arguments.Trim();
+            arguments = arguments.Replace("%BIN%", @"bin\")
+                                 .Replace("%LISTS%", @"lists\")
+                                 .Replace("%~dp0", "")
+                                 .Replace("%GameFilterTCP%", "65535")
+                                 .Replace("%GameFilterUDP%", "65535")
+                                 .Replace("%GameFilter%", "65535")
+                                 .Trim();
 
             if (string.IsNullOrEmpty(arguments))
-            {
                 throw new Exception($"Ошибка в {sourceName} [Строка {winwsStartLine}]:\nКоманда «{AppConstants.ZapretProcessName}» вызвана без параметров фильтрации.");
-            }
 
             var unexpandedVar = Regex.Match(arguments, @"%[a-zA-Z0-9_]+%");
             if (unexpandedVar.Success)
-            {
                 throw new Exception($"Ошибка в {sourceName}:\nОбнаружена неизвестная переменная «{unexpandedVar.Value}», которая не поддерживается в прямом запуске Zapret.");
-            }
+
+            return arguments;
+        }
+
+        public void Start(string profileName)
+        {
+            Stop();
+
+            var batFilePath = Path.Combine(_basePath, profileName);
+            var sourceName = GetSourceDisplayName(profileName);
+
+            if (!File.Exists(batFilePath))
+                throw new FileNotFoundException($"Конфигурационный файл не найден в {sourceName} по пути: {batFilePath}");
+
+            var lines = File.ReadAllLines(batFilePath);
+            var arguments = ParseAndValidateBatLines(lines, sourceName, _basePath, checkReferencedFiles: true);
 
             var exePath = Path.Combine(_basePath, $"{AppConstants.ZapretProcessName}.exe");
             var binExePath = Path.Combine(_basePath, "bin", $"{AppConstants.ZapretProcessName}.exe");
@@ -183,9 +188,7 @@ namespace ZapretGUI.Core
                 exePath = binExePath;
 
             if (!File.Exists(exePath))
-            {
                 throw new FileNotFoundException($"Не найден исполняемый файл ядра по пути: {exePath}. Запустите проверку обновлений в настройках.");
-            }
 
             var startInfo = new ProcessStartInfo
             {

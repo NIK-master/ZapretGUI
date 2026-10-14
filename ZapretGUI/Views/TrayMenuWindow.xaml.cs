@@ -1,7 +1,5 @@
 ﻿using System;
 using System.Diagnostics;
-using System.Net.Sockets;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media;
 using ZapretGUI.Core;
@@ -35,70 +33,30 @@ namespace ZapretGUI.Views
 
             try
             {
-                var hostToPing = AppConstants.AwsPingHost;
-                var portToPing = AppConstants.AwsPingPort;
-
-                var fullUrl = Core.SettingsManager.Current.PingUrl;
-                if (!string.IsNullOrWhiteSpace(fullUrl))
-                {
-                    if (Uri.TryCreate(fullUrl, UriKind.Absolute, out Uri? uri))
-                    {
-                        hostToPing = uri.Host;
-                        portToPing = uri.Port > 0 ? uri.Port : 443;
-                    }
-                    else
-                        hostToPing = fullUrl;
-                }
-
-                var pingMs = await TcpPingAsync(hostToPing, portToPing);
+                var pingMs = await BypassController.Current.CheckPingAsync();
 
                 if (pingMs >= 0)
                 {
                     PingText.Text = $"{pingMs} мс";
 
                     if (pingMs < 80)
-                        PingText.Foreground = UIHelper.GetBrushFromHex("#4CAF50");
+                        PingText.Foreground = UIHelper.GetSuccessBrush();
                     else if (pingMs < 150)
                         PingText.Foreground = new SolidColorBrush(System.Windows.Media.Colors.Orange);
                     else
-                        PingText.Foreground = UIHelper.GetBrushFromHex("#F44336");
+                        PingText.Foreground = UIHelper.GetErrorBrush();
                 }
                 else
                 {
                     PingText.Text = "ошибка";
-                    PingText.Foreground = UIHelper.GetBrushFromHex("#F44336");
+                    PingText.Foreground = UIHelper.GetErrorBrush();
                 }
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"Ошибка проверки пинга из трея: {ex.Message}");
                 PingText.Text = "нет сети";
-                PingText.Foreground = UIHelper.GetBrushFromHex("#F44336");
-            }
-        }
-
-        private async Task<long> TcpPingAsync(string host, int port)
-        {
-            try
-            {
-                using var client = new TcpClient();
-                var stopwatch = new Stopwatch();
-
-                stopwatch.Start();
-                var connectTask = client.ConnectAsync(host, port);
-
-                if (await Task.WhenAny(connectTask, Task.Delay(2000)) == connectTask)
-                {
-                    stopwatch.Stop();
-                    return client.Connected ? stopwatch.ElapsedMilliseconds : -1;
-                }
-
-                return -1;
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"TCP Ping Failed: {ex.Message}");
-                return -1;
+                PingText.Foreground = UIHelper.GetErrorBrush();
             }
         }
 
@@ -169,7 +127,5 @@ namespace ZapretGUI.Views
         {
             System.Windows.Application.Current.Shutdown();
         }
-
-
     }
 }
