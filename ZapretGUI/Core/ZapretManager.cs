@@ -1,6 +1,9 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace ZapretGUI.Core
@@ -17,56 +20,161 @@ namespace ZapretGUI.Core
             _basePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.CoreFilesDirectory);
         }
 
+        private string GetSourceDisplayName(string profileName)
+        {
+            if (profileName.StartsWith("mod_", StringComparison.OrdinalIgnoreCase))
+            {
+                var modId = Path.GetFileNameWithoutExtension(profileName).Substring(4);
+                var modJsonPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, "strategies", modId, "mod.json");
+                if (File.Exists(modJsonPath))
+                {
+                    try
+                    {
+                        var meta = JsonSerializer.Deserialize<ModMetaData>(File.ReadAllText(modJsonPath), new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                        if (meta != null && !string.IsNullOrWhiteSpace(meta.Name))
+                            return $"моде «{meta.Name}» ({profileName})";
+                    }
+                    catch { }
+                }
+                return $"моде «{modId}» ({profileName})";
+            }
+            return $"профиле «{profileName}»";
+        }
+
         public void Start(string profileName)
         {
             Stop();
 
             var batFilePath = Path.Combine(_basePath, profileName);
+            var sourceName = GetSourceDisplayName(profileName);
+
             if (!File.Exists(batFilePath))
-                throw new FileNotFoundException($"Профиль {profileName} не найден по пути: {batFilePath}");
+                throw new FileNotFoundException($"Конфигурационный файл не найден в {sourceName} по пути: {batFilePath}");
 
             var lines = File.ReadAllLines(batFilePath);
+            if (lines.Length == 0 || lines.All(string.IsNullOrWhiteSpace))
+                throw new Exception($"Ошибка в {sourceName}: Файл стратегии пуст.");
+
             var arguments = "";
             var isReadingArgs = false;
+            var winwsFound = false;
+            var winwsStartLine = 0;
 
-            foreach (var line in lines)
+            for (var i = 0; i < lines.Length; i++)
             {
-                var trimmed = line.Trim();
+                var lineNum = i + 1;
+                var rawLine = lines[i];
+                var trimmed = rawLine.Trim();
 
-                if (trimmed.StartsWith("::") || trimmed.StartsWith("rem ", StringComparison.OrdinalIgnoreCase))
-                    continue;
-
-                if (!isReadingArgs && trimmed.Contains(AppConstants.ZapretProcessName, StringComparison.OrdinalIgnoreCase))
+                if (string.IsNullOrWhiteSpace(trimmed) ||
+                    trimmed.StartsWith("::") ||
+                    trimmed.StartsWith("rem ", StringComparison.OrdinalIgnoreCase) ||
+                    trimmed.Equals("rem", StringComparison.OrdinalIgnoreCase))
                 {
-                    isReadingArgs = true;
-                    var match = Regex.Match(trimmed, $@"{AppConstants.ZapretProcessName}(?:\.exe)?[""']?\s+(.*)", RegexOptions.IgnoreCase);
-                    trimmed = match.Success ? match.Groups[1].Value.Trim() : "";
+                    continue;
+                }
+
+                if (!isReadingArgs)
+                {
+                    if (trimmed.Contains(AppConstants.ZapretProcessName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        isReadingArgs = true;
+                        winwsFound = true;
+                        winwsStartLine = lineNum;
+
+                        var match = Regex.Match(trimmed, $@"{AppConstants.ZapretProcessName}(?:\.exe)?[""']?\s*(.*)", RegexOptions.IgnoreCase);
+                        trimmed = match.Success ? match.Groups[1].Value.Trim() : "";
+                    }
+                    else
+                    {
+                        var isStandardBatCmd = Regex.IsMatch(trimmed, @"^(@?echo|chcp|cd|pushd|popd|set|title|cls|color|mode|goto|call|if|for|pause|timeout|:)\b", RegexOptions.IgnoreCase);
+                        if (!isStandardBatCmd)
+                            throw new Exception($"Синтаксическая ошибка в {sourceName} [Строка {lineNum}]:\nНеизвестная команда «{trimmed}».\nОжидался вызов {AppConstants.ZapretProcessName}.exe или стандартная инструкция Batch.");
+                        continue;
+                    }
                 }
 
                 if (isReadingArgs)
                 {
                     var hasContinuation = trimmed.EndsWith("^");
-                    if (hasContinuation)
-                        trimmed = trimmed.Substring(0, trimmed.Length - 1).TrimEnd();
+                    var cleanLine = hasContinuation ? trimmed.Substring(0, trimmed.Length - 1).TrimEnd() : trimmed;
+                    var quoteCount = cleanLine.Count(c => c == '\"');
 
-                    if (!string.IsNullOrWhiteSpace(trimmed))
-                        arguments += " " + trimmed;
+                    if (quoteCount % 2 != 0)
+                        throw new Exception($"Ошибка синтаксиса в {sourceName} [Строка {lineNum}]:\nНе закрыта кавычка (\") в параметрах:\n«{rawLine.Trim()}»");
+
+                    if (!string.IsNullOrWhiteSpace(cleanLine))
+                    {
+                        var tokens = Regex.Matches(cleanLine, @"[\""].+?[\""]|[^ ]+")
+                                          .Select(m => m.Value.Trim())
+                                          .ToList();
+
+                        foreach (var token in tokens)
+                        {
+                            if (!token.StartsWith("--") && !token.StartsWith("-") && !token.Equals("--new", StringComparison.OrdinalIgnoreCase))
+                                throw new Exception($"Ошибка параметра в {sourceName} [Строка {lineNum}]:\nАргумент «{token}» не подходит для Zapret (winws).\nВсе параметры должны начинаться с «--» (например, --filter-tcp=80 или --dpi-desync=fake).\nСтрока: «{rawLine.Trim()}»");
+
+                            if (token.StartsWith("---") || token == "--" || token == "-")
+                                throw new Exception($"Ошибка синтаксиса в {sourceName} [Строка {lineNum}]:\nНекорректный формат флага «{token}».\nСтрока: «{rawLine.Trim()}»");
+
+                            var fileMatch = Regex.Match(token, @"^--(hostlist|hostlist-exclude|ipset|ipset-exclude|dpi-desync-fake-tls|dpi-desync-fake-quic|dpi-desync-fake-unknown-udp|dpi-desync-split-seqovl-pattern)=(.+)$", RegexOptions.IgnoreCase);
+                            if (fileMatch.Success)
+                            {
+                                var paramName = fileMatch.Groups[1].Value;
+                                var rawFilePath = fileMatch.Groups[2].Value.Trim('\"', '\'');
+
+                                if (!rawFilePath.StartsWith("0x", StringComparison.OrdinalIgnoreCase) && !rawFilePath.StartsWith("!"))
+                                {
+                                    var resolvedPath = rawFilePath
+                                        .Replace("%BIN%", @"bin\")
+                                        .Replace("%LISTS%", @"lists\")
+                                        .Replace("%~dp0", "");
+
+                                    var fullCheckPath = Path.IsPathRooted(resolvedPath)
+                                        ? resolvedPath
+                                        : Path.Combine(_basePath, resolvedPath);
+
+                                    if (!File.Exists(fullCheckPath))
+                                    {
+                                        throw new Exception($"Ошибка в {sourceName} [Строка {lineNum}]:\nВ параметре «--{paramName}» указан несуществующий файл «{rawFilePath}».\nСтрока: «{rawLine.Trim()}»");
+                                    }
+                                }
+                            }
+                        }
+
+                        arguments += " " + cleanLine;
+                    }
 
                     if (!hasContinuation)
                         break;
                 }
             }
 
+            if (!winwsFound)
+            {
+                throw new Exception($"Ошибка структуры в {sourceName}:\nВ батнике не найден вызов ядра «{AppConstants.ZapretProcessName}.exe». Этот скрипт не подходит для Zapret.");
+            }
+
             arguments = arguments.Replace("%BIN%", @"bin\");
             arguments = arguments.Replace("%LISTS%", @"lists\");
+            arguments = arguments.Replace("%~dp0", "");
 
             arguments = arguments.Replace("%GameFilterTCP%", "65535");
             arguments = arguments.Replace("%GameFilterUDP%", "65535");
+            arguments = arguments.Replace("%GameFilter%", "65535");
 
             arguments = arguments.Trim();
 
             if (string.IsNullOrEmpty(arguments))
-                throw new Exception($"Не удалось извлечь параметры запуска из {profileName}.");
+            {
+                throw new Exception($"Ошибка в {sourceName} [Строка {winwsStartLine}]:\nКоманда «{AppConstants.ZapretProcessName}» вызвана без параметров фильтрации.");
+            }
+
+            var unexpandedVar = Regex.Match(arguments, @"%[a-zA-Z0-9_]+%");
+            if (unexpandedVar.Success)
+            {
+                throw new Exception($"Ошибка в {sourceName}:\nОбнаружена неизвестная переменная «{unexpandedVar.Value}», которая не поддерживается в прямом запуске Zapret.");
+            }
 
             var exePath = Path.Combine(_basePath, $"{AppConstants.ZapretProcessName}.exe");
             var binExePath = Path.Combine(_basePath, "bin", $"{AppConstants.ZapretProcessName}.exe");
@@ -76,13 +184,7 @@ namespace ZapretGUI.Core
 
             if (!File.Exists(exePath))
             {
-                var msg = $"Не найден исполняемый файл ядра по пути: {exePath}\n\nПожалуйста, запустите проверку обновлений ядер или переустановите программу.";
-                LogMessage?.Invoke($"[Zapret ERR] {msg}");
-                System.Windows.Application.Current.Dispatcher.Invoke(() =>
-                {
-                    System.Windows.MessageBox.Show(msg, "Ошибка запуска", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
-                });
-                return;
+                throw new FileNotFoundException($"Не найден исполняемый файл ядра по пути: {exePath}. Запустите проверку обновлений в настройках.");
             }
 
             var startInfo = new ProcessStartInfo
@@ -98,17 +200,17 @@ namespace ZapretGUI.Core
 
             _process = new Process { StartInfo = startInfo };
 
+            var errorOutputs = new List<string>();
+
             _process.OutputDataReceived += (s, e) =>
             {
-                if (string.IsNullOrEmpty(e.Data)) 
-                    return;
-
+                if (string.IsNullOrEmpty(e.Data)) return;
                 var line = e.Data;
 
                 string[] noise = {
-        "Loading hostlist", "loading plain text list", "Loaded",
-        "user defined desync profile", "github version", "windivert initialized"
-    };
+                    "Loading hostlist", "loading plain text list", "Loaded",
+                    "user defined desync profile", "github version", "windivert initialized"
+                };
 
                 if (noise.Any(n => line.Contains(n, StringComparison.OrdinalIgnoreCase)))
                     return;
@@ -116,12 +218,27 @@ namespace ZapretGUI.Core
                 LogMessage?.Invoke($"[Zapret] {line}");
             };
 
-            _process.ErrorDataReceived += (s, e) => { if (!string.IsNullOrEmpty(e.Data)) LogMessage?.Invoke($"[Zapret ERR] {e.Data}"); };
+            _process.ErrorDataReceived += (s, e) =>
+            {
+                if (!string.IsNullOrEmpty(e.Data))
+                {
+                    errorOutputs.Add(e.Data);
+                    LogMessage?.Invoke($"[Zapret ERR] {e.Data}");
+                }
+            };
 
             _process.Start();
-
             _process.BeginOutputReadLine();
             _process.BeginErrorReadLine();
+
+            if (_process.WaitForExit(350))
+            {
+                var errDetails = errorOutputs.Count > 0
+                    ? string.Join(" | ", errorOutputs)
+                    : $"Код завершения: {_process.ExitCode}";
+
+                throw new Exception($"Ядро Zapret отвергло конфигурацию в {sourceName}!\nПричина от движка winws: {errDetails}");
+            }
         }
 
         public void Stop()

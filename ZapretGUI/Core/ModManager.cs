@@ -132,5 +132,36 @@ namespace ZapretGUI.Core
                 }
             });
         }
+
+        public (bool isValid, string errorMessage) ValidateBatMod(string modName, string batContent)
+        {
+            if (string.IsNullOrWhiteSpace(batContent))
+                return (false, $"Мод «{modName}»: файл скрипта пуст.");
+
+            var lines = batContent.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+            bool hasWinws = false;
+
+            for (int i = 0; i < lines.Length; i++)
+            {
+                int lineNum = i + 1;
+                string rawLine = lines[i];
+                string trimmed = rawLine.Trim();
+
+                if (string.IsNullOrWhiteSpace(trimmed) || trimmed.StartsWith("::") || trimmed.StartsWith("rem ", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                if (trimmed.Contains(AppConstants.ZapretProcessName, StringComparison.OrdinalIgnoreCase))
+                    hasWinws = true;
+
+                int quotes = trimmed.Count(c => c == '\"');
+                if (quotes % 2 != 0)
+                    return (false, $"Мод «{modName}» [Строка {lineNum}]: Не закрыта кавычка (\") в строке:\n«{trimmed}»");
+            }
+
+            if (!hasWinws)
+                return (false, $"Мод «{modName}»: В скрипте отсутствует вызов «{AppConstants.ZapretProcessName}.exe». Такой батник не подходит для Zapret.");
+
+            return (true, "");
+        }
     }
 }

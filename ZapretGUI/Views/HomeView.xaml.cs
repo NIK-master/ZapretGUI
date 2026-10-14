@@ -288,11 +288,26 @@ namespace ZapretGUI.Views
             }
             catch (Exception ex)
             {
-                Log($"ОШИБКА: {ex.Message}");
+                foreach (var errLine in ex.Message.Split('\n'))
+                {
+                    if (!string.IsNullOrWhiteSpace(errLine))
+                        Log($"❌ ОШИБКА: {errLine.Trim()}");
+                }
+
                 TriggerErrorGlitch();
 
+                if (System.Windows.Application.Current.MainWindow is MainWindow mainWindowErr)
+                {
+                    mainWindowErr.ShowNotification(
+                        "Ошибка конфигурации Zapret",
+                        ex.Message,
+                        System.Windows.Forms.ToolTipIcon.Error);
+                }
+
+                BypassController.Current.StopServices();
                 MainToggle.IsChecked = false;
                 UpdateUIState(false);
+                SyncMainWindowIndicators();
                 LaunchProgressBar.Visibility = Visibility.Collapsed;
                 MainToggle.IsEnabled = true;
             }
