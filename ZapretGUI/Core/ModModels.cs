@@ -5,7 +5,8 @@ namespace ZapretGUI.Core
     public enum ModType
     {
         BatStrategy,
-        DomainList
+        DomainList,
+        Guide
     }
 
     public class ModMetaData

@@ -438,11 +438,11 @@ namespace ZapretGUI.Views
                 var match = Regex.Match(message, @"([a-zA-Z0-9_\-\(\)\s]+\.bat).*?Успешно:\s*(\d+)(?:,\s*Ошибок:\s*(\d+))?");
                 if (match.Success)
                 {
-                    string batName = match.Groups[1].Value.Trim();
-                    string okCount = match.Groups[2].Value;
-                    string errCount = match.Groups[3].Success ? match.Groups[3].Value : "0";
+                    var batName = match.Groups[1].Value.Trim();
+                    var okCount = match.Groups[2].Value;
+                    var errCount = match.Groups[3].Success ? match.Groups[3].Value : "0";
 
-                    int total = int.Parse(okCount) + int.Parse(errCount);
+                    var total = int.Parse(okCount) + int.Parse(errCount);
                     UpdateConfigTests(batName, okCount, total.ToString());
                 }
             });
@@ -500,11 +500,8 @@ namespace ZapretGUI.Views
                     continue;
                 }
 
-                // Ограничиваем количество параграфов в документе, чтобы не раздувать память
                 while (LogDocument.Blocks.Count >= MaxLogBlocks && LogDocument.Blocks.FirstBlock != null)
-                {
                     LogDocument.Blocks.Remove(LogDocument.Blocks.FirstBlock);
-                }
 
                 var run = new System.Windows.Documents.Run("") { Foreground = entry.Color, FontWeight = entry.Weight };
                 var paragraph = new System.Windows.Documents.Paragraph(run) { Margin = new Thickness(0, 0, 0, 2) };
@@ -639,9 +636,12 @@ namespace ZapretGUI.Views
             AnimationHelper.HideOverlay(ConfigOverlay, OverlayContentBorder, ContentGrid);
         }
 
-        private void BtnCloseOverlay_Click(object sender, RoutedEventArgs e) => CloseOverlay();
-        private void OverlayBackground_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e) => CloseOverlay();
-        private void OverlayContent_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e) => e.Handled = true;
+        private void BtnCloseOverlay_Click(object sender, RoutedEventArgs e) 
+            => CloseOverlay();
+        private void OverlayBackground_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e) 
+            => CloseOverlay();
+        private void OverlayContent_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e) 
+            => e.Handled = true;
 
         private void OverlayProfileListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
@@ -687,7 +687,7 @@ namespace ZapretGUI.Views
                     string? bestConfig = topConfigs[0];
                     Log($"⭐ Применяем лучшую: {bestConfig}");
 
-                    for (int i = 0; i < OverlayProfileListBox.Items.Count; i++)
+                    for (var i = 0; i < OverlayProfileListBox.Items.Count; i++)
                     {
                         if (OverlayProfileListBox.Items[i] is ConfigItem item && item.FileName == bestConfig)
                         {
@@ -756,7 +756,7 @@ namespace ZapretGUI.Views
                 if (item is ConfigItem config)
                 {
                     var parts = config.MetaInfo.Split('•');
-                    string testsPart = parts.Length > 1 ? parts[1].Trim() : "Тесты: не проводились";
+                    var testsPart = parts.Length > 1 ? parts[1].Trim() : "Тесты: не проводились";
                     config.MetaInfo = $"Пинг: {currentPing} мс • {testsPart}";
                 }
             }

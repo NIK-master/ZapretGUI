@@ -26,20 +26,22 @@ namespace ZapretGUI.Core
 
         public void InitializeFolders()
         {
-            if (!Directory.Exists(_modsBasePath)) Directory.CreateDirectory(_modsBasePath);
-            if (!Directory.Exists(_strategiesPath)) Directory.CreateDirectory(_strategiesPath);
-            if (!Directory.Exists(_listsPath)) Directory.CreateDirectory(_listsPath);
+            if (!Directory.Exists(_modsBasePath)) 
+                Directory.CreateDirectory(_modsBasePath);
+
+            if (!Directory.Exists(_strategiesPath)) 
+                Directory.CreateDirectory(_strategiesPath);
+
+            if (!Directory.Exists(_listsPath)) 
+                Directory.CreateDirectory(_listsPath);
         }
 
-        /// <summary>
-        /// Проверяет, занят ли ID хотя бы в одной из категорий (strategies или lists), либо в метаданных.
-        /// </summary>
         public bool IsModIdTaken(string id)
         {
             if (string.IsNullOrWhiteSpace(id)) return true;
             InitializeFolders();
 
-            string normId = SanitizeModId(id);
+            var normId = SanitizeModId(id);
             if (Directory.Exists(Path.Combine(_strategiesPath, normId)) ||
                 Directory.Exists(Path.Combine(_listsPath, normId)))
             {
@@ -66,25 +68,27 @@ namespace ZapretGUI.Core
 
         public static string SanitizeModId(string raw)
         {
-            if (string.IsNullOrWhiteSpace(raw)) return "";
-            string clean = raw.Trim().ToLowerInvariant().Replace(" ", "_");
+            if (string.IsNullOrWhiteSpace(raw)) 
+                return "";
+
+            var clean = raw.Trim().ToLowerInvariant().Replace(" ", "_");
             clean = Regex.Replace(clean, @"[^a-z0-9_\-]", "");
             return clean.Trim('_');
         }
 
-        /// <summary>
-        /// Генерирует гарантированно уникальный ID с коротким крипто-суффиксом.
-        /// </summary>
         public string GenerateUniqueModId(string baseName = "mod")
         {
-            string prefix = SanitizeModId(baseName);
-            if (string.IsNullOrEmpty(prefix)) prefix = "mod";
-            if (prefix.Length > 18) prefix = prefix.Substring(0, 18).TrimEnd('_');
+            var prefix = SanitizeModId(baseName);
+            if (string.IsNullOrEmpty(prefix)) 
+                prefix = "mod";
+
+            if (prefix.Length > 18) 
+                prefix = prefix.Substring(0, 18).TrimEnd('_');
 
             while (true)
             {
-                string shortHash = Guid.NewGuid().ToString("N").Substring(0, 4);
-                string candidate = $"{prefix}_{shortHash}";
+                var shortHash = Guid.NewGuid().ToString("N").Substring(0, 4);
+                var candidate = $"{prefix}_{shortHash}";
                 if (!IsModIdTaken(candidate))
                     return candidate;
             }
@@ -171,8 +175,6 @@ namespace ZapretGUI.Core
                 }
             }
 
-            // Создаем чистый бэкап оригинального list-general.txt при первом запуске,
-            // чтобы отключение одного мода не удалило стандартные домены или домены другого активного мода
             if (!File.Exists(backupBaseFile))
             {
                 var currentRaw = await File.ReadAllLinesAsync(targetFile);

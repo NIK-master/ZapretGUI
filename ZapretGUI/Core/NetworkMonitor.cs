@@ -69,7 +69,7 @@ namespace ZapretGUI.Core
                 }
             }
 
-            double elapsedSeconds = Math.Max(0.1, _elapsedStopwatch.Elapsed.TotalSeconds);
+            var elapsedSeconds = Math.Max(0.1, _elapsedStopwatch.Elapsed.TotalSeconds);
             _elapsedStopwatch.Restart();
 
             if (_lastBytesReceived != 0 && _lastBytesSent != 0)

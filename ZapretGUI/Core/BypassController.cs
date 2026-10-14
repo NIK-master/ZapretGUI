@@ -77,9 +77,7 @@ namespace ZapretGUI.Core
                     portToPing = uri.Port > 0 ? uri.Port : 443;
                 }
                 else
-                {
                     hostToPing = fullUrl;
-                }
             }
 
             return await NetworkHelper.TcpPingAsync(hostToPing, portToPing);

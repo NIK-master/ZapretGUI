@@ -41,9 +41,6 @@ namespace ZapretGUI.Core
             return $"профиле «{profileName}»";
         }
 
-        /// <summary>
-        /// Единый глубокий анализатор и сборщик аргументов .bat скрипта для ZapretManager и редактора модов.
-        /// </summary>
         public static string ParseAndValidateBatLines(string[] lines, string sourceName, string zapretBasePath, bool checkReferencedFiles = true)
         {
             if (lines == null || lines.Length == 0 || lines.All(string.IsNullOrWhiteSpace))
@@ -131,9 +128,7 @@ namespace ZapretGUI.Core
                                             : Path.Combine(zapretBasePath, resolvedPath);
 
                                         if (!File.Exists(fullCheckPath))
-                                        {
                                             throw new Exception($"Ошибка в {sourceName} [Строка {lineNum}]:\nВ параметре «--{paramName}» указан несуществующий файл «{rawFilePath}».\nСтрока: «{rawLine.Trim()}»");
-                                        }
                                     }
                                 }
                             }
@@ -207,10 +202,12 @@ namespace ZapretGUI.Core
 
             _process.OutputDataReceived += (s, e) =>
             {
-                if (string.IsNullOrEmpty(e.Data)) return;
-                var line = e.Data;
+                if (string.IsNullOrEmpty(e.Data)) 
+                    return;
 
-                string[] noise = {
+                var line = e.Data;
+                var noise = new[]
+                {
                     "Loading hostlist", "loading plain text list", "Loaded",
                     "user defined desync profile", "github version", "windivert initialized"
                 };

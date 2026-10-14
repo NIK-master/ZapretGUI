@@ -30,7 +30,7 @@ namespace ZapretGUI.Core
 
     public static class UpdateManager
     {
-        public const string CurrentVersion = "v2.1";
+        public const string CurrentVersion = AppConstants.AppVersion;
 
         private static readonly HttpClient _httpClient = new HttpClient();
 
@@ -45,16 +45,12 @@ namespace ZapretGUI.Core
             return version.Trim().TrimStart('v', 'V');
         }
 
-        /// <summary>
-        /// Единый сценарий проверки и установки обновлений для старта программы и кнопки в Настройках.
-        /// </summary>
         public static async Task RunUpdateWorkflowAsync(bool isManualCheck, Action? stopServicesCallback, IProgress<string>? progress = null)
         {
-            // 1. Проверка обновлений самого приложения (GUI)
             var appUpdate = await CheckForAppUpdateAsync();
             if (appUpdate.UpdateAvailable)
             {
-                bool acceptApp = UIHelper.ShowConfirm(
+                var acceptApp = UIHelper.ShowConfirm(
                     "Обновление программы",
                     $"Доступна новая версия панели управления {appUpdate.Version}!\n\nПрограмма будет закрыта для установки обновления. Продолжить?",
                     confirmText: "Обновить");
@@ -84,11 +80,10 @@ namespace ZapretGUI.Core
                 UIHelper.ShowAlert("Проверка обновлений", "У вас уже установлена самая последняя версия панели управления!");
             }
 
-            // 2. Проверка обновлений ядра Zapret
             var zapretUpdate = await CheckForCoreUpdateAsync(AppConstants.ZapretCoreRepoUrl, SettingsManager.Current.ZapretCoreVersion, "Zapret", true);
             if (zapretUpdate.UpdateAvailable)
             {
-                bool acceptZapret = UIHelper.ShowConfirm(
+                var acceptZapret = UIHelper.ShowConfirm(
                     "Обновление ядра Zapret",
                     $"Найдено обновление обхода Zapret от flowseal ({zapretUpdate.Version})!\n\nТекущая версия: {zapretUpdate.CurrentVersion}\nОбновить автоматически?",
                     confirmText: "Обновить");
@@ -113,11 +108,10 @@ namespace ZapretGUI.Core
                 UIHelper.ShowAlert("Проверка ядра Zapret", "Ядро Zapret обновлено до последней версии.");
             }
 
-            // 3. Проверка обновлений ядра TgWsProxy
             var proxyUpdate = await CheckForCoreUpdateAsync(AppConstants.TgProxyCoreRepoUrl, SettingsManager.Current.TgProxyCoreVersion, "TgWsProxy", false);
             if (proxyUpdate.UpdateAvailable)
             {
-                bool acceptProxy = UIHelper.ShowConfirm(
+                var acceptProxy = UIHelper.ShowConfirm(
                     "Обновление ядра TgWsProxy",
                     $"Найдено обновление прокси Telegram от flowseal ({proxyUpdate.Version})!\n\nТекущая версия: {proxyUpdate.CurrentVersion}\nОбновить автоматически?",
                     confirmText: "Обновить");

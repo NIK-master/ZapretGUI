@@ -10,24 +10,19 @@ namespace ZapretGUI.Core
         private static readonly BrushConverter _brushConverter = new BrushConverter();
 
         public static SolidColorBrush GetBrushFromHex(string hex)
-        {
-            return (SolidColorBrush)_brushConverter.ConvertFromString(hex)!;
-        }
+            => (SolidColorBrush)_brushConverter.ConvertFromString(hex)!;
 
         public static SolidColorBrush GetSuccessBrush()
-        {
-            return GetBrushFromHex(SettingsManager.Current.ColorblindMode ? "#0078D7" : "#107C10");
-        }
+            => GetBrushFromHex(SettingsManager.Current.ColorblindMode ? "#0078D7" : "#107C10");
 
         public static SolidColorBrush GetErrorBrush()
-        {
-            return GetBrushFromHex(SettingsManager.Current.ColorblindMode ? "#FF8C00" : "#D13438");
-        }
+            => GetBrushFromHex(SettingsManager.Current.ColorblindMode ? "#FF8C00" : "#D13438");
 
         public static void ApplyThemeColors()
         {
             var res = System.Windows.Application.Current?.Resources;
-            if (res == null) return;
+            if (res == null) 
+                return;
 
             res["BrandSuccessBrush"] = GetSuccessBrush();
             res["BrandErrorBrush"] = GetErrorBrush();
@@ -50,8 +45,8 @@ namespace ZapretGUI.Core
         {
             System.Windows.Application.Current.Dispatcher.Invoke(() =>
             {
-                string accent = isError ? "#F44336" : "#107C10";
-                string icon = isError ? "\xE783" : "\xE946";
+                var accent = isError ? "#F44336" : "#107C10";
+                var icon = isError ? "\xE783" : "\xE946";
 
                 var mainWin = System.Windows.Application.Current.MainWindow;
                 if (mainWin != null && mainWin.IsVisible)
@@ -72,8 +67,8 @@ namespace ZapretGUI.Core
         {
             return System.Windows.Application.Current.Dispatcher.Invoke(() =>
             {
-                string accent = isDanger ? "#F44336" : "#107C10";
-                string icon = isDanger ? "\xE7BA" : "\xE897";
+                var accent = isDanger ? "#F44336" : "#107C10";
+                var icon = isDanger ? "\xE7BA" : "\xE897";
 
                 var mainWin = System.Windows.Application.Current.MainWindow;
                 if (mainWin != null && mainWin.IsVisible)

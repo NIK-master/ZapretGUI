@@ -141,9 +141,13 @@ namespace ZapretGUI.Core
             try
             {
                 var ancount = (data[6] << 8) | data[7];
-                if (ancount == 0) return ips;
+                if (ancount == 0) 
+                    return ips;
+
                 var i = 12;
-                while (i < data.Length && data[i] != 0) i += data[i] + 1;
+                while (i < data.Length && data[i] != 0) 
+                    i += data[i] + 1;
+
                 i += 5;
                 for (var a = 0; a < ancount && i + 10 < data.Length; a++)
                 {
@@ -276,8 +280,10 @@ namespace ZapretGUI.Core
                 if (!result.SystemIps.Intersect(result.DohIps).Any())
                     result.Spoofed = true;
             }
-            else if (result.SystemIps.Count == 0) result.Spoofed = true;
-            else if (result.DohIps.Count == 0) result.Error = "1.1.1.1 недоступен";
+            else if (result.SystemIps.Count == 0) 
+                result.Spoofed = true;
+            else if (result.DohIps.Count == 0) 
+                result.Error = "1.1.1.1 недоступен";
             progress?.Invoke(1.0);
             return result;
         }
@@ -315,9 +321,9 @@ namespace ZapretGUI.Core
                     var sw = Stopwatch.StartNew();
                     var data = await _httpClient.GetByteArrayAsync(url);
                     sw.Stop();
-                    double sizeKb = data.Length / 1024.0;
+                    var sizeKb = data.Length / 1024.0;
                     if (sizeKb < 5) continue;
-                    double elapsed = Math.Max(sw.Elapsed.TotalSeconds, 0.001);
+                    var elapsed = Math.Max(sw.Elapsed.TotalSeconds, 0.001);
                     result.SpeedKbps = sizeKb / elapsed * 8;
                     result.Throttled = result.SpeedKbps < MediaThrottleResult.SlowThreshold;
                     progress?.Invoke(1.0);
@@ -334,11 +340,11 @@ namespace ZapretGUI.Core
             var result = new UdpResult();
             var tested = DiscordUdpPorts.Take(5).ToList();
             result.TestedPorts = tested;
-            int done = 0;
+            var done = 0;
 
             var tasks = tested.Select(async port =>
             {
-                bool open = await UdpProbeAsync(DiscordHost, port);
+                var open = await UdpProbeAsync(DiscordHost, port);
                 Interlocked.Increment(ref done);
                 progress?.Invoke((double)done / tested.Count);
                 return (port, open);
@@ -353,7 +359,7 @@ namespace ZapretGUI.Core
         public static async Task<List<DiscordPingResult>> CheckDiscordPingAsync(Action<double>? progress = null)
         {
             var results = new List<DiscordPingResult>();
-            for (int i = 0; i < DiscordPingHosts.Length; i++)
+            for (var i = 0; i < DiscordPingHosts.Length; i++)
             {
                 var (label, ip) = DiscordPingHosts[i];
                 var (ok, lat, err) = await TcpConnectAsync(ip, 443, 4.0);
@@ -376,8 +382,11 @@ namespace ZapretGUI.Core
             var dcOk = r.DcResults.Where(x => x.Ok).ToList();
             var pingOk = r.PingResults.Where(x => x.Ok).ToList();
 
-            if (r.DnsResult?.Spoofed == true) blocks.Add(BlockType.DnsSpoof);
-            if (r.DpiResult?.DpiDetected == true) blocks.Add(BlockType.SniBlock);
+            if (r.DnsResult?.Spoofed == true) 
+                blocks.Add(BlockType.DnsSpoof);
+
+            if (r.DpiResult?.DpiDetected == true) 
+                blocks.Add(BlockType.SniBlock);
 
             if (dcOk.Count == 0 && pingOk.Count > 0 && !blocks.Contains(BlockType.SniBlock))
                 blocks.Add(BlockType.IpBlock);
@@ -398,7 +407,9 @@ namespace ZapretGUI.Core
                 }
             }
 
-            if (r.MediaResult?.Throttled == true) blocks.Add(BlockType.MediaThrottle);
+            if (r.MediaResult?.Throttled == true) 
+                blocks.Add(BlockType.MediaThrottle);
+
             return [.. blocks];
         }
 

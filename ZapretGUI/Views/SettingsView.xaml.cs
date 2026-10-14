@@ -148,7 +148,8 @@ namespace ZapretGUI.Views
 
         private async void BtnCheckUpdates_Click(object sender, RoutedEventArgs e)
         {
-            if (sender is System.Windows.Controls.Button btn) btn.IsEnabled = false;
+            if (sender is System.Windows.Controls.Button btn) 
+                btn.IsEnabled = false;
 
             Action stopServicesAction = () =>
             {

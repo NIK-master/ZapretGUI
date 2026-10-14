@@ -24,15 +24,13 @@ namespace ZapretGUI.Views
         private void PrepareSkeletons()
         {
             var skeletons = new List<DcResult>();
-            int[] dcs = { 1, 2, 3, 4, 5 };
-            int[] ports = { 443, 80, 5222 };
+            var dcs = new[] { 1, 2, 3, 4, 5 };
+            var ports = new[] { 443, 80, 5222 };
 
             foreach (var dc in dcs)
             {
                 foreach (var port in ports)
-                {
                     skeletons.Add(new DcResult { DcId = dc, Port = port, IsLoading = true });
-                }
             }
             DcItemsControl.ItemsSource = skeletons;
 
@@ -77,7 +75,6 @@ namespace ZapretGUI.Views
 
         private void UpdateUI(DiagReport report)
         {
-            // Теперь мы вызываем методы прямо из этого же класса
             var tgVerdict = HumanVerdict(report);
             TxtTgMainStatus.Text = tgVerdict.title;
             TxtTgSubStatus.Text = tgVerdict.detail;
@@ -104,20 +101,19 @@ namespace ZapretGUI.Views
             DiscordItemsControl.ItemsSource = report.DiscordPing;
         }
 
-        // --- ПЕРЕНЕСЕННЫЕ ИЗ ДВИЖКА МЕТОДЫ ОФОРМЛЕНИЯ ---
         private (string emoji, string title, string detail, string color) HumanVerdict(DiagReport r)
         {
             var blocks = new HashSet<BlockType>(r.BlockTypes);
             var app = r.AppStatus;
-            int dcOk = r.DcResults.Count(x => x.Ok);
-            int dcTot = r.DcResults.Count;
-            bool pingOk = r.PingResults.Any(p => p.Ok);
-            bool bypass = app != null && app.ZapretRunning;
+            var dcOk = r.DcResults.Count(x => x.Ok);
+            var dcTot = r.DcResults.Count;
+            var pingOk = r.PingResults.Any(p => p.Ok);
+            var bypass = app != null && app.ZapretRunning;
 
-            bool isCb = SettingsManager.Current.ColorblindMode;
-            string successColor = isCb ? "#0078D7" : "#107C10";
-            string errorColor = isCb ? "#FF8C00" : "#D13438";
-            string warningColor = isCb ? "#FFB900" : "#FF8C00";
+            var isCb = SettingsManager.Current.ColorblindMode;
+            var successColor = isCb ? "#0078D7" : "#107C10";
+            var errorColor = isCb ? "#FF8C00" : "#D13438";
+            var warningColor = isCb ? "#FFB900" : "#FF8C00";
 
             if (app?.TgWsProxyRunning == true)
                 return ("🟢", "tg-ws-proxy активен", "Telegram работает через прокси локально.", successColor);
@@ -144,12 +140,12 @@ namespace ZapretGUI.Views
         private (string emoji, string title, string detail, string color) DiscordVerdict(DiagReport r)
         {
             var app = r.AppStatus;
-            bool bypass = app != null && app.ZapretRunning;
+            var bypass = app != null && app.ZapretRunning;
 
-            bool isCb = SettingsManager.Current.ColorblindMode;
-            string successColor = isCb ? "#0078D7" : "#107C10";
-            string errorColor = isCb ? "#FF8C00" : "#D13438";
-            string warningColor = isCb ? "#FFB900" : "#FF8C00";
+            var isCb = SettingsManager.Current.ColorblindMode;
+            var successColor = isCb ? "#0078D7" : "#107C10";
+            var errorColor = isCb ? "#FF8C00" : "#D13438";
+            var warningColor = isCb ? "#FFB900" : "#FF8C00";
 
             if (r.DiscordPing != null && r.DiscordPing.Count > 0 && r.DiscordPing.All(p => !p.Ok))
                 return bypass
@@ -164,7 +160,6 @@ namespace ZapretGUI.Views
             return ("🟢", "Discord работает нормально", "Все нужные порты и серверы доступны.", successColor);
         }
 
-        // --- ЛОГИКА ПАСХАЛОК ---
 
         private void TxtDiscordEmoji_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
