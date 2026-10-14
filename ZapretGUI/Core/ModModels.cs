@@ -10,6 +10,7 @@ namespace ZapretGUI.Core
 
     public class ModMetaData
     {
+        public string UniqueId { get; set; } = "";
         public string Name { get; set; } = "Неизвестный мод";
         public string Author { get; set; } = "Аноним";
         public string Version { get; set; } = "1.0";

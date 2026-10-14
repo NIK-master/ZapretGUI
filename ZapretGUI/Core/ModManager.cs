@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace ZapretGUI.Core
@@ -28,6 +29,65 @@ namespace ZapretGUI.Core
             if (!Directory.Exists(_modsBasePath)) Directory.CreateDirectory(_modsBasePath);
             if (!Directory.Exists(_strategiesPath)) Directory.CreateDirectory(_strategiesPath);
             if (!Directory.Exists(_listsPath)) Directory.CreateDirectory(_listsPath);
+        }
+
+        /// <summary>
+        /// Проверяет, занят ли ID хотя бы в одной из категорий (strategies или lists), либо в метаданных.
+        /// </summary>
+        public bool IsModIdTaken(string id)
+        {
+            if (string.IsNullOrWhiteSpace(id)) return true;
+            InitializeFolders();
+
+            string normId = SanitizeModId(id);
+            if (Directory.Exists(Path.Combine(_strategiesPath, normId)) ||
+                Directory.Exists(Path.Combine(_listsPath, normId)))
+            {
+                return true;
+            }
+
+            foreach (var dir in Directory.GetDirectories(_strategiesPath).Concat(Directory.GetDirectories(_listsPath)))
+            {
+                var jsonPath = Path.Combine(dir, "mod.json");
+                if (File.Exists(jsonPath))
+                {
+                    try
+                    {
+                        var meta = JsonSerializer.Deserialize<ModMetaData>(File.ReadAllText(jsonPath), new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                        if (meta != null && string.Equals(meta.UniqueId, normId, StringComparison.OrdinalIgnoreCase))
+                            return true;
+                    }
+                    catch { }
+                }
+            }
+
+            return false;
+        }
+
+        public static string SanitizeModId(string raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) return "";
+            string clean = raw.Trim().ToLowerInvariant().Replace(" ", "_");
+            clean = Regex.Replace(clean, @"[^a-z0-9_\-]", "");
+            return clean.Trim('_');
+        }
+
+        /// <summary>
+        /// Генерирует гарантированно уникальный ID с коротким крипто-суффиксом.
+        /// </summary>
+        public string GenerateUniqueModId(string baseName = "mod")
+        {
+            string prefix = SanitizeModId(baseName);
+            if (string.IsNullOrEmpty(prefix)) prefix = "mod";
+            if (prefix.Length > 18) prefix = prefix.Substring(0, 18).TrimEnd('_');
+
+            while (true)
+            {
+                string shortHash = Guid.NewGuid().ToString("N").Substring(0, 4);
+                string candidate = $"{prefix}_{shortHash}";
+                if (!IsModIdTaken(candidate))
+                    return candidate;
+            }
         }
 
         public async Task<List<UIModItem>> GetAvailableModsAsync(ModType type)
@@ -56,6 +116,9 @@ namespace ZapretGUI.Core
 
                         if (meta != null)
                         {
+                            if (string.IsNullOrWhiteSpace(meta.UniqueId))
+                                meta.UniqueId = modId;
+
                             mods.Add(new UIModItem
                             {
                                 Id = modId,
@@ -78,38 +141,57 @@ namespace ZapretGUI.Core
         {
             var listsDir = Path.Combine(_zapretFilesPath, "lists");
             var targetFile = Path.Combine(listsDir, "list-general.txt");
+            var backupBaseFile = Path.Combine(listsDir, "list-general.base.txt");
 
             if (!File.Exists(targetFile)) return;
 
             var allModDomains = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var activeModDomains = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            foreach (var dir in Directory.GetDirectories(_listsPath))
+            if (Directory.Exists(_listsPath))
             {
-                var modId = Path.GetFileName(dir);
-                var listPath = Path.Combine(dir, "list.txt");
-
-                if (File.Exists(listPath))
+                foreach (var dir in Directory.GetDirectories(_listsPath))
                 {
-                    var lines = await File.ReadAllLinesAsync(listPath);
-                    var domains = lines.Where(l => !string.IsNullOrWhiteSpace(l)).Select(l => l.Trim());
+                    var modId = Path.GetFileName(dir);
+                    var listPath = Path.Combine(dir, "list.txt");
 
-                    foreach (var d in domains)
+                    if (File.Exists(listPath))
                     {
-                        allModDomains.Add(d);
-                        if (SettingsManager.Current.ActiveListMods.Contains(modId))
-                            activeModDomains.Add(d);
+                        var lines = await File.ReadAllLinesAsync(listPath);
+                        var domains = lines.Where(l => !string.IsNullOrWhiteSpace(l) && !l.TrimStart().StartsWith("#"))
+                                           .Select(l => l.Trim());
+
+                        foreach (var d in domains)
+                        {
+                            allModDomains.Add(d);
+                            if (SettingsManager.Current.ActiveListMods.Contains(modId))
+                                activeModDomains.Add(d);
+                        }
                     }
                 }
             }
 
-            var currentLinesRaw = await File.ReadAllLinesAsync(targetFile);
-            var currentLines = currentLinesRaw.Where(l => !string.IsNullOrWhiteSpace(l)).Select(l => l.Trim()).ToList();
+            // Создаем чистый бэкап оригинального list-general.txt при первом запуске,
+            // чтобы отключение одного мода не удалило стандартные домены или домены другого активного мода
+            if (!File.Exists(backupBaseFile))
+            {
+                var currentRaw = await File.ReadAllLinesAsync(targetFile);
+                var baseLinesOnly = currentRaw.Where(l => !string.IsNullOrWhiteSpace(l))
+                                              .Select(l => l.Trim())
+                                              .Where(l => !allModDomains.Contains(l))
+                                              .Distinct(StringComparer.OrdinalIgnoreCase)
+                                              .ToList();
+                await File.WriteAllLinesAsync(backupBaseFile, baseLinesOnly);
+            }
 
-            var newLines = currentLines.Where(l => !allModDomains.Contains(l)).ToList();
-            newLines.AddRange(activeModDomains);
+            var baseLines = (await File.ReadAllLinesAsync(backupBaseFile))
+                            .Where(l => !string.IsNullOrWhiteSpace(l))
+                            .Select(l => l.Trim())
+                            .ToList();
 
-            await File.WriteAllLinesAsync(targetFile, newLines.Distinct(StringComparer.OrdinalIgnoreCase));
+            baseLines.AddRange(activeModDomains);
+
+            await File.WriteAllLinesAsync(targetFile, baseLines.Distinct(StringComparer.OrdinalIgnoreCase));
         }
 
         public async Task SyncActiveBatModsAsync()

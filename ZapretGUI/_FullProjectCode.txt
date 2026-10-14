@@ -572,6 +572,13 @@ namespace ZapretGUI
 
         public void ToggleBypass() => _homeView.ToggleFromTray();
 
+        public async Task RestartBypassAsync()
+        {
+            var profile = _homeView.TxtMainProfile.Text;
+            await BypassController.Current.RestartServicesAsync(profile);
+            UpdateIndicators(BypassController.Current.Zapret.IsRunning(), BypassController.Current.TgProxy.IsRunning());
+        }
+
         private SolidColorBrush GetSuccessColor()
         {
             var hex = SettingsManager.Current.ColorblindMode ? "#0078D7" : "#107C10";
@@ -1500,6 +1507,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace ZapretGUI.Core
@@ -1524,6 +1532,65 @@ namespace ZapretGUI.Core
             if (!Directory.Exists(_modsBasePath)) Directory.CreateDirectory(_modsBasePath);
             if (!Directory.Exists(_strategiesPath)) Directory.CreateDirectory(_strategiesPath);
             if (!Directory.Exists(_listsPath)) Directory.CreateDirectory(_listsPath);
+        }
+
+        /// <summary>
+        /// Проверяет, занят ли ID хотя бы в одной из категорий (strategies или lists), либо в метаданных.
+        /// </summary>
+        public bool IsModIdTaken(string id)
+        {
+            if (string.IsNullOrWhiteSpace(id)) return true;
+            InitializeFolders();
+
+            string normId = SanitizeModId(id);
+            if (Directory.Exists(Path.Combine(_strategiesPath, normId)) ||
+                Directory.Exists(Path.Combine(_listsPath, normId)))
+            {
+                return true;
+            }
+
+            foreach (var dir in Directory.GetDirectories(_strategiesPath).Concat(Directory.GetDirectories(_listsPath)))
+            {
+                var jsonPath = Path.Combine(dir, "mod.json");
+                if (File.Exists(jsonPath))
+                {
+                    try
+                    {
+                        var meta = JsonSerializer.Deserialize<ModMetaData>(File.ReadAllText(jsonPath), new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                        if (meta != null && string.Equals(meta.UniqueId, normId, StringComparison.OrdinalIgnoreCase))
+                            return true;
+                    }
+                    catch { }
+                }
+            }
+
+            return false;
+        }
+
+        public static string SanitizeModId(string raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) return "";
+            string clean = raw.Trim().ToLowerInvariant().Replace(" ", "_");
+            clean = Regex.Replace(clean, @"[^a-z0-9_\-]", "");
+            return clean.Trim('_');
+        }
+
+        /// <summary>
+        /// Генерирует гарантированно уникальный ID с коротким крипто-суффиксом.
+        /// </summary>
+        public string GenerateUniqueModId(string baseName = "mod")
+        {
+            string prefix = SanitizeModId(baseName);
+            if (string.IsNullOrEmpty(prefix)) prefix = "mod";
+            if (prefix.Length > 18) prefix = prefix.Substring(0, 18).TrimEnd('_');
+
+            while (true)
+            {
+                string shortHash = Guid.NewGuid().ToString("N").Substring(0, 4);
+                string candidate = $"{prefix}_{shortHash}";
+                if (!IsModIdTaken(candidate))
+                    return candidate;
+            }
         }
 
         public async Task<List<UIModItem>> GetAvailableModsAsync(ModType type)
@@ -1552,6 +1619,9 @@ namespace ZapretGUI.Core
 
                         if (meta != null)
                         {
+                            if (string.IsNullOrWhiteSpace(meta.UniqueId))
+                                meta.UniqueId = modId;
+
                             mods.Add(new UIModItem
                             {
                                 Id = modId,
@@ -1574,38 +1644,57 @@ namespace ZapretGUI.Core
         {
             var listsDir = Path.Combine(_zapretFilesPath, "lists");
             var targetFile = Path.Combine(listsDir, "list-general.txt");
+            var backupBaseFile = Path.Combine(listsDir, "list-general.base.txt");
 
             if (!File.Exists(targetFile)) return;
 
             var allModDomains = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var activeModDomains = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            foreach (var dir in Directory.GetDirectories(_listsPath))
+            if (Directory.Exists(_listsPath))
             {
-                var modId = Path.GetFileName(dir);
-                var listPath = Path.Combine(dir, "list.txt");
-
-                if (File.Exists(listPath))
+                foreach (var dir in Directory.GetDirectories(_listsPath))
                 {
-                    var lines = await File.ReadAllLinesAsync(listPath);
-                    var domains = lines.Where(l => !string.IsNullOrWhiteSpace(l)).Select(l => l.Trim());
+                    var modId = Path.GetFileName(dir);
+                    var listPath = Path.Combine(dir, "list.txt");
 
-                    foreach (var d in domains)
+                    if (File.Exists(listPath))
                     {
-                        allModDomains.Add(d);
-                        if (SettingsManager.Current.ActiveListMods.Contains(modId))
-                            activeModDomains.Add(d);
+                        var lines = await File.ReadAllLinesAsync(listPath);
+                        var domains = lines.Where(l => !string.IsNullOrWhiteSpace(l) && !l.TrimStart().StartsWith("#"))
+                                           .Select(l => l.Trim());
+
+                        foreach (var d in domains)
+                        {
+                            allModDomains.Add(d);
+                            if (SettingsManager.Current.ActiveListMods.Contains(modId))
+                                activeModDomains.Add(d);
+                        }
                     }
                 }
             }
 
-            var currentLinesRaw = await File.ReadAllLinesAsync(targetFile);
-            var currentLines = currentLinesRaw.Where(l => !string.IsNullOrWhiteSpace(l)).Select(l => l.Trim()).ToList();
+            // Создаем чистый бэкап оригинального list-general.txt при первом запуске,
+            // чтобы отключение одного мода не удалило стандартные домены или домены другого активного мода
+            if (!File.Exists(backupBaseFile))
+            {
+                var currentRaw = await File.ReadAllLinesAsync(targetFile);
+                var baseLinesOnly = currentRaw.Where(l => !string.IsNullOrWhiteSpace(l))
+                                              .Select(l => l.Trim())
+                                              .Where(l => !allModDomains.Contains(l))
+                                              .Distinct(StringComparer.OrdinalIgnoreCase)
+                                              .ToList();
+                await File.WriteAllLinesAsync(backupBaseFile, baseLinesOnly);
+            }
 
-            var newLines = currentLines.Where(l => !allModDomains.Contains(l)).ToList();
-            newLines.AddRange(activeModDomains);
+            var baseLines = (await File.ReadAllLinesAsync(backupBaseFile))
+                            .Where(l => !string.IsNullOrWhiteSpace(l))
+                            .Select(l => l.Trim())
+                            .ToList();
 
-            await File.WriteAllLinesAsync(targetFile, newLines.Distinct(StringComparer.OrdinalIgnoreCase));
+            baseLines.AddRange(activeModDomains);
+
+            await File.WriteAllLinesAsync(targetFile, baseLines.Distinct(StringComparer.OrdinalIgnoreCase));
         }
 
         public async Task SyncActiveBatModsAsync()
@@ -1678,6 +1767,7 @@ namespace ZapretGUI.Core
 
     public class ModMetaData
     {
+        public string UniqueId { get; set; } = "";
         public string Name { get; set; } = "Неизвестный мод";
         public string Author { get; set; } = "Аноним";
         public string Version { get; set; } = "1.0";
@@ -5128,20 +5218,137 @@ namespace ZapretGUI.Views
                     </StackPanel>
                 </ScrollViewer>
 
-                <ScrollViewer x:Name="GuidePanel" Grid.Row="1" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" Padding="0,0,20,0">
-                    <StackPanel>
-                        <Border Background="#1A1A00" BorderBrush="{DynamicResource BrandSuccessBrush}" BorderThickness="1" CornerRadius="8" Padding="15" Margin="0,0,0,20">
+                <ScrollViewer x:Name="GuidePanel" Grid.Row="1" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" Padding="0,0,15,0">
+                    <StackPanel Margin="0,0,0,20">
+
+                        <!-- Вводный баннер -->
+                        <Border Background="#0A1F0A" BorderBrush="{DynamicResource BrandSuccessBrush}" BorderThickness="1" CornerRadius="10" Padding="18,15" Margin="0,0,0,15">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="⚡" FontSize="24" VerticalAlignment="Center" Margin="0,0,15,0"/>
+                                <StackPanel Grid.Column="1">
+                                    <TextBlock Text="Система модификаций Zapret" Foreground="White" FontWeight="Bold" FontSize="16" Margin="0,0,0,4"/>
+                                    <TextBlock Text="Здесь вы можете создавать собственные стратегии обхода, собирать списки доменов и обмениваться готовыми модами с другими пользователями. Все изменения изолированы и не ломают базовые файлы программы." Foreground="#B0B0B0" FontSize="13" TextWrapping="Wrap" LineHeight="19"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <!-- 1. Типы модификаций -->
+                        <Border Background="#18181B" BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="1" CornerRadius="10" Padding="18,15" Margin="0,0,0,12">
                             <StackPanel>
-                                <TextBlock Text="⚠️ ВАЖНАЯ ИНФОРМАЦИЯ!" Foreground="{DynamicResource BrandSuccessBrush}" FontWeight="Bold" FontSize="16" Margin="0,0,0,10"/>
-                                <TextBlock Text="Добро пожаловать в раздел модификаций! Здесь вы можете гибко настраивать обход блокировок, добавлять свои скрипты для игр и управлять списками сайтов. Все изменения сохраняются локально и автоматически объединяются." Foreground="#CCCCCC" TextWrapping="Wrap" LineHeight="20"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                    <TextBlock Text="&#xE8B7;" FontFamily="Segoe MDL2 Assets" Foreground="#60A5FA" FontSize="16" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                    <TextBlock Text="1. ДВА ТИПА МОДИФИКАЦИЙ" FontWeight="Bold" FontSize="15" Foreground="White" VerticalAlignment="Center"/>
+                                </StackPanel>
+
+                                <TextBlock Foreground="#CCCCCC" FontSize="13" TextWrapping="Wrap" LineHeight="20" Margin="0,0,0,8">
+                                    <Run Text="• .bat Стратегии:" Foreground="#4ADE80" FontWeight="SemiBold"/>
+                                    <Run Text="Индивидуальные профили запуска ядра "/>
+                                    <Run Text="winws.exe" FontFamily="Consolas" Foreground="White"/>
+                                    <Run Text=" (например, под конкретные игры или провайдеров). При включении такой мод автоматически появляется в списке выбора конфигураций на «Главной» вкладке с префиксом "/>
+                                    <Run Text="mod_" FontFamily="Consolas" Foreground="White"/>
+                                    <Run Text="."/>
+                                </TextBlock>
+
+                                <TextBlock Foreground="#CCCCCC" FontSize="13" TextWrapping="Wrap" LineHeight="20">
+                                    <Run Text="• Листы доменов:" Foreground="#60A5FA" FontWeight="SemiBold"/>
+                                    <Run Text="Именованные списки сайтов. Когда вы включаете такой мод, программа автоматически внедряет его домены в общий список "/>
+                                    <Run Text="list-general.txt" FontFamily="Consolas" Foreground="White"/>
+                                    <Run Text=" без дубликатов. При отключении мода его сайты аккуратно удаляются из общего списка."/>
+                                </TextBlock>
                             </StackPanel>
                         </Border>
-                        <TextBlock Text="1. .BAT-СТРАТЕГИИ (Обход для игр)" FontWeight="Bold" FontSize="16" Foreground="White" Margin="0,0,0,10"/>
-                        <TextBlock Text="Этот раздел предназначен для добавления готовых батников (.bat), которые создают индивидуальные стратегии обхода (например, для Battle.net, EA App, League of Legends). Вы можете скачать готовые моды или написать свои через встроенный редактор." Foreground="#AAAAAA" TextWrapping="Wrap" Margin="0,0,0,15" LineHeight="20"/>
-                        <TextBlock Text="2. ЛИСТЫ ДОМЕНОВ" FontWeight="Bold" FontSize="16" Foreground="White" Margin="0,0,0,10"/>
-                        <TextBlock Text="Позволяет создавать именованные списки сайтов. Программа сама соберет все активные листы и объединит их в единый список без дубликатов. Если выключить мод, домены автоматически удалятся из главного списка." Foreground="#AAAAAA" TextWrapping="Wrap" Margin="0,0,0,15" LineHeight="20"/>
-                        <TextBlock Text="Как включить мод:" FontWeight="Bold" FontSize="14" Foreground="White" Margin="0,0,0,5"/>
-                        <TextBlock Text="1. Нажмите «Включить» в колонке доступных модов.&#x0a;2. Перейдите на вкладку «Главная» и перезапустите обход.&#x0a;3. Моды-стратегии появятся в списке конфигов на главном экране." Foreground="#AAAAAA" TextWrapping="Wrap" LineHeight="22"/>
+
+                        <!-- 2. Создание и активация -->
+                        <Border Background="#18181B" BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="1" CornerRadius="10" Padding="18,15" Margin="0,0,0,12">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                    <TextBlock Text="&#xE710;" FontFamily="Segoe MDL2 Assets" Foreground="#4ADE80" FontSize="16" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                    <TextBlock Text="2. СОЗДАНИЕ И АКТИВАЦИЯ" FontWeight="Bold" FontSize="15" Foreground="White" VerticalAlignment="Center"/>
+                                </StackPanel>
+
+                                <TextBlock Foreground="#AAAAAA" FontSize="13" TextWrapping="Wrap" LineHeight="21">
+                                    <Run Text="1." Foreground="White" FontWeight="Bold"/>
+                                    <Run Text=" Выберите слева нужную категорию («.bat Стратегии» или «Листы доменов») и нажмите зелёную кнопку "/>
+                                    <Run Text="«+ Создать»" Foreground="#4ADE80" FontWeight="SemiBold"/>
+                                    <Run Text=".&#x0a;"/>
+                                    <Run Text="2." Foreground="White" FontWeight="Bold"/>
+                                    <Run Text=" Укажите технический ID папки (на английском), отображаемое название, автора и краткое описание.&#x0a;"/>
+                                    <Run Text="3." Foreground="White" FontWeight="Bold"/>
+                                    <Run Text=" Для стратегий программа автоматически подготовит базовый рабочий шаблон с вызовом "/>
+                                    <Run Text="winws.exe" FontFamily="Consolas" Foreground="White"/>
+                                    <Run Text=".&#x0a;"/>
+                                    <Run Text="4." Foreground="White" FontWeight="Bold"/>
+                                    <Run Text=" Нажмите "/>
+                                    <Run Text="«Включить»" Foreground="#60A5FA" FontWeight="SemiBold"/>
+                                    <Run Text=" на карточке мода, чтобы активировать его. Если обход уже запущен — перезапустите его на Главной."/>
+                                </TextBlock>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- 3. Встроенная студия редактирования -->
+                        <Border Background="#18181B" BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="1" CornerRadius="10" Padding="18,15" Margin="0,0,0,12">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                    <TextBlock Text="&#xE70F;" FontFamily="Segoe MDL2 Assets" Foreground="#F59E0B" FontSize="16" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                    <TextBlock Text="3. РЕДАКТОР КОДА И СВОЙСТВ" FontWeight="Bold" FontSize="15" Foreground="White" VerticalAlignment="Center"/>
+                                </StackPanel>
+
+                                <TextBlock Text="Нажмите «Изменить» на карточке мода, чтобы открыть встроенную студию:" Foreground="#CCCCCC" FontSize="13" Margin="0,0,0,8"/>
+
+                                <TextBlock Foreground="#AAAAAA" FontSize="13" TextWrapping="Wrap" LineHeight="21">
+                                    <Run Text="• Паспорт мода:" Foreground="White" FontWeight="SemiBold"/>
+                                    <Run Text=" В верхней панели вы можете в любой момент изменить Название, Автора, Версию и Описание мода (кнопка «Свойства мода» позволяет свернуть эту панель).&#x0a;"/>
+                                    <Run Text="• Быстрые сниппеты (.bat):" Foreground="White" FontWeight="SemiBold"/>
+                                    <Run Text=" Нажимайте на готовые кнопки ("/>
+                                    <Run Text="--new ^, --filter-tcp, %BIN%, %LISTS%" FontFamily="Consolas" Foreground="#4ADE80"/>
+                                    <Run Text="), чтобы мгновенно вставлять аргументы в место курсора без опечаток.&#x0a;"/>
+                                    <Run Text="• Проверка синтаксиса (.bat):" Foreground="White" FontWeight="SemiBold"/>
+                                    <Run Text=" Кнопка "/>
+                                    <Run Text="«✓ Проверить синтаксис»" Foreground="#4ADE80"/>
+                                    <Run Text=" тестирует скрипт на незакрытые кавычки, наличие вызова ядра и правильность флагов с указанием точного номера строки.&#x0a;"/>
+                                    <Run Text="• Авто-очистка доменов (Листы):" Foreground="White" FontWeight="SemiBold"/>
+                                    <Run Text=" Кнопка "/>
+                                    <Run Text="«Очистить дубли и URL»" Foreground="#60A5FA"/>
+                                    <Run Text=" сама превратит скопированные из браузера ссылки вида "/>
+                                    <Run Text="https://www.site.com/page" FontFamily="Consolas" Foreground="White"/>
+                                    <Run Text=" в чистый домен "/>
+                                    <Run Text="site.com" FontFamily="Consolas" Foreground="White"/>
+                                    <Run Text=", удалит дубликаты и отсортирует список по алфавиту.&#x0a;"/>
+                                    <Run Text="• Горячие клавиши:" Foreground="White" FontWeight="SemiBold"/>
+                                    <Run Text=" Используйте "/>
+                                    <Run Text="Ctrl + F" FontFamily="Consolas" Foreground="White"/>
+                                    <Run Text=" для поиска и замены текста, "/>
+                                    <Run Text="Ctrl + S" FontFamily="Consolas" Foreground="White"/>
+                                    <Run Text=" для быстрого сохранения и кнопки "/>
+                                    <Run Text="A- / A+" FontFamily="Consolas" Foreground="White"/>
+                                    <Run Text=" для изменения масштаба шрифта."/>
+                                </TextBlock>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- 4. Импорт и экспорт -->
+                        <Border Background="#18181B" BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="1" CornerRadius="10" Padding="18,15">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                    <TextBlock Text="&#xE8B5;" FontFamily="Segoe MDL2 Assets" Foreground="#A855F7" FontSize="16" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                    <TextBlock Text="4. ИМПОРТ И ЭКСПОРТ (.ZIP / .NETFIX-MOD)" FontWeight="Bold" FontSize="15" Foreground="White" VerticalAlignment="Center"/>
+                                </StackPanel>
+
+                                <TextBlock Foreground="#AAAAAA" FontSize="13" TextWrapping="Wrap" LineHeight="21">
+                                    <Run Text="• Экспорт:" Foreground="#60A5FA" FontWeight="SemiBold"/>
+                                    <Run Text=" Нажмите «Экспорт» на карточке любого мода. Программа упакует скрипт/список и его паспорт ("/>
+                                    <Run Text="mod.json" FontFamily="Consolas" Foreground="White"/>
+                                    <Run Text=") в готовый архив, которым можно сразу поделиться с друзьями.&#x0a;"/>
+                                    <Run Text="• Импорт:" Foreground="#4ADE80" FontWeight="SemiBold"/>
+                                    <Run Text=" Нажмите «Импорт (.zip)» в верхней панели и выберите скачанный архив. Программа сама прочитает паспорт мода, определит его категорию (стратегия или список доменов) и установит в нужную папку."/>
+                                </TextBlock>
+                            </StackPanel>
+                        </Border>
+
                     </StackPanel>
                 </ScrollViewer>
             </Grid>
@@ -5363,20 +5570,22 @@ namespace ZapretGUI.Views
                         </Grid>
                     </Border>
 
-                    <!-- 6. СТАТУС-БАР И КНОПКИ СОХРАНЕНИЯ -->
+                    <!-- 6. СТАТУС-БАР И КНОПКИ СОХРАНЕНИЯ (Исправлено наложение текста на кнопки) -->
                     <Grid Grid.Row="6" Margin="0,12,0,0">
                         <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
 
-                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock x:Name="TxtCursorPos" Text="Стр: 1, Столб: 1" FontFamily="Consolas" FontSize="12" Foreground="#888888" Margin="0,0,15,0"/>
-                            <TextBlock x:Name="TxtStatsInfo" Text="Строк: 1" FontFamily="Consolas" FontSize="12" Foreground="#888888" Margin="0,0,15,0"/>
-                            <TextBlock x:Name="TxtEditorStatusMsg" Text="" FontFamily="Consolas" FontSize="12" Foreground="#4ADE80" TextTrimming="CharacterEllipsis" MaxWidth="300"/>
-                        </StackPanel>
+                        <TextBlock x:Name="TxtCursorPos" Grid.Column="0" Text="Стр: 1, Столб: 1" FontFamily="Consolas" FontSize="12" Foreground="#888888" VerticalAlignment="Center" Margin="0,0,15,0"/>
+                        <TextBlock x:Name="TxtStatsInfo" Grid.Column="1" Text="Строк: 1" FontFamily="Consolas" FontSize="12" Foreground="#888888" VerticalAlignment="Center" Margin="0,0,15,0"/>
 
-                        <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                        <TextBlock x:Name="TxtEditorStatusMsg" Grid.Column="2" Text="" FontFamily="Consolas" FontSize="12" Foreground="#4ADE80" 
+                                   VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="0,0,15,0" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
+
+                        <StackPanel Grid.Column="3" Orientation="Horizontal" HorizontalAlignment="Right">
                             <Button Content="Отмена" Background="Transparent" Foreground="#A0A0A0" BorderBrush="#333333" BorderThickness="1" Padding="15,7" Margin="0,0,10,0" Cursor="Hand" Click="BtnCloseEditor_Click">
                                 <Button.Resources>
                                     <Style TargetType="Border">
@@ -5408,10 +5617,25 @@ namespace ZapretGUI.Views
                 </Border.RenderTransform>
                 <StackPanel>
                     <TextBlock Text="Создать новый мод" FontSize="18" FontWeight="Bold" Margin="0,0,0,15"/>
-                    <TextBlock Text="Название (ID папки, англ.):" Foreground="#A0A0A0" FontSize="12" Margin="0,0,0,5"/>
-                    <ui:TextBox x:Name="TxtNewModId" Margin="0,0,0,10"/>
+
                     <TextBlock Text="Отображаемое имя:" Foreground="#A0A0A0" FontSize="12" Margin="0,0,0,5"/>
-                    <ui:TextBox x:Name="TxtNewModName" Margin="0,0,0,10"/>
+                    <ui:TextBox x:Name="TxtNewModName" Margin="0,0,0,10" TextChanged="TxtNewModName_TextChanged"/>
+
+                    <Grid Margin="0,0,0,5">
+                        <TextBlock Text="Уникальный ID (папка, англ.):" Foreground="#A0A0A0" FontSize="12" HorizontalAlignment="Left"/>
+                        <TextBlock x:Name="TxtIdValidationStatus" Text="✓ ID свободен" FontFamily="Consolas" FontSize="11" Foreground="#4ADE80" HorizontalAlignment="Right"/>
+                    </Grid>
+                    <Grid Margin="0,0,0,10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <ui:TextBox x:Name="TxtNewModId" Grid.Column="0" FontFamily="Consolas" TextChanged="TxtNewModId_TextChanged"/>
+                        <Button Grid.Column="1" Style="{StaticResource EditorToolBtn}" Margin="8,0,0,0" Padding="10,0" Click="BtnRegenerateId_Click" ToolTip="Сгенерировать уникальный ID">
+                            <TextBlock Text="🎲" FontSize="14"/>
+                        </Button>
+                    </Grid>
+
                     <TextBlock Text="Автор:" Foreground="#A0A0A0" FontSize="12" Margin="0,0,0,5"/>
                     <ui:TextBox x:Name="TxtNewModAuthor" Margin="0,0,0,10"/>
                     <TextBlock Text="Описание:" Foreground="#A0A0A0" FontSize="12" Margin="0,0,0,5"/>
@@ -5424,7 +5648,7 @@ namespace ZapretGUI.Views
                                 </Style>
                             </Button.Resources>
                         </Button>
-                        <Button Content="Создать" Background="{DynamicResource BrandSuccessBrush}" Foreground="White" BorderThickness="0" Padding="15,6" Cursor="Hand" Click="BtnConfirmCreateMod_Click">
+                        <Button x:Name="BtnConfirmCreateMod" Content="Создать" Background="{DynamicResource BrandSuccessBrush}" Foreground="White" BorderThickness="0" Padding="15,6" Cursor="Hand" Click="BtnConfirmCreateMod_Click">
                             <Button.Resources>
                                 <Style TargetType="Border">
                                     <Setter Property="CornerRadius" Value="6"/>
@@ -5484,6 +5708,7 @@ using System.IO.Compression;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -5507,15 +5732,92 @@ namespace ZapretGUI.Views
 
         private Action? _pendingConfirmAction;
 
+        // Live-мониторинг файлов модов и списков доменов
+        private FileSystemWatcher? _modsWatcher;
+        private CancellationTokenSource? _watcherDebounceCts;
+        private bool _isInternalFileOperation = false;
+        private bool _isAutoGeneratingId = false;
+
         public ModsView()
         {
             InitializeComponent();
             _modManager = new ModManager();
+            _modManager.InitializeFolders();
 
             AvailableModsList.ItemsSource = _availableMods;
             ActiveModsList.ItemsSource = _activeMods;
 
+            SetupLiveFileWatcher();
+
             _ = SwitchTabAsync(ModType.BatStrategy);
+        }
+
+        private void SetupLiveFileWatcher()
+        {
+            var modsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory);
+            if (!Directory.Exists(modsPath)) Directory.CreateDirectory(modsPath);
+
+            _modsWatcher = new FileSystemWatcher(modsPath)
+            {
+                IncludeSubdirectories = true,
+                NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.LastWrite,
+                EnableRaisingEvents = true
+            };
+
+            _modsWatcher.Changed += OnModsDirectoryChanged;
+            _modsWatcher.Created += OnModsDirectoryChanged;
+            _modsWatcher.Deleted += OnModsDirectoryChanged;
+            _modsWatcher.Renamed += OnModsDirectoryChanged;
+        }
+
+        private void OnModsDirectoryChanged(object sender, FileSystemEventArgs e)
+        {
+            if (_isInternalFileOperation) return;
+
+            _watcherDebounceCts?.Cancel();
+            _watcherDebounceCts = new CancellationTokenSource();
+            var token = _watcherDebounceCts.Token;
+
+            Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(350, token);
+                    if (token.IsCancellationRequested) return;
+
+                    // В прямом эфире пересобираем list-general.txt и синхронизируем батники
+                    await _modManager.ApplyListModsAsync();
+                    await _modManager.SyncActiveBatModsAsync();
+
+                    await Dispatcher.InvokeAsync(async () =>
+                    {
+                        if (_currentTab == ModType.BatStrategy || _currentTab == ModType.DomainList)
+                            await LoadCurrentModsAsync();
+                    });
+                }
+                catch (TaskCanceledException) { }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Ошибка live-обновления модов: {ex.Message}");
+                }
+            });
+        }
+
+        private void PromptRestartZapretIfNeeded(string reasonText)
+        {
+            if (BypassController.Current.Zapret.IsRunning())
+            {
+                ShowConfirmDialog(
+                    "Перезапустить Zapret?",
+                    $"{reasonText}\n\nФайл list-general.txt был обновлен в прямом эфире, но для применения новых доменов в уже работающем ядре winws.exe требуется перезапуск. Перезапустить сейчас?",
+                    "🔄 Перезапустить",
+                    (System.Windows.Media.Brush)System.Windows.Application.Current.Resources["BrandSuccessBrush"],
+                    async () =>
+                    {
+                        if (System.Windows.Application.Current.MainWindow is MainWindow mw)
+                            await mw.RestartBypassAsync();
+                    });
+            }
         }
 
         private async Task SwitchTabAsync(ModType type)
@@ -5545,7 +5847,7 @@ namespace ZapretGUI.Views
                 else
                 {
                     TxtCategoryTitle.Text = "Листы доменов";
-                    TxtCategoryDesc.Text = "Списки сайтов и сервисов для маршрутизации трафика.";
+                    TxtCategoryDesc.Text = "Списки сайтов и сервисов для маршрутизации трафика (обновляются в прямом эфире).";
                     BtnDomainLists.Background = UIHelper.GetBrushFromHex("#2A2A2A");
                     BtnDomainLists.Foreground = System.Windows.Media.Brushes.White;
                 }
@@ -5602,16 +5904,80 @@ namespace ZapretGUI.Views
             if (Directory.Exists(path)) Process.Start("explorer.exe", path);
         }
 
+        // =========================================================================
+        // СОЗДАНИЕ МОДА С ГАРАНТИРОВАННО УНИКАЛЬНЫМ ID
+        // =========================================================================
+
         private void BtnCreateMod_Click(object sender, RoutedEventArgs e)
         {
             AudioHelper.PlayClick();
 
-            TxtNewModId.Text = $"mod_{DateTime.Now:HHmmss}";
             TxtNewModName.Text = "Мой новый мод";
             TxtNewModAuthor.Text = "You";
             TxtNewModDesc.Text = "Описание мода";
 
+            _isAutoGeneratingId = true;
+            TxtNewModId.Text = _modManager.GenerateUniqueModId("custom_mod");
+            _isAutoGeneratingId = false;
+            ValidateNewModIdUI();
+
             AnimationHelper.ShowOverlay(CreateModOverlay, CreateContentBorder, ContentGrid);
+        }
+
+        private void BtnRegenerateId_Click(object sender, RoutedEventArgs e)
+        {
+            AudioHelper.PlayClick();
+            _isAutoGeneratingId = true;
+            string slug = ModManager.SanitizeModId(TxtNewModName.Text);
+            TxtNewModId.Text = _modManager.GenerateUniqueModId(string.IsNullOrEmpty(slug) ? "mod" : slug);
+            _isAutoGeneratingId = false;
+            ValidateNewModIdUI();
+        }
+
+        private void TxtNewModName_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (!IsLoaded) return;
+            string slug = ModManager.SanitizeModId(TxtNewModName.Text);
+            if (!string.IsNullOrEmpty(slug))
+            {
+                _isAutoGeneratingId = true;
+                TxtNewModId.Text = _modManager.GenerateUniqueModId(slug);
+                _isAutoGeneratingId = false;
+                ValidateNewModIdUI();
+            }
+        }
+
+        private void TxtNewModId_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (!IsLoaded || _isAutoGeneratingId) return;
+            ValidateNewModIdUI();
+        }
+
+        private bool ValidateNewModIdUI()
+        {
+            if (TxtNewModId == null || TxtIdValidationStatus == null || BtnConfirmCreateMod == null) return false;
+
+            string cleanId = ModManager.SanitizeModId(TxtNewModId.Text);
+            if (string.IsNullOrEmpty(cleanId))
+            {
+                TxtIdValidationStatus.Text = "⚠ Введите корректный ID (a-z, 0-9)";
+                TxtIdValidationStatus.Foreground = UIHelper.GetBrushFromHex("#F59E0B");
+                BtnConfirmCreateMod.IsEnabled = false;
+                return false;
+            }
+
+            if (_modManager.IsModIdTaken(cleanId))
+            {
+                TxtIdValidationStatus.Text = "❌ Такой ID уже занят!";
+                TxtIdValidationStatus.Foreground = UIHelper.GetBrushFromHex("#F44336");
+                BtnConfirmCreateMod.IsEnabled = false;
+                return false;
+            }
+
+            TxtIdValidationStatus.Text = $"✓ ID «{cleanId}» уникален";
+            TxtIdValidationStatus.Foreground = UIHelper.GetBrushFromHex("#4ADE80");
+            BtnConfirmCreateMod.IsEnabled = true;
+            return true;
         }
 
         private void BtnCloseCreateMod_Click(object sender, RoutedEventArgs e)
@@ -5624,28 +5990,24 @@ namespace ZapretGUI.Views
         {
             AudioHelper.PlayClick();
 
-            string id = TxtNewModId.Text.Trim().Replace(" ", "_").ToLower();
-            var invalidChars = System.IO.Path.GetInvalidFileNameChars();
-            id = new string(id.Where(c => !invalidChars.Contains(c)).ToArray());
-
-            if (string.IsNullOrEmpty(id))
-                id = $"mod_{DateTime.Now:HHmmss}";
+            string id = ModManager.SanitizeModId(TxtNewModId.Text);
+            if (string.IsNullOrEmpty(id) || _modManager.IsModIdTaken(id))
+            {
+                System.Windows.MessageBox.Show("Мод с таким ID уже существует в системе (в стратегиях или списках)! Нажмите 🎲 для генерации уникального ID.", "Конфликт ID", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
 
             string folderName = _currentTab == ModType.BatStrategy ? "strategies" : "lists";
             string modFolderPath = Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, folderName, id);
 
-            if (Directory.Exists(modFolderPath))
-            {
-                System.Windows.MessageBox.Show("Мод с таким ID (папкой) уже существует!", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
             try
             {
+                _isInternalFileOperation = true;
                 Directory.CreateDirectory(modFolderPath);
 
                 var meta = new ModMetaData
                 {
+                    UniqueId = id,
                     Name = string.IsNullOrWhiteSpace(TxtNewModName.Text) ? id : TxtNewModName.Text.Trim(),
                     Author = string.IsNullOrWhiteSpace(TxtNewModAuthor.Text) ? "Аноним" : TxtNewModAuthor.Text.Trim(),
                     Version = "1.0",
@@ -5677,6 +6039,10 @@ namespace ZapretGUI.Views
             {
                 System.Windows.MessageBox.Show($"Ошибка при создании мода: {ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
             }
+            finally
+            {
+                _isInternalFileOperation = false;
+            }
         }
 
         private async void BtnToggleMod_Click(object sender, RoutedEventArgs e)
@@ -5706,28 +6072,42 @@ namespace ZapretGUI.Views
 
                 await SaveAndApplyModsAsync();
                 UpdateHeadersVisibility();
+
+                if (_currentTab == ModType.DomainList)
+                {
+                    string actionWord = mod.IsActive ? "включен" : "отключен";
+                    PromptRestartZapretIfNeeded($"Список доменов «{mod.Meta.Name}» был {actionWord}.");
+                }
             }
         }
 
         private async Task SaveAndApplyModsAsync()
         {
-            var activeStrategies = new List<string>();
-            var activeLists = new List<string>();
-
-            if (_currentTab == ModType.BatStrategy)
+            _isInternalFileOperation = true;
+            try
             {
-                foreach (var mod in _activeMods) activeStrategies.Add(mod.Id);
-                SettingsManager.Current.ActiveBatMods = activeStrategies;
-                await _modManager.SyncActiveBatModsAsync();
-            }
-            else
-            {
-                foreach (var mod in _activeMods) activeLists.Add(mod.Id);
-                SettingsManager.Current.ActiveListMods = activeLists;
-                await _modManager.ApplyListModsAsync();
-            }
+                var activeStrategies = new List<string>();
+                var activeLists = new List<string>();
 
-            SettingsManager.Save();
+                if (_currentTab == ModType.BatStrategy)
+                {
+                    foreach (var mod in _activeMods) activeStrategies.Add(mod.Id);
+                    SettingsManager.Current.ActiveBatMods = activeStrategies;
+                    await _modManager.SyncActiveBatModsAsync();
+                }
+                else
+                {
+                    foreach (var mod in _activeMods) activeLists.Add(mod.Id);
+                    SettingsManager.Current.ActiveListMods = activeLists;
+                    await _modManager.ApplyListModsAsync();
+                }
+
+                SettingsManager.Save();
+            }
+            finally
+            {
+                _isInternalFileOperation = false;
+            }
         }
 
         private void ShowConfirmDialog(string title, string message, string confirmBtnText, System.Windows.Media.Brush confirmBtnBrush, Action onConfirm)
@@ -5751,8 +6131,9 @@ namespace ZapretGUI.Views
         {
             AudioHelper.PlayClick();
             AnimationHelper.HideOverlay(ConfirmOverlay, ConfirmContentBorder, ContentGrid);
-            _pendingConfirmAction?.Invoke();
+            var action = _pendingConfirmAction;
             _pendingConfirmAction = null;
+            action?.Invoke();
         }
 
         private void BtnDisableAll_Click(object sender, RoutedEventArgs e)
@@ -5775,6 +6156,9 @@ namespace ZapretGUI.Views
                     }
                     await SaveAndApplyModsAsync();
                     UpdateHeadersVisibility();
+
+                    if (_currentTab == ModType.DomainList)
+                        PromptRestartZapretIfNeeded("Все дополнительные списки доменов были отключены.");
                 });
         }
 
@@ -5791,6 +6175,9 @@ namespace ZapretGUI.Views
                     async () => {
                         try
                         {
+                            _isInternalFileOperation = true;
+                            bool wasActiveList = mod.IsActive && _currentTab == ModType.DomainList;
+
                             string folderName = _currentTab == ModType.BatStrategy ? "strategies" : "lists";
                             string modFolderPath = Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, folderName, mod.Id);
 
@@ -5808,10 +6195,17 @@ namespace ZapretGUI.Views
                             }
 
                             UpdateHeadersVisibility();
+
+                            if (wasActiveList)
+                                PromptRestartZapretIfNeeded($"Активный список доменов «{mod.Meta.Name}» был удален.");
                         }
                         catch (Exception ex)
                         {
                             System.Windows.MessageBox.Show($"Не удалось удалить мод.\nОшибка: {ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                        }
+                        finally
+                        {
+                            _isInternalFileOperation = false;
                         }
                     });
             }
@@ -5843,22 +6237,19 @@ namespace ZapretGUI.Views
                     return;
                 }
 
-                // Загружаем метаданные в поля редактирования
                 TxtEditModName.Text = mod.Meta.Name;
                 TxtEditModAuthor.Text = mod.Meta.Author;
                 TxtEditModVersion.Text = string.IsNullOrWhiteSpace(mod.Meta.Version) ? "1.0" : mod.Meta.Version;
                 TxtEditModDesc.Text = mod.Meta.Description;
 
                 TxtEditorTitle.Text = $"Редактор: {mod.Meta.Name}";
-                TxtEditorSubTitle.Text = $"ID: {mod.Id} • Файл: {fileName}";
+                TxtEditorSubTitle.Text = $"Уникальный ID: {mod.Id} • Файл: {fileName}";
                 TxtEditorStatusMsg.Text = "";
 
-                // Настраиваем контекстные панели (Батник vs Список доменов)
                 BatToolsPanel.Visibility = isBat ? Visibility.Visible : Visibility.Collapsed;
                 SnippetsBar.Visibility = isBat ? Visibility.Visible : Visibility.Collapsed;
                 ListToolsPanel.Visibility = isBat ? Visibility.Collapsed : Visibility.Visible;
 
-                // Загружаем содержимое файла
                 EditorTextBox.Text = File.ReadAllText(_currentEditingFilePath);
                 UpdateLineNumbersAndStats();
 
@@ -5886,11 +6277,13 @@ namespace ZapretGUI.Views
 
             try
             {
-                // Если это .bat мод, проверяем синтаксис перед сохранением
+                _isInternalFileOperation = true;
+                bool wasActiveDomainList = _currentEditingMod.IsActive && _currentTab == ModType.DomainList;
+                string editedModName = string.IsNullOrWhiteSpace(TxtEditModName.Text) ? _currentEditingMod.Id : TxtEditModName.Text.Trim();
+
                 if (_currentTab == ModType.BatStrategy)
                 {
-                    string modDisplayName = string.IsNullOrWhiteSpace(TxtEditModName.Text) ? _currentEditingMod.Id : TxtEditModName.Text.Trim();
-                    var (isValid, errMsg) = _modManager.ValidateBatMod(modDisplayName, EditorTextBox.Text);
+                    var (isValid, errMsg) = _modManager.ValidateBatMod(editedModName, EditorTextBox.Text);
                     if (!isValid)
                     {
                         var res = System.Windows.MessageBox.Show(
@@ -5904,8 +6297,9 @@ namespace ZapretGUI.Views
                     }
                 }
 
-                // 1. Обновляем метаданные мода (mod.json)
-                _currentEditingMod.Meta.Name = string.IsNullOrWhiteSpace(TxtEditModName.Text) ? _currentEditingMod.Id : TxtEditModName.Text.Trim();
+                // 1. Обновляем метаданные мода (mod.json) с сохранением UniqueId
+                _currentEditingMod.Meta.UniqueId = _currentEditingMod.Id;
+                _currentEditingMod.Meta.Name = editedModName;
                 _currentEditingMod.Meta.Author = string.IsNullOrWhiteSpace(TxtEditModAuthor.Text) ? "Аноним" : TxtEditModAuthor.Text.Trim();
                 _currentEditingMod.Meta.Version = string.IsNullOrWhiteSpace(TxtEditModVersion.Text) ? "1.0" : TxtEditModVersion.Text.Trim();
                 _currentEditingMod.Meta.Description = TxtEditModDesc.Text.Trim();
@@ -5924,10 +6318,19 @@ namespace ZapretGUI.Views
                 await LoadCurrentModsAsync();
 
                 AnimationHelper.HideOverlay(EditorOverlay, EditorContentBorder, ContentGrid);
+
+                if (wasActiveDomainList)
+                {
+                    PromptRestartZapretIfNeeded($"Содержимое активного списка «{editedModName}» было обновлено.");
+                }
             }
             catch (Exception ex)
             {
                 System.Windows.MessageBox.Show($"Ошибка сохранения: {ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                _isInternalFileOperation = false;
             }
         }
 
@@ -6163,14 +6566,11 @@ namespace ZapretGUI.Views
                 if (string.IsNullOrWhiteSpace(d) || d.StartsWith("#") || d.StartsWith("//"))
                     continue;
 
-                // Отрезаем протоколы (http://, https://)
                 if (d.StartsWith("http://")) d = d.Substring(7);
                 else if (d.StartsWith("https://")) d = d.Substring(8);
 
-                // Отрезаем www.
                 if (d.StartsWith("www.")) d = d.Substring(4);
 
-                // Отрезаем пути и параметры после слеша или порта
                 int slashIdx = d.IndexOf('/');
                 if (slashIdx > 0) d = d.Substring(0, slashIdx);
 
@@ -6185,7 +6585,7 @@ namespace ZapretGUI.Views
             int removedCount = rawLines.Length - uniqueSorted.Count;
 
             EditorTextBox.Text = string.Join("\r\n", uniqueSorted);
-            SetEditorStatus($"Готово! Доменов: {uniqueSorted.Count} (удалено мусора/дублей: {Math.Max(0, removedCount)})", "#60A5FA");
+            SetEditorStatus($"Готово! Доменов: {uniqueSorted.Count} (удалено: {Math.Max(0, removedCount)})", "#60A5FA");
         }
 
         private void SetEditorStatus(string message, string hexColor)
@@ -6195,7 +6595,7 @@ namespace ZapretGUI.Views
         }
 
         // =========================================================================
-        // ИМПОРТ И ЭКСПОРТ МОДОВ
+        // ИМПОРТ И ЭКСПОРТ МОДОВ С ПРОВЕРКОЙ УНИКАЛЬНОСТИ ID
         // =========================================================================
 
         private async void BtnImportMod_Click(object sender, RoutedEventArgs e)
@@ -6210,9 +6610,10 @@ namespace ZapretGUI.Views
 
             if (openFileDialog.ShowDialog() == true)
             {
-                var tempDir = Path.Combine(Path.GetTempPath(), "ZapretGUI_Mod_" + Guid.NewGuid().ToString());
+                var tempDir = Path.Combine(Path.GetTempPath(), "ZapretGUI_Mod_" + Guid.NewGuid().ToString("N"));
                 try
                 {
+                    _isInternalFileOperation = true;
                     Directory.CreateDirectory(tempDir);
                     await Task.Run(() => ZipFile.ExtractToDirectory(openFileDialog.FileName, tempDir));
 
@@ -6237,23 +6638,23 @@ namespace ZapretGUI.Views
                         return;
                     }
 
-                    var safeId = Path.GetFileNameWithoutExtension(openFileDialog.FileName).Replace(" ", "_").ToLower();
-                    var invalidChars = Path.GetInvalidFileNameChars();
-                    safeId = new string(safeId.Where(c => !invalidChars.Contains(c)).ToArray());
-                    if (string.IsNullOrEmpty(safeId))
-                        safeId = $"mod_{DateTime.Now:HHmmss}";
+                    // Берем UniqueId из паспорта мода (или генерируем из имени) и проверяем на глобальную уникальность
+                    string baseCandidate = !string.IsNullOrWhiteSpace(meta.UniqueId)
+                        ? ModManager.SanitizeModId(meta.UniqueId)
+                        : ModManager.SanitizeModId(meta.Name);
+
+                    if (string.IsNullOrEmpty(baseCandidate))
+                        baseCandidate = ModManager.SanitizeModId(Path.GetFileNameWithoutExtension(openFileDialog.FileName));
+
+                    string finalUniqueId = _modManager.IsModIdTaken(baseCandidate)
+                        ? _modManager.GenerateUniqueModId(baseCandidate)
+                        : baseCandidate;
+
+                    meta.UniqueId = finalUniqueId;
+                    await File.WriteAllTextAsync(jsonPath, JsonSerializer.Serialize(meta, new JsonSerializerOptions { WriteIndented = true }));
 
                     var folderType = meta.IsBatStrategy ? "strategies" : "lists";
-                    var destPath = Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, folderType, safeId);
-
-                    var counter = 1;
-                    var originalId = safeId;
-                    while (Directory.Exists(destPath))
-                    {
-                        safeId = $"{originalId}_{counter}";
-                        destPath = Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, folderType, safeId);
-                        counter++;
-                    }
+                    var destPath = Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, folderType, finalUniqueId);
 
                     Directory.CreateDirectory(destPath);
 
@@ -6269,7 +6670,7 @@ namespace ZapretGUI.Views
                     });
 
                     if ((meta.IsBatStrategy && _currentTab != ModType.BatStrategy) || (!meta.IsBatStrategy && _currentTab != ModType.DomainList))
-                        System.Windows.MessageBox.Show($"Мод '{meta.Name}' успешно установлен, но он относится к другой категории. Переключите вкладку, чтобы увидеть его.", "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
+                        System.Windows.MessageBox.Show($"Мод '{meta.Name}' (ID: {finalUniqueId}) успешно установлен в соседнюю категорию.", "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
                     else
                         await LoadCurrentModsAsync();
                 }
@@ -6279,6 +6680,7 @@ namespace ZapretGUI.Views
                 }
                 finally
                 {
+                    _isInternalFileOperation = false;
                     if (Directory.Exists(tempDir))
                         try { Directory.Delete(tempDir, true); } catch { }
                 }
@@ -6316,7 +6718,7 @@ namespace ZapretGUI.Views
 
                         await Task.Run(() => ZipFile.CreateFromDirectory(modFolderPath, saveFileDialog.FileName));
 
-                        System.Windows.MessageBox.Show($"Мод '{mod.Meta.Name}' успешно экспортирован и готов к публикации!", "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
+                        System.Windows.MessageBox.Show($"Мод '{mod.Meta.Name}' (ID: {mod.Id}) успешно экспортирован!", "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
                     }
                     catch (Exception ex)
                     {

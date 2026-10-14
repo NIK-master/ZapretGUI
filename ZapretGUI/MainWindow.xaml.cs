@@ -227,6 +227,13 @@ namespace ZapretGUI
 
         public void ToggleBypass() => _homeView.ToggleFromTray();
 
+        public async Task RestartBypassAsync()
+        {
+            var profile = _homeView.TxtMainProfile.Text;
+            await BypassController.Current.RestartServicesAsync(profile);
+            UpdateIndicators(BypassController.Current.Zapret.IsRunning(), BypassController.Current.TgProxy.IsRunning());
+        }
+
         private SolidColorBrush GetSuccessColor()
         {
             var hex = SettingsManager.Current.ColorblindMode ? "#0078D7" : "#107C10";
