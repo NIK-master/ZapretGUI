@@ -4,7 +4,7 @@ using System.IO;
 
 namespace ZapretGUI.Core
 {
-    public class TgProxyManager
+    public class TgProxyManager : IBypassService
     {
         private readonly string _proxyPath;
         private Process? _process;
@@ -16,9 +16,9 @@ namespace ZapretGUI.Core
             _proxyPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.CoreFilesDirectory, $"{AppConstants.TgProxyProcessName}.exe");
         }
 
-        public void Start()
+        public void Start(string profileName = "")
         {
-            if (IsRunning())
+            if (IsRunning)
                 return;
 
             if (!File.Exists(_proxyPath))
@@ -61,7 +61,6 @@ namespace ZapretGUI.Core
             ProcessHelper.KillProcessesByName(AppConstants.TgProxyProcessName);
         }
 
-        public bool IsRunning()
-            => Process.GetProcessesByName(AppConstants.TgProxyProcessName).Length > 0;
+        public bool IsRunning => Process.GetProcessesByName(AppConstants.TgProxyProcessName).Length > 0;
     }
 }

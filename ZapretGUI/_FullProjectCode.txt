@@ -535,7 +535,7 @@ namespace ZapretGUI
         {
             var profile = _homeView.TxtMainProfile.Text;
             await BypassController.Current.RestartServicesAsync(profile);
-            UpdateIndicators(BypassController.Current.Zapret.IsRunning(), BypassController.Current.TgProxy.IsRunning());
+            mainWindow.UpdateIndicators(BypassController.Current.Zapret.IsRunning, BypassController.Current.TgProxy.IsRunning);
         }
 
         public void AnimateWindowSize(bool isCompact)
@@ -818,6 +818,7 @@ namespace ZapretGUI.Core
 ////////////////////////////////////////////////////////////////////////////////
 
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace ZapretGUI.Core
@@ -831,14 +832,20 @@ namespace ZapretGUI.Core
         public NetworkMonitor NetMonitor { get; } = new NetworkMonitor();
         public ZapretScanner Scanner { get; } = new ZapretScanner();
 
-        public bool IsRunning => Zapret.IsRunning() || TgProxy.IsRunning();
+        private readonly List<IBypassService> _services;
+
+        public bool IsRunning => Zapret.IsRunning || TgProxy.IsRunning;
 
         public event Action<string>? OnLog;
 
         private BypassController()
         {
-            Zapret.LogMessage += msg => OnLog?.Invoke(msg);
-            TgProxy.LogMessage += msg => OnLog?.Invoke(msg);
+            _services = new List<IBypassService> { Zapret, TgProxy };
+
+            foreach (var service in _services)
+            {
+                service.LogMessage += msg => OnLog?.Invoke(msg);
+            }
             Scanner.LogMessage += msg => OnLog?.Invoke(msg);
         }
 
@@ -863,8 +870,10 @@ namespace ZapretGUI.Core
 
         public void StopServices()
         {
-            Zapret.Stop();
-            TgProxy.Stop();
+            foreach (var service in _services)
+            {
+                service.Stop();
+            }
             OnLog?.Invoke("🛑 Все модули остановлены.");
         }
 
@@ -1502,6 +1511,23 @@ namespace ZapretGUI.Core
         public List<BlockType> BlockTypes { get; set; } = new();
         public List<string> Recommendations { get; set; } = new();
         public List<DiscordPingResult> DiscordPing { get; set; } = new();
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// ФАЙЛ: Core\IBypassService.cs
+////////////////////////////////////////////////////////////////////////////////
+
+using System;
+
+namespace ZapretGUI.Core
+{
+    public interface IBypassService
+    {
+        bool IsRunning { get; }
+        event Action<string>? LogMessage;
+        void Start(string profileName = "");
+        void Stop();
     }
 }
 
@@ -2476,9 +2502,9 @@ namespace ZapretGUI.Core
             _proxyPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.CoreFilesDirectory, $"{AppConstants.TgProxyProcessName}.exe");
         }
 
-        public void Start()
+        public void Start(string profileName = "")
         {
-            if (IsRunning())
+            if (IsRunning)
                 return;
 
             if (!File.Exists(_proxyPath))
@@ -3312,12 +3338,13 @@ using System.Text.RegularExpressions;
 
 namespace ZapretGUI.Core
 {
-    public class ZapretManager
+    public class ZapretManager : IBypassService
     {
         private readonly string _basePath;
         private Process? _process;
 
         public event Action<string>? LogMessage;
+
 
         public ZapretManager()
         {
@@ -3567,7 +3594,7 @@ namespace ZapretGUI.Core
             ProcessHelper.KillProcessesByName(AppConstants.ZapretProcessName);
         }
 
-        public bool IsRunning()
+        public bool IsRunning 
             => Process.GetProcessesByName(AppConstants.ZapretProcessName).Length > 0;
     }
 }

@@ -209,7 +209,7 @@ namespace ZapretGUI.Views
         private void SyncMainWindowIndicators()
         {
             if (System.Windows.Application.Current.MainWindow is MainWindow mainWindow)
-                mainWindow.UpdateIndicators(BypassController.Current.Zapret.IsRunning(), BypassController.Current.TgProxy.IsRunning());
+                mainWindow.UpdateIndicators(BypassController.Current.Zapret.IsRunning, BypassController.Current.TgProxy.IsRunning);
         }
 
         private void SyncNetworkIndicator(bool isOnline)
@@ -700,8 +700,8 @@ namespace ZapretGUI.Views
                 LogsPanel.IsHitTestVisible = !isCompact;
             }
 
-            var isZapret = BypassController.Current.Zapret.IsRunning();
-            var isProxy = BypassController.Current.TgProxy.IsRunning();
+            var isZapret = BypassController.Current.Zapret.IsRunning;
+            var isProxy = BypassController.Current.TgProxy.IsRunning;
 
             UpdateUIState(isZapret || isProxy);
 
@@ -806,7 +806,7 @@ namespace ZapretGUI.Views
                     SaveSettings();
                     _isUpdatingUI = false;
 
-                    if (BypassController.Current.Zapret.IsRunning() && ZapretToggle.IsChecked == true)
+                    if (BypassController.Current.Zapret.IsRunning && ZapretToggle.IsChecked == true)
                     {
                         Log("🔄 Перезапуск служб с новой конфигурацией...");
                         BypassController.Current.Zapret.Start(bestConfig);
@@ -972,7 +972,7 @@ namespace ZapretGUI.Views
             CloseGameFilterOverlay();
             Log($"🎮 Игровой фильтр обновлен: {ServiceToolsManager.GetGameFilterDisplayStatus()}");
 
-            if (BypassController.Current.Zapret.IsRunning())
+            if (BypassController.Current.Zapret.IsRunning)
             {
                 bool restart = UIHelper.ShowConfirm(
                     "Перезапустить Zapret?",

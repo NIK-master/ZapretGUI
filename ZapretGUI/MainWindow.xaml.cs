@@ -189,7 +189,7 @@ namespace ZapretGUI
         {
             var profile = _homeView.TxtMainProfile.Text;
             await BypassController.Current.RestartServicesAsync(profile);
-            UpdateIndicators(BypassController.Current.Zapret.IsRunning(), BypassController.Current.TgProxy.IsRunning());
+            UpdateIndicators(BypassController.Current.Zapret.IsRunning, BypassController.Current.TgProxy.IsRunning);
         }
 
         public void AnimateWindowSize(bool isCompact)

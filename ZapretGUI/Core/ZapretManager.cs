@@ -8,12 +8,13 @@ using System.Text.RegularExpressions;
 
 namespace ZapretGUI.Core
 {
-    public class ZapretManager
+    public class ZapretManager : IBypassService
     {
         private readonly string _basePath;
         private Process? _process;
 
         public event Action<string>? LogMessage;
+
 
         public ZapretManager()
         {
@@ -263,7 +264,7 @@ namespace ZapretGUI.Core
             ProcessHelper.KillProcessesByName(AppConstants.ZapretProcessName);
         }
 
-        public bool IsRunning()
+        public bool IsRunning 
             => Process.GetProcessesByName(AppConstants.ZapretProcessName).Length > 0;
     }
 }

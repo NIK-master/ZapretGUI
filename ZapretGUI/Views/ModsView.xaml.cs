@@ -147,7 +147,7 @@ namespace ZapretGUI.Views
 
         private void PromptRestartZapretIfNeeded(string reasonText)
         {
-            if (BypassController.Current.Zapret.IsRunning())
+            if (BypassController.Current.Zapret.IsRunning)
             {
                 ShowConfirmDialog(
                     "Перезапустить Zapret?",

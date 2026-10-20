@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace ZapretGUI.Core
@@ -12,14 +13,20 @@ namespace ZapretGUI.Core
         public NetworkMonitor NetMonitor { get; } = new NetworkMonitor();
         public ZapretScanner Scanner { get; } = new ZapretScanner();
 
-        public bool IsRunning => Zapret.IsRunning() || TgProxy.IsRunning();
+        private readonly List<IBypassService> _services;
+
+        public bool IsRunning => Zapret.IsRunning || TgProxy.IsRunning;
 
         public event Action<string>? OnLog;
 
         private BypassController()
         {
-            Zapret.LogMessage += msg => OnLog?.Invoke(msg);
-            TgProxy.LogMessage += msg => OnLog?.Invoke(msg);
+            _services = new List<IBypassService> { Zapret, TgProxy };
+
+            foreach (var service in _services)
+            {
+                service.LogMessage += msg => OnLog?.Invoke(msg);
+            }
             Scanner.LogMessage += msg => OnLog?.Invoke(msg);
         }
 
@@ -44,8 +51,10 @@ namespace ZapretGUI.Core
 
         public void StopServices()
         {
-            Zapret.Stop();
-            TgProxy.Stop();
+            foreach (var service in _services)
+            {
+                service.Stop();
+            }
             OnLog?.Invoke("🛑 Все модули остановлены.");
         }
 
