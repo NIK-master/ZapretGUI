@@ -232,7 +232,6 @@
                                         <TextBlock Text="Интервал обновления статистики" FontSize="14" FontWeight="SemiBold"/>
                                         <TextBlock Text="Как часто опрашивать сеть и перерисовывать графики" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
                                     </StackPanel>
-                                    <!-- Фирменная плашка выбора вместо системного ComboBox -->
                                     <Border Grid.Column="1" Style="{StaticResource CyberSelectorBorderStyle}" MinWidth="150" VerticalAlignment="Center" MouseLeftButtonDown="BtnSelectInterval_MouseDown">
                                         <Grid>
                                             <Grid.ColumnDefinitions>
@@ -262,7 +261,7 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- БЛОК 4: СПИСКИ МАРШРУТИЗАЦИИ (IPSET И HOSTS) — Двухуровневый макет без обрезания меток -->
+                    <!-- БЛОК 4: СПИСКИ МАРШРУТИЗАЦИИ (IPSET И HOSTS) -->
                     <Border Background="#181818" CornerRadius="12" BorderBrush="#2A2A2A" BorderThickness="1" Margin="0,0,0,25" Padding="20">
                         <StackPanel>
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
@@ -270,7 +269,6 @@
                                 <TextBlock Text="Списки маршрутизации (IPSet и Hosts)" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center"/>
                             </StackPanel>
 
-                            <!-- Строка 1: Фильтр IPSet -->
                             <Border Style="{StaticResource SettingRowStyle}">
                                 <StackPanel>
                                     <WrapPanel Orientation="Horizontal" Margin="0,0,0,4">
@@ -301,7 +299,6 @@
                                 </StackPanel>
                             </Border>
 
-                            <!-- Строка 2: Авто-обновление системного файла hosts -->
                             <Border Style="{StaticResource SettingRowStyle}">
                                 <StackPanel>
                                     <WrapPanel Orientation="Horizontal" Margin="0,0,0,4">
@@ -333,7 +330,6 @@
                                 </StackPanel>
                             </Border>
 
-                            <!-- Строка 3: Папка профилей -->
                             <Border Style="{StaticResource SettingRowStyle}" Margin="-15,0,-15,0">
                                 <Grid>
                                     <Grid.ColumnDefinitions>

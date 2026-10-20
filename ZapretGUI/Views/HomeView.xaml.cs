@@ -348,36 +348,65 @@ namespace ZapretGUI.Views
 
         private void LoadProfiles()
         {
-            OverlayProfileListBox.Items.Clear();
             var folderPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.CoreFilesDirectory);
+            if (!Directory.Exists(folderPath)) return;
 
-            if (Directory.Exists(folderPath))
-            {
-                var batFiles = Directory.GetFiles(folderPath, "*.bat")
-                    .Where(f =>
-                    {
-                        var name = Path.GetFileName(f);
-                        return name.StartsWith("general", StringComparison.OrdinalIgnoreCase) ||
-                               name.StartsWith("mod_", StringComparison.OrdinalIgnoreCase);
-                    }).ToArray();
-
-                foreach (var file in batFiles)
+            var batFiles = Directory.GetFiles(folderPath, "*.bat")
+                .Where(f =>
                 {
-                    var fileName = Path.GetFileName(file);
-                    OverlayProfileListBox.Items.Add(new ConfigItem
-                    {
-                        FileName = fileName,
-                        MetaInfo = "Пинг: — мс • Тесты: не проводились",
-                        IsActive = false
-                    });
-                }
+                    var name = Path.GetFileName(f);
+                    return name.StartsWith("general", StringComparison.OrdinalIgnoreCase) ||
+                           name.StartsWith("mod_", StringComparison.OrdinalIgnoreCase);
+                })
+                .Select(f => Path.GetFileName(f))
+                .ToList();
 
-                if (TxtConfigsCount != null)
-                    TxtConfigsCount.Text = $"{batFiles.Length} конфигов";
-
-                if (OverlayProfileListBox.Items.Count > 0 && OverlayProfileListBox.SelectedIndex == -1)
-                    OverlayProfileListBox.SelectedIndex = 0;
+            var newItems = new List<ConfigItem>();
+            foreach (var fileName in batFiles)
+            {
+                var existingItem = OverlayProfileListBox.Items.OfType<ConfigItem>().FirstOrDefault(i => i.FileName == fileName);
+                newItems.Add(existingItem ?? new ConfigItem
+                {
+                    FileName = fileName,
+                    MetaInfo = "Пинг: — мс • Тесты: не проводились",
+                    IsActive = false
+                });
             }
+
+            SortAndSetProfiles(newItems);
+        }
+        private void SortAndSetProfiles(List<ConfigItem> items)
+        {
+            var sortedList = items.OrderByDescending(item =>
+            {
+                var match = Regex.Match(item.MetaInfo, @"Тесты:\s*(\d+)/(\d+)");
+                if (match.Success)
+                {
+                    var ok = int.Parse(match.Groups[1].Value);
+                    var total = int.Parse(match.Groups[2].Value);
+                    return total > 0 ? (double)ok / total : 0;
+                }
+                return -1.0;
+            }).ThenBy(item =>
+            {
+                var match = Regex.Match(item.MetaInfo, @"Пинг:\s*(\d+)\s*мс");
+                if (match.Success)
+                {
+                    return int.Parse(match.Groups[1].Value);
+                }
+                return int.MaxValue;
+            }).ThenBy(item => item.FileName).ToList();
+
+            OverlayProfileListBox.ItemsSource = null;
+            OverlayProfileListBox.Items.Clear();
+            foreach (var item in sortedList)
+                OverlayProfileListBox.Items.Add(item);
+
+            if (OverlayProfileListBox.Items.Count > 0 && OverlayProfileListBox.SelectedIndex == -1)
+                OverlayProfileListBox.SelectedIndex = 0;
+
+            if (TxtConfigsCount != null)
+                TxtConfigsCount.Text = $"{sortedList.Count} конфигов";
         }
 
         private void LoadSettings()
@@ -782,15 +811,18 @@ namespace ZapretGUI.Views
         private void UpdateConfigTests(string fileName, string okCount, string totalCount)
         {
             var currentPing = PingText.Text == "..." || PingText.Text == "—" ? "—" : PingText.Text;
+            var currentList = OverlayProfileListBox.Items.OfType<ConfigItem>().ToList();
 
-            foreach (var item in OverlayProfileListBox.Items)
+            foreach (var item in currentList)
             {
-                if (item is ConfigItem config && config.FileName == fileName)
+                if (item.FileName == fileName)
                 {
-                    config.MetaInfo = $"Пинг: {currentPing} мс • Тесты: {okCount}/{totalCount}";
+                    item.MetaInfo = $"Пинг: {currentPing} мс • Тесты: {okCount}/{totalCount}";
                     break;
                 }
             }
+
+            SortAndSetProfiles(currentList);
         }
         // =========================================================================
         // МЕНЮ НАСТРОЙКИ GAME FILTER

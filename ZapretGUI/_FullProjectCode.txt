@@ -4277,6 +4277,7 @@ namespace ZapretGUI.Views
             <Setter Property="Margin" Value="0,0,0,6"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ListBoxItem">
@@ -4658,6 +4659,7 @@ namespace ZapretGUI.Views
                                 <Setter Property="Margin" Value="0,0,8,8"/>
                                 <Setter Property="Cursor" Value="Hand"/>
                                 <Setter Property="Background" Value="Transparent"/>
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
                                 <Setter Property="Template">
                                     <Setter.Value>
                                         <ControlTemplate TargetType="ListBoxItem">
@@ -4761,29 +4763,31 @@ namespace ZapretGUI.Views
                     <TextBlock Text="Режим перехвата трафика игр:" Foreground="#CCCCCC" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,8"/>
 
                     <!-- Наш фирменный список карточек вместо системного ComboBox -->
-                    <ListBox x:Name="ListGameFilterMode" Background="Transparent" BorderThickness="0" ItemContainerStyle="{StaticResource CyberSelectListBoxItem}" Margin="0,0,0,10" SelectionChanged="ComboGameFilterMode_SelectionChanged">
+                    <ListBox x:Name="ListGameFilterMode" Background="Transparent" BorderThickness="0" 
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             ItemContainerStyle="{StaticResource CyberSelectListBoxItem}" Margin="0,0,0,10" SelectionChanged="ComboGameFilterMode_SelectionChanged">
                         <ListBoxItem>
                             <StackPanel>
                                 <TextBlock Text="Отключен" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
-                                <TextBlock Text="По умолчанию — фильтрация игровых портов выключена (порт 12)" Foreground="#71717A" FontSize="11"/>
+                                <TextBlock Text="По умолчанию — фильтрация игровых портов выключена (порт 12)" Foreground="#71717A" FontSize="11" TextWrapping="Wrap"/>
                             </StackPanel>
                         </ListBoxItem>
                         <ListBoxItem>
                             <StackPanel>
                                 <TextBlock Text="TCP и UDP (Рекомендуется)" Foreground="{DynamicResource BrandSuccessBrush}" FontSize="13" FontWeight="SemiBold"/>
-                                <TextBlock Text="Полный обход для большинства онлайн-игр и игровых лаунчеров" Foreground="#71717A" FontSize="11"/>
+                                <TextBlock Text="Полный обход для большинства онлайн-игр и игровых лаунчеров" Foreground="#71717A" FontSize="11" TextWrapping="Wrap"/>
                             </StackPanel>
                         </ListBoxItem>
                         <ListBoxItem>
                             <StackPanel>
                                 <TextBlock Text="Только TCP" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
-                                <TextBlock Text="Перехват только TCP-соединений игровых серверов" Foreground="#71717A" FontSize="11"/>
+                                <TextBlock Text="Перехват только TCP-соединений игровых серверов" Foreground="#71717A" FontSize="11" TextWrapping="Wrap"/>
                             </StackPanel>
                         </ListBoxItem>
                         <ListBoxItem>
                             <StackPanel>
                                 <TextBlock Text="Только UDP" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
-                                <TextBlock Text="Перехват только UDP-трафика (голосовые чаты и динамичные шутеры)" Foreground="#71717A" FontSize="11"/>
+                                <TextBlock Text="Перехват только UDP-трафика (голосовые чаты и динамичные шутеры)" Foreground="#71717A" FontSize="11" TextWrapping="Wrap"/>
                             </StackPanel>
                         </ListBoxItem>
                     </ListBox>
@@ -5192,36 +5196,65 @@ namespace ZapretGUI.Views
 
         private void LoadProfiles()
         {
-            OverlayProfileListBox.Items.Clear();
             var folderPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.CoreFilesDirectory);
+            if (!Directory.Exists(folderPath)) return;
 
-            if (Directory.Exists(folderPath))
-            {
-                var batFiles = Directory.GetFiles(folderPath, "*.bat")
-                    .Where(f =>
-                    {
-                        var name = Path.GetFileName(f);
-                        return name.StartsWith("general", StringComparison.OrdinalIgnoreCase) ||
-                               name.StartsWith("mod_", StringComparison.OrdinalIgnoreCase);
-                    }).ToArray();
-
-                foreach (var file in batFiles)
+            var batFiles = Directory.GetFiles(folderPath, "*.bat")
+                .Where(f =>
                 {
-                    var fileName = Path.GetFileName(file);
-                    OverlayProfileListBox.Items.Add(new ConfigItem
-                    {
-                        FileName = fileName,
-                        MetaInfo = "Пинг: — мс • Тесты: не проводились",
-                        IsActive = false
-                    });
-                }
+                    var name = Path.GetFileName(f);
+                    return name.StartsWith("general", StringComparison.OrdinalIgnoreCase) ||
+                           name.StartsWith("mod_", StringComparison.OrdinalIgnoreCase);
+                })
+                .Select(f => Path.GetFileName(f))
+                .ToList();
 
-                if (TxtConfigsCount != null)
-                    TxtConfigsCount.Text = $"{batFiles.Length} конфигов";
-
-                if (OverlayProfileListBox.Items.Count > 0 && OverlayProfileListBox.SelectedIndex == -1)
-                    OverlayProfileListBox.SelectedIndex = 0;
+            var newItems = new List<ConfigItem>();
+            foreach (var fileName in batFiles)
+            {
+                var existingItem = OverlayProfileListBox.Items.OfType<ConfigItem>().FirstOrDefault(i => i.FileName == fileName);
+                newItems.Add(existingItem ?? new ConfigItem
+                {
+                    FileName = fileName,
+                    MetaInfo = "Пинг: — мс • Тесты: не проводились",
+                    IsActive = false
+                });
             }
+
+            SortAndSetProfiles(newItems);
+        }
+        private void SortAndSetProfiles(List<ConfigItem> items)
+        {
+            var sortedList = items.OrderByDescending(item =>
+            {
+                var match = Regex.Match(item.MetaInfo, @"Тесты:\s*(\d+)/(\d+)");
+                if (match.Success)
+                {
+                    var ok = int.Parse(match.Groups[1].Value);
+                    var total = int.Parse(match.Groups[2].Value);
+                    return total > 0 ? (double)ok / total : 0;
+                }
+                return -1.0;
+            }).ThenBy(item =>
+            {
+                var match = Regex.Match(item.MetaInfo, @"Пинг:\s*(\d+)\s*мс");
+                if (match.Success)
+                {
+                    return int.Parse(match.Groups[1].Value);
+                }
+                return int.MaxValue;
+            }).ThenBy(item => item.FileName).ToList();
+
+            OverlayProfileListBox.ItemsSource = null;
+            OverlayProfileListBox.Items.Clear();
+            foreach (var item in sortedList)
+                OverlayProfileListBox.Items.Add(item);
+
+            if (OverlayProfileListBox.Items.Count > 0 && OverlayProfileListBox.SelectedIndex == -1)
+                OverlayProfileListBox.SelectedIndex = 0;
+
+            if (TxtConfigsCount != null)
+                TxtConfigsCount.Text = $"{sortedList.Count} конфигов";
         }
 
         private void LoadSettings()
@@ -5626,15 +5659,18 @@ namespace ZapretGUI.Views
         private void UpdateConfigTests(string fileName, string okCount, string totalCount)
         {
             var currentPing = PingText.Text == "..." || PingText.Text == "—" ? "—" : PingText.Text;
+            var currentList = OverlayProfileListBox.Items.OfType<ConfigItem>().ToList();
 
-            foreach (var item in OverlayProfileListBox.Items)
+            foreach (var item in currentList)
             {
-                if (item is ConfigItem config && config.FileName == fileName)
+                if (item.FileName == fileName)
                 {
-                    config.MetaInfo = $"Пинг: {currentPing} мс • Тесты: {okCount}/{totalCount}";
+                    item.MetaInfo = $"Пинг: {currentPing} мс • Тесты: {okCount}/{totalCount}";
                     break;
                 }
             }
+
+            SortAndSetProfiles(currentList);
         }
         // =========================================================================
         // МЕНЮ НАСТРОЙКИ GAME FILTER
@@ -7866,7 +7902,6 @@ namespace ZapretGUI.Views
                                         <TextBlock Text="Интервал обновления статистики" FontSize="14" FontWeight="SemiBold"/>
                                         <TextBlock Text="Как часто опрашивать сеть и перерисовывать графики" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
                                     </StackPanel>
-                                    <!-- Фирменная плашка выбора вместо системного ComboBox -->
                                     <Border Grid.Column="1" Style="{StaticResource CyberSelectorBorderStyle}" MinWidth="150" VerticalAlignment="Center" MouseLeftButtonDown="BtnSelectInterval_MouseDown">
                                         <Grid>
                                             <Grid.ColumnDefinitions>
@@ -7896,7 +7931,7 @@ namespace ZapretGUI.Views
                         </StackPanel>
                     </Border>
 
-                    <!-- БЛОК 4: СПИСКИ МАРШРУТИЗАЦИИ (IPSET И HOSTS) — Двухуровневый макет без обрезания меток -->
+                    <!-- БЛОК 4: СПИСКИ МАРШРУТИЗАЦИИ (IPSET И HOSTS) -->
                     <Border Background="#181818" CornerRadius="12" BorderBrush="#2A2A2A" BorderThickness="1" Margin="0,0,0,25" Padding="20">
                         <StackPanel>
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
@@ -7904,7 +7939,6 @@ namespace ZapretGUI.Views
                                 <TextBlock Text="Списки маршрутизации (IPSet и Hosts)" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center"/>
                             </StackPanel>
 
-                            <!-- Строка 1: Фильтр IPSet -->
                             <Border Style="{StaticResource SettingRowStyle}">
                                 <StackPanel>
                                     <WrapPanel Orientation="Horizontal" Margin="0,0,0,4">
@@ -7935,7 +7969,6 @@ namespace ZapretGUI.Views
                                 </StackPanel>
                             </Border>
 
-                            <!-- Строка 2: Авто-обновление системного файла hosts -->
                             <Border Style="{StaticResource SettingRowStyle}">
                                 <StackPanel>
                                     <WrapPanel Orientation="Horizontal" Margin="0,0,0,4">
@@ -7967,7 +8000,6 @@ namespace ZapretGUI.Views
                                 </StackPanel>
                             </Border>
 
-                            <!-- Строка 3: Папка профилей -->
                             <Border Style="{StaticResource SettingRowStyle}" Margin="-15,0,-15,0">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
@@ -8037,13 +8069,17 @@ namespace ZapretGUI.Views
                         <Button Grid.Column="2" Content="✕" Background="Transparent" Foreground="#888888" BorderThickness="0" FontSize="16" Cursor="Hand" Click="BtnCloseSelectionOverlay_Click" VerticalAlignment="Top"/>
                     </Grid>
 
-                    <ListBox x:Name="SelectionListBox" Background="Transparent" BorderThickness="0" SelectionChanged="SelectionListBox_SelectionChanged">
+                    <ListBox x:Name="SelectionListBox" Background="Transparent" BorderThickness="0" 
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto"
+                             SelectionChanged="SelectionListBox_SelectionChanged">
                         <ListBox.ItemContainerStyle>
                             <Style TargetType="ListBoxItem">
                                 <Setter Property="Padding" Value="0"/>
                                 <Setter Property="Margin" Value="0,0,0,8"/>
                                 <Setter Property="Cursor" Value="Hand"/>
                                 <Setter Property="Background" Value="Transparent"/>
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
                                 <Setter Property="Template">
                                     <Setter.Value>
                                         <ControlTemplate TargetType="ListBoxItem">
@@ -8056,8 +8092,8 @@ namespace ZapretGUI.Views
 
                                                     <StackPanel Grid.Column="0" VerticalAlignment="Center">
                                                         <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                                                            <TextBlock Text="{Binding Title}" Foreground="White" FontSize="14" FontWeight="SemiBold"/>
-                                                            <Border x:Name="ActiveBadge" Background="#1E3A8A" CornerRadius="4" Padding="6,2" Margin="10,0,0,0" Visibility="Collapsed">
+                                                            <TextBlock Text="{Binding Title}" Foreground="White" FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                                            <Border x:Name="ActiveBadge" Background="#1E3A8A" CornerRadius="4" Padding="6,2" Margin="10,0,0,0" Visibility="Collapsed" VerticalAlignment="Center">
                                                                 <TextBlock Text="выбрано" Foreground="#60A5FA" FontSize="10" FontWeight="SemiBold"/>
                                                             </Border>
                                                         </StackPanel>
