@@ -31,6 +31,7 @@ namespace ZapretGUI.Core
         public string GameFilterTcpRange { get; set; } = "1024-65535";
         public string GameFilterUdpRange { get; set; } = "1024-65535";
         public int HostsSourceIndex { get; set; } = 2;
+        public bool FirstTimeScanPrompted { get; set; } = false;
     }
 
     public static class SettingsManager

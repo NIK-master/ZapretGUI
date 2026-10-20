@@ -38,6 +38,11 @@ namespace ZapretGUI.Views
             set { _isActive = value; OnPropertyChanged(nameof(IsActive)); }
         }
 
+        public int TopRank { get; set; } = int.MaxValue;
+        public int PingMs { get; set; } = int.MaxValue;
+        public int TestsOk { get; set; } = -1;
+        public int TestsTotal { get; set; } = -1;
+
         public override string ToString() => FileName;
 
         protected void OnPropertyChanged(string propertyName) =>
@@ -237,6 +242,28 @@ namespace ZapretGUI.Views
                         MainToggle.IsChecked = false;
                         return;
                     }
+
+                    if (isZapretSelected && !SettingsManager.Current.FirstTimeScanPrompted)
+                    {
+                        SettingsManager.Current.FirstTimeScanPrompted = true;
+                        SettingsManager.Save();
+
+                        var runScan = UIHelper.ShowConfirm(
+                            "Первый запуск Zapret",
+                            "Перед первым включением рекомендуется протестировать стратегии обхода, чтобы выбрать самую быструю и стабильную для вашего провайдера.\n\nЗапустить автоматическое тестирование конфигураций сейчас?",
+                            confirmText: "Запустить тест");
+
+                        if (runScan)
+                        {
+                            MainToggle.IsChecked = false;
+                            BtnOpenConfigMenu_MouseDown(this, null!);
+                            BtnStartScan_Click(this, new RoutedEventArgs());
+                            return;
+                        }
+                    }
+
+                    MainToggle.IsEnabled = false;
+                    LaunchProgressBar.Visibility = Visibility.Visible;
 
                     MainToggle.IsEnabled = false;
                     LaunchProgressBar.Visibility = Visibility.Visible;
