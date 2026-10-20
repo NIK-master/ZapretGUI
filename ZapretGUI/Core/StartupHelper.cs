@@ -32,12 +32,16 @@ namespace ZapretGUI.Core
 
                 if (enable)
                 {
-                    var exePath = System.Reflection.Assembly.GetExecutingAssembly().Location;
-                    exePath = Path.ChangeExtension(exePath, ".exe");
+                    var exePath = Environment.ProcessPath;
+                    if (string.IsNullOrEmpty(exePath))
+                        exePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ZapretGUI.exe");
+
                     key.SetValue(AppConstants.AppRegistryName, $"\"{exePath}\"");
                 }
                 else
+                {
                     key.DeleteValue(AppConstants.AppRegistryName, false);
+                }
             }
             catch (Exception ex)
             {

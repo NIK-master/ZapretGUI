@@ -367,8 +367,21 @@ namespace ZapretGUI
         public MainWindow()
         {
             InitializeComponent();
+
+            var configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.json");
+            var isFirstRun = !File.Exists(configPath);
+
             SettingsManager.Load();
             UIHelper.ApplyThemeColors();
+
+            if (isFirstRun)
+            {
+                var wizard = new Views.WizardWindow();
+                wizard.ShowDialog();
+                SettingsManager.Save();
+                UIHelper.ApplyThemeColors();
+            }
+
             RenderOptions.ProcessRenderMode = SettingsManager.Current.HardwareAcceleration
                 ? RenderMode.Default
                 : RenderMode.SoftwareOnly;
@@ -379,14 +392,6 @@ namespace ZapretGUI
             MainContentContainer.Content = _homeView;
 
             _trayIconManager = new TrayIconManager(this);
-
-            var configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.json");
-            if (!File.Exists(configPath))
-            {
-                var wizard = new Views.WizardWindow();
-                wizard.ShowDialog();
-                UIHelper.ApplyThemeColors();
-            }
 
             _ = CheckUpdatesOnStartupAsync();
         }
@@ -404,6 +409,7 @@ namespace ZapretGUI
             var stopServicesAction = () => { if (IsBypassRunning()) ToggleBypass(); };
             var progress = new Progress<string>(status => _homeView.ShowUpdateProgress(status));
             await Core.UpdateManager.RunUpdateWorkflowAsync(isManualCheck: false, stopServicesAction, progress);
+            _homeView.RefreshProfilesLive();
         }
 
         private void BtnHome_Click(object sender, RoutedEventArgs e)
@@ -731,7 +737,7 @@ namespace ZapretGUI.Core
     public static class AppConstants
     {
         // Основные
-        public const string AppVersion = "v3.0";
+        public const string AppVersion = "v3.5";
         public const string CoreFilesDirectory = "ZapretFiles";
         public const string ModsDirectory = "Mods";
         public const string ZapretProcessName = "winws";
@@ -2311,6 +2317,7 @@ namespace ZapretGUI.Core
 ////////////////////////////////////////////////////////////////////////////////
 
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
@@ -2322,6 +2329,7 @@ namespace ZapretGUI.Core
         public bool ZapretEnabled { get; set; } = true;
         public bool TgProxyEnabled { get; set; } = true;
         public int SelectedProfileIndex { get; set; } = 0;
+        public string SelectedProfileName { get; set; } = "general.bat";
         public bool StartMinimized { get; set; } = false;
         public bool MinimizeOnClose { get; set; } = true;
         public bool NotificationsEnabled { get; set; } = true;
@@ -2427,12 +2435,16 @@ namespace ZapretGUI.Core
 
                 if (enable)
                 {
-                    var exePath = System.Reflection.Assembly.GetExecutingAssembly().Location;
-                    exePath = Path.ChangeExtension(exePath, ".exe");
+                    var exePath = Environment.ProcessPath;
+                    if (string.IsNullOrEmpty(exePath))
+                        exePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ZapretGUI.exe");
+
                     key.SetValue(AppConstants.AppRegistryName, $"\"{exePath}\"");
                 }
                 else
+                {
                     key.DeleteValue(AppConstants.AppRegistryName, false);
+                }
             }
             catch (Exception ex)
             {
@@ -2786,6 +2798,7 @@ using System.IO.Compression;
 using System.Linq;
 using System.Net.Http;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace ZapretGUI.Core
@@ -2820,10 +2833,56 @@ namespace ZapretGUI.Core
             _httpClient.DefaultRequestHeaders.Add("User-Agent", AppConstants.GithubUserAgent);
         }
 
-        private static string CleanVersion(string version)
+        private static string CleanVersion(string? version)
         {
-            if (string.IsNullOrEmpty(version)) return "0.0.0";
+            if (string.IsNullOrWhiteSpace(version)) return "0.0.0";
             return version.Trim().TrimStart('v', 'V');
+        }
+
+        private static bool IsNewerVersion(string? remoteVersion, string? localVersion)
+        {
+            string cleanRemote = CleanVersion(remoteVersion);
+            string cleanLocal = CleanVersion(localVersion);
+
+            if (string.Equals(cleanRemote, cleanLocal, StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            if (TryParseNormalizedVersion(cleanRemote, out Version? vRemote) &&
+                TryParseNormalizedVersion(cleanLocal, out Version? vLocal))
+            {
+                return vRemote > vLocal;
+            }
+
+            return cleanLocal == "0.0.0" || string.IsNullOrEmpty(cleanLocal);
+        }
+
+        private static bool TryParseNormalizedVersion(string input, out Version? version)
+        {
+            version = null;
+            var match = Regex.Match(input, @"^(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:\.(\d+))?");
+            if (!match.Success) return false;
+
+            int major = int.Parse(match.Groups[1].Value);
+            int minor = match.Groups[2].Success ? int.Parse(match.Groups[2].Value) : 0;
+            int build = match.Groups[3].Success ? int.Parse(match.Groups[3].Value) : 0;
+            int rev = match.Groups[4].Success ? int.Parse(match.Groups[4].Value) : 0;
+
+            version = new Version(major, minor, build, rev);
+            return true;
+        }
+
+        private static bool IsCoreFilePresentOnDisk(bool isZapret)
+        {
+            var baseDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.CoreFilesDirectory);
+            if (isZapret)
+            {
+                return File.Exists(Path.Combine(baseDir, $"{AppConstants.ZapretProcessName}.exe")) ||
+                       File.Exists(Path.Combine(baseDir, "bin", $"{AppConstants.ZapretProcessName}.exe"));
+            }
+            else
+            {
+                return File.Exists(Path.Combine(baseDir, $"{AppConstants.TgProxyProcessName}.exe"));
+            }
         }
 
         public static async Task RunUpdateWorkflowAsync(bool isManualCheck, Action? stopServicesCallback, IProgress<string>? progress = null)
@@ -2833,7 +2892,7 @@ namespace ZapretGUI.Core
             {
                 var acceptApp = UIHelper.ShowConfirm(
                     "Обновление программы",
-                    $"Доступна новая версия панели управления {appUpdate.Version}!\n\nПрограмма будет закрыта для установки обновления. Продолжить?",
+                    $"Доступна новая версия панели управления {appUpdate.Version} (текущая: {CurrentVersion})!\n\nПрограмма будет закрыта для установки обновления. Продолжить?",
                     confirmText: "Обновить");
 
                 if (acceptApp)
@@ -2864,23 +2923,31 @@ namespace ZapretGUI.Core
             var zapretUpdate = await CheckForCoreUpdateAsync(AppConstants.ZapretCoreRepoUrl, SettingsManager.Current.ZapretCoreVersion, "Zapret", true);
             if (zapretUpdate.UpdateAvailable)
             {
-                var acceptZapret = UIHelper.ShowConfirm(
-                    "Обновление ядра Zapret",
-                    $"Найдено обновление обхода Zapret от flowseal ({zapretUpdate.Version})!\n\nТекущая версия: {zapretUpdate.CurrentVersion}\nОбновить автоматически?",
-                    confirmText: "Обновить");
-
-                if (acceptZapret)
+                if (!isManualCheck && CleanVersion(SettingsManager.Current.ZapretCoreVersion) == "0.0.0" && IsCoreFilePresentOnDisk(true))
                 {
-                    try
+                    SettingsManager.Current.ZapretCoreVersion = zapretUpdate.Version;
+                    SettingsManager.Save();
+                }
+                else
+                {
+                    var acceptZapret = UIHelper.ShowConfirm(
+                        "Обновление ядра Zapret",
+                        $"Найдено обновление обхода Zapret от flowseal ({zapretUpdate.Version})!\n\nТекущая версия: {zapretUpdate.CurrentVersion}\nОбновить автоматически?",
+                        confirmText: "Обновить");
+
+                    if (acceptZapret)
                     {
-                        await InstallCoreAsync(zapretUpdate, stopServicesCallback, progress);
-                        SettingsManager.Current.ZapretCoreVersion = zapretUpdate.Version;
-                        SettingsManager.Save();
-                        UIHelper.ShowAlert("Успех", $"Модуль Zapret успешно обновлен до версии {zapretUpdate.Version}!");
-                    }
-                    catch (Exception ex)
-                    {
-                        UIHelper.ShowAlert("Ошибка", $"Ошибка при установке обновления Zapret: {ex.Message}", isError: true);
+                        try
+                        {
+                            await InstallCoreAsync(zapretUpdate, stopServicesCallback, progress);
+                            SettingsManager.Current.ZapretCoreVersion = zapretUpdate.Version;
+                            SettingsManager.Save();
+                            UIHelper.ShowAlert("Успех", $"Модуль Zapret успешно обновлен до версии {zapretUpdate.Version}!");
+                        }
+                        catch (Exception ex)
+                        {
+                            UIHelper.ShowAlert("Ошибка", $"Ошибка при установке обновления Zapret: {ex.Message}", isError: true);
+                        }
                     }
                 }
             }
@@ -2892,23 +2959,31 @@ namespace ZapretGUI.Core
             var proxyUpdate = await CheckForCoreUpdateAsync(AppConstants.TgProxyCoreRepoUrl, SettingsManager.Current.TgProxyCoreVersion, "TgWsProxy", false);
             if (proxyUpdate.UpdateAvailable)
             {
-                var acceptProxy = UIHelper.ShowConfirm(
-                    "Обновление ядра TgWsProxy",
-                    $"Найдено обновление прокси Telegram от flowseal ({proxyUpdate.Version})!\n\nТекущая версия: {proxyUpdate.CurrentVersion}\nОбновить автоматически?",
-                    confirmText: "Обновить");
-
-                if (acceptProxy)
+                if (!isManualCheck && CleanVersion(SettingsManager.Current.TgProxyCoreVersion) == "0.0.0" && IsCoreFilePresentOnDisk(false))
                 {
-                    try
+                    SettingsManager.Current.TgProxyCoreVersion = proxyUpdate.Version;
+                    SettingsManager.Save();
+                }
+                else
+                {
+                    var acceptProxy = UIHelper.ShowConfirm(
+                        "Обновление ядра TgWsProxy",
+                        $"Найдено обновление прокси Telegram от flowseal ({proxyUpdate.Version})!\n\nТекущая версия: {proxyUpdate.CurrentVersion}\nОбновить автоматически?",
+                        confirmText: "Обновить");
+
+                    if (acceptProxy)
                     {
-                        await InstallCoreAsync(proxyUpdate, stopServicesCallback, progress);
-                        SettingsManager.Current.TgProxyCoreVersion = proxyUpdate.Version;
-                        SettingsManager.Save();
-                        UIHelper.ShowAlert("Успех", $"Модуль TgWsProxy успешно обновлен до версии {proxyUpdate.Version}!");
-                    }
-                    catch (Exception ex)
-                    {
-                        UIHelper.ShowAlert("Ошибка", $"Ошибка при установке обновления TgWsProxy: {ex.Message}", isError: true);
+                        try
+                        {
+                            await InstallCoreAsync(proxyUpdate, stopServicesCallback, progress);
+                            SettingsManager.Current.TgProxyCoreVersion = proxyUpdate.Version;
+                            SettingsManager.Save();
+                            UIHelper.ShowAlert("Успех", $"Модуль TgWsProxy успешно обновлен до версии {proxyUpdate.Version}!");
+                        }
+                        catch (Exception ex)
+                        {
+                            UIHelper.ShowAlert("Ошибка", $"Ошибка при установке обновления TgWsProxy: {ex.Message}", isError: true);
+                        }
                     }
                 }
             }
@@ -2928,7 +3003,7 @@ namespace ZapretGUI.Core
                 using var doc = JsonDocument.Parse(response);
                 var latestVersion = doc.RootElement.GetProperty("tag_name").GetString();
 
-                if (latestVersion != null && CleanVersion(latestVersion) != CleanVersion(CurrentVersion))
+                if (latestVersion != null && IsNewerVersion(latestVersion, CurrentVersion))
                 {
                     var downloadUrl = "";
                     foreach (var asset in doc.RootElement.GetProperty("assets").EnumerateArray())
@@ -2966,8 +3041,9 @@ namespace ZapretGUI.Core
                 using var doc = JsonDocument.Parse(response);
 
                 var latestVersion = doc.RootElement.GetProperty("tag_name").GetString();
+                bool filesExist = IsCoreFilePresentOnDisk(isZapret);
 
-                if (latestVersion != null && CleanVersion(latestVersion) != CleanVersion(currentVersion))
+                if (latestVersion != null && (!filesExist || IsNewerVersion(latestVersion, currentVersion)))
                 {
                     var downloadUrl = "";
                     var targetFileName = "";
@@ -3128,8 +3204,11 @@ namespace ZapretGUI.Core
             var sourceExePath = extractedExe ?? Path.Combine(extractDir, "ZapretGUI.exe");
 
             var currentAppDir = AppDomain.CurrentDomain.BaseDirectory;
-            var currentExePath = System.Reflection.Assembly.GetExecutingAssembly().Location;
-            currentExePath = Path.ChangeExtension(currentExePath, ".exe");
+            var currentExePath = Environment.ProcessPath;
+            if (string.IsNullOrEmpty(currentExePath))
+            {
+                currentExePath = Path.Combine(currentAppDir, "ZapretGUI.exe");
+            }
 
             var batPath = Path.Combine(tempDir, "updater.bat");
             var batContent = $@"@echo off
@@ -3161,7 +3240,6 @@ del ""%~f0""
                 {
                     await InstallCoreAsync(zapretUpdate, null, progress);
                     SettingsManager.Current.ZapretCoreVersion = zapretUpdate.Version;
-                    SettingsManager.Save();
                 }
             }
 
@@ -3173,9 +3251,12 @@ del ""%~f0""
                 {
                     await InstallCoreAsync(proxyUpdate, null, progress);
                     SettingsManager.Current.TgProxyCoreVersion = proxyUpdate.Version;
-                    SettingsManager.Save();
                 }
             }
+
+            SettingsManager.Current.ZapretEnabled = installZapret;
+            SettingsManager.Current.TgProxyEnabled = installProxy;
+            SettingsManager.Save();
         }
 
         private static async Task DownloadFileWithProgressAsync(string downloadUrl, string destinationFilePath, IProgress<string>? progress)
@@ -4894,6 +4975,15 @@ namespace ZapretGUI.Views
         public int TestsOk { get; set; } = -1;
         public int TestsTotal { get; set; } = -1;
 
+        public double SuccessRate => TestsTotal > 0 ? (double)TestsOk / TestsTotal : -1.0;
+
+        public void RefreshMetaText()
+        {
+            string pingStr = PingMs < int.MaxValue && PingMs >= 0 ? $"{PingMs}" : "—";
+            string testStr = TestsTotal > 0 ? $"{TestsOk}/{TestsTotal}" : "не проводились";
+            MetaInfo = $"Пинг: {pingStr} мс • Тесты: {testStr}";
+        }
+
         public override string ToString() => FileName;
 
         protected void OnPropertyChanged(string propertyName) =>
@@ -4950,32 +5040,17 @@ namespace ZapretGUI.Views
                 Log("Интерфейс загружен. Найдены активные процессы в фоне.");
             }
             else
+            {
                 Log("Интерфейс загружен. Ожидание команд...");
+            }
         }
 
-        private void RefreshProfilesLive()
+        public void RefreshProfilesLive()
         {
             Dispatcher.Invoke(() =>
             {
                 _isUpdatingUI = true;
-
-                var currentProfile = TxtMainProfile.Text;
                 LoadProfiles();
-
-                var found = false;
-                for (var i = 0; i < OverlayProfileListBox.Items.Count; i++)
-                {
-                    if (OverlayProfileListBox.Items[i] is ConfigItem item && item.FileName == currentProfile)
-                    {
-                        OverlayProfileListBox.SelectedIndex = i;
-                        found = true;
-                        break;
-                    }
-                }
-
-                if (!found && OverlayProfileListBox.Items.Count > 0)
-                    OverlayProfileListBox.SelectedIndex = 0;
-
                 _isUpdatingUI = false;
             });
         }
@@ -5041,7 +5116,7 @@ namespace ZapretGUI.Views
                 {
                     PingText.Text = pingMs.ToString();
                     SyncNetworkIndicator(true);
-                    UpdateAllConfigsPing(pingMs.ToString());
+                    UpdateAllConfigsPing((int)pingMs);
                 }
                 else
                 {
@@ -5236,52 +5311,70 @@ namespace ZapretGUI.Views
                 .Select(f => Path.GetFileName(f))
                 .ToList();
 
+            var existingItems = OverlayProfileListBox.Items.OfType<ConfigItem>().ToList();
             var newItems = new List<ConfigItem>();
+
             foreach (var fileName in batFiles)
             {
-                var existingItem = OverlayProfileListBox.Items.OfType<ConfigItem>().FirstOrDefault(i => i.FileName == fileName);
-                newItems.Add(existingItem ?? new ConfigItem
+                var existing = existingItems.FirstOrDefault(i => i.FileName.Equals(fileName, StringComparison.OrdinalIgnoreCase));
+                newItems.Add(existing ?? new ConfigItem
                 {
                     FileName = fileName,
-                    MetaInfo = "Пинг: — мс • Тесты: не проводились",
                     IsActive = false
                 });
             }
 
             SortAndSetProfiles(newItems);
         }
+
         private void SortAndSetProfiles(List<ConfigItem> items)
         {
-            var sortedList = items.OrderByDescending(item =>
-            {
-                var match = Regex.Match(item.MetaInfo, @"Тесты:\s*(\d+)/(\d+)");
-                if (match.Success)
-                {
-                    var ok = int.Parse(match.Groups[1].Value);
-                    var total = int.Parse(match.Groups[2].Value);
-                    return total > 0 ? (double)ok / total : 0;
-                }
-                return -1.0;
-            }).ThenBy(item =>
-            {
-                var match = Regex.Match(item.MetaInfo, @"Пинг:\s*(\d+)\s*мс");
-                if (match.Success)
-                {
-                    return int.Parse(match.Groups[1].Value);
-                }
-                return int.MaxValue;
-            }).ThenBy(item => item.FileName).ToList();
+            var sortedList = items
+                .OrderBy(item => item.TopRank)
+                .ThenByDescending(item => item.SuccessRate)
+                .ThenBy(item => item.PingMs)
+                .ThenBy(item => item.FileName)
+                .ToList();
+
+            bool prevUpdating = _isUpdatingUI;
+            _isUpdatingUI = true;
+
+            string targetProfile = !string.IsNullOrWhiteSpace(TxtMainProfile?.Text)
+                ? TxtMainProfile.Text
+                : SettingsManager.Current.SelectedProfileName;
 
             OverlayProfileListBox.ItemsSource = null;
             OverlayProfileListBox.Items.Clear();
-            foreach (var item in sortedList)
-                OverlayProfileListBox.Items.Add(item);
 
-            if (OverlayProfileListBox.Items.Count > 0 && OverlayProfileListBox.SelectedIndex == -1)
+            int activeIdx = -1;
+            for (int i = 0; i < sortedList.Count; i++)
+            {
+                var item = sortedList[i];
+                bool isMatch = string.Equals(item.FileName, targetProfile, StringComparison.OrdinalIgnoreCase);
+                item.IsActive = isMatch;
+                if (isMatch) activeIdx = i;
+                OverlayProfileListBox.Items.Add(item);
+            }
+
+            if (activeIdx >= 0)
+            {
+                OverlayProfileListBox.SelectedIndex = activeIdx;
+            }
+            else if (OverlayProfileListBox.Items.Count > 0)
+            {
                 OverlayProfileListBox.SelectedIndex = 0;
+                if (OverlayProfileListBox.Items[0] is ConfigItem first)
+                {
+                    first.IsActive = true;
+                    if (TxtMainProfile != null) TxtMainProfile.Text = first.FileName;
+                    if (OverlayTxtProfile != null) OverlayTxtProfile.Text = first.FileName;
+                }
+            }
 
             if (TxtConfigsCount != null)
                 TxtConfigsCount.Text = $"{sortedList.Count} конфигов";
+
+            _isUpdatingUI = prevUpdating;
         }
 
         private void LoadSettings()
@@ -5291,14 +5384,31 @@ namespace ZapretGUI.Views
             ZapretToggle.IsChecked = SettingsManager.Current.ZapretEnabled;
             TgProxyToggle.IsChecked = SettingsManager.Current.TgProxyEnabled;
 
-            if (SettingsManager.Current.SelectedProfileIndex >= 0 && SettingsManager.Current.SelectedProfileIndex < OverlayProfileListBox.Items.Count)
+            string savedProfile = SettingsManager.Current.SelectedProfileName;
+            int foundIdx = -1;
+
+            for (int i = 0; i < OverlayProfileListBox.Items.Count; i++)
             {
-                OverlayProfileListBox.SelectedIndex = SettingsManager.Current.SelectedProfileIndex;
-                if (OverlayProfileListBox.Items[SettingsManager.Current.SelectedProfileIndex] is ConfigItem currentItem)
+                if (OverlayProfileListBox.Items[i] is ConfigItem item &&
+                    string.Equals(item.FileName, savedProfile, StringComparison.OrdinalIgnoreCase))
                 {
-                    TxtMainProfile.Text = currentItem.FileName;
-                    OverlayTxtProfile.Text = currentItem.FileName;
+                    foundIdx = i;
+                    break;
                 }
+            }
+
+            if (foundIdx == -1 &&
+                SettingsManager.Current.SelectedProfileIndex >= 0 &&
+                SettingsManager.Current.SelectedProfileIndex < OverlayProfileListBox.Items.Count)
+            {
+                foundIdx = SettingsManager.Current.SelectedProfileIndex;
+            }
+
+            if (foundIdx >= 0 && OverlayProfileListBox.Items[foundIdx] is ConfigItem currentItem)
+            {
+                OverlayProfileListBox.SelectedIndex = foundIdx;
+                TxtMainProfile.Text = currentItem.FileName;
+                OverlayTxtProfile.Text = currentItem.FileName;
             }
 
             RefreshListActiveStates(TxtMainProfile.Text);
@@ -5311,7 +5421,7 @@ namespace ZapretGUI.Views
             foreach (var item in OverlayProfileListBox.Items)
             {
                 if (item is ConfigItem configItem)
-                    configItem.IsActive = (configItem.FileName == activeFileName);
+                    configItem.IsActive = string.Equals(configItem.FileName, activeFileName, StringComparison.OrdinalIgnoreCase);
             }
         }
 
@@ -5319,7 +5429,8 @@ namespace ZapretGUI.Views
         {
             SettingsManager.Current.ZapretEnabled = ZapretToggle.IsChecked ?? true;
             SettingsManager.Current.TgProxyEnabled = TgProxyToggle.IsChecked ?? true;
-            SettingsManager.Current.SelectedProfileIndex = OverlayProfileListBox.SelectedIndex;
+            SettingsManager.Current.SelectedProfileIndex = Math.Max(0, OverlayProfileListBox.SelectedIndex);
+            SettingsManager.Current.SelectedProfileName = TxtMainProfile.Text;
 
             SettingsManager.Save();
         }
@@ -5348,11 +5459,10 @@ namespace ZapretGUI.Views
                 if (match.Success)
                 {
                     var batName = match.Groups[1].Value.Trim();
-                    var okCount = match.Groups[2].Value;
-                    var errCount = match.Groups[3].Success ? match.Groups[3].Value : "0";
+                    int okCount = int.Parse(match.Groups[2].Value);
+                    int errCount = match.Groups[3].Success ? int.Parse(match.Groups[3].Value) : 0;
 
-                    var total = int.Parse(okCount) + int.Parse(errCount);
-                    UpdateConfigTests(batName, okCount, total.ToString());
+                    UpdateConfigTests(batName, okCount, okCount + errCount);
                 }
             });
         }
@@ -5557,11 +5667,11 @@ namespace ZapretGUI.Views
             AnimationHelper.HideOverlay(ConfigOverlay, OverlayContentBorder, ContentGrid);
         }
 
-        private void BtnCloseOverlay_Click(object sender, RoutedEventArgs e) 
+        private void BtnCloseOverlay_Click(object sender, RoutedEventArgs e)
             => CloseOverlay();
-        private void OverlayBackground_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e) 
+        private void OverlayBackground_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
             => CloseOverlay();
-        private void OverlayContent_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e) 
+        private void OverlayContent_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
             => e.Handled = true;
 
         private void OverlayProfileListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -5605,24 +5715,28 @@ namespace ZapretGUI.Views
                         Log($"  {i + 1}. {topConfigs[i]}");
                     }
 
-                    string? bestConfig = topConfigs[0];
+                    string bestConfig = topConfigs[0];
                     Log($"⭐ Применяем лучшую: {bestConfig}");
 
-                    for (var i = 0; i < OverlayProfileListBox.Items.Count; i++)
+                    var currentList = OverlayProfileListBox.Items.OfType<ConfigItem>().ToList();
+                    foreach (var item in currentList)
+                        item.TopRank = int.MaxValue;
+
+                    for (int i = 0; i < topConfigs.Count; i++)
                     {
-                        if (OverlayProfileListBox.Items[i] is ConfigItem item && item.FileName == bestConfig)
-                        {
-                            OverlayProfileListBox.SelectedIndex = i;
-                            TxtMainProfile.Text = bestConfig;
-                            OverlayTxtProfile.Text = bestConfig;
-
-                            _isUpdatingUI = true;
-                            SaveSettings();
-                            _isUpdatingUI = false;
-
-                            break;
-                        }
+                        var cfg = currentList.FirstOrDefault(c => c.FileName.Equals(topConfigs[i], StringComparison.OrdinalIgnoreCase));
+                        if (cfg != null)
+                            cfg.TopRank = i;
                     }
+
+                    TxtMainProfile.Text = bestConfig;
+                    OverlayTxtProfile.Text = bestConfig;
+
+                    SortAndSetProfiles(currentList);
+
+                    _isUpdatingUI = true;
+                    SaveSettings();
+                    _isUpdatingUI = false;
 
                     if (BypassController.Current.Zapret.IsRunning() && ZapretToggle.IsChecked == true)
                     {
@@ -5658,6 +5772,9 @@ namespace ZapretGUI.Views
                 return;
             }
 
+            SettingsManager.Current.FirstTimeScanPrompted = true;
+            SettingsManager.Save();
+
             MainToggle.IsEnabled = false;
 
             ScanIcon.Text = "\xE71A";
@@ -5670,38 +5787,40 @@ namespace ZapretGUI.Views
             await BypassController.Current.Scanner.StartScanAsync();
         }
 
-        private void UpdateAllConfigsPing(string currentPing)
+        private void UpdateAllConfigsPing(int pingMs)
         {
-            foreach (var item in OverlayProfileListBox.Items)
+            var currentList = OverlayProfileListBox.Items.OfType<ConfigItem>().ToList();
+            foreach (var config in currentList)
             {
-                if (item is ConfigItem config)
-                {
-                    var parts = config.MetaInfo.Split('•');
-                    var testsPart = parts.Length > 1 ? parts[1].Trim() : "Тесты: не проводились";
-                    config.MetaInfo = $"Пинг: {currentPing} мс • {testsPart}";
-                }
+                config.PingMs = pingMs > 0 ? pingMs : int.MaxValue;
+                config.RefreshMetaText();
             }
+
+            SortAndSetProfiles(currentList);
         }
 
-        private void UpdateConfigTests(string fileName, string okCount, string totalCount)
+        private void UpdateConfigTests(string fileName, int okCount, int totalCount)
         {
-            var currentPing = PingText.Text == "..." || PingText.Text == "—" ? "—" : PingText.Text;
+            int.TryParse(PingText.Text, out int pingVal);
+            if (pingVal <= 0) pingVal = int.MaxValue;
+
             var currentList = OverlayProfileListBox.Items.OfType<ConfigItem>().ToList();
 
             foreach (var item in currentList)
             {
-                if (item.FileName == fileName)
+                if (item.FileName.Equals(fileName, StringComparison.OrdinalIgnoreCase))
                 {
-                    item.MetaInfo = $"Пинг: {currentPing} мс • Тесты: {okCount}/{totalCount}";
+                    item.TestsOk = okCount;
+                    item.TestsTotal = totalCount;
+                    item.PingMs = pingVal;
+                    item.RefreshMetaText();
                     break;
                 }
             }
 
             SortAndSetProfiles(currentList);
         }
-        // =========================================================================
-        // МЕНЮ НАСТРОЙКИ GAME FILTER
-        // =========================================================================
+
 
         private void UpdateGameFilterBadge()
         {
@@ -8048,7 +8167,7 @@ namespace ZapretGUI.Views
                     <ui:Button Content="Сбросить все настройки" Appearance="Danger" HorizontalAlignment="Center" Margin="0,0,0,20" Click="BtnResetSettings_Click"/>
 
                     <StackPanel HorizontalAlignment="Center" Margin="0,0,0,40">
-                        <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#444444" HorizontalAlignment="Center" Text="Zapret for ADHD v3.0"/>
+                        <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#444444" HorizontalAlignment="Center" Text="Zapret for ADHD v3.5"/>
                         <TextBlock Foreground="#444444" FontSize="12" HorizontalAlignment="Center" Margin="0,5,0,0">
                             <Run Text="Разработано с ❤️ | "/>
                             <Hyperlink NavigateUri="https://github.com/NIK-master/ZapretGUI" RequestNavigate="Hyperlink_RequestNavigate" Foreground="#107C10" TextDecorations="None">
@@ -9166,7 +9285,6 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Shapes;
-using ZapretGUI.Core;
 using ZapretGUI.Views.WizardPages;
 
 namespace ZapretGUI.Views
@@ -9365,39 +9483,7 @@ namespace ZapretGUI.Views
                 LoadCurrentPage(true, true);
             }
         }
-        private async void BtnInstall_Click(object sender, RoutedEventArgs e)
-        {
-            BtnInstall.IsEnabled = false;
-            WizardProgress.Visibility = Visibility.Visible;
-            WizardProgress.IsIndeterminate = true;
 
-            var installZapret = ChkInstallZapret.IsChecked ?? true;
-            var installProxy = ChkInstallProxy.IsChecked ?? true;
-
-            var progress = new Progress<string>(status =>
-            {
-                Dispatcher.Invoke(() => TxtWizardStatus.Text = status);
-            });
-
-            try
-            {
-                await UpdateManager.InstallModulesSilentAsync(installZapret, installProxy, progress);
-
-                SettingsManager.Current.ZapretEnabled = installZapret;
-                SettingsManager.Current.TgProxyEnabled = installProxy;
-                SettingsManager.Save();
-
-                TxtWizardStatus.Text = "Установка успешно завершена!";
-                await Task.Delay(800);
-                this.Close();
-            }
-            catch (Exception ex)
-            {
-                TxtWizardStatus.Text = $"Ошибка установки: {ex.Message}";
-                BtnInstall.IsEnabled = true;
-                WizardProgress.Visibility = Visibility.Collapsed;
-            }
-        }
     }
 }
 

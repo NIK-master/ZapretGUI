@@ -43,6 +43,15 @@ namespace ZapretGUI.Views
         public int TestsOk { get; set; } = -1;
         public int TestsTotal { get; set; } = -1;
 
+        public double SuccessRate => TestsTotal > 0 ? (double)TestsOk / TestsTotal : -1.0;
+
+        public void RefreshMetaText()
+        {
+            string pingStr = PingMs < int.MaxValue && PingMs >= 0 ? $"{PingMs}" : "—";
+            string testStr = TestsTotal > 0 ? $"{TestsOk}/{TestsTotal}" : "не проводились";
+            MetaInfo = $"Пинг: {pingStr} мс • Тесты: {testStr}";
+        }
+
         public override string ToString() => FileName;
 
         protected void OnPropertyChanged(string propertyName) =>
@@ -99,32 +108,17 @@ namespace ZapretGUI.Views
                 Log("Интерфейс загружен. Найдены активные процессы в фоне.");
             }
             else
+            {
                 Log("Интерфейс загружен. Ожидание команд...");
+            }
         }
 
-        private void RefreshProfilesLive()
+        public void RefreshProfilesLive()
         {
             Dispatcher.Invoke(() =>
             {
                 _isUpdatingUI = true;
-
-                var currentProfile = TxtMainProfile.Text;
                 LoadProfiles();
-
-                var found = false;
-                for (var i = 0; i < OverlayProfileListBox.Items.Count; i++)
-                {
-                    if (OverlayProfileListBox.Items[i] is ConfigItem item && item.FileName == currentProfile)
-                    {
-                        OverlayProfileListBox.SelectedIndex = i;
-                        found = true;
-                        break;
-                    }
-                }
-
-                if (!found && OverlayProfileListBox.Items.Count > 0)
-                    OverlayProfileListBox.SelectedIndex = 0;
-
                 _isUpdatingUI = false;
             });
         }
@@ -190,7 +184,7 @@ namespace ZapretGUI.Views
                 {
                     PingText.Text = pingMs.ToString();
                     SyncNetworkIndicator(true);
-                    UpdateAllConfigsPing(pingMs.ToString());
+                    UpdateAllConfigsPing((int)pingMs);
                 }
                 else
                 {
@@ -385,52 +379,70 @@ namespace ZapretGUI.Views
                 .Select(f => Path.GetFileName(f))
                 .ToList();
 
+            var existingItems = OverlayProfileListBox.Items.OfType<ConfigItem>().ToList();
             var newItems = new List<ConfigItem>();
+
             foreach (var fileName in batFiles)
             {
-                var existingItem = OverlayProfileListBox.Items.OfType<ConfigItem>().FirstOrDefault(i => i.FileName == fileName);
-                newItems.Add(existingItem ?? new ConfigItem
+                var existing = existingItems.FirstOrDefault(i => i.FileName.Equals(fileName, StringComparison.OrdinalIgnoreCase));
+                newItems.Add(existing ?? new ConfigItem
                 {
                     FileName = fileName,
-                    MetaInfo = "Пинг: — мс • Тесты: не проводились",
                     IsActive = false
                 });
             }
 
             SortAndSetProfiles(newItems);
         }
+
         private void SortAndSetProfiles(List<ConfigItem> items)
         {
-            var sortedList = items.OrderByDescending(item =>
-            {
-                var match = Regex.Match(item.MetaInfo, @"Тесты:\s*(\d+)/(\d+)");
-                if (match.Success)
-                {
-                    var ok = int.Parse(match.Groups[1].Value);
-                    var total = int.Parse(match.Groups[2].Value);
-                    return total > 0 ? (double)ok / total : 0;
-                }
-                return -1.0;
-            }).ThenBy(item =>
-            {
-                var match = Regex.Match(item.MetaInfo, @"Пинг:\s*(\d+)\s*мс");
-                if (match.Success)
-                {
-                    return int.Parse(match.Groups[1].Value);
-                }
-                return int.MaxValue;
-            }).ThenBy(item => item.FileName).ToList();
+            var sortedList = items
+                .OrderBy(item => item.TopRank)
+                .ThenByDescending(item => item.SuccessRate)
+                .ThenBy(item => item.PingMs)
+                .ThenBy(item => item.FileName)
+                .ToList();
+
+            bool prevUpdating = _isUpdatingUI;
+            _isUpdatingUI = true;
+
+            string targetProfile = !string.IsNullOrWhiteSpace(TxtMainProfile?.Text)
+                ? TxtMainProfile.Text
+                : SettingsManager.Current.SelectedProfileName;
 
             OverlayProfileListBox.ItemsSource = null;
             OverlayProfileListBox.Items.Clear();
-            foreach (var item in sortedList)
-                OverlayProfileListBox.Items.Add(item);
 
-            if (OverlayProfileListBox.Items.Count > 0 && OverlayProfileListBox.SelectedIndex == -1)
+            int activeIdx = -1;
+            for (int i = 0; i < sortedList.Count; i++)
+            {
+                var item = sortedList[i];
+                bool isMatch = string.Equals(item.FileName, targetProfile, StringComparison.OrdinalIgnoreCase);
+                item.IsActive = isMatch;
+                if (isMatch) activeIdx = i;
+                OverlayProfileListBox.Items.Add(item);
+            }
+
+            if (activeIdx >= 0)
+            {
+                OverlayProfileListBox.SelectedIndex = activeIdx;
+            }
+            else if (OverlayProfileListBox.Items.Count > 0)
+            {
                 OverlayProfileListBox.SelectedIndex = 0;
+                if (OverlayProfileListBox.Items[0] is ConfigItem first)
+                {
+                    first.IsActive = true;
+                    if (TxtMainProfile != null) TxtMainProfile.Text = first.FileName;
+                    if (OverlayTxtProfile != null) OverlayTxtProfile.Text = first.FileName;
+                }
+            }
 
             if (TxtConfigsCount != null)
                 TxtConfigsCount.Text = $"{sortedList.Count} конфигов";
+
+            _isUpdatingUI = prevUpdating;
         }
 
         private void LoadSettings()
@@ -440,14 +452,31 @@ namespace ZapretGUI.Views
             ZapretToggle.IsChecked = SettingsManager.Current.ZapretEnabled;
             TgProxyToggle.IsChecked = SettingsManager.Current.TgProxyEnabled;
 
-            if (SettingsManager.Current.SelectedProfileIndex >= 0 && SettingsManager.Current.SelectedProfileIndex < OverlayProfileListBox.Items.Count)
+            string savedProfile = SettingsManager.Current.SelectedProfileName;
+            int foundIdx = -1;
+
+            for (int i = 0; i < OverlayProfileListBox.Items.Count; i++)
             {
-                OverlayProfileListBox.SelectedIndex = SettingsManager.Current.SelectedProfileIndex;
-                if (OverlayProfileListBox.Items[SettingsManager.Current.SelectedProfileIndex] is ConfigItem currentItem)
+                if (OverlayProfileListBox.Items[i] is ConfigItem item &&
+                    string.Equals(item.FileName, savedProfile, StringComparison.OrdinalIgnoreCase))
                 {
-                    TxtMainProfile.Text = currentItem.FileName;
-                    OverlayTxtProfile.Text = currentItem.FileName;
+                    foundIdx = i;
+                    break;
                 }
+            }
+
+            if (foundIdx == -1 &&
+                SettingsManager.Current.SelectedProfileIndex >= 0 &&
+                SettingsManager.Current.SelectedProfileIndex < OverlayProfileListBox.Items.Count)
+            {
+                foundIdx = SettingsManager.Current.SelectedProfileIndex;
+            }
+
+            if (foundIdx >= 0 && OverlayProfileListBox.Items[foundIdx] is ConfigItem currentItem)
+            {
+                OverlayProfileListBox.SelectedIndex = foundIdx;
+                TxtMainProfile.Text = currentItem.FileName;
+                OverlayTxtProfile.Text = currentItem.FileName;
             }
 
             RefreshListActiveStates(TxtMainProfile.Text);
@@ -460,7 +489,7 @@ namespace ZapretGUI.Views
             foreach (var item in OverlayProfileListBox.Items)
             {
                 if (item is ConfigItem configItem)
-                    configItem.IsActive = (configItem.FileName == activeFileName);
+                    configItem.IsActive = string.Equals(configItem.FileName, activeFileName, StringComparison.OrdinalIgnoreCase);
             }
         }
 
@@ -468,7 +497,8 @@ namespace ZapretGUI.Views
         {
             SettingsManager.Current.ZapretEnabled = ZapretToggle.IsChecked ?? true;
             SettingsManager.Current.TgProxyEnabled = TgProxyToggle.IsChecked ?? true;
-            SettingsManager.Current.SelectedProfileIndex = OverlayProfileListBox.SelectedIndex;
+            SettingsManager.Current.SelectedProfileIndex = Math.Max(0, OverlayProfileListBox.SelectedIndex);
+            SettingsManager.Current.SelectedProfileName = TxtMainProfile.Text;
 
             SettingsManager.Save();
         }
@@ -497,11 +527,10 @@ namespace ZapretGUI.Views
                 if (match.Success)
                 {
                     var batName = match.Groups[1].Value.Trim();
-                    var okCount = match.Groups[2].Value;
-                    var errCount = match.Groups[3].Success ? match.Groups[3].Value : "0";
+                    int okCount = int.Parse(match.Groups[2].Value);
+                    int errCount = match.Groups[3].Success ? int.Parse(match.Groups[3].Value) : 0;
 
-                    var total = int.Parse(okCount) + int.Parse(errCount);
-                    UpdateConfigTests(batName, okCount, total.ToString());
+                    UpdateConfigTests(batName, okCount, okCount + errCount);
                 }
             });
         }
@@ -706,11 +735,11 @@ namespace ZapretGUI.Views
             AnimationHelper.HideOverlay(ConfigOverlay, OverlayContentBorder, ContentGrid);
         }
 
-        private void BtnCloseOverlay_Click(object sender, RoutedEventArgs e) 
+        private void BtnCloseOverlay_Click(object sender, RoutedEventArgs e)
             => CloseOverlay();
-        private void OverlayBackground_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e) 
+        private void OverlayBackground_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
             => CloseOverlay();
-        private void OverlayContent_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e) 
+        private void OverlayContent_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
             => e.Handled = true;
 
         private void OverlayProfileListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -754,24 +783,28 @@ namespace ZapretGUI.Views
                         Log($"  {i + 1}. {topConfigs[i]}");
                     }
 
-                    string? bestConfig = topConfigs[0];
+                    string bestConfig = topConfigs[0];
                     Log($"⭐ Применяем лучшую: {bestConfig}");
 
-                    for (var i = 0; i < OverlayProfileListBox.Items.Count; i++)
+                    var currentList = OverlayProfileListBox.Items.OfType<ConfigItem>().ToList();
+                    foreach (var item in currentList)
+                        item.TopRank = int.MaxValue;
+
+                    for (int i = 0; i < topConfigs.Count; i++)
                     {
-                        if (OverlayProfileListBox.Items[i] is ConfigItem item && item.FileName == bestConfig)
-                        {
-                            OverlayProfileListBox.SelectedIndex = i;
-                            TxtMainProfile.Text = bestConfig;
-                            OverlayTxtProfile.Text = bestConfig;
-
-                            _isUpdatingUI = true;
-                            SaveSettings();
-                            _isUpdatingUI = false;
-
-                            break;
-                        }
+                        var cfg = currentList.FirstOrDefault(c => c.FileName.Equals(topConfigs[i], StringComparison.OrdinalIgnoreCase));
+                        if (cfg != null)
+                            cfg.TopRank = i;
                     }
+
+                    TxtMainProfile.Text = bestConfig;
+                    OverlayTxtProfile.Text = bestConfig;
+
+                    SortAndSetProfiles(currentList);
+
+                    _isUpdatingUI = true;
+                    SaveSettings();
+                    _isUpdatingUI = false;
 
                     if (BypassController.Current.Zapret.IsRunning() && ZapretToggle.IsChecked == true)
                     {
@@ -807,6 +840,9 @@ namespace ZapretGUI.Views
                 return;
             }
 
+            SettingsManager.Current.FirstTimeScanPrompted = true;
+            SettingsManager.Save();
+
             MainToggle.IsEnabled = false;
 
             ScanIcon.Text = "\xE71A";
@@ -819,38 +855,40 @@ namespace ZapretGUI.Views
             await BypassController.Current.Scanner.StartScanAsync();
         }
 
-        private void UpdateAllConfigsPing(string currentPing)
+        private void UpdateAllConfigsPing(int pingMs)
         {
-            foreach (var item in OverlayProfileListBox.Items)
+            var currentList = OverlayProfileListBox.Items.OfType<ConfigItem>().ToList();
+            foreach (var config in currentList)
             {
-                if (item is ConfigItem config)
-                {
-                    var parts = config.MetaInfo.Split('•');
-                    var testsPart = parts.Length > 1 ? parts[1].Trim() : "Тесты: не проводились";
-                    config.MetaInfo = $"Пинг: {currentPing} мс • {testsPart}";
-                }
+                config.PingMs = pingMs > 0 ? pingMs : int.MaxValue;
+                config.RefreshMetaText();
             }
+
+            SortAndSetProfiles(currentList);
         }
 
-        private void UpdateConfigTests(string fileName, string okCount, string totalCount)
+        private void UpdateConfigTests(string fileName, int okCount, int totalCount)
         {
-            var currentPing = PingText.Text == "..." || PingText.Text == "—" ? "—" : PingText.Text;
+            int.TryParse(PingText.Text, out int pingVal);
+            if (pingVal <= 0) pingVal = int.MaxValue;
+
             var currentList = OverlayProfileListBox.Items.OfType<ConfigItem>().ToList();
 
             foreach (var item in currentList)
             {
-                if (item.FileName == fileName)
+                if (item.FileName.Equals(fileName, StringComparison.OrdinalIgnoreCase))
                 {
-                    item.MetaInfo = $"Пинг: {currentPing} мс • Тесты: {okCount}/{totalCount}";
+                    item.TestsOk = okCount;
+                    item.TestsTotal = totalCount;
+                    item.PingMs = pingVal;
+                    item.RefreshMetaText();
                     break;
                 }
             }
 
             SortAndSetProfiles(currentList);
         }
-        // =========================================================================
-        // МЕНЮ НАСТРОЙКИ GAME FILTER
-        // =========================================================================
+
 
         private void UpdateGameFilterBadge()
         {

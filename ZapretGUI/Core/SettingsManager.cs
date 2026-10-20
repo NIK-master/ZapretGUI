@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
@@ -10,6 +11,7 @@ namespace ZapretGUI.Core
         public bool ZapretEnabled { get; set; } = true;
         public bool TgProxyEnabled { get; set; } = true;
         public int SelectedProfileIndex { get; set; } = 0;
+        public string SelectedProfileName { get; set; } = "general.bat";
         public bool StartMinimized { get; set; } = false;
         public bool MinimizeOnClose { get; set; } = true;
         public bool NotificationsEnabled { get; set; } = true;

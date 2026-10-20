@@ -63,6 +63,7 @@ namespace ZapretGUI
             var stopServicesAction = () => { if (IsBypassRunning()) ToggleBypass(); };
             var progress = new Progress<string>(status => _homeView.ShowUpdateProgress(status));
             await Core.UpdateManager.RunUpdateWorkflowAsync(isManualCheck: false, stopServicesAction, progress);
+            _homeView.RefreshProfilesLive();
         }
 
         private void BtnHome_Click(object sender, RoutedEventArgs e)
