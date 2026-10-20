@@ -5,6 +5,7 @@ using System.IO.Compression;
 using System.Linq;
 using System.Net.Http;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace ZapretGUI.Core
@@ -39,10 +40,56 @@ namespace ZapretGUI.Core
             _httpClient.DefaultRequestHeaders.Add("User-Agent", AppConstants.GithubUserAgent);
         }
 
-        private static string CleanVersion(string version)
+        private static string CleanVersion(string? version)
         {
-            if (string.IsNullOrEmpty(version)) return "0.0.0";
+            if (string.IsNullOrWhiteSpace(version)) return "0.0.0";
             return version.Trim().TrimStart('v', 'V');
+        }
+
+        private static bool IsNewerVersion(string? remoteVersion, string? localVersion)
+        {
+            string cleanRemote = CleanVersion(remoteVersion);
+            string cleanLocal = CleanVersion(localVersion);
+
+            if (string.Equals(cleanRemote, cleanLocal, StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            if (TryParseNormalizedVersion(cleanRemote, out Version? vRemote) &&
+                TryParseNormalizedVersion(cleanLocal, out Version? vLocal))
+            {
+                return vRemote > vLocal;
+            }
+
+            return cleanLocal == "0.0.0" || string.IsNullOrEmpty(cleanLocal);
+        }
+
+        private static bool TryParseNormalizedVersion(string input, out Version? version)
+        {
+            version = null;
+            var match = Regex.Match(input, @"^(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:\.(\d+))?");
+            if (!match.Success) return false;
+
+            int major = int.Parse(match.Groups[1].Value);
+            int minor = match.Groups[2].Success ? int.Parse(match.Groups[2].Value) : 0;
+            int build = match.Groups[3].Success ? int.Parse(match.Groups[3].Value) : 0;
+            int rev = match.Groups[4].Success ? int.Parse(match.Groups[4].Value) : 0;
+
+            version = new Version(major, minor, build, rev);
+            return true;
+        }
+
+        private static bool IsCoreFilePresentOnDisk(bool isZapret)
+        {
+            var baseDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.CoreFilesDirectory);
+            if (isZapret)
+            {
+                return File.Exists(Path.Combine(baseDir, $"{AppConstants.ZapretProcessName}.exe")) ||
+                       File.Exists(Path.Combine(baseDir, "bin", $"{AppConstants.ZapretProcessName}.exe"));
+            }
+            else
+            {
+                return File.Exists(Path.Combine(baseDir, $"{AppConstants.TgProxyProcessName}.exe"));
+            }
         }
 
         public static async Task RunUpdateWorkflowAsync(bool isManualCheck, Action? stopServicesCallback, IProgress<string>? progress = null)
@@ -52,7 +99,7 @@ namespace ZapretGUI.Core
             {
                 var acceptApp = UIHelper.ShowConfirm(
                     "Обновление программы",
-                    $"Доступна новая версия панели управления {appUpdate.Version}!\n\nПрограмма будет закрыта для установки обновления. Продолжить?",
+                    $"Доступна новая версия панели управления {appUpdate.Version} (текущая: {CurrentVersion})!\n\nПрограмма будет закрыта для установки обновления. Продолжить?",
                     confirmText: "Обновить");
 
                 if (acceptApp)
@@ -83,23 +130,31 @@ namespace ZapretGUI.Core
             var zapretUpdate = await CheckForCoreUpdateAsync(AppConstants.ZapretCoreRepoUrl, SettingsManager.Current.ZapretCoreVersion, "Zapret", true);
             if (zapretUpdate.UpdateAvailable)
             {
-                var acceptZapret = UIHelper.ShowConfirm(
-                    "Обновление ядра Zapret",
-                    $"Найдено обновление обхода Zapret от flowseal ({zapretUpdate.Version})!\n\nТекущая версия: {zapretUpdate.CurrentVersion}\nОбновить автоматически?",
-                    confirmText: "Обновить");
-
-                if (acceptZapret)
+                if (!isManualCheck && CleanVersion(SettingsManager.Current.ZapretCoreVersion) == "0.0.0" && IsCoreFilePresentOnDisk(true))
                 {
-                    try
+                    SettingsManager.Current.ZapretCoreVersion = zapretUpdate.Version;
+                    SettingsManager.Save();
+                }
+                else
+                {
+                    var acceptZapret = UIHelper.ShowConfirm(
+                        "Обновление ядра Zapret",
+                        $"Найдено обновление обхода Zapret от flowseal ({zapretUpdate.Version})!\n\nТекущая версия: {zapretUpdate.CurrentVersion}\nОбновить автоматически?",
+                        confirmText: "Обновить");
+
+                    if (acceptZapret)
                     {
-                        await InstallCoreAsync(zapretUpdate, stopServicesCallback, progress);
-                        SettingsManager.Current.ZapretCoreVersion = zapretUpdate.Version;
-                        SettingsManager.Save();
-                        UIHelper.ShowAlert("Успех", $"Модуль Zapret успешно обновлен до версии {zapretUpdate.Version}!");
-                    }
-                    catch (Exception ex)
-                    {
-                        UIHelper.ShowAlert("Ошибка", $"Ошибка при установке обновления Zapret: {ex.Message}", isError: true);
+                        try
+                        {
+                            await InstallCoreAsync(zapretUpdate, stopServicesCallback, progress);
+                            SettingsManager.Current.ZapretCoreVersion = zapretUpdate.Version;
+                            SettingsManager.Save();
+                            UIHelper.ShowAlert("Успех", $"Модуль Zapret успешно обновлен до версии {zapretUpdate.Version}!");
+                        }
+                        catch (Exception ex)
+                        {
+                            UIHelper.ShowAlert("Ошибка", $"Ошибка при установке обновления Zapret: {ex.Message}", isError: true);
+                        }
                     }
                 }
             }
@@ -111,23 +166,31 @@ namespace ZapretGUI.Core
             var proxyUpdate = await CheckForCoreUpdateAsync(AppConstants.TgProxyCoreRepoUrl, SettingsManager.Current.TgProxyCoreVersion, "TgWsProxy", false);
             if (proxyUpdate.UpdateAvailable)
             {
-                var acceptProxy = UIHelper.ShowConfirm(
-                    "Обновление ядра TgWsProxy",
-                    $"Найдено обновление прокси Telegram от flowseal ({proxyUpdate.Version})!\n\nТекущая версия: {proxyUpdate.CurrentVersion}\nОбновить автоматически?",
-                    confirmText: "Обновить");
-
-                if (acceptProxy)
+                if (!isManualCheck && CleanVersion(SettingsManager.Current.TgProxyCoreVersion) == "0.0.0" && IsCoreFilePresentOnDisk(false))
                 {
-                    try
+                    SettingsManager.Current.TgProxyCoreVersion = proxyUpdate.Version;
+                    SettingsManager.Save();
+                }
+                else
+                {
+                    var acceptProxy = UIHelper.ShowConfirm(
+                        "Обновление ядра TgWsProxy",
+                        $"Найдено обновление прокси Telegram от flowseal ({proxyUpdate.Version})!\n\nТекущая версия: {proxyUpdate.CurrentVersion}\nОбновить автоматически?",
+                        confirmText: "Обновить");
+
+                    if (acceptProxy)
                     {
-                        await InstallCoreAsync(proxyUpdate, stopServicesCallback, progress);
-                        SettingsManager.Current.TgProxyCoreVersion = proxyUpdate.Version;
-                        SettingsManager.Save();
-                        UIHelper.ShowAlert("Успех", $"Модуль TgWsProxy успешно обновлен до версии {proxyUpdate.Version}!");
-                    }
-                    catch (Exception ex)
-                    {
-                        UIHelper.ShowAlert("Ошибка", $"Ошибка при установке обновления TgWsProxy: {ex.Message}", isError: true);
+                        try
+                        {
+                            await InstallCoreAsync(proxyUpdate, stopServicesCallback, progress);
+                            SettingsManager.Current.TgProxyCoreVersion = proxyUpdate.Version;
+                            SettingsManager.Save();
+                            UIHelper.ShowAlert("Успех", $"Модуль TgWsProxy успешно обновлен до версии {proxyUpdate.Version}!");
+                        }
+                        catch (Exception ex)
+                        {
+                            UIHelper.ShowAlert("Ошибка", $"Ошибка при установке обновления TgWsProxy: {ex.Message}", isError: true);
+                        }
                     }
                 }
             }
@@ -147,7 +210,7 @@ namespace ZapretGUI.Core
                 using var doc = JsonDocument.Parse(response);
                 var latestVersion = doc.RootElement.GetProperty("tag_name").GetString();
 
-                if (latestVersion != null && CleanVersion(latestVersion) != CleanVersion(CurrentVersion))
+                if (latestVersion != null && IsNewerVersion(latestVersion, CurrentVersion))
                 {
                     var downloadUrl = "";
                     foreach (var asset in doc.RootElement.GetProperty("assets").EnumerateArray())
@@ -185,8 +248,9 @@ namespace ZapretGUI.Core
                 using var doc = JsonDocument.Parse(response);
 
                 var latestVersion = doc.RootElement.GetProperty("tag_name").GetString();
+                bool filesExist = IsCoreFilePresentOnDisk(isZapret);
 
-                if (latestVersion != null && CleanVersion(latestVersion) != CleanVersion(currentVersion))
+                if (latestVersion != null && (!filesExist || IsNewerVersion(latestVersion, currentVersion)))
                 {
                     var downloadUrl = "";
                     var targetFileName = "";
@@ -347,8 +411,11 @@ namespace ZapretGUI.Core
             var sourceExePath = extractedExe ?? Path.Combine(extractDir, "ZapretGUI.exe");
 
             var currentAppDir = AppDomain.CurrentDomain.BaseDirectory;
-            var currentExePath = System.Reflection.Assembly.GetExecutingAssembly().Location;
-            currentExePath = Path.ChangeExtension(currentExePath, ".exe");
+            var currentExePath = Environment.ProcessPath;
+            if (string.IsNullOrEmpty(currentExePath))
+            {
+                currentExePath = Path.Combine(currentAppDir, "ZapretGUI.exe");
+            }
 
             var batPath = Path.Combine(tempDir, "updater.bat");
             var batContent = $@"@echo off
@@ -393,6 +460,10 @@ del ""%~f0""
                     SettingsManager.Current.TgProxyCoreVersion = proxyUpdate.Version;
                 }
             }
+
+            SettingsManager.Current.ZapretEnabled = installZapret;
+            SettingsManager.Current.TgProxyEnabled = installProxy;
+            SettingsManager.Save();
         }
 
         private static async Task DownloadFileWithProgressAsync(string downloadUrl, string destinationFilePath, IProgress<string>? progress)

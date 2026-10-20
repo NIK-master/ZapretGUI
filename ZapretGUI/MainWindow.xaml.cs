@@ -21,8 +21,21 @@ namespace ZapretGUI
         public MainWindow()
         {
             InitializeComponent();
+
+            var configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.json");
+            var isFirstRun = !File.Exists(configPath);
+
             SettingsManager.Load();
             UIHelper.ApplyThemeColors();
+
+            if (isFirstRun)
+            {
+                var wizard = new Views.WizardWindow();
+                wizard.ShowDialog();
+                SettingsManager.Save();
+                UIHelper.ApplyThemeColors();
+            }
+
             RenderOptions.ProcessRenderMode = SettingsManager.Current.HardwareAcceleration
                 ? RenderMode.Default
                 : RenderMode.SoftwareOnly;
@@ -33,14 +46,6 @@ namespace ZapretGUI
             MainContentContainer.Content = _homeView;
 
             _trayIconManager = new TrayIconManager(this);
-
-            var configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.json");
-            if (!File.Exists(configPath))
-            {
-                var wizard = new Views.WizardWindow();
-                wizard.ShowDialog();
-                UIHelper.ApplyThemeColors();
-            }
 
             _ = CheckUpdatesOnStartupAsync();
         }

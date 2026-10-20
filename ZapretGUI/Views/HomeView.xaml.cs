@@ -264,9 +264,6 @@ namespace ZapretGUI.Views
 
                     MainToggle.IsEnabled = false;
                     LaunchProgressBar.Visibility = Visibility.Visible;
-
-                    MainToggle.IsEnabled = false;
-                    LaunchProgressBar.Visibility = Visibility.Visible;
                     LaunchProgressBar.Value = 0;
 
                     Log("Инициализация запуска...");

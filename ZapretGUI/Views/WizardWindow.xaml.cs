@@ -204,5 +204,6 @@ namespace ZapretGUI.Views
                 LoadCurrentPage(true, true);
             }
         }
+
     }
 }

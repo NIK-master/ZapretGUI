@@ -2343,6 +2343,7 @@ namespace ZapretGUI.Core
         public string GameFilterTcpRange { get; set; } = "1024-65535";
         public string GameFilterUdpRange { get; set; } = "1024-65535";
         public int HostsSourceIndex { get; set; } = 2;
+        public bool FirstTimeScanPrompted { get; set; } = false;
     }
 
     public static class SettingsManager
@@ -3160,6 +3161,7 @@ del ""%~f0""
                 {
                     await InstallCoreAsync(zapretUpdate, null, progress);
                     SettingsManager.Current.ZapretCoreVersion = zapretUpdate.Version;
+                    SettingsManager.Save();
                 }
             }
 
@@ -3171,6 +3173,7 @@ del ""%~f0""
                 {
                     await InstallCoreAsync(proxyUpdate, null, progress);
                     SettingsManager.Current.TgProxyCoreVersion = proxyUpdate.Version;
+                    SettingsManager.Save();
                 }
             }
         }
@@ -4886,6 +4889,11 @@ namespace ZapretGUI.Views
             set { _isActive = value; OnPropertyChanged(nameof(IsActive)); }
         }
 
+        public int TopRank { get; set; } = int.MaxValue;
+        public int PingMs { get; set; } = int.MaxValue;
+        public int TestsOk { get; set; } = -1;
+        public int TestsTotal { get; set; } = -1;
+
         public override string ToString() => FileName;
 
         protected void OnPropertyChanged(string propertyName) =>
@@ -5084,6 +5092,25 @@ namespace ZapretGUI.Views
                         TriggerErrorGlitch();
                         MainToggle.IsChecked = false;
                         return;
+                    }
+
+                    if (isZapretSelected && !SettingsManager.Current.FirstTimeScanPrompted)
+                    {
+                        SettingsManager.Current.FirstTimeScanPrompted = true;
+                        SettingsManager.Save();
+
+                        var runScan = UIHelper.ShowConfirm(
+                            "Первый запуск Zapret",
+                            "Перед первым включением рекомендуется протестировать стратегии обхода, чтобы выбрать самую быструю и стабильную для вашего провайдера.\n\nЗапустить автоматическое тестирование конфигураций сейчас?",
+                            confirmText: "Запустить тест");
+
+                        if (runScan)
+                        {
+                            MainToggle.IsChecked = false;
+                            BtnOpenConfigMenu_MouseDown(this, null!);
+                            BtnStartScan_Click(this, new RoutedEventArgs());
+                            return;
+                        }
                     }
 
                     MainToggle.IsEnabled = false;
@@ -9139,6 +9166,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Shapes;
+using ZapretGUI.Core;
 using ZapretGUI.Views.WizardPages;
 
 namespace ZapretGUI.Views
@@ -9335,6 +9363,39 @@ namespace ZapretGUI.Views
             {
                 _currentPageIndex--;
                 LoadCurrentPage(true, true);
+            }
+        }
+        private async void BtnInstall_Click(object sender, RoutedEventArgs e)
+        {
+            BtnInstall.IsEnabled = false;
+            WizardProgress.Visibility = Visibility.Visible;
+            WizardProgress.IsIndeterminate = true;
+
+            var installZapret = ChkInstallZapret.IsChecked ?? true;
+            var installProxy = ChkInstallProxy.IsChecked ?? true;
+
+            var progress = new Progress<string>(status =>
+            {
+                Dispatcher.Invoke(() => TxtWizardStatus.Text = status);
+            });
+
+            try
+            {
+                await UpdateManager.InstallModulesSilentAsync(installZapret, installProxy, progress);
+
+                SettingsManager.Current.ZapretEnabled = installZapret;
+                SettingsManager.Current.TgProxyEnabled = installProxy;
+                SettingsManager.Save();
+
+                TxtWizardStatus.Text = "Установка успешно завершена!";
+                await Task.Delay(800);
+                this.Close();
+            }
+            catch (Exception ex)
+            {
+                TxtWizardStatus.Text = $"Ошибка установки: {ex.Message}";
+                BtnInstall.IsEnabled = true;
+                WizardProgress.Visibility = Visibility.Collapsed;
             }
         }
     }
