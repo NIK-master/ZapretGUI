@@ -5,7 +5,6 @@
              Foreground="White">
 
     <UserControl.Resources>
-        <!-- Обновленный стиль строки: больше воздуха и плавный ховер -->
         <Style x:Key="SettingRowStyle" TargetType="Border">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="CornerRadius" Value="8"/>
@@ -14,6 +13,22 @@
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
                     <Setter Property="Background" Value="#08FFFFFF"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Стиль кликабельной плашки выбора (вместо системного ComboBox) -->
+        <Style x:Key="CyberSelectorBorderStyle" TargetType="Border">
+            <Setter Property="Background" Value="#222222"/>
+            <Setter Property="BorderBrush" Value="#333333"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Padding" Value="12,8"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#2A2A2A"/>
+                    <Setter Property="BorderBrush" Value="#4A4A4A"/>
                 </Trigger>
             </Style.Triggers>
         </Style>
@@ -39,247 +54,411 @@
             <TranslateTransform Y="15"/>
         </Grid.RenderTransform>
 
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-        </Grid.RowDefinitions>
+        <Grid x:Name="ContentGrid">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
 
-        <StackPanel Grid.Row="0" Margin="0,10,0,30">
-            <TextBlock Text="Настройки" FontSize="28" FontWeight="Bold"/>
-            <TextBlock Text="Управление поведением и параметрами приложения." Foreground="#888888" FontSize="14" Margin="0,5,0,0"/>
-        </StackPanel>
-
-        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,10,0">
-            <StackPanel HorizontalAlignment="Stretch" Margin="0,0,20,20">
-
-                <!-- БЛОК 1: СИСТЕМНЫЕ НАСТРОЙКИ -->
-                <Border Background="#181818" CornerRadius="12" BorderBrush="#2A2A2A" BorderThickness="1" Margin="0,0,0,15" Padding="20">
-                    <StackPanel>
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
-                            <TextBlock Text="&#xE713;" FontFamily="Segoe MDL2 Assets" FontSize="18" Foreground="#888888" Margin="0,0,10,0" VerticalAlignment="Center"/>
-                            <TextBlock Text="Системные настройки" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                        </StackPanel>
-
-                        <Border Style="{StaticResource SettingRowStyle}">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0" Margin="0,0,20,0" VerticalAlignment="Center">
-                                    <TextBlock Text="Автозагрузка Windows" FontSize="14" FontWeight="SemiBold"/>
-                                    <TextBlock Text="Запускать программу при включении компьютера" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
-                                </StackPanel>
-                                <CheckBox x:Name="ToggleAutoStart" Style="{StaticResource CyberToggleStyle}" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
-                            </Grid>
-                        </Border>
-
-                        <Border Style="{StaticResource SettingRowStyle}">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0" Margin="0,0,20,0" VerticalAlignment="Center">
-                                    <TextBlock Text="Запускать свернутым" FontSize="14" FontWeight="SemiBold"/>
-                                    <TextBlock Text="Прятать окно в системный трей при старте программы" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
-                                </StackPanel>
-                                <CheckBox x:Name="ToggleStartMinimized" Style="{StaticResource CyberToggleStyle}" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
-                            </Grid>
-                        </Border>
-
-                        <Border Style="{StaticResource SettingRowStyle}">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0" Margin="0,0,20,0" VerticalAlignment="Center">
-                                    <TextBlock Text="Сворачивать при закрытии" FontSize="14" FontWeight="SemiBold"/>
-                                    <TextBlock Text="Кнопка [X] не закрывает программу, а прячет её в трей" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
-                                </StackPanel>
-                                <CheckBox x:Name="ToggleMinimizeOnClose" Style="{StaticResource CyberToggleStyle}" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
-                            </Grid>
-                        </Border>
-
-                        <!-- У последней строки убираем отступ снизу -->
-                        <Border Style="{StaticResource SettingRowStyle}" Margin="-15,0,-15,0">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0" Margin="0,0,20,0" VerticalAlignment="Center">
-                                    <TextBlock Text="Уведомления Windows (Тихий режим)" FontSize="14" FontWeight="SemiBold"/>
-                                    <TextBlock Text="Показывать всплывающие окна при обрыве сети или запуске/остановке служб" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
-                                </StackPanel>
-                                <CheckBox x:Name="ToggleNotifications" Style="{StaticResource CyberToggleStyle}" IsChecked="True" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
-                            </Grid>
-                        </Border>
-                    </StackPanel>
-                </Border>
-
-                <!-- БЛОК 2: ВИЗУАЛЬНЫЕ ЭФФЕКТЫ -->
-                <Border Background="#181818" CornerRadius="12" BorderBrush="#2A2A2A" BorderThickness="1" Margin="0,0,0,15" Padding="20">
-                    <StackPanel>
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
-                            <TextBlock Text="&#xE890;" FontFamily="Segoe MDL2 Assets" FontSize="18" Foreground="#888888" Margin="0,0,10,0" VerticalAlignment="Center"/>
-                            <TextBlock Text="Визуальные эффекты" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                        </StackPanel>
-
-                        <Border Style="{StaticResource SettingRowStyle}">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0" Margin="0,0,20,0" VerticalAlignment="Center">
-                                    <TextBlock Text="Режим фокусировки (Без глитчей)" FontSize="14" FontWeight="SemiBold"/>
-                                    <TextBlock Text="Отключить тряску камеры, эффект VHS и резкие вспышки" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
-                                </StackPanel>
-                                <CheckBox x:Name="ToggleFocusMode" Style="{StaticResource CyberToggleStyle}" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
-                            </Grid>
-                        </Border>
-
-                        <Border Style="{StaticResource SettingRowStyle}">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0" Margin="0,0,20,0" VerticalAlignment="Center">
-                                    <TextBlock Text="Минималистичный интерфейс" FontSize="14" FontWeight="SemiBold"/>
-                                    <TextBlock Text="Скрыть графики скорости и логи, оставив только кнопки" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
-                                </StackPanel>
-                                <CheckBox x:Name="ToggleCompactMode" Style="{StaticResource CyberToggleStyle}" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
-                            </Grid>
-                        </Border>
-
-                        <Border Style="{StaticResource SettingRowStyle}">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0" Margin="0,0,20,0" VerticalAlignment="Center">
-                                    <TextBlock Text="Аппаратное ускорение (GPU)" FontSize="14" FontWeight="SemiBold"/>
-                                    <TextBlock Text="Использовать видеокарту для отрисовки интерфейса" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
-                                </StackPanel>
-                                <CheckBox x:Name="ToggleHardwareAccel" Style="{StaticResource CyberToggleStyle}" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
-                            </Grid>
-                        </Border>
-
-                        <Border Style="{StaticResource SettingRowStyle}" Margin="-15,0,-15,0">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0" Margin="0,0,20,0" VerticalAlignment="Center">
-                                    <TextBlock Text="Режим цветовой слепоты" FontSize="14" FontWeight="SemiBold"/>
-                                    <TextBlock Text="Заменить красно-зеленые точки индикаторов на оранжево-синие" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
-                                </StackPanel>
-                                <CheckBox x:Name="ToggleColorblind" Style="{StaticResource CyberToggleStyle}" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
-                            </Grid>
-                        </Border>
-                    </StackPanel>
-                </Border>
-
-                <!-- БЛОК 3: СЕТЬ И ДИАГНОСТИКА -->
-                <Border Background="#181818" CornerRadius="12" BorderBrush="#2A2A2A" BorderThickness="1" Margin="0,0,0,15" Padding="20">
-                    <StackPanel>
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
-                            <TextBlock Text="&#xE774;" FontFamily="Segoe MDL2 Assets" FontSize="18" Foreground="#888888" Margin="0,0,10,0" VerticalAlignment="Center"/>
-                            <TextBlock Text="Сеть и диагностика" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                        </StackPanel>
-
-                        <Border Style="{StaticResource SettingRowStyle}">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="220"/>
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0" Margin="0,0,20,0" VerticalAlignment="Center">
-                                    <TextBlock Text="Адрес сервера для пинга" FontSize="14" FontWeight="SemiBold"/>
-                                    <TextBlock Text="URL для проверки соединения (по умолчанию Франкфурт AWS)" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
-                                </StackPanel>
-                                <ui:TextBox x:Name="TxtPingUrl" Grid.Column="1" Text="https://dynamodb.eu-central-1.amazonaws.com" VerticalAlignment="Center" LostFocus="TextInput_LostFocus"/>
-                            </Grid>
-                        </Border>
-
-                        <Border Style="{StaticResource SettingRowStyle}">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0" Margin="0,0,20,0" VerticalAlignment="Center">
-                                    <TextBlock Text="Интервал обновления статистики" FontSize="14" FontWeight="SemiBold"/>
-                                    <TextBlock Text="Как часто опрашивать сеть и перерисовывать графики" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
-                                </StackPanel>
-                                <ComboBox x:Name="ComboUpdateInterval" Grid.Column="1" Width="140" VerticalAlignment="Center" SelectionChanged="Setting_Changed">
-                                    <ComboBoxItem Content="1 секунда"/>
-                                    <ComboBoxItem Content="3 секунды"/>
-                                    <ComboBoxItem Content="5 секунд"/>
-                                </ComboBox>
-                            </Grid>
-                        </Border>
-
-                        <Border Style="{StaticResource SettingRowStyle}" Margin="-15,0,-15,0">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0" Margin="0,0,20,0" VerticalAlignment="Center">
-                                    <TextBlock Text="Авто-перезапуск при обрыве" FontSize="14" FontWeight="SemiBold"/>
-                                    <TextBlock Text="Автоматически перезапускать службы при восстановлении сети" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
-                                </StackPanel>
-                                <CheckBox x:Name="ToggleAutoRestart" Style="{StaticResource CyberToggleStyle}" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
-                            </Grid>
-                        </Border>
-                    </StackPanel>
-                </Border>
-
-                <!-- БЛОК 4: УПРАВЛЕНИЕ ФАЙЛАМИ -->
-                <Border Background="#181818" CornerRadius="12" BorderBrush="#2A2A2A" BorderThickness="1" Margin="0,0,0,25" Padding="20">
-                    <StackPanel>
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
-                            <TextBlock Text="&#xE8B7;" FontFamily="Segoe MDL2 Assets" FontSize="18" Foreground="#888888" Margin="0,0,10,0" VerticalAlignment="Center"/>
-                            <TextBlock Text="Управление файлами" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                        </StackPanel>
-
-                        <Border Style="{StaticResource SettingRowStyle}" Margin="-15,0,-15,0">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0" Margin="0,0,20,0" VerticalAlignment="Center">
-                                    <TextBlock Text="Профили маршрутизации" FontSize="14" FontWeight="SemiBold"/>
-                                    <TextBlock Text="Открыть директорию с .bat конфигурациями Zapret" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
-                                </StackPanel>
-                                <ui:Button Content="Открыть папку" Grid.Column="1" VerticalAlignment="Center" Click="BtnOpenZapretFolder_Click"/>
-                            </Grid>
-                        </Border>
-                    </StackPanel>
-                </Border>
-
-                <ui:Button Content="Проверить обновления" Appearance="Primary" HorizontalAlignment="Center" Margin="0,0,0,10" Click="BtnCheckUpdates_Click"/>
-
-                <ui:Button Content="Сбросить все настройки" Appearance="Danger" HorizontalAlignment="Center" Margin="0,0,0,20" Click="BtnResetSettings_Click"/>
-
-                <StackPanel HorizontalAlignment="Center" Margin="0,0,0,40">
-                    <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#444444" HorizontalAlignment="Center" Text="Zapret for ADHD v3.0"/>
-                    <TextBlock Foreground="#444444" FontSize="12" HorizontalAlignment="Center" Margin="0,5,0,0">
-                        <Run Text="Разработано с ❤️ | "/>
-                        <Hyperlink NavigateUri="https://github.com/NIK-master/ZapretGUI" RequestNavigate="Hyperlink_RequestNavigate" Foreground="#107C10" TextDecorations="None">
-                            Страница на GitHub
-                        </Hyperlink>
-                    </TextBlock>
-                </StackPanel>
-
+            <StackPanel Grid.Row="0" Margin="0,10,0,24">
+                <TextBlock Text="Настройки" FontSize="28" FontWeight="Bold"/>
+                <TextBlock Text="Управление поведением и параметрами приложения." Foreground="#888888" FontSize="14" Margin="0,5,0,0"/>
             </StackPanel>
-        </ScrollViewer>
+
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,10,0">
+                <StackPanel HorizontalAlignment="Stretch" Margin="0,0,20,20">
+
+                    <!-- БЛОК 1: СИСТЕМНЫЕ НАСТРОЙКИ -->
+                    <Border Background="#181818" CornerRadius="12" BorderBrush="#2A2A2A" BorderThickness="1" Margin="0,0,0,15" Padding="20">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
+                                <TextBlock Text="&#xE713;" FontFamily="Segoe MDL2 Assets" FontSize="18" Foreground="#888888" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="Системные настройки" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            </StackPanel>
+
+                            <Border Style="{StaticResource SettingRowStyle}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Margin="0,0,20,0" VerticalAlignment="Center">
+                                        <TextBlock Text="Автозагрузка Windows" FontSize="14" FontWeight="SemiBold"/>
+                                        <TextBlock Text="Запускать программу при включении компьютера" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="ToggleAutoStart" Style="{StaticResource CyberToggleStyle}" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
+                                </Grid>
+                            </Border>
+
+                            <Border Style="{StaticResource SettingRowStyle}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Margin="0,0,20,0" VerticalAlignment="Center">
+                                        <TextBlock Text="Запускать свернутым" FontSize="14" FontWeight="SemiBold"/>
+                                        <TextBlock Text="Прятать окно в системный трей при старте программы" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="ToggleStartMinimized" Style="{StaticResource CyberToggleStyle}" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
+                                </Grid>
+                            </Border>
+
+                            <Border Style="{StaticResource SettingRowStyle}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Margin="0,0,20,0" VerticalAlignment="Center">
+                                        <TextBlock Text="Сворачивать при закрытии" FontSize="14" FontWeight="SemiBold"/>
+                                        <TextBlock Text="Кнопка [X] не закрывает программу, а прячет её в трей" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="ToggleMinimizeOnClose" Style="{StaticResource CyberToggleStyle}" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
+                                </Grid>
+                            </Border>
+
+                            <Border Style="{StaticResource SettingRowStyle}" Margin="-15,0,-15,0">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Margin="0,0,20,0" VerticalAlignment="Center">
+                                        <TextBlock Text="Уведомления Windows (Тихий режим)" FontSize="14" FontWeight="SemiBold"/>
+                                        <TextBlock Text="Показывать всплывающие окна при обрыве сети или запуске/остановке служб" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="ToggleNotifications" Style="{StaticResource CyberToggleStyle}" IsChecked="True" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
+                                </Grid>
+                            </Border>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- БЛОК 2: ВИЗУАЛЬНЫЕ ЭФФЕКТЫ -->
+                    <Border Background="#181818" CornerRadius="12" BorderBrush="#2A2A2A" BorderThickness="1" Margin="0,0,0,15" Padding="20">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
+                                <TextBlock Text="&#xE890;" FontFamily="Segoe MDL2 Assets" FontSize="18" Foreground="#888888" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="Визуальные эффекты" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            </StackPanel>
+
+                            <Border Style="{StaticResource SettingRowStyle}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Margin="0,0,20,0" VerticalAlignment="Center">
+                                        <TextBlock Text="Режим фокусировки (Без глитчей)" FontSize="14" FontWeight="SemiBold"/>
+                                        <TextBlock Text="Отключить тряску камеры, эффект VHS и резкие вспышки" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="ToggleFocusMode" Style="{StaticResource CyberToggleStyle}" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
+                                </Grid>
+                            </Border>
+
+                            <Border Style="{StaticResource SettingRowStyle}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Margin="0,0,20,0" VerticalAlignment="Center">
+                                        <TextBlock Text="Минималистичный интерфейс" FontSize="14" FontWeight="SemiBold"/>
+                                        <TextBlock Text="Скрыть графики скорости и логи, оставив только кнопки" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="ToggleCompactMode" Style="{StaticResource CyberToggleStyle}" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
+                                </Grid>
+                            </Border>
+
+                            <Border Style="{StaticResource SettingRowStyle}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Margin="0,0,20,0" VerticalAlignment="Center">
+                                        <TextBlock Text="Аппаратное ускорение (GPU)" FontSize="14" FontWeight="SemiBold"/>
+                                        <TextBlock Text="Использовать видеокарту для отрисовки интерфейса" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="ToggleHardwareAccel" Style="{StaticResource CyberToggleStyle}" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
+                                </Grid>
+                            </Border>
+
+                            <Border Style="{StaticResource SettingRowStyle}" Margin="-15,0,-15,0">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Margin="0,0,20,0" VerticalAlignment="Center">
+                                        <TextBlock Text="Режим цветовой слепоты" FontSize="14" FontWeight="SemiBold"/>
+                                        <TextBlock Text="Заменить красно-зеленые точки индикаторов на оранжево-синие" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="ToggleColorblind" Style="{StaticResource CyberToggleStyle}" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
+                                </Grid>
+                            </Border>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- БЛОК 3: СЕТЬ И ДИАГНОСТИКА -->
+                    <Border Background="#181818" CornerRadius="12" BorderBrush="#2A2A2A" BorderThickness="1" Margin="0,0,0,15" Padding="20">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
+                                <TextBlock Text="&#xE774;" FontFamily="Segoe MDL2 Assets" FontSize="18" Foreground="#888888" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="Сеть и диагностика" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            </StackPanel>
+
+                            <Border Style="{StaticResource SettingRowStyle}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="220"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Margin="0,0,20,0" VerticalAlignment="Center">
+                                        <TextBlock Text="Адрес сервера для пинга" FontSize="14" FontWeight="SemiBold"/>
+                                        <TextBlock Text="URL для проверки соединения (по умолчанию Франкфурт AWS)" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                    <ui:TextBox x:Name="TxtPingUrl" Grid.Column="1" Text="https://dynamodb.eu-central-1.amazonaws.com" VerticalAlignment="Center" LostFocus="TextInput_LostFocus"/>
+                                </Grid>
+                            </Border>
+
+                            <Border Style="{StaticResource SettingRowStyle}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Margin="0,0,20,0" VerticalAlignment="Center">
+                                        <TextBlock Text="Интервал обновления статистики" FontSize="14" FontWeight="SemiBold"/>
+                                        <TextBlock Text="Как часто опрашивать сеть и перерисовывать графики" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                    <!-- Фирменная плашка выбора вместо системного ComboBox -->
+                                    <Border Grid.Column="1" Style="{StaticResource CyberSelectorBorderStyle}" MinWidth="150" VerticalAlignment="Center" MouseLeftButtonDown="BtnSelectInterval_MouseDown">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock x:Name="TxtSelectedInterval" Text="1 секунда" Foreground="White" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="1" Text="&#xE70D;" FontFamily="Segoe MDL2 Assets" Foreground="#888888" FontSize="11" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                                        </Grid>
+                                    </Border>
+                                </Grid>
+                            </Border>
+
+                            <Border Style="{StaticResource SettingRowStyle}" Margin="-15,0,-15,0">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Margin="0,0,20,0" VerticalAlignment="Center">
+                                        <TextBlock Text="Авто-перезапуск при обрыве" FontSize="14" FontWeight="SemiBold"/>
+                                        <TextBlock Text="Автоматически перезапускать службы при восстановлении сети" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="ToggleAutoRestart" Style="{StaticResource CyberToggleStyle}" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
+                                </Grid>
+                            </Border>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- БЛОК 4: СПИСКИ МАРШРУТИЗАЦИИ (IPSET И HOSTS) — Двухуровневый макет без обрезания меток -->
+                    <Border Background="#181818" CornerRadius="12" BorderBrush="#2A2A2A" BorderThickness="1" Margin="0,0,0,25" Padding="20">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
+                                <TextBlock Text="&#xE8B7;" FontFamily="Segoe MDL2 Assets" FontSize="18" Foreground="#888888" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="Списки маршрутизации (IPSet и Hosts)" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            </StackPanel>
+
+                            <!-- Строка 1: Фильтр IPSet -->
+                            <Border Style="{StaticResource SettingRowStyle}">
+                                <StackPanel>
+                                    <WrapPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                        <TextBlock Text="Фильтрация по подсетям (IPSet Filter)" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                        <Border Background="#1E293B" CornerRadius="5" Padding="8,3" VerticalAlignment="Center">
+                                            <TextBlock x:Name="TxtIpSetStatusBadge" Text="Проверка..." FontFamily="Consolas" FontSize="11" FontWeight="SemiBold" Foreground="#60A5FA"/>
+                                        </Border>
+                                    </WrapPanel>
+                                    <TextBlock Text="Режим работы базы заблокированных IP-адресов (ipset-all.txt) и её обновление из репозитория Flowseal" Foreground="#888888" FontSize="12" Margin="0,0,0,12" TextWrapping="Wrap"/>
+
+                                    <WrapPanel Orientation="Horizontal">
+                                        <Border Style="{StaticResource CyberSelectorBorderStyle}" MinWidth="220" Margin="0,0,10,4" MouseLeftButtonDown="BtnSelectIpSetMode_MouseDown">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel>
+                                                    <TextBlock Text="Режим фильтрации:" Foreground="#888888" FontSize="10" Margin="0,0,0,2"/>
+                                                    <TextBlock x:Name="TxtSelectedIpSetMode" Text="По списку (Loaded)" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
+                                                </StackPanel>
+                                                <TextBlock Grid.Column="1" Text="&#xE70D;" FontFamily="Segoe MDL2 Assets" Foreground="#888888" FontSize="12" VerticalAlignment="Center" Margin="12,0,0,0"/>
+                                            </Grid>
+                                        </Border>
+
+                                        <ui:Button x:Name="BtnUpdateIpSet" Content="🔄 Обновить базу IP" Margin="0,0,0,4" VerticalAlignment="Stretch" Click="BtnUpdateIpSet_Click"/>
+                                    </WrapPanel>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Строка 2: Авто-обновление системного файла hosts -->
+                            <Border Style="{StaticResource SettingRowStyle}">
+                                <StackPanel>
+                                    <WrapPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                        <TextBlock Text="Системный файл Hosts (ChatGPT, AI, Spotify и др.)" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                        <Border Background="#1A2E1A" CornerRadius="5" Padding="8,3" VerticalAlignment="Center">
+                                            <TextBlock x:Name="TxtHostsStatusBadge" Text="Проверка..." FontFamily="Consolas" FontSize="11" FontWeight="SemiBold" Foreground="#4ADE80"/>
+                                        </Border>
+                                    </WrapPanel>
+                                    <TextBlock Text="Автоматическое внедрение обходных IP-адресов в системный файл hosts без потери ваших личных записей" Foreground="#888888" FontSize="12" Margin="0,0,0,12" TextWrapping="Wrap"/>
+
+                                    <WrapPanel Orientation="Horizontal">
+                                        <Border Style="{StaticResource CyberSelectorBorderStyle}" MinWidth="250" Margin="0,0,10,4" MouseLeftButtonDown="BtnSelectHostsSource_MouseDown">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel>
+                                                    <TextBlock Text="Источник списка Hosts:" Foreground="#888888" FontSize="10" Margin="0,0,0,2"/>
+                                                    <TextBlock x:Name="TxtSelectedHostsSource" Text="Flowseal + V3nilla (Рекомендуется)" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
+                                                </StackPanel>
+                                                <TextBlock Grid.Column="1" Text="&#xE70D;" FontFamily="Segoe MDL2 Assets" Foreground="#888888" FontSize="12" VerticalAlignment="Center" Margin="12,0,0,0"/>
+                                            </Grid>
+                                        </Border>
+
+                                        <ui:Button x:Name="BtnUpdateHosts" Content="⚡ Обновить" Appearance="Primary" Margin="0,0,8,4" VerticalAlignment="Stretch" Click="BtnUpdateHosts_Click"/>
+                                        <ui:Button x:Name="BtnClearHosts" Content="Очистить" Margin="0,0,0,4" VerticalAlignment="Stretch" Click="BtnClearHosts_Click" ToolTip="Удалить записи Zapret из системного файла hosts"/>
+                                    </WrapPanel>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Строка 3: Папка профилей -->
+                            <Border Style="{StaticResource SettingRowStyle}" Margin="-15,0,-15,0">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Margin="0,0,20,0" VerticalAlignment="Center">
+                                        <TextBlock Text="Профили маршрутизации и списки" FontSize="14" FontWeight="SemiBold"/>
+                                        <TextBlock Text="Открыть директорию с .bat конфигурациями Zapret и папкой lists" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                    <ui:Button Content="Открыть папку" Grid.Column="1" VerticalAlignment="Center" Click="BtnOpenZapretFolder_Click"/>
+                                </Grid>
+                            </Border>
+                        </StackPanel>
+                    </Border>
+
+                    <ui:Button Content="Проверить обновления" Appearance="Primary" HorizontalAlignment="Center" Margin="0,0,0,10" Click="BtnCheckUpdates_Click"/>
+
+                    <ui:Button Content="Сбросить все настройки" Appearance="Danger" HorizontalAlignment="Center" Margin="0,0,0,20" Click="BtnResetSettings_Click"/>
+
+                    <StackPanel HorizontalAlignment="Center" Margin="0,0,0,40">
+                        <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#444444" HorizontalAlignment="Center" Text="Zapret for ADHD v3.0"/>
+                        <TextBlock Foreground="#444444" FontSize="12" HorizontalAlignment="Center" Margin="0,5,0,0">
+                            <Run Text="Разработано с ❤️ | "/>
+                            <Hyperlink NavigateUri="https://github.com/NIK-master/ZapretGUI" RequestNavigate="Hyperlink_RequestNavigate" Foreground="#107C10" TextDecorations="None">
+                                Страница на GitHub
+                            </Hyperlink>
+                        </TextBlock>
+                    </StackPanel>
+
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+
+        <!-- ФИРМЕННЫЙ ОВЕРЛЕЙ ВЫБОРА ОПЦИЙ (ВМЕСТО СИСТЕМНЫХ COMBOBOX) -->
+        <Grid x:Name="SelectionOverlay" Background="#CC000000" Visibility="Collapsed" Panel.ZIndex="200" MouseDown="SelectionOverlay_MouseDown">
+            <Border x:Name="SelectionContentBorder" Background="#141414" BorderBrush="#2A2A2A" BorderThickness="1" CornerRadius="12"
+                    HorizontalAlignment="Center" VerticalAlignment="Center" Padding="20" Width="480"
+                    MouseDown="SelectionContent_MouseDown" RenderTransformOrigin="0.5,0.5">
+                <Border.RenderTransform>
+                    <TransformGroup>
+                        <ScaleTransform ScaleX="0.95" ScaleY="0.95"/>
+                        <TranslateTransform Y="10"/>
+                    </TransformGroup>
+                </Border.RenderTransform>
+                <Border.Effect>
+                    <DropShadowEffect Color="Black" BlurRadius="40" ShadowDepth="10" Opacity="0.8"/>
+                </Border.Effect>
+
+                <StackPanel>
+                    <Grid Margin="0,0,0,16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Border Grid.Column="0" Width="32" Height="32" Background="#1E3A8A" CornerRadius="8" Margin="0,0,12,0">
+                            <TextBlock Text="&#xE713;" FontFamily="Segoe MDL2 Assets" Foreground="#60A5FA" FontSize="15" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock x:Name="TxtSelectionSubTitle" Text="Параметры" Foreground="#888888" FontSize="12"/>
+                            <TextBlock x:Name="TxtSelectionTitle" Text="Выберите вариант" Foreground="White" FontSize="16" FontWeight="Bold"/>
+                        </StackPanel>
+
+                        <Button Grid.Column="2" Content="✕" Background="Transparent" Foreground="#888888" BorderThickness="0" FontSize="16" Cursor="Hand" Click="BtnCloseSelectionOverlay_Click" VerticalAlignment="Top"/>
+                    </Grid>
+
+                    <ListBox x:Name="SelectionListBox" Background="Transparent" BorderThickness="0" 
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto"
+                             SelectionChanged="SelectionListBox_SelectionChanged">
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem">
+                                <Setter Property="Padding" Value="0"/>
+                                <Setter Property="Margin" Value="0,0,0,8"/>
+                                <Setter Property="Cursor" Value="Hand"/>
+                                <Setter Property="Background" Value="Transparent"/>
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="ListBoxItem">
+                                            <Border x:Name="CardBorder" Background="#18181B" BorderBrush="#27272A" BorderThickness="1" CornerRadius="10" Padding="15,12">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                                            <TextBlock Text="{Binding Title}" Foreground="White" FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                                            <Border x:Name="ActiveBadge" Background="#1E3A8A" CornerRadius="4" Padding="6,2" Margin="10,0,0,0" Visibility="Collapsed" VerticalAlignment="Center">
+                                                                <TextBlock Text="выбрано" Foreground="#60A5FA" FontSize="10" FontWeight="SemiBold"/>
+                                                            </Border>
+                                                        </StackPanel>
+                                                        <TextBlock Text="{Binding Description}" Foreground="#888888" FontSize="12" TextWrapping="Wrap"/>
+                                                    </StackPanel>
+
+                                                    <TextBlock x:Name="ActionIcon" Grid.Column="1" Text="→" Foreground="#3F3F46" FontSize="16" VerticalAlignment="Center" Margin="12,0,0,0"/>
+                                                </Grid>
+                                            </Border>
+
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="CardBorder" Property="Background" Value="#27272A"/>
+                                                </Trigger>
+                                                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                    <Setter TargetName="CardBorder" Property="Background" Value="#172554"/>
+                                                    <Setter TargetName="CardBorder" Property="BorderBrush" Value="#2563EB"/>
+                                                    <Setter TargetName="ActiveBadge" Property="Visibility" Value="Visible"/>
+                                                    <Setter TargetName="ActionIcon" Property="Text" Value="✓"/>
+                                                    <Setter TargetName="ActionIcon" Property="Foreground" Value="#60A5FA"/>
+                                                </DataTrigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </ListBox.ItemContainerStyle>
+                    </ListBox>
+                </StackPanel>
+            </Border>
+        </Grid>
+
     </Grid>
 </UserControl>

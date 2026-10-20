@@ -145,12 +145,15 @@ namespace ZapretGUI.Core
             if (!winwsFound)
                 throw new Exception($"Ошибка структуры в {sourceName}:\nВ батнике не найден вызов ядра «{AppConstants.ZapretProcessName}.exe». Этот скрипт не подходит для Zapret.");
 
+            var (gfAll, gfTcp, gfUdp) = ServiceToolsManager.GetGameFilterSubstitutions();
+            ServiceToolsManager.SyncGameFilterFile();
+
             arguments = arguments.Replace("%BIN%", @"bin\")
                                  .Replace("%LISTS%", @"lists\")
                                  .Replace("%~dp0", "")
-                                 .Replace("%GameFilterTCP%", "65535")
-                                 .Replace("%GameFilterUDP%", "65535")
-                                 .Replace("%GameFilter%", "65535")
+                                 .Replace("%GameFilterTCP%", gfTcp)
+                                 .Replace("%GameFilterUDP%", gfUdp)
+                                 .Replace("%GameFilter%", gfAll)
                                  .Trim();
 
             if (string.IsNullOrEmpty(arguments))

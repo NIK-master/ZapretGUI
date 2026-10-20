@@ -26,6 +26,11 @@ namespace ZapretGUI.Core
 
         public List<string> ActiveBatMods { get; set; } = new List<string>();
         public List<string> ActiveListMods { get; set; } = new List<string>();
+
+        public string GameFilterMode { get; set; } = "disabled";
+        public string GameFilterTcpRange { get; set; } = "1024-65535";
+        public string GameFilterUdpRange { get; set; } = "1024-65535";
+        public int HostsSourceIndex { get; set; } = 2;
     }
 
     public static class SettingsManager

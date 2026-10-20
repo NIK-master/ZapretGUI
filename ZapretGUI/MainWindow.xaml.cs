@@ -196,7 +196,7 @@ namespace ZapretGUI
             };
             var heightAnim = new System.Windows.Media.Animation.DoubleAnimation
             {
-                To = isCompact ? 490 : 760,
+                To = isCompact ? 520 : 760,
                 Duration = TimeSpan.FromSeconds(0.4),
                 EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut }
             };

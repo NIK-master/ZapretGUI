@@ -30,6 +30,42 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <!-- Фирменный стиль карточки выбора для оверлеев -->
+        <Style x:Key="CyberSelectListBoxItem" TargetType="ListBoxItem">
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Margin" Value="0,0,0,6"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="CardBorder" Background="#18181B" BorderBrush="#27272A" BorderThickness="1" CornerRadius="8" Padding="14,10">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <ContentPresenter Grid.Column="0" VerticalAlignment="Center"/>
+                                <TextBlock x:Name="ActionIcon" Grid.Column="1" Text="→" Foreground="#3F3F46" FontSize="15" FontWeight="Bold" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="CardBorder" Property="Background" Value="#27272A"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="CardBorder" Property="Background" Value="#172554"/>
+                                <Setter TargetName="CardBorder" Property="BorderBrush" Value="#2563EB"/>
+                                <Setter TargetName="ActionIcon" Property="Text" Value="✓"/>
+                                <Setter TargetName="ActionIcon" Property="Foreground" Value="#60A5FA"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </UserControl.Resources>
 
     <UserControl.Triggers>
@@ -47,7 +83,7 @@
         </EventTrigger>
     </UserControl.Triggers>
 
-    <Grid x:Name="MainGrid" Margin="20" Opacity="0" RenderTransformOrigin="0.5,0.5">
+    <Grid x:Name="MainGrid" Margin="20,14,20,16" Opacity="0" RenderTransformOrigin="0.5,0.5">
 
         <Grid.Effect>
             <DropShadowEffect x:Name="MainGridGlitchShadow" Color="#00FFFF" BlurRadius="0" ShadowDepth="0" Opacity="0"/>
@@ -67,20 +103,20 @@
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
-            <StackPanel Grid.Row="0" HorizontalAlignment="Center" Margin="0,10,0,30">
-                <TextBlock Text="⚡ Починить Telegram и Discord" FontSize="28" FontWeight="Bold" HorizontalAlignment="Center"/>
-                <TextBlock Text="Одна кнопка — запустит всё необходимое." Foreground="#A0A0A0" FontSize="14" HorizontalAlignment="Center" Margin="0,5,0,0"/>
+            <StackPanel x:Name="HeaderStack" Grid.Row="0" HorizontalAlignment="Center" Margin="0,4,0,16">
+                <TextBlock x:Name="TxtHeaderTitle" Text="⚡ Починить Telegram и Discord" FontSize="26" FontWeight="Bold" HorizontalAlignment="Center"/>
+                <TextBlock x:Name="TxtHeaderSub" Text="Одна кнопка — запустит всё необходимое." Foreground="#A0A0A0" FontSize="14" HorizontalAlignment="Center" Margin="0,4,0,0"/>
             </StackPanel>
 
             <Grid Grid.Row="1">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="280"/>
+                    <ColumnDefinition Width="285"/>
                 </Grid.ColumnDefinitions>
 
                 <StackPanel Grid.Column="0" HorizontalAlignment="Center" VerticalAlignment="Center">
-                    <ToggleButton x:Name="MainToggle" Width="200" Height="200" Click="MainToggle_Click" Cursor="Hand" Background="Transparent" BorderThickness="0">
+                    <ToggleButton x:Name="MainToggle" Width="190" Height="190" Click="MainToggle_Click" Cursor="Hand" Background="Transparent" BorderThickness="0">
                         <ToggleButton.Template>
                             <ControlTemplate TargetType="ToggleButton">
                                 <Border x:Name="BtnBorder" Background="#121212" BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="3" CornerRadius="100" RenderTransformOrigin="0.5,0.5">
@@ -92,7 +128,7 @@
                                         <DropShadowEffect Color="{DynamicResource MainBtnColor}" BlurRadius="20" ShadowDepth="0" Opacity="0"/>
                                     </Border.Effect>
                                     <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="&#xE7E8;" FontFamily="Segoe MDL2 Assets" FontSize="50" Foreground="White" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                                        <TextBlock Text="&#xE7E8;" FontFamily="Segoe MDL2 Assets" FontSize="46" Foreground="White" HorizontalAlignment="Center" Margin="0,0,0,8"/>
                                         <TextBlock x:Name="BtnText" Text="Починить интернет" FontSize="14" FontWeight="SemiBold" Foreground="White" HorizontalAlignment="Center"/>
                                     </StackPanel>
                                 </Border>
@@ -205,16 +241,18 @@
                     </Grid>
                 </StackPanel>
 
+                <!-- ПРАВАЯ КОЛОНКА С КАРТОЧКАМИ -->
                 <StackPanel Grid.Column="2" VerticalAlignment="Center">
-                    <Border Background="#181818" CornerRadius="12" BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="1" Margin="0,0,0,15">
-                        <StackPanel Margin="20">
-                            <Grid Margin="0,0,0,10">
-                                <TextBlock Text="Настройки Zapret" FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                    <Border x:Name="ZapretCardBorder" Background="#181818" CornerRadius="12" BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="1" Margin="0,0,0,10">
+                        <StackPanel x:Name="ZapretCardPanel" Margin="16,14">
+                            <Grid Margin="0,0,0,4">
+                                <TextBlock Text="Настройки Zapret" FontSize="15" FontWeight="SemiBold" HorizontalAlignment="Left" VerticalAlignment="Center"/>
                                 <CheckBox x:Name="ZapretToggle" Style="{StaticResource CyberToggleStyle}" IsChecked="True" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Settings_Changed"/>
                             </Grid>
-                            <TextBlock x:Name="StatusText" Text="Остановлен" Foreground="#D13438" Margin="0,0,0,15"/>
+                            <TextBlock x:Name="StatusText" Text="Остановлен" FontSize="12" Foreground="#D13438" Margin="0,0,0,10"/>
 
-                            <Border x:Name="BtnOpenConfigMenu" Background="#222222" CornerRadius="8" Padding="15" Cursor="Hand" MouseLeftButtonDown="BtnOpenConfigMenu_MouseDown">
+                            <!-- Кнопка выбора конфига -->
+                            <Border x:Name="BtnOpenConfigMenu" Background="#222222" CornerRadius="8" Padding="12,8" Margin="0,0,0,8" Cursor="Hand" MouseLeftButtonDown="BtnOpenConfigMenu_MouseDown">
                                 <Border.Style>
                                     <Style TargetType="Border">
                                         <Style.Triggers>
@@ -230,22 +268,46 @@
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
                                     <StackPanel>
-                                        <TextBlock Text="Текущий конфиг:" Foreground="#888888" FontSize="12" Margin="0,0,0,4"/>
+                                        <TextBlock Text="Текущий конфиг:" Foreground="#888888" FontSize="11" Margin="0,0,0,2"/>
                                         <TextBlock x:Name="TxtMainProfile" FontFamily="Consolas" Text="general.bat" Foreground="White" FontSize="13" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
                                     </StackPanel>
-                                    <TextBlock Grid.Column="1" Text="&#xE713;" FontFamily="Segoe MDL2 Assets" Foreground="#888888" FontSize="16" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                                    <TextBlock Grid.Column="1" Text="&#xE713;" FontFamily="Segoe MDL2 Assets" Foreground="#888888" FontSize="15" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                                </Grid>
+                            </Border>
+
+                            <!-- Кнопка открытия меню Game Filter -->
+                            <Border x:Name="BtnOpenGameFilterMenu" Background="#222222" CornerRadius="8" Padding="12,8" Cursor="Hand" MouseLeftButtonDown="BtnOpenGameFilterMenu_MouseDown">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Style.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter Property="Background" Value="#2A2A2A"/>
+                                            </Trigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Text="Игровой фильтр (Game Filter):" Foreground="#888888" FontSize="11" Margin="0,0,0,2"/>
+                                        <TextBlock x:Name="TxtGameFilterStatus" FontFamily="Consolas" Text="Отключен" Foreground="#A0A0A0" FontSize="12" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                    </StackPanel>
+                                    <TextBlock Grid.Column="1" Text="&#xE7FC;" FontFamily="Segoe MDL2 Assets" Foreground="#60A5FA" FontSize="15" VerticalAlignment="Center" Margin="10,0,0,0"/>
                                 </Grid>
                             </Border>
                         </StackPanel>
                     </Border>
 
-                    <Border Background="#181818" CornerRadius="12" BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="1">
-                        <StackPanel Margin="20">
-                            <Grid Margin="0,0,0,5">
-                                <TextBlock Text="TgWsProxy" FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                    <Border x:Name="ProxyCardBorder" Background="#181818" CornerRadius="12" BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="1">
+                        <StackPanel x:Name="ProxyCardPanel" Margin="16,12">
+                            <Grid Margin="0,0,0,3">
+                                <TextBlock Text="TgWsProxy" FontSize="15" FontWeight="SemiBold" HorizontalAlignment="Left" VerticalAlignment="Center"/>
                                 <CheckBox x:Name="TgProxyToggle" Style="{StaticResource CyberToggleStyle}" IsChecked="True" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Settings_Changed"/>
                             </Grid>
-                            <TextBlock Text="Прокси для Telegram" Foreground="#A0A0A0" FontSize="12" Margin="0,0,0,15"/>
+                            <TextBlock Text="Прокси для Telegram" Foreground="#A0A0A0" FontSize="12"/>
                         </StackPanel>
                     </Border>
                 </StackPanel>
@@ -257,14 +319,14 @@
                 </ProgressBar.Effect>
             </ProgressBar>
 
-            <Border x:Name="LogsPanel" Height="250" Grid.Row="2" Background="#0A0A0A" CornerRadius="8" BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="1" Margin="0,20,0,0">
+            <Border x:Name="LogsPanel" Height="235" Grid.Row="2" Background="#0A0A0A" CornerRadius="8" BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="1" Margin="0,14,0,0">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
 
-                    <Grid Grid.Row="0" Margin="15,15,15,5">
+                    <Grid Grid.Row="0" Margin="15,12,15,5">
                         <TextBlock Text="Лог событий" Foreground="#A0A0A0" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
 
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
@@ -291,7 +353,7 @@
             </Border>
         </Grid>
 
-        <!-- ОВЕРЛЕЙ ЦЕНТРАЛЬНОГО МЕНЮ (Вынесен за пределы ContentGrid) -->
+        <!-- ОВЕРЛЕЙ ЦЕНТРАЛЬНОГО МЕНЮ ВЫБОРА КОНФИГОВ (Полноценная ширина 550) -->
         <Grid x:Name="ConfigOverlay" Background="#CC000000" Visibility="Collapsed" Panel.ZIndex="100" MouseDown="OverlayBackground_MouseDown">
 
             <Border x:Name="OverlayContentBorder" Background="#141414" BorderBrush="#2A2A2A" BorderThickness="1" CornerRadius="12" 
@@ -318,7 +380,7 @@
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
-                    <Grid Grid.Row="0" Margin="0,0,0,20">
+                    <Grid Grid.Row="0" Margin="0,0,0,18">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
@@ -337,7 +399,7 @@
                         <Button Grid.Column="2" Content="✕" Background="Transparent" Foreground="#888888" BorderThickness="0" FontSize="16" Cursor="Hand" Click="BtnCloseOverlay_Click" VerticalAlignment="Top"/>
                     </Grid>
 
-                    <WrapPanel Grid.Row="1" Margin="0,0,0,25">
+                    <WrapPanel Grid.Row="1" Margin="0,0,0,20">
                         <TextBlock Text="Активный конфиг: " Foreground="White" FontSize="15" FontWeight="Bold"/>
                         <TextBlock x:Name="OverlayTxtProfile" FontFamily="Consolas" Text="general.bat" Foreground="{DynamicResource BrandSuccessBrush}" FontSize="15" FontWeight="Bold"/>
                     </WrapPanel>
@@ -350,7 +412,7 @@
                     </Grid>
 
                     <ListBox x:Name="OverlayProfileListBox" Grid.Row="3" Background="Transparent" BorderThickness="0" 
-         SelectionChanged="OverlayProfileListBox_SelectionChanged" ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.CanContentScroll="False" MaxHeight="300" Margin="0,0,0,15" Padding="0,0,8,0">
+         SelectionChanged="OverlayProfileListBox_SelectionChanged" ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.CanContentScroll="False" MaxHeight="290" Margin="0,0,0,15" Padding="0,0,8,0">
                         <ListBox.ItemContainerStyle>
                             <Style TargetType="ListBoxItem">
                                 <Setter Property="Padding" Value="0"/>
@@ -419,6 +481,121 @@
                         </StackPanel>
                     </Button>
                 </Grid>
+            </Border>
+        </Grid>
+
+        <!-- ОВЕРЛЕЙ НАСТРОЙКИ GAME FILTER (С фирменным списком карточек вместо стандартного ComboBox) -->
+        <Grid x:Name="GameFilterOverlay" Background="#CC000000" Visibility="Collapsed" Panel.ZIndex="110" MouseDown="GameFilterOverlay_MouseDown">
+            <Border x:Name="GameFilterContentBorder" Background="#141414" BorderBrush="#2A2A2A" BorderThickness="1" CornerRadius="12"
+                    HorizontalAlignment="Center" VerticalAlignment="Center" Padding="20" Width="490"
+                    MouseDown="OverlayContent_MouseDown" RenderTransformOrigin="0.5,0.5">
+                <Border.RenderTransform>
+                    <TransformGroup>
+                        <ScaleTransform ScaleX="0.95" ScaleY="0.95"/>
+                        <TranslateTransform Y="10"/>
+                    </TransformGroup>
+                </Border.RenderTransform>
+                <Border.Effect>
+                    <DropShadowEffect Color="Black" BlurRadius="40" ShadowDepth="10" Opacity="0.8"/>
+                </Border.Effect>
+
+                <StackPanel>
+                    <Grid Margin="0,0,0,14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Border Grid.Column="0" Width="34" Height="34" Background="#1E3A8A" CornerRadius="8" Margin="0,0,12,0">
+                            <TextBlock Text="&#xE7FC;" FontFamily="Segoe MDL2 Assets" Foreground="#60A5FA" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock Text="Маршрутизация игровых портов" Foreground="#888888" FontSize="12"/>
+                            <TextBlock Text="Настройка Game Filter" Foreground="White" FontSize="16" FontWeight="Bold"/>
+                        </StackPanel>
+
+                        <Button Grid.Column="2" Content="✕" Background="Transparent" Foreground="#888888" BorderThickness="0" FontSize="16" Cursor="Hand" Click="BtnCloseGameFilter_Click" VerticalAlignment="Top"/>
+                    </Grid>
+
+                    <TextBlock Text="Режим перехвата трафика игр:" Foreground="#CCCCCC" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,8"/>
+
+                    <!-- Наш фирменный список карточек вместо системного ComboBox -->
+                    <ListBox x:Name="ListGameFilterMode" Background="Transparent" BorderThickness="0" 
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             ItemContainerStyle="{StaticResource CyberSelectListBoxItem}" Margin="0,0,0,10" SelectionChanged="ComboGameFilterMode_SelectionChanged">
+                        <ListBoxItem>
+                            <StackPanel>
+                                <TextBlock Text="Отключен" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
+                                <TextBlock Text="По умолчанию — фильтрация игровых портов выключена (порт 12)" Foreground="#71717A" FontSize="11" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </ListBoxItem>
+                        <ListBoxItem>
+                            <StackPanel>
+                                <TextBlock Text="TCP и UDP (Рекомендуется)" Foreground="{DynamicResource BrandSuccessBrush}" FontSize="13" FontWeight="SemiBold"/>
+                                <TextBlock Text="Полный обход для большинства онлайн-игр и игровых лаунчеров" Foreground="#71717A" FontSize="11" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </ListBoxItem>
+                        <ListBoxItem>
+                            <StackPanel>
+                                <TextBlock Text="Только TCP" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
+                                <TextBlock Text="Перехват только TCP-соединений игровых серверов" Foreground="#71717A" FontSize="11" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </ListBoxItem>
+                        <ListBoxItem>
+                            <StackPanel>
+                                <TextBlock Text="Только UDP" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
+                                <TextBlock Text="Перехват только UDP-трафика (голосовые чаты и динамичные шутеры)" Foreground="#71717A" FontSize="11" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </ListBoxItem>
+                    </ListBox>
+
+                    <Grid Margin="0,0,0,12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="12"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="Диапазон TCP портов:" Foreground="#A0A0A0" FontSize="12" Margin="0,0,0,4"/>
+                            <ui:TextBox x:Name="TxtGameFilterTcp" FontFamily="Consolas" Text="1024-65535" PlaceholderText="1024-65535"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="2">
+                            <TextBlock Text="Диапазон UDP портов:" Foreground="#A0A0A0" FontSize="12" Margin="0,0,0,4"/>
+                            <ui:TextBox x:Name="TxtGameFilterUdp" FontFamily="Consolas" Text="1024-65535" PlaceholderText="1024-65535"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid>
+                        <Button Content="Сбросить (1024-65535)" Background="Transparent" Foreground="#888888" BorderBrush="#333333" BorderThickness="1" Padding="12,6" HorizontalAlignment="Left" Cursor="Hand" Click="BtnResetGameFilterPorts_Click">
+                            <Button.Resources>
+                                <Style TargetType="Border">
+                                    <Setter Property="CornerRadius" Value="6"/>
+                                </Style>
+                            </Button.Resources>
+                        </Button>
+
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Button Content="Отмена" Background="Transparent" Foreground="#A0A0A0" BorderBrush="#333333" BorderThickness="1" Padding="14,6" Margin="0,0,10,0" Cursor="Hand" Click="BtnCloseGameFilter_Click">
+                                <Button.Resources>
+                                    <Style TargetType="Border">
+                                        <Setter Property="CornerRadius" Value="6"/>
+                                    </Style>
+                                </Button.Resources>
+                            </Button>
+                            <Button Content="💾 Применить" Background="{DynamicResource BrandSuccessBrush}" Foreground="White" FontWeight="SemiBold" BorderThickness="0" Padding="16,6" Cursor="Hand" Click="BtnSaveGameFilter_Click">
+                                <Button.Resources>
+                                    <Style TargetType="Border">
+                                        <Setter Property="CornerRadius" Value="6"/>
+                                    </Style>
+                                </Button.Resources>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
             </Border>
         </Grid>
     </Grid>

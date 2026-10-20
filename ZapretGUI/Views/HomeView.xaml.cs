@@ -332,6 +332,8 @@ namespace ZapretGUI.Views
                 StatusText.Foreground = UIHelper.GetSuccessBrush();
                 BtnOpenConfigMenu.IsEnabled = false;
                 BtnOpenConfigMenu.Opacity = 0.5;
+                BtnOpenGameFilterMenu.IsEnabled = false;
+                BtnOpenGameFilterMenu.Opacity = 0.5;
             }
             else
             {
@@ -339,6 +341,8 @@ namespace ZapretGUI.Views
                 StatusText.Foreground = UIHelper.GetErrorBrush();
                 BtnOpenConfigMenu.IsEnabled = true;
                 BtnOpenConfigMenu.Opacity = 1.0;
+                BtnOpenGameFilterMenu.IsEnabled = true;
+                BtnOpenGameFilterMenu.Opacity = 1.0;
             }
         }
 
@@ -394,6 +398,7 @@ namespace ZapretGUI.Views
             }
 
             RefreshListActiveStates(TxtMainProfile.Text);
+            UpdateGameFilterBadge();
             _isUpdatingUI = false;
         }
 
@@ -585,14 +590,26 @@ namespace ZapretGUI.Views
         {
             var isCompact = SettingsManager.Current.CompactMode;
 
+            MainGrid.Margin = isCompact ? new Thickness(16, 10, 16, 10) : new Thickness(20, 14, 20, 16);
+            HeaderStack.Margin = isCompact ? new Thickness(0, 0, 0, 10) : new Thickness(0, 4, 0, 16);
+            TxtHeaderTitle.FontSize = isCompact ? 22 : 26;
+            TxtHeaderSub.FontSize = isCompact ? 12 : 14;
+
+            MainToggle.Width = isCompact ? 170 : 190;
+            MainToggle.Height = isCompact ? 170 : 190;
+
+            ZapretCardPanel.Margin = isCompact ? new Thickness(14, 12, 14, 12) : new Thickness(16, 14, 16, 14);
+            ProxyCardPanel.Margin = isCompact ? new Thickness(14, 10, 14, 10) : new Thickness(16, 12, 16, 12);
+            OverlayProfileListBox.MaxHeight = isCompact ? 180 : 290;
+
             if (NetworkStatsPanel != null)
                 NetworkStatsPanel.Visibility = isCompact ? Visibility.Collapsed : Visibility.Visible;
 
             if (LogsPanel != null)
             {
                 var opacityAnim = new DoubleAnimation { To = isCompact ? 0 : 1, Duration = TimeSpan.FromSeconds(0.3) };
-                var heightAnim = new DoubleAnimation { To = isCompact ? 0 : 250, Duration = TimeSpan.FromSeconds(0.4), EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
-                var marginAnim = new ThicknessAnimation { To = isCompact ? new Thickness(0) : new Thickness(0, 20, 0, 0), Duration = TimeSpan.FromSeconds(0.4), EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
+                var heightAnim = new DoubleAnimation { To = isCompact ? 0 : 235, Duration = TimeSpan.FromSeconds(0.4), EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
+                var marginAnim = new ThicknessAnimation { To = isCompact ? new Thickness(0) : new Thickness(0, 14, 0, 0), Duration = TimeSpan.FromSeconds(0.4), EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
 
                 LogsPanel.BeginAnimation(UIElement.OpacityProperty, opacityAnim);
                 LogsPanel.BeginAnimation(FrameworkElement.HeightProperty, heightAnim);
@@ -772,6 +789,106 @@ namespace ZapretGUI.Views
                 {
                     config.MetaInfo = $"Пинг: {currentPing} мс • Тесты: {okCount}/{totalCount}";
                     break;
+                }
+            }
+        }
+        // =========================================================================
+        // МЕНЮ НАСТРОЙКИ GAME FILTER
+        // =========================================================================
+
+        private void UpdateGameFilterBadge()
+        {
+            if (TxtGameFilterStatus == null) return;
+            TxtGameFilterStatus.Text = ServiceToolsManager.GetGameFilterDisplayStatus();
+
+            bool isEnabled = !string.Equals(SettingsManager.Current.GameFilterMode, "disabled", StringComparison.OrdinalIgnoreCase);
+            TxtGameFilterStatus.Foreground = isEnabled ? UIHelper.GetSuccessBrush() : UIHelper.GetBrushFromHex("#A0A0A0");
+        }
+
+        private void BtnOpenGameFilterMenu_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            AudioHelper.PlayClick();
+
+            string mode = (SettingsManager.Current.GameFilterMode ?? "disabled").ToLowerInvariant();
+            ListGameFilterMode.SelectedIndex = mode switch
+            {
+                "all" => 1,
+                "tcp" => 2,
+                "udp" => 3,
+                _ => 0
+            };
+
+            TxtGameFilterTcp.Text = string.IsNullOrWhiteSpace(SettingsManager.Current.GameFilterTcpRange) ? "1024-65535" : SettingsManager.Current.GameFilterTcpRange;
+            TxtGameFilterUdp.Text = string.IsNullOrWhiteSpace(SettingsManager.Current.GameFilterUdpRange) ? "1024-65535" : SettingsManager.Current.GameFilterUdpRange;
+
+            AnimationHelper.ShowOverlay(GameFilterOverlay, GameFilterContentBorder, ContentGrid);
+        }
+
+        private void CloseGameFilterOverlay()
+        {
+            AnimationHelper.HideOverlay(GameFilterOverlay, GameFilterContentBorder, ContentGrid);
+        }
+
+        private void BtnCloseGameFilter_Click(object sender, RoutedEventArgs e) => CloseGameFilterOverlay();
+        private void GameFilterOverlay_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e) => CloseGameFilterOverlay();
+
+        private void ComboGameFilterMode_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (!IsLoaded) return;
+            AudioHelper.PlayClick();
+        }
+
+        private void BtnResetGameFilterPorts_Click(object sender, RoutedEventArgs e)
+        {
+            AudioHelper.PlayClick();
+            TxtGameFilterTcp.Text = "1024-65535";
+            TxtGameFilterUdp.Text = "1024-65535";
+        }
+
+        private async void BtnSaveGameFilter_Click(object sender, RoutedEventArgs e)
+        {
+            AudioHelper.PlayClick();
+
+            if (!ServiceToolsManager.ValidatePortRange(TxtGameFilterTcp.Text, out string validTcp))
+            {
+                UIHelper.ShowAlert("Ошибка портов TCP", "Указан некорректный диапазон портов TCP!\nПример правильного формата: 1024-65535 или 1024-1934,1936-65535", isError: true);
+                return;
+            }
+
+            if (!ServiceToolsManager.ValidatePortRange(TxtGameFilterUdp.Text, out string validUdp))
+            {
+                UIHelper.ShowAlert("Ошибка портов UDP", "Указан некорректный диапазон портов UDP!\nПример правильного формата: 1024-65535", isError: true);
+                return;
+            }
+
+            SettingsManager.Current.GameFilterMode = ListGameFilterMode.SelectedIndex switch
+            {
+                1 => "all",
+                2 => "tcp",
+                3 => "udp",
+                _ => "disabled"
+            };
+            SettingsManager.Current.GameFilterTcpRange = validTcp;
+            SettingsManager.Current.GameFilterUdpRange = validUdp;
+
+            ServiceToolsManager.SyncGameFilterFile();
+            SettingsManager.Save();
+            UpdateGameFilterBadge();
+
+            CloseGameFilterOverlay();
+            Log($"🎮 Игровой фильтр обновлен: {ServiceToolsManager.GetGameFilterDisplayStatus()}");
+
+            if (BypassController.Current.Zapret.IsRunning())
+            {
+                bool restart = UIHelper.ShowConfirm(
+                    "Перезапустить Zapret?",
+                    "Настройки Игрового фильтра сохранены. Чтобы новые диапазоны портов вступили в силу в работающем обходе, требуется перезапуск. Перезапустить сейчас?",
+                    confirmText: "Перезапустить");
+
+                if (restart)
+                {
+                    await BypassController.Current.RestartServicesAsync(TxtMainProfile.Text);
+                    SyncMainWindowIndicators();
                 }
             }
         }
