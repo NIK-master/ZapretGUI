@@ -363,143 +363,205 @@
 					</div>
 				</section>
 
-				<!-- ВКЛАДКА 2: МОДИФИКАЦИИ (MODSVIEW) -->
-				<section id="tab-mods" class="tab-view h-full gap-5">
-					<div class="w-52 bg-[#0C0C0C] border border-[#2A2A2A] rounded-xl p-3 flex flex-col shrink-0">
-						<div class="text-lg font-bold text-white px-2 mb-4">Модификации</div>
+				<!-- ВКЛАДКА 2: МОДИФИКАЦИИ (MODSVIEW — WORKSHOP LAYOUT) -->
+				<section id="tab-mods" class="tab-view flex-col h-full gap-3">
 
-						<button id="mod-tab-bat" onclick="switchModsSubTab('bat')" class="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-semibold bg-[#2A2A2A] text-white mb-1.5 transition cursor-pointer text-left">
-							<span class="mdl-icon text-sm">&#xE8B7;</span>
-							<span>.bat Стратегии</span>
-						</button>
+					<!-- ВЕРХНЯЯ ШАПКА И КНОПКИ ДЕЙСТВИЙ (С FLEX-WRAP ДЛЯ КОМПАКТНОГО ОКНА) -->
+					<div class="flex flex-wrap items-center justify-between gap-2.5 shrink-0">
+						<div class="min-w-[200px]">
+							<div class="flex items-center gap-2.5">
+								<h2 id="mods-cat-title" class="text-xl font-bold text-white whitespace-nowrap">Мастерская модификаций</h2>
+								<span id="mods-active-summary" class="px-2 py-0.5 rounded-full bg-[#181818] border border-[#2A2A2A] font-mono text-[11px] text-[#888888] whitespace-nowrap">
+									Активно: 0
+								</span>
+							</div>
+							<p id="mods-cat-desc" class="text-xs text-[#888888] mt-0.5">
+								Пользовательские скрипты обхода (.bat) и дополнительные списки доменов для маршрутизации.
+							</p>
+						</div>
 
-						<button id="mod-tab-list" onclick="switchModsSubTab('list')" class="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-semibold text-[#A0A0A0] hover:bg-[#222222] hover:text-white mb-2 transition cursor-pointer text-left">
-							<span class="mdl-icon text-sm">&#xE71C;</span>
-							<span>Листы доменов</span>
-						</button>
-
-						<div class="h-[1px] bg-[#2A2A2A] my-2"></div>
-
-						<button id="mod-tab-guide" onclick="switchModsSubTab('guide')" class="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-semibold text-[#A0A0A0] hover:bg-[#222222] hover:text-white transition cursor-pointer text-left">
-							<span class="mdl-icon text-sm">&#xE9CE;</span>
-							<span>Руководство</span>
-						</button>
+						<!-- Главные кнопки действий -->
+						<div id="mods-action-bar" class="flex flex-wrap items-center gap-1.5 shrink-0">
+							<button onclick="promptDisableAllMods()" class="px-2.5 py-1.5 rounded-lg bg-[#181818] border border-[#2A2A2A] hover:border-[#D13438]/60 hover:bg-[#2A1215] text-[#F44336] text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer whitespace-nowrap" title="Отключить все моды в текущей категории">
+								<span class="mdl-icon text-[11px]">&#xE711;</span>
+								<span>Откл. всё</span>
+							</button>
+							<button onclick="sendCmd('importMod')" class="px-2.5 py-1.5 rounded-lg bg-[#181818] border border-[#2A2A2A] hover:border-[#444444] hover:bg-[#222222] text-[#CCCCCC] hover:text-white text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer whitespace-nowrap">
+								<span class="mdl-icon text-xs text-brand">&#xE8B5;</span>
+								<span>Импорт (.zip)</span>
+							</button>
+							<button onclick="sendCmd('openFolder', { folder: 'mods' })" class="px-2.5 py-1.5 rounded-lg bg-[#181818] border border-[#2A2A2A] hover:border-[#444444] hover:bg-[#222222] text-[#A0A0A0] hover:text-white text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer whitespace-nowrap" title="Открыть папку Mods в Проводнике">
+								<span class="mdl-icon text-xs">&#xE8B7;</span>
+								<span>Папка</span>
+							</button>
+							<button onclick="openCreateModModal()" class="px-3.5 py-1.5 rounded-lg btn-brand text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-lg whitespace-nowrap">
+								<span class="mdl-icon text-xs">&#xE710;</span>
+								<span>Создать</span>
+							</button>
+						</div>
 					</div>
 
-					<div class="flex-1 flex flex-col overflow-hidden">
-						<div class="mb-3 shrink-0">
-							<h2 id="mods-cat-title" class="text-[22px] font-bold text-white">.bat Стратегии</h2>
-							<p id="mods-cat-desc" class="text-xs text-[#888888] mt-1 mb-3">Пользовательские скрипты обхода для специфичных игр и задач.</p>
+					<!-- ПАНЕЛЬ НАВИГАЦИИ: SEGMENTED CONTROL + ПОИСК -->
+					<div class="flex flex-wrap items-center justify-between gap-2 bg-[#161616] border border-[#262626] rounded-xl p-1.5 shrink-0">
+						<!-- Переключатель вкладок -->
+						<div class="flex items-center gap-1 overflow-x-auto">
+							<button id="mod-tab-bat" onclick="switchModsSubTab('bat')" class="mods-seg-btn active">
+								<span class="mdl-icon text-xs">&#xE756;</span>
+								<span>.bat Стратегии</span>
+								<span id="badge-count-bat" class="px-1.5 py-0.2 rounded bg-[#121212] text-[10px] font-mono text-[#AAAAAA]">0</span>
+							</button>
 
-							<div id="mods-action-bar" class="flex flex-wrap items-center gap-2">
-								<button onclick="promptDisableAllMods()" class="px-3 py-1.5 rounded-md border border-[#333333] hover:bg-[#222222] text-[#F44336] text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer">
-									<span class="mdl-icon text-[11px]">&#xE711;</span>
-									<span>Отключить всё</span>
+							<button id="mod-tab-list" onclick="switchModsSubTab('list')" class="mods-seg-btn">
+								<span class="mdl-icon text-xs">&#xE774;</span>
+								<span>Листы доменов</span>
+								<span id="badge-count-list" class="px-1.5 py-0.2 rounded bg-[#121212] text-[10px] font-mono text-[#888888]">0</span>
+							</button>
+
+							<button id="mod-tab-guide" onclick="switchModsSubTab('guide')" class="mods-seg-btn">
+								<span class="mdl-icon text-xs">&#xE9CE;</span>
+								<span>Руководство</span>
+							</button>
+						</div>
+
+						<!-- Поиск и вид отображения -->
+						<div id="mods-filter-controls" class="flex items-center gap-2 flex-1 min-w-[180px] justify-end">
+							<div class="relative flex items-center flex-1 max-w-[230px]">
+								<span class="mdl-icon text-[11px] text-[#666666] absolute left-2.5 pointer-events-none">&#xE721;</span>
+								<input id="mods-search-input" type="text" oninput="renderModsView()" placeholder="Поиск мода..." class="w-full bg-[#101010] border border-[#2A2A2A] focus:border-[#107C10] rounded-lg pl-7 pr-2.5 py-1 text-xs text-white focus:outline-none transition select-text">
+                        </div>
+
+							<div id="mods-layout-Academic" class="flex items-center bg-[#101010] border border-[#2A2A2A] rounded-lg p-0.5 shrink-0">
+								<button id="btn-layout-grid" onclick="setModsLayout('grid')" class="w-7 h-6 rounded flex items-center justify-center bg-[#262626] text-white transition cursor-pointer" title="Сетка (2 колонки)">
+									<span class="mdl-icon text-xs">&#xF0E2;</span>
 								</button>
-								<button onclick="sendCmd('importMod')" class="px-3 py-1.5 rounded-md border border-[#333333] hover:bg-[#222222] text-[#60A5FA] text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer">
-									<span class="mdl-icon text-xs">&#xE8B5;</span>
-									<span>Импорт (.zip)</span>
+								<button id="btn-layout-list" onclick="setModsLayout('list')" class="w-7 h-6 rounded flex items-center justify-center text-[#666666] hover:text-white transition cursor-pointer" title="Список (1 колонка)">
+									<span class="mdl-icon text-xs">&#xE8FD;</span>
 								</button>
-								<button onclick="sendCmd('openFolder', { folder: 'mods' })" class="px-3 py-1.5 rounded-md border border-[#333333] hover:bg-[#222222] text-[#A0A0A0] text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer">
-									<span class="mdl-icon text-xs">&#xE8B7;</span>
-									<span>Папка</span>
-								</button>
-								<button onclick="openCreateModModal()" class="px-3.5 py-1.5 rounded-md btn-brand text-xs font-bold flex items-center gap-1.5 cursor-pointer">
+							</div>
+						</div>
+					</div>
+
+					<!-- КОНТЕЙНЕР СПИСКА МОДОВ -->
+					<div id="mods-lists-container" class="flex-1 overflow-y-auto pr-1 space-y-3">
+						<div id="active-mods-section" class="hidden">
+							<div class="flex items-center gap-2 mb-2">
+								<span class="w-2 h-2 rounded-full dot-online"></span>
+								<span class="text-xs font-bold text-brand tracking-wider uppercase">АКТИВНЫЕ МОДИФИКАЦИИ</span>
+							</div>
+							<div id="active-mods-list" class="grid grid-cols-2 gap-3"></div>
+						</div>
+
+						<div id="mods-divider" class="h-[1px] bg-[#242424] my-2 hidden"></div>
+
+						<div id="available-mods-section" class="hidden">
+							<div class="flex items-center gap-2 mb-2">
+								<span class="w-2 h-2 rounded-full bg-[#555555]"></span>
+								<span class="text-xs font-bold text-[#888888] tracking-wider uppercase">ДОСТУПНЫЕ В БИБЛИОТЕКЕ</span>
+							</div>
+							<div id="available-mods-list" class="grid grid-cols-2 gap-3"></div>
+						</div>
+
+						<!-- Красивое пустое состояние (Empty State) -->
+						<div id="mods-empty-state" class="h-[260px] rounded-2xl border border-dashed border-[#2A2A2A] bg-[#141414]/60 flex flex-col items-center justify-center text-center p-5 hidden">
+							<div class="w-12 h-12 rounded-2xl bg-[#1C1C1C] border border-[#2A2A2A] flex items-center justify-center text-[#666666] mb-2.5">
+								<span class="mdl-icon text-xl">&#xE74C;</span>
+							</div>
+							<div id="mods-empty-title" class="text-sm font-bold text-white mb-1">В этой категории пока нет модов</div>
+							<p id="mods-empty-sub" class="text-xs text-[#888888] max-w-md mb-3.5 leading-relaxed">
+								Создайте собственную стратегию обхода с помощью встроенного редактора кода или импортируйте готовый архив (.zip / .netfix-mod).
+							</p>
+							<div class="flex items-center gap-2">
+								<button onclick="openCreateModModal()" class="px-3.5 py-1.5 rounded-lg btn-brand text-xs font-semibold flex items-center gap-1.5 cursor-pointer">
 									<span class="mdl-icon text-xs">&#xE710;</span>
-									<span>Создать</span>
+									<span>Создать первый мод</span>
+								</button>
+								<button onclick="sendCmd('importMod')" class="px-3.5 py-1.5 rounded-lg bg-[#222222] hover:bg-[#2A2A2A] border border-[#333333] text-xs font-semibold text-white flex items-center gap-1.5 transition cursor-pointer">
+									<span class="mdl-icon text-xs">&#xE8B5;</span>
+									<span>Импортировать .zip</span>
 								</button>
 							</div>
 						</div>
+					</div>
 
-						<div id="mods-lists-container" class="flex-1 overflow-y-auto pr-2 space-y-3">
-							<div id="active-mods-section" class="hidden">
-								<div class="text-xs font-bold text-brand tracking-wider uppercase mb-2">ВКЛЮЧЕННЫЕ МОДЫ</div>
-								<div id="active-mods-list" class="space-y-2.5"></div>
+					<!-- КОНТЕЙНЕР РУКОВОДСТВА -->
+					<div id="mods-guide-container" class="flex-1 overflow-y-auto pr-1 space-y-3 hidden">
+						<div class="p-3.5 rounded-xl bg-[#0F200F] border border-[#107C10] flex items-center gap-3.5">
+							<div class="w-10 h-10 rounded-xl bg-[#107C10]/20 border border-[#107C10] flex items-center justify-center text-brand shrink-0">
+								<span class="mdl-icon text-lg">&#xE945;</span>
 							</div>
-
-							<div id="mods-divider" class="h-[1px] bg-[#2A2A2A] my-3 hidden"></div>
-
-							<div id="available-mods-section" class="hidden">
-								<div class="text-xs font-bold text-[#888888] tracking-wider uppercase mb-2">ДОСТУПНЫЕ МОДЫ</div>
-								<div id="available-mods-list" class="space-y-2.5"></div>
-							</div>
-
-							<div id="mods-empty-state" class="flex flex-col items-center justify-center py-16 text-[#666666] hidden">
-								<span class="mdl-icon text-4xl mb-3 text-[#333333]">&#xE711;</span>
-								<div class="text-sm font-semibold">В этой категории нет установленных модов</div>
+							<div>
+								<div class="font-bold text-sm text-white mb-0.5">Система модульных модификаций Zapret</div>
+								<div class="text-xs text-[#B8B8B8] leading-relaxed">
+									Создавайте собственные профили обхода DPI, собирайте списки доменов для игр и сервисов и делитесь готовыми архивами. Все моды работают изолированно и никогда не повреждают базовые файлы ядра.
+								</div>
 							</div>
 						</div>
 
-						<div id="mods-guide-container" class="flex-1 overflow-y-auto pr-2 space-y-3 hidden">
-							<div class="p-4 rounded-xl bg-[#0A1F0A] border border-[#107C10] flex items-center gap-4">
-								<span class="mdl-icon text-2xl text-brand">&#xE945;</span>
-								<div>
-									<div class="font-bold text-sm text-white mb-1">Система модификаций Zapret</div>
-									<div class="text-xs text-[#B0B0B0] leading-relaxed">Здесь вы можете создавать собственные стратегии обхода, собирать списки доменов и обмениваться готовыми модами с другими пользователями. Все изменения изолированы и не ломают базовые файлы программы.</div>
+						<div id="mods-guide-grid" class="grid grid-cols-2 gap-3">
+							<div class="glass-card rounded-xl p-4 space-y-2">
+								<div class="flex items-center gap-2.5">
+									<span class="w-6 h-6 rounded-md bg-[#222222] border border-[#333333] flex items-center justify-center font-mono text-xs font-bold text-brand">01</span>
+									<span class="font-bold text-sm text-white">Два типа модификаций</span>
+								</div>
+								<p class="text-xs text-[#BBBBBB] leading-relaxed">
+									<b class="text-brand">• .bat Стратегии:</b> Скрипты запуска <code class="text-white bg-[#222222] px-1 rounded">winws.exe</code>. При включении тумблера такой мод сразу появляется в списке конфигов на Главной вкладке с префиксом <code class="text-white bg-[#222222] px-1 rounded">mod_</code>.
+								</p>
+								<p class="text-xs text-[#BBBBBB] leading-relaxed">
+									<b class="text-white">• Листы доменов:</b> Списки сайтов (<code class="text-white bg-[#222222] px-1 rounded">list.txt</code>). При включении мода его домены на лету внедряются в общий <code class="text-white bg-[#222222] px-1 rounded">list-general.txt</code> без дубликатов.
+								</p>
+							</div>
+
+							<div class="glass-card rounded-xl p-4 space-y-2">
+								<div class="flex items-center gap-2.5">
+									<span class="w-6 h-6 rounded-md bg-[#222222] border border-[#333333] flex items-center justify-center font-mono text-xs font-bold text-brand">02</span>
+									<span class="font-bold text-sm text-white">Создание и активация</span>
+								</div>
+								<div class="space-y-1.5 text-xs text-[#BBBBBB] leading-relaxed">
+									<div>
+										<b class="text-white">1.</b> Выберите категорию сверху и нажмите зелёную кнопку <b class="text-brand">«+ Создать»</b>.
+									</div>
+									<div>
+										<b class="text-white">2.</b> Укажите название, автора и уникальный технический ID папки.
+									</div>
+									<div>
+										<b class="text-white">3.</b> Для стратегий программа сама подготовит рабочий шаблон с вызовом ядра.
+									</div>
+									<div>
+										<b class="text-white">4.</b> Переключите тумблер на карточке мода в положение <b class="text-brand">«Активен»</b>.
+									</div>
 								</div>
 							</div>
 
 							<div class="glass-card rounded-xl p-4 space-y-2">
-								<div class="font-bold text-sm text-white flex items-center gap-2.5">
-									<span class="mdl-icon text-sm text-[#60A5FA]">&#xE8B7;</span>
-									<span>1. ДВА ТИПА МОДИФИКАЦИЙ</span>
+								<div class="flex items-center gap-2.5">
+									<span class="w-6 h-6 rounded-md bg-[#222222] border border-[#333333] flex items-center justify-center font-mono text-xs font-bold text-brand">03</span>
+									<span class="font-bold text-sm text-white">Встроенная студия кода (Code Studio)</span>
 								</div>
-								<p class="text-xs text-[#CCCCCC] leading-relaxed">
-									<b class="text-brand">• .bat Стратегии:</b> Индивидуальные профили запуска ядра <code class="text-white">winws.exe</code> (например, под конкретные игры или провайдеров). При включении такой мод автоматически появляется в списке выбора конфигураций на «Главной» вкладке с префиксом <code class="text-white">mod_</code>.
-								</p>
-								<p class="text-xs text-[#CCCCCC] leading-relaxed">
-									<b class="text-[#60A5FA]">• Листы доменов:</b> Именованные списки сайтов. Когда вы включаете такой мод, программа автоматически внедряет его домены в общий список <code class="text-white">list-general.txt</code> без дубликатов. При отключении мода его сайты аккуратно удаляются из общего списка.
-								</p>
-							</div>
-
-							<div class="glass-card rounded-xl p-4 space-y-1.5 text-xs text-[#AAAAAA] leading-relaxed">
-								<div class="font-bold text-sm text-white flex items-center gap-2.5 mb-1">
-									<span class="mdl-icon text-sm text-brand">&#xE710;</span>
-									<span>2. СОЗДАНИЕ И АКТИВАЦИЯ</span>
-								</div>
-								<div>
-									<b class="text-white">1.</b> Выберите слева нужную категорию («.bat Стратегии» или «Листы доменов») и нажмите зелёную кнопку <b class="text-brand">«+ Создать»</b>.
-								</div>
-								<div>
-									<b class="text-white">2.</b> Укажите технический ID папки (на английском), отображаемое название, автора и краткое описание.
-								</div>
-								<div>
-									<b class="text-white">3.</b> Для стратегий программа автоматически подготовит базовый рабочий шаблон с вызовом <code class="text-white">winws.exe</code>.
-								</div>
-								<div>
-									<b class="text-white">4.</b> Нажмите <b class="text-[#60A5FA]">«Включить»</b> на карточке мода, чтобы активировать его.
+								<div class="space-y-1.5 text-xs text-[#BBBBBB] leading-relaxed">
+									<div>
+										<b class="text-white">• Быстрые сниппеты (.bat):</b> Вставляйте флаги (<code class="text-brand">--new ^, --filter-tcp, %BIN%</code>) одним кликом.
+									</div>
+									<div>
+										<b class="text-white">• Валидатор синтаксиса:</b> Кнопка <span class="text-brand">«Проверить синтаксис»</span> проверяет кавычки, флаги и существование файлов списков.
+									</div>
+									<div>
+										<b class="text-white">• Очистка URL (Листы):</b> Автоматически вырезает <code class="text-white">https://</code> и пути, оставляя чистые домены по алфавиту.
+									</div>
 								</div>
 							</div>
 
-							<div class="glass-card rounded-xl p-4 space-y-1.5 text-xs text-[#AAAAAA] leading-relaxed">
-								<div class="font-bold text-sm text-white flex items-center gap-2.5 mb-1">
-									<span class="mdl-icon text-sm text-[#F59E0B]">&#xE70F;</span>
-									<span>3. РЕДАКТОР КОДА И СВОЙСТВ</span>
+							<div class="glass-card rounded-xl p-4 space-y-2">
+								<div class="flex items-center gap-2.5">
+									<span class="w-6 h-6 rounded-md bg-[#222222] border border-[#333333] flex items-center justify-center font-mono text-xs font-bold text-brand">04</span>
+									<span class="font-bold text-sm text-white">Обмен модами (.zip / .netfix-mod)</span>
 								</div>
-								<div>
-									<b class="text-white">• Паспорт мода:</b> В верхней панели вы можете в любой момент изменить Название, Автора, Версию и Описание мода.
-								</div>
-								<div>
-									<b class="text-white">• Быстрые сниппеты (.bat):</b> Нажимайте на готовые кнопки (<code class="text-brand">--new ^, --filter-tcp, %BIN%, %LISTS%</code>) для мгновенной вставки аргументов.
-								</div>
-								<div>
-									<b class="text-white">• Проверка синтаксиса (.bat):</b> Кнопка <span class="text-brand">«✓ Проверить синтаксис»</span> тестирует скрипт на незакрытые кавычки, наличие вызова ядра и правильность флагов.
-								</div>
-								<div>
-									<b class="text-white">• Авто-очистка доменов (Листы):</b> Кнопка <span class="text-[#60A5FA]">«Очистить дубли и URL (A-Z)»</span> сама превратит ссылки вида <code class="text-white">https://www.site.com/page</code> в чистый домен <code class="text-white">site.com</code>, удалит дубликаты и отсортирует список.
-								</div>
-							</div>
-
-							<div class="glass-card rounded-xl p-4 space-y-1.5 text-xs text-[#AAAAAA] leading-relaxed">
-								<div class="font-bold text-sm text-white flex items-center gap-2.5 mb-1">
-									<span class="mdl-icon text-sm text-[#A855F7]">&#xE8B5;</span>
-									<span>4. ИМПОРТ И ЭКСПОРТ (.ZIP / .NETFIX-MOD)</span>
-								</div>
-								<div>
-									<b class="text-[#60A5FA]">• Экспорт:</b> Нажмите «Экспорт» на карточке любого мода. Программа упакует скрипт/список и его паспорт (<code class="text-white">mod.json</code>) в готовый архив.
-								</div>
-								<div>
-									<b class="text-brand">• Импорт:</b> Нажмите «Импорт (.zip)» в верхней панели и выберите архив — программа сама определит категорию и установит мод.
+								<div class="space-y-1.5 text-xs text-[#BBBBBB] leading-relaxed">
+									<div>
+										<b class="text-white">• Экспорт в 1 клик:</b> Нажмите <b class="text-white">«Экспорт»</b> на любой карточке — программа упакует скрипт и его паспорт <code class="text-white">mod.json</code> в архив.
+									</div>
+									<div>
+										<b class="text-white">• Умный импорт:</b> Нажмите <b class="text-brand">«Импорт (.zip)»</b> в шапке — программа сама распознает тип мода и защитит от конфликта ID.
+									</div>
 								</div>
 							</div>
 						</div>

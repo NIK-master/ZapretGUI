@@ -4,6 +4,9 @@ using System.Threading.Tasks;
 using System.Windows;
 using Microsoft.Web.WebView2.Core;
 using ZapretGUI.Core;
+using System.Windows.Interop;
+using System.Windows.Media;
+using System.Windows.Media.Animation;
 
 namespace ZapretGUI
 {
@@ -22,6 +25,17 @@ namespace ZapretGUI
 
             SettingsManager.Load();
             UIHelper.ApplyThemeColors();
+
+            if (SettingsManager.Current.CompactMode)
+            {
+                this.Width = 850;
+                this.Height = 520;
+            }
+
+            if (!SettingsManager.Current.HardwareAcceleration)
+            {
+                RenderOptions.ProcessRenderMode = RenderMode.SoftwareOnly;
+            }
 
             _trayIconManager = new TrayIconManager(this);
 
@@ -145,8 +159,27 @@ namespace ZapretGUI
         {
             Dispatcher.Invoke(() =>
             {
-                this.Width = isCompact ? 850 : 1100;
-                this.Height = isCompact ? 520 : 760;
+                var targetWidth = isCompact ? 850 : 1100;
+                var targetHeight = isCompact ? 520 : 760;
+
+                if (Math.Abs(this.ActualWidth - targetWidth) < 2 && Math.Abs(this.ActualHeight - targetHeight) < 2)
+                    return;
+
+                var duration = new Duration(TimeSpan.FromMilliseconds(320));
+                var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+
+                var deltaW = targetWidth - this.ActualWidth;
+                var deltaH = targetHeight - this.ActualHeight;
+
+                var widthAnim = new DoubleAnimation(this.ActualWidth, targetWidth, duration) { EasingFunction = ease };
+                var heightAnim = new DoubleAnimation(this.ActualHeight, targetHeight, duration) { EasingFunction = ease };
+                var leftAnim = new DoubleAnimation(this.Left, this.Left - deltaW / 2, duration) { EasingFunction = ease };
+                var topAnim = new DoubleAnimation(this.Top, this.Top - deltaH / 2, duration) { EasingFunction = ease };
+
+                this.BeginAnimation(Window.WidthProperty, widthAnim);
+                this.BeginAnimation(Window.HeightProperty, heightAnim);
+                this.BeginAnimation(Window.LeftProperty, leftAnim);
+                this.BeginAnimation(Window.TopProperty, topAnim);
             });
         }
 

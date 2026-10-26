@@ -4886,78 +4886,106 @@ namespace ZapretGUI.Views
 			<main id="main-container" class="flex-1 p-5 overflow-y-auto relative bg-[#121212]">
 
 				<!-- ВКЛАДКА 1: ГЛАВНАЯ (HOMEVIEW) -->
-				<section id="tab-home" class="tab-view active flex-col h-full justify-between gap-4">
-					<div class="text-center pt-1">
-						<h1 id="home-header-title" class="text-[26px] font-bold tracking-tight text-white flex items-center justify-center gap-2.5">
+				<section id="tab-home" class="tab-view active flex-col h-full justify-between gap-3">
+					<div class="text-center pt-0.5">
+						<h1 id="home-header-title" class="text-[25px] font-bold tracking-tight text-white flex items-center justify-center gap-2.5">
 							<span class="mdl-icon text-2xl text-brand">&#xE945;</span>
 							<span>Починить Telegram и Discord</span>
 						</h1>
-						<p class="text-sm text-[#A0A0A0] mt-1">Одна кнопка — запустит всё необходимое.</p>
+						<p class="text-xs text-[#A0A0A0] mt-1">Одна кнопка — запустит всё необходимое.</p>
 					</div>
 
-					<div class="grid grid-cols-12 gap-6 items-center my-auto">
-						<!-- Круглая кнопка с оригинальной иконкой питания &#xE7E8; -->
+					<div class="grid grid-cols-12 gap-5 items-center my-auto">
+						<!-- КОЛОНКА 1: ОРБИТАЛЬНЫЙ РЕАКТОР + ТАЙМЕР СЕССИИ -->
 						<div id="home-btn-col" class="col-span-4 flex flex-col items-center justify-center">
-							<button id="main-toggle-btn" onclick="onMainToggleClick()" class="power-btn flex flex-col items-center justify-center">
-								<span class="mdl-icon text-[44px] text-white mb-2.5">&#xE7E8;</span>
-								<span id="main-btn-text" class="text-sm font-semibold text-white">Починить интернет</span>
-							</button>
+							<div id="reactor-container" class="reactor-wrap">
+								<div class="reactor-ambient"></div>
+								<div class="reactor-ring-outer"></div>
+								<div class="reactor-ring-inner"></div>
+
+								<button id="main-toggle-btn" onclick="onMainToggleClick()" class="power-btn flex flex-col items-center justify-center">
+									<span class="power-icon-glyph mdl-icon text-[42px] text-white mb-2 transition-all">&#xE7E8;</span>
+									<span id="main-btn-text" class="text-sm font-semibold text-white">Починить интернет</span>
+								</button>
+							</div>
+
+							<!-- Живой бейдж статуса и таймер аптайма -->
+							<div id="session-badge" class="mt-2.5 px-3 py-1 rounded-full bg-[#181818] border border-[#2A2A2A] flex items-center gap-2 text-[11px] font-mono text-[#888888] transition-all">
+								<span id="session-dot" class="w-1.5 h-1.5 rounded-full bg-[#555555]"></span>
+								<span id="session-text">ОЖИДАНИЕ ЗАПУСКА</span>
+							</div>
 						</div>
 
-						<!-- Панель статистики сети -->
+						<!-- КОЛОНКА 2: ТЕЛЕМЕТРИЯ И ДВУХКАНАЛЬНЫЙ ГРАФИК -->
 						<div id="home-stats-panel" class="col-span-4 glass-card rounded-xl p-4 flex flex-col gap-3">
 							<div class="flex justify-between items-center">
-								<div class="flex items-center gap-3">
-									<span class="mdl-icon text-lg text-[#A0A0A0]">&#xE896;</span>
+								<div class="flex items-center gap-2.5">
+									<div class="w-7 h-7 rounded-lg bg-[#107C10]/15 border border-[#107C10]/40 flex items-center justify-center text-brand">
+										<span class="mdl-icon text-xs">&#xE896;</span>
+									</div>
 									<div>
-										<div class="text-xs text-[#A0A0A0] font-semibold">Входящий</div>
-										<div class="mt-0.5">
-											<span id="stat-rx" class="text-2xl font-bold font-mono text-white">0.0</span>
-											<span class="text-xs text-[#888888]">Мбит/с</span>
+										<div class="text-[11px] text-[#A0A0A0] font-semibold">Входящий</div>
+										<div class="leading-none mt-0.5">
+											<span id="stat-rx" class="text-xl font-bold font-mono text-white">0.0</span>
+											<span class="text-[11px] text-[#888888]">Мбит/с</span>
 										</div>
 									</div>
 								</div>
-								<div class="flex items-center gap-3">
-									<span class="mdl-icon text-lg text-[#A0A0A0]">&#xE898;</span>
+								<div class="flex items-center gap-2.5">
 									<div class="text-right">
-										<div class="text-xs text-[#A0A0A0] font-semibold">Исходящий</div>
-										<div class="mt-0.5">
-											<span id="stat-tx" class="text-2xl font-bold font-mono text-white">0.0</span>
-											<span class="text-xs text-[#888888]">Мбит/с</span>
+										<div class="text-[11px] text-[#A0A0A0] font-semibold">Исходящий</div>
+										<div class="leading-none mt-0.5">
+											<span id="stat-tx" class="text-xl font-bold font-mono text-white">0.0</span>
+											<span class="text-[11px] text-[#888888]">Мбит/с</span>
 										</div>
+									</div>
+									<div class="w-7 h-7 rounded-lg bg-[#3B82F6]/15 border border-[#3B82F6]/40 flex items-center justify-center text-[#60A5FA]">
+										<span class="mdl-icon text-xs">&#xE898;</span>
 									</div>
 								</div>
 							</div>
 
-							<canvas id="traffic-chart" width="260" height="58" class="w-full h-14 rounded-lg bg-[#0A0A0A] border border-[#2A2A2A]"></canvas>
+							<!-- График с легендой пиковой скорости -->
+							<div class="relative">
+								<canvas id="traffic-chart" width="280" height="68" class="w-full h-[68px] rounded-lg bg-[#0A0A0A] border border-[#2A2A2A]"></canvas>
+								<div class="absolute top-1.5 right-2 flex items-center gap-2 pointer-events-none">
+									<span id="stat-peak" class="text-[10px] font-mono text-[#666666]">Пик: 0.0 Мбит/с</span>
+								</div>
+							</div>
 
 							<div class="flex items-center justify-between pt-2 border-t border-[#2A2A2A]">
-								<div class="flex items-center gap-3">
-									<span class="mdl-icon text-lg text-[#A0A0A0]">&#xE916;</span>
+								<div class="flex items-center gap-2.5">
+									<span class="mdl-icon text-base text-[#A0A0A0]">&#xE916;</span>
 									<div>
-										<div class="text-xs text-[#A0A0A0] font-semibold">Пинг (EU Frankfurt)</div>
-										<div class="mt-0.5">
-											<span id="stat-ping" class="text-xl font-bold font-mono text-white">...</span>
-											<span class="text-xs text-[#888888]">мс</span>
+										<div class="flex items-center gap-1.5">
+											<span class="text-[11px] text-[#A0A0A0] font-semibold">Пинг (EU Frankfurt)</span>
+											<span id="ping-quality-badge" class="px-1.5 py-0.2 rounded text-[9px] font-mono font-semibold bg-[#222222] text-[#888888]">—</span>
+										</div>
+										<div class="mt-0.5 leading-none">
+											<span id="stat-ping" class="text-lg font-bold font-mono text-white">...</span>
+											<span class="text-[11px] text-[#888888]">мс</span>
 										</div>
 									</div>
 								</div>
-								<button onclick="refreshPing()" class="w-8 h-8 rounded-lg bg-[#222222] hover:bg-[#2A2A2A] text-[#A0A0A0] hover:text-white flex items-center justify-center transition cursor-pointer" title="Обновить пинг">
+								<button onclick="refreshPing()" class="w-8 h-8 rounded-lg bg-[#222222] hover:bg-[#2A2A2A] border border-[#333333] text-[#A0A0A0] hover:text-white flex items-center justify-center transition cursor-pointer" title="Обновить пинг">
 									<span id="ping-refresh-icon" class="mdl-icon text-sm">&#xE149;</span>
 								</button>
 							</div>
 						</div>
 
-						<!-- Карточки модулей справа -->
+						<!-- КОЛОНКА 3: КАРТОЧКИ МОДУЛЕЙ -->
 						<div id="home-cards-col" class="col-span-4 flex flex-col gap-2.5">
 							<div class="glass-card rounded-xl p-4">
 								<div class="flex items-center justify-between mb-1">
-									<span class="font-semibold text-[15px] text-white">Настройки Zapret</span>
+									<div class="flex items-center gap-2">
+										<span class="mdl-icon text-sm text-brand">&#xE72E;</span>
+										<span class="font-semibold text-[15px] text-white">Настройки Zapret</span>
+									</div>
 									<input id="chk-zapret" type="checkbox" checked="" onchange="onModuleToggleChange()" class="cyber-toggle">
                             </div>
 								<div id="zapret-status-label" class="text-xs text-[#D13438] font-medium mb-3">Остановлен</div>
 
-								<div id="btn-open-config" onclick="openConfigModal()" class="bg-[#222222] hover:bg-[#2A2A2A] rounded-lg px-3 py-2 mb-2 cursor-pointer transition flex items-center justify-between">
+								<div id="btn-open-config" onclick="openConfigModal()" class="bg-[#222222] hover:bg-[#2A2A2A] border border-transparent hover:border-[#3A3A3A] rounded-lg px-3 py-2 mb-2 cursor-pointer transition flex items-center justify-between">
 									<div class="overflow-hidden pr-2">
 										<div class="text-[11px] text-[#888888]">Текущий конфиг:</div>
 										<div id="txt-main-profile" class="text-[13px] font-mono font-semibold text-white truncate">general.bat</div>
@@ -4965,7 +4993,7 @@ namespace ZapretGUI.Views
 									<span class="mdl-icon text-[#888888] text-[15px]">&#xE713;</span>
 								</div>
 
-								<div id="btn-open-gf" onclick="openGameFilterModal()" class="bg-[#222222] hover:bg-[#2A2A2A] rounded-lg px-3 py-2 cursor-pointer transition flex items-center justify-between">
+								<div id="btn-open-gf" onclick="openGameFilterModal()" class="bg-[#222222] hover:bg-[#2A2A2A] border border-transparent hover:border-[#3A3A3A] rounded-lg px-3 py-2 cursor-pointer transition flex items-center justify-between">
 									<div class="overflow-hidden pr-2">
 										<div class="text-[11px] text-[#888888]">Игровой фильтр (Game Filter):</div>
 										<div id="txt-gf-status" class="text-xs font-mono font-semibold text-[#A0A0A0] truncate">Отключен</div>
@@ -4976,170 +5004,251 @@ namespace ZapretGUI.Views
 
 							<div class="glass-card rounded-xl px-4 py-3 flex items-center justify-between">
 								<div>
-									<div class="font-semibold text-[15px] text-white">TgWsProxy</div>
-									<div class="text-xs text-[#A0A0A0] mt-0.5">Прокси для Telegram</div>
+									<div class="flex items-center gap-2">
+										<span class="mdl-icon text-sm text-[#60A5FA]">&#xE709;</span>
+										<span class="font-semibold text-[15px] text-white">TgWsProxy</span>
+									</div>
+									<div id="proxy-status-label" class="text-xs text-[#A0A0A0] mt-0.5">Прокси для Telegram</div>
 								</div>
 								<input id="chk-proxy" type="checkbox" checked="" onchange="onModuleToggleChange()" class="cyber-toggle">
                         </div>
 						</div>
 					</div>
 
-					<!-- Панель логов -->
-					<div id="home-logs-panel" class="rounded-lg border border-[#2A2A2A] p-3.5 h-[225px] flex flex-col bg-[#0A0A0A]">
-						<div class="flex items-center justify-between mb-2">
-							<span class="text-sm font-semibold text-[#A0A0A0]">Лог событий</span>
-							<div class="flex items-center gap-4">
-								<button onclick="clearLogs()" class="text-xs text-[#A0A0A0] hover:text-white flex items-center gap-1.5 transition cursor-pointer">
+					<!-- ПАНЕЛЬ ЛОГОВ С ФИЛЬТРОМ И ПОИСКОМ -->
+					<div id="home-logs-panel" class="rounded-xl border border-[#2A2A2A] p-3 h-[215px] flex flex-col bg-[#0A0A0A]">
+						<div class="flex items-center justify-between gap-2 mb-2 pb-1.5 border-b border-[#1A1A1A]">
+							<div class="flex items-center gap-2">
+								<span class="mdl-icon text-xs text-brand">&#xE756;</span>
+								<span class="text-xs font-semibold text-[#CCCCCC]">Лог событий</span>
+								<span id="log-counter-badge" class="px-1.5 py-0.5 rounded bg-[#181818] border border-[#2A2A2A] font-mono text-[10px] text-[#888888]">0</span>
+
+								<!-- Быстрые таблетки фильтрации -->
+								<div class="flex items-center gap-1 ml-2">
+									<button id="log-filter-all" onclick="setLogFilter('all')" class="px-2 py-0.5 rounded text-[11px] font-semibold bg-[#2A2A2A] text-white cursor-pointer transition">Все</button>
+									<button id="log-filter-err" onclick="setLogFilter('err')" class="px-2 py-0.5 rounded text-[11px] font-medium text-[#888888] hover:text-white cursor-pointer transition">Ошибки</button>
+								</div>
+							</div>
+
+							<div class="flex items-center gap-3">
+								<div class="relative flex items-center">
+									<span class="mdl-icon text-[10px] text-[#666666] absolute left-2 pointer-events-none">&#xE721;</span>
+									<input id="log-search-input" type="text" oninput="applyLogFilters()" placeholder="Поиск в логах..." class="bg-[#141414] border border-[#2A2A2A] focus:border-[#444444] rounded-md pl-6 pr-2 py-0.5 text-[11px] text-white focus:outline-none w-36 select-text">
+                            </div>
+
+								<button onclick="clearLogs()" class="text-xs text-[#A0A0A0] hover:text-white flex items-center gap-1 transition cursor-pointer">
 									<span class="mdl-icon text-xs">&#xE74D;</span>
 									<span>Очистить</span>
 								</button>
-								<button onclick="exportLogs()" class="text-xs text-[#A0A0A0] hover:text-white flex items-center gap-1.5 transition cursor-pointer">
+								<button onclick="exportLogs()" class="text-xs text-[#A0A0A0] hover:text-white flex items-center gap-1 transition cursor-pointer">
 									<span class="mdl-icon text-xs">&#xE78C;</span>
 									<span>Экспорт</span>
 								</button>
 							</div>
 						</div>
-						<div id="log-box" class="flex-1 overflow-y-auto font-mono text-[13px] space-y-1 text-[#CCCCCC] select-text pr-2"></div>
+						<div id="log-box" class="flex-1 overflow-y-auto font-mono text-[12.5px] space-y-1 text-[#CCCCCC] select-text pr-2"></div>
 					</div>
 				</section>
 
-				<!-- ВКЛАДКА 2: МОДИФИКАЦИИ (MODSVIEW) -->
-				<section id="tab-mods" class="tab-view h-full gap-5">
-					<div class="w-52 bg-[#0C0C0C] border border-[#2A2A2A] rounded-xl p-3 flex flex-col shrink-0">
-						<div class="text-lg font-bold text-white px-2 mb-4">Модификации</div>
+				<!-- ВКЛАДКА 2: МОДИФИКАЦИИ (MODSVIEW — WORKSHOP LAYOUT) -->
+				<section id="tab-mods" class="tab-view flex-col h-full gap-4">
 
-						<button id="mod-tab-bat" onclick="switchModsSubTab('bat')" class="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-semibold bg-[#2A2A2A] text-white mb-1.5 transition cursor-pointer text-left">
-							<span class="mdl-icon text-sm">&#xE8B7;</span>
-							<span>.bat Стратегии</span>
-						</button>
+					<!-- ВЕРХНЯЯ ШАПКА И СТАТИСТИКА -->
+					<div class="flex items-center justify-between gap-4 shrink-0">
+						<div>
+							<div class="flex items-center gap-3">
+								<h2 id="mods-cat-title" class="text-2xl font-bold text-white">Мастерская модификаций</h2>
+								<span id="mods-active-summary" class="px-2.5 py-0.5 rounded-full bg-[#181818] border border-[#2A2A2A] font-mono text-[11px] text-[#888888]">
+									Активно: 0
+								</span>
+							</div>
+							<p id="mods-cat-desc" class="text-xs text-[#888888] mt-1">
+								Пользовательские скрипты обхода (.bat) и дополнительные списки доменов для маршрутизации.
+							</p>
+						</div>
 
-						<button id="mod-tab-list" onclick="switchModsSubTab('list')" class="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-semibold text-[#A0A0A0] hover:bg-[#222222] hover:text-white mb-2 transition cursor-pointer text-left">
-							<span class="mdl-icon text-sm">&#xE71C;</span>
-							<span>Листы доменов</span>
-						</button>
-
-						<div class="h-[1px] bg-[#2A2A2A] my-2"></div>
-
-						<button id="mod-tab-guide" onclick="switchModsSubTab('guide')" class="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-semibold text-[#A0A0A0] hover:bg-[#222222] hover:text-white transition cursor-pointer text-left">
-							<span class="mdl-icon text-sm">&#xE9CE;</span>
-							<span>Руководство</span>
-						</button>
+						<!-- Главные кнопки действий -->
+						<div id="mods-action-bar" class="flex items-center gap-2 shrink-0">
+							<button onclick="promptDisableAllMods()" class="px-3 py-2 rounded-lg bg-[#181818] border border-[#2A2A2A] hover:border-[#D13438]/60 hover:bg-[#2A1215] text-[#F44336] text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer" title="Отключить все моды в текущей категории">
+								<span class="mdl-icon text-[11px]">&#xE711;</span>
+								<span>Отключить всё</span>
+							</button>
+							<button onclick="sendCmd('importMod')" class="px-3 py-2 rounded-lg bg-[#181818] border border-[#2A2A2A] hover:border-[#444444] hover:bg-[#222222] text-[#CCCCCC] hover:text-white text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer">
+								<span class="mdl-icon text-xs text-brand">&#xE8B5;</span>
+								<span>Импорт (.zip)</span>
+							</button>
+							<button onclick="sendCmd('openFolder', { folder: 'mods' })" class="px-3 py-2 rounded-lg bg-[#181818] border border-[#2A2A2A] hover:border-[#444444] hover:bg-[#222222] text-[#A0A0A0] hover:text-white text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer" title="Открыть папку Mods в Проводнике">
+								<span class="mdl-icon text-xs">&#xE8B7;</span>
+								<span>Папка</span>
+							</button>
+							<button onclick="openCreateModModal()" class="px-4 py-2 rounded-lg btn-brand text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-lg">
+								<span class="mdl-icon text-xs">&#xE710;</span>
+								<span>Создать мод</span>
+							</button>
+						</div>
 					</div>
 
-					<div class="flex-1 flex flex-col overflow-hidden">
-						<div class="mb-3 shrink-0">
-							<h2 id="mods-cat-title" class="text-[22px] font-bold text-white">.bat Стратегии</h2>
-							<p id="mods-cat-desc" class="text-xs text-[#888888] mt-1 mb-3">Пользовательские скрипты обхода для специфичных игр и задач.</p>
+					<!-- ПАНЕЛЬ НАВИГАЦИИ: SEGMENTED CONTROL + ПОИСК + ПЕРЕКЛЮЧАТЕЛЬ СЕТКИ -->
+					<div class="flex items-center justify-between gap-3 bg-[#161616] border border-[#262626] rounded-xl p-1.5 shrink-0">
+						<!-- Переключатель вкладок -->
+						<div class="flex items-center gap-1">
+							<button id="mod-tab-bat" onclick="switchModsSubTab('bat')" class="mods-seg-btn active">
+								<span class="mdl-icon text-xs">&#xE756;</span>
+								<span>.bat Стратегии</span>
+								<span id="badge-count-bat" class="px-1.5 py-0.2 rounded bg-[#121212] text-[10px] font-mono text-[#AAAAAA]">0</span>
+							</button>
 
-							<div id="mods-action-bar" class="flex flex-wrap items-center gap-2">
-								<button onclick="promptDisableAllMods()" class="px-3 py-1.5 rounded-md border border-[#333333] hover:bg-[#222222] text-[#F44336] text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer">
-									<span class="mdl-icon text-[11px]">&#xE711;</span>
-									<span>Отключить всё</span>
+							<button id="mod-tab-list" onclick="switchModsSubTab('list')" class="mods-seg-btn">
+								<span class="mdl-icon text-xs">&#xE774;</span>
+								<span>Листы доменов</span>
+								<span id="badge-count-list" class="px-1.5 py-0.2 rounded bg-[#121212] text-[10px] font-mono text-[#888888]">0</span>
+							</button>
+
+							<button id="mod-tab-guide" onclick="switchModsSubTab('guide')" class="mods-seg-btn">
+								<span class="mdl-icon text-xs">&#xE9CE;</span>
+								<span>Руководство</span>
+							</button>
+						</div>
+
+						<!-- Поиск и вид отображения (скрываются на вкладке Руководство) -->
+						<div id="mods-filter-controls" class="flex items-center gap-2 pr-1">
+							<div class="relative flex items-center">
+								<span class="mdl-icon text-[11px] text-[#666666] absolute left-2.5 pointer-events-none">&#xE721;</span>
+								<input id="mods-search-input" type="text" oninput="renderModsView()" placeholder="Поиск по названию, ID или автору..." class="bg-[#101010] border border-[#2A2A2A] focus:border-[#107C10] rounded-lg pl-7 pr-3 py-1 text-xs text-white focus:outline-none w-56 transition select-text">
+                        </div>
+
+							<div class="flex items-center bg-[#101010] border border-[#2A2A2A] rounded-lg p-0.5">
+								<button id="btn-layout-grid" onclick="setModsLayout('grid')" class="w-7 h-6 rounded flex items-center justify-center bg-[#262626] text-white transition cursor-pointer" title="Сетка (2 колонки)">
+									<span class="mdl-icon text-xs">&#xF0E2;</span>
 								</button>
-								<button onclick="sendCmd('importMod')" class="px-3 py-1.5 rounded-md border border-[#333333] hover:bg-[#222222] text-[#60A5FA] text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer">
-									<span class="mdl-icon text-xs">&#xE8B5;</span>
-									<span>Импорт (.zip)</span>
+								<button id="btn-layout-list" onclick="setModsLayout('list')" class="w-7 h-6 rounded flex items-center justify-center text-[#666666] hover:text-white transition cursor-pointer" title="Список (1 колонка)">
+									<span class="mdl-icon text-xs">&#xE8FD;</span>
 								</button>
-								<button onclick="sendCmd('openFolder', { folder: 'mods' })" class="px-3 py-1.5 rounded-md border border-[#333333] hover:bg-[#222222] text-[#A0A0A0] text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer">
-									<span class="mdl-icon text-xs">&#xE8B7;</span>
-									<span>Папка</span>
-								</button>
-								<button onclick="openCreateModModal()" class="px-3.5 py-1.5 rounded-md btn-brand text-xs font-bold flex items-center gap-1.5 cursor-pointer">
+							</div>
+						</div>
+					</div>
+
+					<!-- КОНТЕЙНЕР СПИСКА МОДОВ -->
+					<div id="mods-lists-container" class="flex-1 overflow-y-auto pr-1 space-y-4">
+						<div id="active-mods-section" class="hidden">
+							<div class="flex items-center gap-2 mb-2.5">
+								<span class="w-2 h-2 rounded-full dot-online"></span>
+								<span class="text-xs font-bold text-brand tracking-wider uppercase">АКТИВНЫЕ МОДИФИКАЦИИ</span>
+							</div>
+							<div id="active-mods-list" class="grid grid-cols-2 gap-3"></div>
+						</div>
+
+						<div id="mods-divider" class="h-[1px] bg-[#242424] my-2 hidden"></div>
+
+						<div id="available-mods-section" class="hidden">
+							<div class="flex items-center gap-2 mb-2.5">
+								<span class="w-2 h-2 rounded-full bg-[#555555]"></span>
+								<span class="text-xs font-bold text-[#888888] tracking-wider uppercase">ДОСТУПНЫЕ В БИБЛИОТЕКЕ</span>
+							</div>
+							<div id="available-mods-list" class="grid grid-cols-2 gap-3"></div>
+						</div>
+
+						<!-- Красивое пустое состояние (Empty State) -->
+						<div id="mods-empty-state" class="h-[340px] rounded-2xl border border-dashed border-[#2A2A2A] bg-[#141414]/60 flex flex-col items-center justify-center text-center p-6 hidden">
+							<div class="w-14 h-14 rounded-2xl bg-[#1C1C1C] border border-[#2A2A2A] flex items-center justify-center text-[#666666] mb-3">
+								<span class="mdl-icon text-2xl">&#xE74C;</span>
+							</div>
+							<div id="mods-empty-title" class="text-base font-bold text-white mb-1">В этой категории пока нет модов</div>
+							<p id="mods-empty-sub" class="text-xs text-[#888888] max-w-md mb-4 leading-relaxed">
+								Создайте собственную стратегию обхода с помощью встроенного редактора кода или импортируйте готовый архив (.zip / .netfix-mod).
+							</p>
+							<div class="flex items-center gap-2.5">
+								<button onclick="openCreateModModal()" class="px-4 py-2 rounded-lg btn-brand text-xs font-semibold flex items-center gap-1.5 cursor-pointer">
 									<span class="mdl-icon text-xs">&#xE710;</span>
-									<span>Создать</span>
+									<span>Создать первый мод</span>
+								</button>
+								<button onclick="sendCmd('importMod')" class="px-4 py-2 rounded-lg bg-[#222222] hover:bg-[#2A2A2A] border border-[#333333] text-xs font-semibold text-white flex items-center gap-1.5 transition cursor-pointer">
+									<span class="mdl-icon text-xs">&#xE8B5;</span>
+									<span>Импортировать .zip</span>
 								</button>
 							</div>
 						</div>
+					</div>
 
-						<div id="mods-lists-container" class="flex-1 overflow-y-auto pr-2 space-y-3">
-							<div id="active-mods-section" class="hidden">
-								<div class="text-xs font-bold text-brand tracking-wider uppercase mb-2">ВКЛЮЧЕННЫЕ МОДЫ</div>
-								<div id="active-mods-list" class="space-y-2.5"></div>
+					<!-- КОНТЕЙНЕР РУКОВОДСТВА (2-КОЛОНОЧНАЯ СЕТКА) -->
+					<div id="mods-guide-container" class="flex-1 overflow-y-auto pr-1 space-y-3 hidden">
+						<div class="p-4 rounded-xl bg-[#0F200F] border border-[#107C10] flex items-center gap-4">
+							<div class="w-11 h-11 rounded-xl bg-[#107C10]/20 border border-[#107C10] flex items-center justify-center text-brand shrink-0">
+								<span class="mdl-icon text-xl">&#xE945;</span>
 							</div>
-
-							<div id="mods-divider" class="h-[1px] bg-[#2A2A2A] my-3 hidden"></div>
-
-							<div id="available-mods-section" class="hidden">
-								<div class="text-xs font-bold text-[#888888] tracking-wider uppercase mb-2">ДОСТУПНЫЕ МОДЫ</div>
-								<div id="available-mods-list" class="space-y-2.5"></div>
-							</div>
-
-							<div id="mods-empty-state" class="flex flex-col items-center justify-center py-16 text-[#666666] hidden">
-								<span class="mdl-icon text-4xl mb-3 text-[#333333]">&#xE711;</span>
-								<div class="text-sm font-semibold">В этой категории нет установленных модов</div>
+							<div>
+								<div class="font-bold text-sm text-white mb-0.5">Система модульных модификаций Zapret</div>
+								<div class="text-xs text-[#B8B8B8] leading-relaxed">
+									Создавайте собственные профили обхода DPI, собирайте списки доменов для игр и сервисов и делитесь готовыми архивами. Все моды работают изолированно и никогда не повреждают базовые файлы ядра.
+								</div>
 							</div>
 						</div>
 
-						<div id="mods-guide-container" class="flex-1 overflow-y-auto pr-2 space-y-3 hidden">
-							<div class="p-4 rounded-xl bg-[#0A1F0A] border border-[#107C10] flex items-center gap-4">
-								<span class="mdl-icon text-2xl text-brand">&#xE945;</span>
-								<div>
-									<div class="font-bold text-sm text-white mb-1">Система модификаций Zapret</div>
-									<div class="text-xs text-[#B0B0B0] leading-relaxed">Здесь вы можете создавать собственные стратегии обхода, собирать списки доменов и обмениваться готовыми модами с другими пользователями. Все изменения изолированы и не ломают базовые файлы программы.</div>
+						<div class="grid grid-cols-2 gap-3">
+							<div class="glass-card rounded-xl p-4 space-y-2">
+								<div class="flex items-center gap-2.5">
+									<span class="w-6 h-6 rounded-md bg-[#222222] border border-[#333333] flex items-center justify-center font-mono text-xs font-bold text-brand">01</span>
+									<span class="font-bold text-sm text-white">Два типа модификаций</span>
+								</div>
+								<p class="text-xs text-[#BBBBBB] leading-relaxed">
+									<b class="text-brand">• .bat Стратегии:</b> Скрипты запуска <code class="text-white bg-[#222222] px-1 rounded">winws.exe</code>. При включении тумблера такой мод сразу появляется в списке конфигов на Главной вкладке с префиксом <code class="text-white bg-[#222222] px-1 rounded">mod_</code>.
+								</p>
+								<p class="text-xs text-[#BBBBBB] leading-relaxed">
+									<b class="text-white">• Листы доменов:</b> Списки сайтов (<code class="text-white bg-[#222222] px-1 rounded">list.txt</code>). При включении мода его домены на лету внедряются в общий <code class="text-white bg-[#222222] px-1 rounded">list-general.txt</code> без дубликатов.
+								</p>
+							</div>
+
+							<div class="glass-card rounded-xl p-4 space-y-2">
+								<div class="flex items-center gap-2.5">
+									<span class="w-6 h-6 rounded-md bg-[#222222] border border-[#333333] flex items-center justify-center font-mono text-xs font-bold text-brand">02</span>
+									<span class="font-bold text-sm text-white">Создание и активация</span>
+								</div>
+								<div class="space-y-1.5 text-xs text-[#BBBBBB] leading-relaxed">
+									<div>
+										<b class="text-white">1.</b> Выберите категорию сверху и нажмите зелёную кнопку <b class="text-brand">«+ Создать мод»</b>.
+									</div>
+									<div>
+										<b class="text-white">2.</b> Укажите название, автора и уникальный технический ID папки.
+									</div>
+									<div>
+										<b class="text-white">3.</b> Для стратегий программа сама подготовит рабочий шаблон с вызовом ядра.
+									</div>
+									<div>
+										<b class="text-white">4.</b> Переключите тумблер на карточке мода в положение <b class="text-brand">«Активен»</b>.
+									</div>
 								</div>
 							</div>
 
 							<div class="glass-card rounded-xl p-4 space-y-2">
-								<div class="font-bold text-sm text-white flex items-center gap-2.5">
-									<span class="mdl-icon text-sm text-[#60A5FA]">&#xE8B7;</span>
-									<span>1. ДВА ТИПА МОДИФИКАЦИЙ</span>
+								<div class="flex items-center gap-2.5">
+									<span class="w-6 h-6 rounded-md bg-[#222222] border border-[#333333] flex items-center justify-center font-mono text-xs font-bold text-brand">03</span>
+									<span class="font-bold text-sm text-white">Встроенная студия кода (Code Studio)</span>
 								</div>
-								<p class="text-xs text-[#CCCCCC] leading-relaxed">
-									<b class="text-brand">• .bat Стратегии:</b> Индивидуальные профили запуска ядра <code class="text-white">winws.exe</code> (например, под конкретные игры или провайдеров). При включении такой мод автоматически появляется в списке выбора конфигураций на «Главной» вкладке с префиксом <code class="text-white">mod_</code>.
-								</p>
-								<p class="text-xs text-[#CCCCCC] leading-relaxed">
-									<b class="text-[#60A5FA]">• Листы доменов:</b> Именованные списки сайтов. Когда вы включаете такой мод, программа автоматически внедряет его домены в общий список <code class="text-white">list-general.txt</code> без дубликатов. При отключении мода его сайты аккуратно удаляются из общего списка.
-								</p>
-							</div>
-
-							<div class="glass-card rounded-xl p-4 space-y-1.5 text-xs text-[#AAAAAA] leading-relaxed">
-								<div class="font-bold text-sm text-white flex items-center gap-2.5 mb-1">
-									<span class="mdl-icon text-sm text-brand">&#xE710;</span>
-									<span>2. СОЗДАНИЕ И АКТИВАЦИЯ</span>
-								</div>
-								<div>
-									<b class="text-white">1.</b> Выберите слева нужную категорию («.bat Стратегии» или «Листы доменов») и нажмите зелёную кнопку <b class="text-brand">«+ Создать»</b>.
-								</div>
-								<div>
-									<b class="text-white">2.</b> Укажите технический ID папки (на английском), отображаемое название, автора и краткое описание.
-								</div>
-								<div>
-									<b class="text-white">3.</b> Для стратегий программа автоматически подготовит базовый рабочий шаблон с вызовом <code class="text-white">winws.exe</code>.
-								</div>
-								<div>
-									<b class="text-white">4.</b> Нажмите <b class="text-[#60A5FA]">«Включить»</b> на карточке мода, чтобы активировать его.
+								<div class="space-y-1.5 text-xs text-[#BBBBBB] leading-relaxed">
+									<div>
+										<b class="text-white">• Быстрые сниппеты (.bat):</b> Вставляйте флаги (<code class="text-brand">--new ^, --filter-tcp, %BIN%</code>) одним кликом.
+									</div>
+									<div>
+										<b class="text-white">• Валидатор синтаксиса:</b> Кнопка <span class="text-brand">«Проверить синтаксис»</span> проверяет кавычки, флаги и существование файлов списков.
+									</div>
+									<div>
+										<b class="text-white">• Очистка URL (Листы):</b> Автоматически вырезает <code class="text-white">https://</code> и пути, оставляя чистые домены по алфавиту.
+									</div>
 								</div>
 							</div>
 
-							<div class="glass-card rounded-xl p-4 space-y-1.5 text-xs text-[#AAAAAA] leading-relaxed">
-								<div class="font-bold text-sm text-white flex items-center gap-2.5 mb-1">
-									<span class="mdl-icon text-sm text-[#F59E0B]">&#xE70F;</span>
-									<span>3. РЕДАКТОР КОДА И СВОЙСТВ</span>
+							<div class="glass-card rounded-xl p-4 space-y-2">
+								<div class="flex items-center gap-2.5">
+									<span class="w-6 h-6 rounded-md bg-[#222222] border border-[#333333] flex items-center justify-center font-mono text-xs font-bold text-brand">04</span>
+									<span class="font-bold text-sm text-white">Обмен модами (.zip / .netfix-mod)</span>
 								</div>
-								<div>
-									<b class="text-white">• Паспорт мода:</b> В верхней панели вы можете в любой момент изменить Название, Автора, Версию и Описание мода.
-								</div>
-								<div>
-									<b class="text-white">• Быстрые сниппеты (.bat):</b> Нажимайте на готовые кнопки (<code class="text-brand">--new ^, --filter-tcp, %BIN%, %LISTS%</code>) для мгновенной вставки аргументов.
-								</div>
-								<div>
-									<b class="text-white">• Проверка синтаксиса (.bat):</b> Кнопка <span class="text-brand">«✓ Проверить синтаксис»</span> тестирует скрипт на незакрытые кавычки, наличие вызова ядра и правильность флагов.
-								</div>
-								<div>
-									<b class="text-white">• Авто-очистка доменов (Листы):</b> Кнопка <span class="text-[#60A5FA]">«Очистить дубли и URL (A-Z)»</span> сама превратит ссылки вида <code class="text-white">https://www.site.com/page</code> в чистый домен <code class="text-white">site.com</code>, удалит дубликаты и отсортирует список.
-								</div>
-							</div>
-
-							<div class="glass-card rounded-xl p-4 space-y-1.5 text-xs text-[#AAAAAA] leading-relaxed">
-								<div class="font-bold text-sm text-white flex items-center gap-2.5 mb-1">
-									<span class="mdl-icon text-sm text-[#A855F7]">&#xE8B5;</span>
-									<span>4. ИМПОРТ И ЭКСПОРТ (.ZIP / .NETFIX-MOD)</span>
-								</div>
-								<div>
-									<b class="text-[#60A5FA]">• Экспорт:</b> Нажмите «Экспорт» на карточке любого мода. Программа упакует скрипт/список и его паспорт (<code class="text-white">mod.json</code>) в готовый архив.
-								</div>
-								<div>
-									<b class="text-brand">• Импорт:</b> Нажмите «Импорт (.zip)» в верхней панели и выберите архив — программа сама определит категорию и установит мод.
+								<div class="space-y-1.5 text-xs text-[#BBBBBB] leading-relaxed">
+									<div>
+										<b class="text-white">• Экспорт в 1 клик:</b> Нажмите <b class="text-white">«Экспорт»</b> на любой карточке — программа упакует скрипт и его паспорт <code class="text-white">mod.json</code> в архив.
+									</div>
+									<div>
+										<b class="text-white">• Умный импорт:</b> Нажмите <b class="text-brand">«Импорт (.zip)»</b> в шапке — программа сама распознает тип мода и защитит от конфликта ID.
+									</div>
 								</div>
 							</div>
 						</div>
@@ -5775,7 +5884,7 @@ body {
     margin: 0;
 }
 
-/* Системный шрифт монохромных иконок Windows (как в оригинальном WPF и трее) */
+/* Системный шрифт монохромных иконок Windows */
 .mdl-icon {
     font-family: 'Segoe MDL2 Assets', 'Segoe Fluent Icons', sans-serif;
     font-style: normal;
@@ -5796,16 +5905,24 @@ body {
     border-radius: 99px;
 }
 
+/* Тонкая техническая сетка на фоне главной области */
+#main-container {
+    background-color: var(--bg-content);
+    background-image: radial-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+    background-size: 22px 22px;
+}
+
 .glass-card {
     background: var(--card-bg);
     border: 1px solid var(--border-color);
     transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    position: relative;
 }
 .glass-card:hover {
     border-color: #3E3E3E;
 }
 
-/* Кибер-тумблер в точности как CyberToggleStyle */
+/* Кибер-тумблер */
 .cyber-toggle {
     appearance: none;
     width: 44px;
@@ -5841,33 +5958,103 @@ body {
     background: #FFFFFF;
 }
 
-/* Главная круглая кнопка */
+/* =========================================================
+   ОРБИТАЛЬНЫЙ РЕАКТОР И КРУГЛАЯ КНОПКА ЗАПУСКА
+   ========================================================= */
+.reactor-wrap {
+    position: relative;
+    width: 226px;
+    height: 226px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.reactor-ambient {
+    position: absolute;
+    inset: -25px;
+    border-radius: 9999px;
+    background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+    opacity: 0;
+    transition: opacity 0.5s ease;
+    pointer-events: none;
+}
+
+.reactor-ring-outer {
+    position: absolute;
+    inset: 0;
+    border-radius: 9999px;
+    border: 1px dashed #2E2E2E;
+    transition: border-color 0.4s ease, opacity 0.4s ease;
+    pointer-events: none;
+    animation: spinSlow 28s linear infinite;
+}
+
+.reactor-ring-inner {
+    position: absolute;
+    inset: 10px;
+    border-radius: 9999px;
+    border: 1px solid #222222;
+    border-top-color: #444444;
+    border-bottom-color: #444444;
+    transition: all 0.4s ease;
+    pointer-events: none;
+    animation: spinReverse 18s linear infinite;
+}
+
+.reactor-wrap.active .reactor-ambient {
+    opacity: 0.45;
+}
+.reactor-wrap.active .reactor-ring-outer {
+    border-color: var(--accent-light);
+    opacity: 0.55;
+    animation-duration: 10s;
+}
+.reactor-wrap.active .reactor-ring-inner {
+    border-color: rgba(255, 255, 255, 0.06);
+    border-top-color: var(--accent-light);
+    border-bottom-color: var(--accent-light);
+    animation-duration: 6s;
+}
+
+@keyframes spinSlow {
+    100% { transform: rotate(360deg); }
+}
+@keyframes spinReverse {
+    100% { transform: rotate(-360deg); }
+}
+
 .power-btn {
     position: relative;
-    width: 190px;
-    height: 190px;
+    width: 184px;
+    height: 184px;
     border-radius: 9999px;
-    background: #121212;
+    background: radial-gradient(circle at 50% 30%, #1C1C1C, #101010);
     border: 3px solid #2A2A2A;
     transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
     cursor: pointer;
+    z-index: 2;
 }
 .power-btn:hover {
     transform: scale(1.03);
-    border-color: #444444;
+    border-color: #484848;
 }
 .power-btn:active {
     transform: scale(0.95);
 }
 .power-btn.active {
     border-color: var(--accent-color);
-    box-shadow: 0 0 45px var(--accent-glow);
+    box-shadow: 0 0 40px var(--accent-glow), inset 0 0 18px rgba(16, 124, 16, 0.25);
     animation: pulseGlow 2.2s infinite ease-in-out;
+}
+.power-btn.active .power-icon-glyph {
+    color: var(--accent-light);
+    text-shadow: 0 0 16px var(--accent-glow);
 }
 
 @keyframes pulseGlow {
-    0%, 100% { box-shadow: 0 0 28px var(--accent-glow); }
-    50% { box-shadow: 0 0 65px var(--accent-glow); }
+    0%, 100% { box-shadow: 0 0 25px var(--accent-glow), inset 0 0 12px rgba(16, 124, 16, 0.2); }
+    50% { box-shadow: 0 0 55px var(--accent-glow), inset 0 0 24px rgba(16, 124, 16, 0.35); }
 }
 
 /* Кнопки акцентного цвета */
@@ -6051,6 +6238,103 @@ body {
 .wizard-step.active {
     display: flex;
 }
+/* =========================================================
+   ВКЛАДКА МОДИФИКАЦИЙ (WORKSHOP CARDS & SEGMENTED CONTROL)
+   ========================================================= */
+.mods-seg-btn {
+    padding: 7px 14px;
+    border-radius: 8px;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: #888888;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    cursor: pointer;
+}
+.mods-seg-btn:hover {
+    color: #E0E0E0;
+    background: rgba(255, 255, 255, 0.03);
+}
+.mods-seg-btn.active {
+    background: #242424;
+    color: #FFFFFF;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+    border: 1px solid #333333;
+}
+
+.mod-workshop-card {
+    position: relative;
+    background: #161616;
+    border: 1px solid #262626;
+    border-radius: 12px;
+    padding: 16px;
+    transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    overflow: hidden;
+    opacity: 0;
+    animation: modCardReveal 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.mod-workshop-card:hover {
+    transform: translateY(-2px);
+    border-color: #3A3A3A;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+.mod-workshop-card.is-active {
+    background: linear-gradient(135deg, rgba(16, 124, 16, 0.10) 0%, #151815 100%);
+    border-color: var(--accent-color);
+    box-shadow: 0 0 25px rgba(16, 124, 16, 0.12);
+}
+.mod-workshop-card::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: transparent;
+    transition: background 0.25s ease;
+}
+.mod-workshop-card.is-active::before {
+    background: var(--accent-light);
+    box-shadow: 0 0 10px var(--accent-light);
+}
+
+@keyframes modCardReveal {
+    from {
+        opacity: 0;
+        transform: translateY(10px) scale(0.99);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.mod-action-pill {
+    padding: 5px 10px;
+    border-radius: 6px;
+    background: #1F1F1F;
+    border: 1px solid #2C2C2C;
+    font-size: 11.5px;
+    font-weight: 500;
+    color: #AAAAAA;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    transition: all 0.15s ease;
+    cursor: pointer;
+}
+.mod-action-pill:hover {
+    background: #292929;
+    border-color: #444444;
+    color: #FFFFFF;
+}
+.mod-action-pill.danger:hover {
+    background: rgba(209, 52, 56, 0.15);
+    border-color: #D13438;
+    color: #F44336;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 // ФАЙЛ: wwwroot\js\app.js
@@ -6141,7 +6425,7 @@ function updateWizardUI() {
 
     const dots = document.getElementById('wiz-dots');
     dots.innerHTML = [0, 1, 2, 3, 4].map(i =>
-        `<span class="w-2 h-2 rounded-full transition-all ${i === wizardStep ? 'bg-emerald-500 scale-125' : 'bg-zinc-700'}"></span>`
+        `<span class="w-2 h-2 rounded-full transition-all ${i === wizardStep ? 'bg-[#107C10] scale-125' : 'bg-[#333333]'}"></span>`
     ).join('');
 
     const btnBack = document.getElementById('wiz-btn-back');
@@ -6257,6 +6541,13 @@ let confirmCallback = null;
 let isBackendConfirm = false;
 let selectionCallback = null;
 
+// Таймер активной сессии обхода
+let sessionStartTime = null;
+let sessionTimerId = null;
+
+// Фильтр логов
+let currentLogFilter = 'all';
+
 function sendCmd(action, payload = {}) {
     if (window.chrome && window.chrome.webview) {
         window.chrome.webview.postMessage({ action, ...payload });
@@ -6289,6 +6580,11 @@ function handleBackendEvent(type, data) {
             updateGameFilterBadge(data.gameFilterStatus, appState.gameFilter.mode !== 'disabled');
             updateRunningUI(data.zapretRunning, data.proxyRunning);
 
+            if (data.zapretRunning || data.proxyRunning)
+                appendLog(new Date().toLocaleTimeString(), 'Интерфейс загружен. Найдены активные процессы в фоне.');
+            else
+                appendLog(new Date().toLocaleTimeString(), 'Интерфейс загружен. Ожидание команд...');
+
             if (data.isFirstRun) {
                 openWizardModal();
             }
@@ -6301,7 +6597,7 @@ function handleBackendEvent(type, data) {
         case 'wizardCompleted':
             wizardFinished = true;
             document.getElementById('wiz-finish-status').innerText = 'Всё готово!';
-            document.getElementById('wiz-finish-status').className = 'text-xl font-bold text-emerald-400 mb-2';
+            document.getElementById('wiz-finish-status').className = 'text-xl font-bold text-brand mb-2';
             document.getElementById('wiz-finish-bar').style.width = '100%';
             const btnNext = document.getElementById('wiz-btn-next');
             btnNext.disabled = false;
@@ -6316,9 +6612,9 @@ function handleBackendEvent(type, data) {
 
         case 'routingStatusUpdated':
             updateRoutingStatusUI(data);
-            document.getElementById('btn-update-ipset').innerText = '🔄 Обновить базу IP';
+            document.getElementById('btn-update-ipset').innerHTML = '<span class="mdl-icon text-xs">&#xE149;</span><span>Обновить базу IP</span>';
             document.getElementById('btn-update-ipset').disabled = false;
-            document.getElementById('btn-update-hosts').innerText = '⚡ Обновить';
+            document.getElementById('btn-update-hosts').innerHTML = '<span class="mdl-icon text-xs">&#xE945;</span><span>Обновить</span>';
             document.getElementById('btn-update-hosts').disabled = false;
             break;
 
@@ -6353,9 +6649,9 @@ function handleBackendEvent(type, data) {
 
         case 'batValidationResult':
             if (data.isValid) {
-                setEditorStatus('✓ Синтаксис корректен!', 'text-emerald-400');
+                setEditorStatus('✓ Синтаксис корректен!', 'text-[#4ADE80]');
             } else {
-                setEditorStatus('⚠ Ошибка в скрипте', 'text-red-400');
+                setEditorStatus('⚠ Ошибка в скрипте', 'text-[#F44336]');
                 showAlert('Проверка синтаксиса Zapret', data.errorMessage, true);
             }
             break;
@@ -6377,7 +6673,7 @@ function handleBackendEvent(type, data) {
             showConfirm(
                 'Перезапустить Zapret?',
                 `${data.reason}\n\nФайл list-general.txt был обновлен в прямом эфире, но для применения новых доменов в уже работающем ядре winws.exe требуется перезапуск. Перезапустить сейчас?`,
-                '🔄 Перезапустить',
+                'Перезапустить',
                 () => sendCmd('restartBypass')
             );
             break;
@@ -6398,7 +6694,7 @@ function handleBackendEvent(type, data) {
         case 'netStats':
             document.getElementById('stat-rx').innerText = data.download.toFixed(1);
             document.getElementById('stat-tx').innerText = data.upload.toFixed(1);
-            updateChart(data.download);
+            updateChart(data.download, data.upload);
             updateRunningUI(data.zapretRunning, data.proxyRunning);
             break;
 
@@ -6409,7 +6705,7 @@ function handleBackendEvent(type, data) {
         case 'pingResult':
             document.getElementById('ping-refresh-icon').classList.remove('spin-anim');
             appState.currentPing = data.ping;
-            document.getElementById('stat-ping').innerText = data.ping >= 0 ? data.ping : '—';
+            updatePingDisplay(data.ping);
             document.getElementById('dot-net').className = `w-2 h-2 rounded-full ${data.ping >= 0 ? 'dot-online' : 'dot-offline'}`;
             appState.configs.forEach(c => c.pingMs = data.ping > 0 ? data.ping : 999999);
             renderConfigCards();
@@ -6483,6 +6779,60 @@ function handleBackendEvent(type, data) {
 // =========================================================================
 // 4. ЛОГИКА ВКЛАДКИ 1: ГЛАВНАЯ (HOMEVIEW)
 // =========================================================================
+function updatePingDisplay(pingMs) {
+    const pingEl = document.getElementById('stat-ping');
+    const badgeEl = document.getElementById('ping-quality-badge');
+    const isCb = appState.settings.colorblindMode;
+
+    if (pingMs < 0) {
+        pingEl.innerText = '—';
+        pingEl.style.color = isCb ? '#FF8C00' : '#D13438';
+        badgeEl.innerText = 'Недоступен';
+        badgeEl.className = 'px-1.5 py-0.2 rounded text-[9px] font-mono font-semibold bg-[#2A1215] text-[#F44336]';
+        return;
+    }
+
+    pingEl.innerText = pingMs;
+    if (pingMs < 80) {
+        pingEl.style.color = isCb ? '#60A5FA' : '#4CAF50';
+        badgeEl.innerText = 'Отлично';
+        badgeEl.className = 'px-1.5 py-0.2 rounded text-[9px] font-mono font-semibold bg-[#1A2E1A] text-[#4ADE80]';
+    } else if (pingMs < 150) {
+        pingEl.style.color = '#FF8C00';
+        badgeEl.innerText = 'Норма';
+        badgeEl.className = 'px-1.5 py-0.2 rounded text-[9px] font-mono font-semibold bg-[#2E2210] text-[#F59E0B]';
+    } else {
+        pingEl.style.color = isCb ? '#FF8C00' : '#D13438';
+        badgeEl.innerText = 'Высокий';
+        badgeEl.className = 'px-1.5 py-0.2 rounded text-[9px] font-mono font-semibold bg-[#2A1215] text-[#F44336]';
+    }
+}
+
+function formatUptime(ms) {
+    const totalSec = Math.max(0, Math.floor(ms / 1000));
+    const h = String(Math.floor(totalSec / 3600)).padStart(2, '0');
+    const m = String(Math.floor((totalSec % 3600) / 60)).padStart(2, '0');
+    const s = String(totalSec % 60).padStart(2, '0');
+    return `${h}:${m}:${s}`;
+}
+
+function updateSessionBadgeTick() {
+    const badge = document.getElementById('session-badge');
+    const dot = document.getElementById('session-dot');
+    const txt = document.getElementById('session-text');
+
+    if (appState.isRunning && sessionStartTime) {
+        const elapsed = Date.now() - sessionStartTime;
+        badge.className = 'mt-2.5 px-3 py-1 rounded-full bg-[#0F240F] border border-[#107C10] flex items-center gap-2 text-[11px] font-mono text-white transition-all';
+        dot.className = 'w-1.5 h-1.5 rounded-full dot-online';
+        txt.innerText = `АКТИВЕН • ${formatUptime(elapsed)}`;
+    } else {
+        badge.className = 'mt-2.5 px-3 py-1 rounded-full bg-[#181818] border border-[#2A2A2A] flex items-center gap-2 text-[11px] font-mono text-[#888888] transition-all';
+        dot.className = 'w-1.5 h-1.5 rounded-full bg-[#555555]';
+        txt.innerText = 'ОЖИДАНИЕ ЗАПУСКА';
+    }
+}
+
 function onMainToggleClick() {
     sendCmd('playClick');
 
@@ -6532,19 +6882,40 @@ function refreshPing() {
 }
 
 function updateRunningUI(zapretRunning, proxyRunning) {
+    const wasRunning = appState.isRunning;
     appState.zapretRunning = zapretRunning;
     appState.proxyRunning = proxyRunning;
     appState.isRunning = zapretRunning || proxyRunning;
 
+    if (appState.isRunning && !wasRunning) {
+        sessionStartTime = Date.now();
+        if (!sessionTimerId) sessionTimerId = setInterval(updateSessionBadgeTick, 1000);
+    } else if (!appState.isRunning) {
+        sessionStartTime = null;
+        if (sessionTimerId) {
+            clearInterval(sessionTimerId);
+            sessionTimerId = null;
+        }
+    }
+    updateSessionBadgeTick();
+
     const btn = document.getElementById('main-toggle-btn');
+    const reactor = document.getElementById('reactor-container');
     const txt = document.getElementById('main-btn-text');
     const lbl = document.getElementById('zapret-status-label');
+    const proxyLbl = document.getElementById('proxy-status-label');
 
     btn.classList.toggle('active', appState.isRunning);
+    reactor.classList.toggle('active', appState.isRunning);
     txt.innerText = appState.isRunning ? 'Остановить' : 'Починить интернет';
 
     lbl.innerText = zapretRunning ? 'Работает' : 'Остановлен';
-    lbl.className = `text-xs font-medium mb-3 ${zapretRunning ? 'text-emerald-400' : 'text-red-400'}`;
+    lbl.className = `text-xs font-medium mb-3 ${zapretRunning ? 'text-brand' : 'text-[#D13438]'}`;
+
+    if (proxyLbl) {
+        proxyLbl.innerText = proxyRunning ? 'Работает локально (:1080)' : 'Прокси для Telegram';
+        proxyLbl.className = `text-xs mt-0.5 ${proxyRunning ? 'text-brand font-medium' : 'text-[#A0A0A0]'}`;
+    }
 
     const cfgBtn = document.getElementById('btn-open-config');
     const gfBtn = document.getElementById('btn-open-gf');
@@ -6605,7 +6976,7 @@ function renderConfigCards() {
              class="p-3.5 rounded-xl border cursor-pointer transition flex items-center justify-between ${isActive ? 'bg-[#172554] border-blue-600' : 'bg-[#18181B] border-zinc-800 hover:bg-zinc-800/80'}">
             <div>
                 <div class="flex items-center gap-2.5 mb-1">
-                    <span class="font-mono text-sm font-semibold text-emerald-400">${cfg.fileName}</span>
+                    <span class="font-mono text-sm font-semibold text-brand">${cfg.fileName}</span>
                     ${isActive ? '<span class="px-1.5 py-0.5 text-[10px] font-semibold bg-blue-900 text-blue-300 rounded">активный</span>' : ''}
                 </div>
                 <div class="text-xs text-zinc-400">${metaInfo}</div>
@@ -6657,7 +7028,7 @@ function updateScanButtonUI() {
 function updateGameFilterBadge(statusText, isEnabled) {
     const el = document.getElementById('txt-gf-status');
     el.innerText = statusText;
-    el.className = `text-xs font-mono font-semibold truncate ${isEnabled ? 'text-emerald-400' : 'text-zinc-400'}`;
+    el.className = `text-xs font-mono font-semibold truncate ${isEnabled ? 'text-brand' : 'text-[#A0A0A0]'}`;
 }
 
 function openGameFilterModal() {
@@ -6677,10 +7048,10 @@ function selectGfMode(mode) {
     appState.gameFilter.mode = mode;
     document.querySelectorAll('.gf-mode-card').forEach(card => {
         const isSelected = card.getAttribute('data-mode') === mode;
-        card.className = `gf-mode-card p-3 rounded-xl border cursor-pointer flex items-center justify-between transition ${isSelected ? 'bg-[#172554] border-blue-600' : 'bg-[#18181B] border-zinc-800 hover:bg-zinc-800/70'}`;
+        card.className = `gf-mode-card p-3 rounded-lg border cursor-pointer flex items-center justify-between transition ${isSelected ? 'bg-[#172554] border-blue-600' : 'bg-[#18181B] border-[#27272A] hover:bg-[#27272A]'}`;
         const check = card.querySelector('.gf-check');
         check.innerText = isSelected ? '✓' : '→';
-        check.className = `gf-check text-sm font-bold ${isSelected ? 'text-blue-400' : 'text-zinc-600'}`;
+        check.className = `gf-check text-sm font-bold ${isSelected ? 'text-blue-400' : 'text-[#3F3F46]'}`;
     });
 }
 
@@ -6700,6 +7071,39 @@ function saveGameFilter() {
     });
 }
 
+// =========================================================================
+// 5. ПАНЕЛЬ ЛОГОВ С ПОИСКОМ И ФИЛЬТРАМИ
+// =========================================================================
+function setLogFilter(mode) {
+    sendCmd('playClick');
+    currentLogFilter = mode;
+    const btnAll = document.getElementById('log-filter-all');
+    const btnErr = document.getElementById('log-filter-err');
+
+    btnAll.className = mode === 'all'
+        ? 'px-2 py-0.5 rounded text-[11px] font-semibold bg-[#2A2A2A] text-white cursor-pointer transition'
+        : 'px-2 py-0.5 rounded text-[11px] font-medium text-[#888888] hover:text-white cursor-pointer transition';
+
+    btnErr.className = mode === 'err'
+        ? 'px-2 py-0.5 rounded text-[11px] font-semibold bg-[#3B181C] text-[#F44336] cursor-pointer transition'
+        : 'px-2 py-0.5 rounded text-[11px] font-medium text-[#888888] hover:text-white cursor-pointer transition';
+
+    applyLogFilters();
+}
+
+function applyLogFilters() {
+    const box = document.getElementById('log-box');
+    const query = (document.getElementById('log-search-input')?.value || '').toLowerCase();
+
+    Array.from(box.children).forEach(el => {
+        const isErr = el.dataset.isErr === '1';
+        const text = el.innerText.toLowerCase();
+        const matchMode = currentLogFilter === 'all' || isErr;
+        const matchQuery = !query || text.includes(query);
+        el.style.display = (matchMode && matchQuery) ? '' : 'none';
+    });
+}
+
 function appendLog(time, message, isProgress = false) {
     const box = document.getElementById('log-box');
     const text = `[${time}] ${message}`;
@@ -6714,17 +7118,27 @@ function appendLog(time, message, isProgress = false) {
     }
 
     const div = document.createElement('div');
-    let color = 'text-zinc-400';
-    if (message.includes('ОШИБКА') || message.includes('⚠') || message.includes('🛑') || message.includes('❌'))
-        color = 'text-red-400 font-bold';
-    else if (message.includes('✅') || message.includes('✨') || message.includes('🏆'))
-        color = 'text-emerald-400';
-    else if (message.includes('🔍'))
-        color = 'text-blue-400';
+    let color = 'text-[#A0A0A0]';
+    let isErr = false;
 
+    if (message.includes('ОШИБКА') || message.includes('⚠') || message.includes('🛑') || message.includes('❌') || message.includes('ERR')) {
+        color = 'text-[#F44336] font-semibold';
+        isErr = true;
+    } else if (message.includes('✅') || message.includes('✨') || message.includes('🏆')) {
+        color = 'text-brand';
+    } else if (message.includes('🔍') || message.includes('[Auto]')) {
+        color = 'text-[#60A5FA]';
+    }
+
+    div.dataset.isErr = isErr ? '1' : '0';
     div.className = color;
     div.innerText = text;
     box.appendChild(div);
+
+    const counter = document.getElementById('log-counter-badge');
+    if (counter) counter.innerText = box.children.length;
+
+    applyLogFilters();
     box.scrollTop = box.scrollHeight;
 
     lastProgressLogEl = isProgress ? div : null;
@@ -6733,6 +7147,8 @@ function appendLog(time, message, isProgress = false) {
 function clearLogs() {
     sendCmd('playClick');
     document.getElementById('log-box').innerHTML = '';
+    const counter = document.getElementById('log-counter-badge');
+    if (counter) counter.innerText = '0';
     lastProgressLogEl = null;
 }
 
@@ -6750,7 +7166,7 @@ function showAlert(title, message, isError = false) {
     document.getElementById('confirm-cancel-btn').style.display = 'none';
     const okBtn = document.getElementById('confirm-ok-btn');
     okBtn.innerText = 'ОК';
-    okBtn.className = `px-4 py-1.5 rounded-lg text-xs font-semibold text-white transition cursor-pointer ${isError ? 'bg-red-600 hover:bg-red-500' : 'bg-emerald-600 hover:bg-emerald-500'}`;
+    okBtn.className = `px-4 py-1.5 rounded-md text-xs font-semibold text-white transition cursor-pointer ${isError ? 'bg-[#D13438] hover:opacity-90' : 'btn-brand'}`;
     document.getElementById('confirm-modal').classList.add('open');
 }
 
@@ -6761,7 +7177,7 @@ function showConfirm(title, message, confirmText, onConfirm, isDanger = false) {
     document.getElementById('confirm-cancel-btn').style.display = 'inline-block';
     const okBtn = document.getElementById('confirm-ok-btn');
     okBtn.innerText = confirmText;
-    okBtn.className = `px-4 py-1.5 rounded-lg text-xs font-semibold text-white transition cursor-pointer ${isDanger ? 'bg-red-600 hover:bg-red-500' : 'bg-emerald-600 hover:bg-emerald-500'}`;
+    okBtn.className = `px-4 py-1.5 rounded-md text-xs font-semibold text-white transition cursor-pointer ${isDanger ? 'bg-[#D13438] hover:opacity-90' : 'btn-brand'}`;
     document.getElementById('confirm-modal').classList.add('open');
 }
 
@@ -6782,27 +7198,87 @@ function closeConfirmModal(accepted) {
     }
 }
 
+// =========================================================================
+// 6. ДВУХКАНАЛЬНЫЙ ГРАФИК ТРАФИКА С ГРАДИЕНТОМ И ПИКОМ
+// =========================================================================
 const rxHistory = new Array(30).fill(0);
-function updateChart(rxValue) {
+const txHistory = new Array(30).fill(0);
+let peakSpeedMbps = 0;
+
+function updateChart(rxValue, txValue = 0) {
     rxHistory.push(rxValue);
     rxHistory.shift();
+    txHistory.push(txValue);
+    txHistory.shift();
+
+    peakSpeedMbps = Math.max(peakSpeedMbps, rxValue, txValue);
+    const peakEl = document.getElementById('stat-peak');
+    if (peakEl) peakEl.innerText = `Пик: ${peakSpeedMbps.toFixed(1)} Мбит/с`;
 
     const canvas = document.getElementById('traffic-chart');
+    if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const w = canvas.width;
+    const h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
 
-    const maxVal = Math.max(10, ...rxHistory);
+    // Фоновая сетка
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
+    ctx.lineWidth = 1;
+    [0.33, 0.66].forEach(ratio => {
+        ctx.beginPath();
+        ctx.moveTo(0, h * ratio);
+        ctx.lineTo(w, h * ratio);
+        ctx.stroke();
+    });
+
+    const maxVal = Math.max(5, ...rxHistory, ...txHistory);
+    const isCb = appState.settings.colorblindMode;
+    const rxColor = isCb ? '#0078D7' : '#4CAF50';
+
+    // Заливка под кривой Download
+    const grad = ctx.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, isCb ? 'rgba(0, 120, 215, 0.35)' : 'rgba(76, 175, 80, 0.35)');
+    grad.addColorStop(1, 'rgba(0, 0, 0, 0.0)');
+
     ctx.beginPath();
-    ctx.strokeStyle = appState.settings.colorblindMode ? '#0078D7' : '#10B981';
-    ctx.lineWidth = 2;
-
     rxHistory.forEach((val, idx) => {
-        const x = (idx / (rxHistory.length - 1)) * canvas.width;
-        const y = canvas.height - (val / maxVal) * (canvas.height - 12) - 6;
+        const x = (idx / (rxHistory.length - 1)) * w;
+        const y = h - (val / maxVal) * (h - 14) - 5;
+        if (idx === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+    });
+    ctx.lineTo(w, h);
+    ctx.lineTo(0, h);
+    ctx.closePath();
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    // Линия Download
+    ctx.beginPath();
+    ctx.strokeStyle = rxColor;
+    ctx.lineWidth = 2;
+    rxHistory.forEach((val, idx) => {
+        const x = (idx / (rxHistory.length - 1)) * w;
+        const y = h - (val / maxVal) * (h - 14) - 5;
         if (idx === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
     });
     ctx.stroke();
+
+    // Пунктирная линия Upload
+    ctx.beginPath();
+    ctx.setLineDash([3, 3]);
+    ctx.strokeStyle = '#60A5FA';
+    ctx.lineWidth = 1.3;
+    txHistory.forEach((val, idx) => {
+        const x = (idx / (txHistory.length - 1)) * w;
+        const y = h - (val / maxVal) * (h - 14) - 5;
+        if (idx === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+    ctx.setLineDash([]);
 }
 
 let sidebarOpen = true;
@@ -6810,8 +7286,9 @@ function toggleSidebar() {
     sendCmd('playClick');
     sidebarOpen = !sidebarOpen;
     const sb = document.getElementById('sidebar');
-    sb.style.width = sidebarOpen ? '224px' : '0px';
-    sb.style.padding = sidebarOpen ? '12px' : '0px';
+    sb.style.width = sidebarOpen ? '220px' : '0px';
+    sb.style.paddingLeft = sidebarOpen ? '10px' : '0px';
+    sb.style.paddingRight = sidebarOpen ? '10px' : '0px';
     sb.style.borderRightWidth = sidebarOpen ? '1px' : '0px';
 }
 
@@ -6827,8 +7304,11 @@ function switchTab(tabId, btn) {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
+    // Фикс: проверяем !e.target.closest('button'), чтобы клик по иконке внутри кнопки не вызывал перетаскивание!
     document.getElementById('titlebar').addEventListener('mousedown', (e) => {
-        if (e.target.tagName !== 'BUTTON') sendCmd('windowDrag');
+        if (!e.target.closest('button')) {
+            sendCmd('windowDrag');
+        }
     });
 
     if (window.chrome && window.chrome.webview) {
@@ -7068,107 +7548,202 @@ function onDiscordEmojiClick() {
 // =========================================================================
 // ЛОГИКА ВКЛАДКИ 2: МОДИФИКАЦИИ (MODSVIEW + CODE STUDIO)
 // =========================================================================
+let modsLayoutMode = 'grid'; // 'grid' (2 колонки) или 'list' (1 колонка)
+
+function setModsLayout(mode) {
+    sendCmd('playClick');
+    modsLayoutMode = mode;
+
+    const btnGrid = document.getElementById('btn-layout-grid');
+    const btnList = document.getElementById('btn-layout-list');
+
+    if (btnGrid && btnList) {
+        btnGrid.className = mode === 'grid'
+            ? 'w-7 h-6 rounded flex items-center justify-center bg-[#262626] text-white transition cursor-pointer'
+            : 'w-7 h-6 rounded flex items-center justify-center text-[#666666] hover:text-white transition cursor-pointer';
+
+        btnList.className = mode === 'list'
+            ? 'w-7 h-6 rounded flex items-center justify-center bg-[#262626] text-white transition cursor-pointer'
+            : 'w-7 h-6 rounded flex items-center justify-center text-[#666666] hover:text-white transition cursor-pointer';
+    }
+
+    renderModsView();
+}
+
 function switchModsSubTab(subTab) {
     sendCmd('playClick');
     appState.modsSubTab = subTab;
 
-    const btnBat = document.getElementById('mod-tab-bat');
-    const btnList = document.getElementById('mod-tab-list');
-    const btnGuide = document.getElementById('mod-tab-guide');
+    ['bat', 'list', 'guide'].forEach(t => {
+        const btn = document.getElementById('mod-tab-' + t);
+        if (btn) btn.classList.toggle('active', t === subTab);
+    });
 
-    const inactiveCls = 'flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-semibold text-zinc-400 hover:bg-zinc-800/50 hover:text-white transition cursor-pointer text-left';
-    const activeCls = 'flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-semibold bg-[#2A2A2A] text-white transition cursor-pointer text-left';
-
-    btnBat.className = (subTab === 'bat' ? activeCls : inactiveCls) + ' mb-1.5';
-    btnList.className = (subTab === 'list' ? activeCls : inactiveCls) + ' mb-2';
-    btnGuide.className = subTab === 'guide' ? activeCls : inactiveCls;
-
-    const title = document.getElementById('mods-cat-title');
     const desc = document.getElementById('mods-cat-desc');
     const actions = document.getElementById('mods-action-bar');
+    const filterControls = document.getElementById('mods-filter-controls');
     const listsContainer = document.getElementById('mods-lists-container');
     const guideContainer = document.getElementById('mods-guide-container');
 
     if (subTab === 'guide') {
-        title.innerText = 'Руководство';
-        desc.innerText = 'Ответы на частые вопросы и инструкции.';
+        desc.innerText = 'Подробная документация по созданию собственных стратегий и списков доменов.';
         actions.classList.add('hidden');
+        filterControls.classList.add('hidden');
         listsContainer.classList.add('hidden');
         guideContainer.classList.remove('hidden');
     } else {
         actions.classList.remove('hidden');
+        filterControls.classList.remove('hidden');
         listsContainer.classList.remove('hidden');
         guideContainer.classList.add('hidden');
 
         if (subTab === 'bat') {
-            title.innerText = '.bat Стратегии';
-            desc.innerText = 'Пользовательские скрипты обхода для специфичных игр и задач.';
+            desc.innerText = 'Пользовательские скрипты обхода (.bat) для специфичных игр, провайдеров и нестандартных блокировок.';
         } else {
-            title.innerText = 'Листы доменов';
-            desc.innerText = 'Списки сайтов и сервисов для маршрутизации трафика (обновляются в прямом эфире).';
+            desc.innerText = 'Дополнительные списки доменов (list.txt), которые автоматически объединяются с основным списком обхода.';
         }
         renderModsView();
     }
 }
 
+function updateModsCounters() {
+    const batTotal = appState.batMods.length;
+    const batActive = appState.batMods.filter(m => m.isActive).length;
+    const listTotal = appState.listMods.length;
+    const listActive = appState.listMods.filter(m => m.isActive).length;
+
+    const badgeBat = document.getElementById('badge-count-bat');
+    const badgeList = document.getElementById('badge-count-list');
+    const summary = document.getElementById('mods-active-summary');
+
+    if (badgeBat) badgeBat.innerText = batTotal;
+    if (badgeList) badgeList.innerText = listTotal;
+
+    const totalActive = batActive + listActive;
+    if (summary) {
+        summary.innerText = `Активно: ${totalActive} из ${batTotal + listTotal}`;
+        summary.className = totalActive > 0
+            ? 'px-2.5 py-0.5 rounded-full bg-[#0F240F] border border-[#107C10] font-mono text-[11px] text-brand font-semibold'
+            : 'px-2.5 py-0.5 rounded-full bg-[#181818] border border-[#2A2A2A] font-mono text-[11px] text-[#888888]';
+    }
+}
+
 function renderModsView() {
+    updateModsCounters();
     if (appState.modsSubTab === 'guide') return;
 
     const isBat = appState.modsSubTab === 'bat';
-    const source = isBat ? appState.batMods : appState.listMods;
+    const rawSource = isBat ? appState.batMods : appState.listMods;
+    const query = (document.getElementById('mods-search-input')?.value || '').trim().toLowerCase();
+
+    const source = rawSource.filter(m => {
+        if (!query) return true;
+        const name = (m.meta?.name || '').toLowerCase();
+        const author = (m.meta?.author || '').toLowerCase();
+        const desc = (m.meta?.description || '').toLowerCase();
+        const id = (m.id || '').toLowerCase();
+        return name.includes(query) || author.includes(query) || desc.includes(query) || id.includes(query);
+    });
 
     const activeMods = source.filter(m => m.isActive);
     const availableMods = source.filter(m => !m.isActive);
 
+    const gridClass = modsLayoutMode === 'grid' ? 'grid grid-cols-2 gap-3' : 'flex flex-col gap-2.5';
+    const activeListEl = document.getElementById('active-mods-list');
+    const availListEl = document.getElementById('available-mods-list');
+    activeListEl.className = gridClass;
+    availListEl.className = gridClass;
+
     document.getElementById('active-mods-section').classList.toggle('hidden', activeMods.length === 0);
     document.getElementById('available-mods-section').classList.toggle('hidden', availableMods.length === 0);
     document.getElementById('mods-divider').classList.toggle('hidden', !(activeMods.length > 0 && availableMods.length > 0));
-    document.getElementById('mods-empty-state').classList.toggle('hidden', source.length > 0);
 
-    document.getElementById('active-mods-list').innerHTML = activeMods.map(m => buildModCardHtml(m, isBat)).join('');
-    document.getElementById('available-mods-list').innerHTML = availableMods.map(m => buildModCardHtml(m, isBat)).join('');
+    const emptyState = document.getElementById('mods-empty-state');
+    const emptyTitle = document.getElementById('mods-empty-title');
+    const emptySub = document.getElementById('mods-empty-sub');
+
+    if (source.length === 0) {
+        emptyState.classList.remove('hidden');
+        if (query && rawSource.length > 0) {
+            emptyTitle.innerText = `По запросу «${query}» ничего не найдено`;
+            emptySub.innerText = 'Попробуйте изменить поисковый запрос или очистить поле фильтра.';
+        } else {
+            emptyTitle.innerText = isBat
+                ? 'У вас пока нет пользовательских .bat стратегий'
+                : 'У вас пока нет дополнительных списков доменов';
+            emptySub.innerText = 'Создайте собственную модификацию в встроенном редакторе кода или импортируйте готовый архив (.zip / .netfix-mod).';
+        }
+    } else {
+        emptyState.classList.add('hidden');
+    }
+
+    activeListEl.innerHTML = activeMods.map((m, idx) => buildModCardHtml(m, isBat, idx)).join('');
+    availListEl.innerHTML = availableMods.map((m, idx) => buildModCardHtml(m, isBat, idx + activeMods.length)).join('');
 }
 
 function escapeStr(str) {
     return (str || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
 }
 
-function buildModCardHtml(mod, isBat) {
-    const cardBorder = mod.isActive
-        ? 'bg-[#0A1F0A] border-emerald-600/80'
-        : 'bg-[#18181B] border-zinc-800 hover:bg-[#222227]';
-
-    const btnCls = mod.isActive
-        ? 'bg-[#7F1D1D] hover:bg-red-800 text-white'
-        : 'bg-[#1E3A8A] hover:bg-blue-800 text-white';
-
-    const btnLabel = mod.isActive ? '✕ Убрать' : 'Включить ▶';
+function buildModCardHtml(mod, isBat, index = 0) {
     const safeName = escapeStr(mod.meta.name);
+    const delayMs = Math.min(index * 40, 240);
+    const typeGlyph = isBat ? '&#xE756;' : '&#xE774;';
+    const fileBadge = isBat ? `mod_${mod.id}.bat` : `${mod.id}/list.txt`;
+    const statusText = mod.isActive ? 'Активен' : 'Отключен';
+    const statusCls = mod.isActive ? 'text-brand font-semibold' : 'text-[#777777]';
+    const iconBoxCls = mod.isActive
+        ? 'bg-[#107C10]/20 border-[#107C10] text-brand'
+        : 'bg-[#202020] border-[#2E2E2E] text-[#888888]';
 
     return `
-    <div class="mod-card-enter p-3.5 rounded-xl border ${cardBorder} flex items-center justify-between gap-4 transition">
-        <div class="overflow-hidden">
-            <div class="flex items-center gap-2">
-                <span class="font-bold text-[15px] text-white truncate">${mod.meta.name}</span>
-                <span class="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 font-mono text-[11px]">v${mod.meta.version || '1.0'}</span>
+    <div style="animation-delay: ${delayMs}ms" class="mod-workshop-card ${mod.isActive ? 'is-active' : ''} flex flex-col justify-between gap-3">
+        <!-- Верхняя часть: Иконка, Название, Технический ID и Тумблер -->
+        <div class="flex items-start justify-between gap-3">
+            <div class="flex items-start gap-3 overflow-hidden">
+                <div class="w-10 h-10 rounded-xl border ${iconBoxCls} flex items-center justify-center shrink-0 mt-0.5 transition-colors">
+                    <span class="mdl-icon text-base">${typeGlyph}</span>
+                </div>
+                <div class="overflow-hidden">
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <span class="font-bold text-[15px] text-white truncate">${mod.meta.name}</span>
+                        <span class="px-1.5 py-0.5 rounded bg-[#222222] border border-[#333333] text-[#AAAAAA] font-mono text-[10px]">v${mod.meta.version || '1.0'}</span>
+                    </div>
+                    <div class="flex items-center gap-2 mt-1 text-[11px] font-mono text-[#777777] truncate">
+                        <span>${fileBadge}</span>
+                        <span>•</span>
+                        <span class="text-[#999999]">Автор: ${mod.meta.author || 'Аноним'}</span>
+                    </div>
+                </div>
             </div>
-            <div class="text-xs text-emerald-400 mt-0.5">Автор: ${mod.meta.author || 'Аноним'}</div>
-            <div class="text-xs text-zinc-400 mt-1 line-clamp-2">${mod.meta.description || ''}</div>
+
+            <!-- Тумблер включения -->
+            <div class="flex items-center gap-2 shrink-0">
+                <span class="text-[11px] ${statusCls}">${statusText}</span>
+                <input type="checkbox" ${mod.isActive ? 'checked' : ''} onchange="toggleMod('${mod.id}', ${isBat}, '${safeName}')" class="cyber-toggle" title="Включить / отключить мод">
+            </div>
         </div>
 
-        <div class="flex flex-col items-end shrink-0 min-w-[135px]">
-            <button onclick="toggleMod('${mod.id}', ${isBat}, '${safeName}')" class="w-full py-1.5 px-3 rounded-md text-xs font-semibold transition cursor-pointer ${btnCls}">
-                ${btnLabel}
-            </button>
-            <div class="flex items-center gap-3 mt-2 text-xs">
-                <button onclick="openModEditor('${mod.id}', ${isBat})" class="text-[#888888] hover:text-white transition cursor-pointer flex items-center gap-1" title="Редактировать мод">
-                    <span class="mdl-icon text-[11px]">&#xE70F;</span><span>Изменить</span>
+        <!-- Описание мода -->
+        <div class="text-xs text-[#A8A8A8] leading-relaxed line-clamp-2 min-h-[32px]">
+            ${mod.meta.description || 'Описание не указано.'}
+        </div>
+
+        <!-- Нижняя панель инструментов карточки -->
+        <div class="flex items-center justify-between pt-2.5 border-t border-[#242424]">
+            <span class="text-[10px] font-mono text-[#555555]">ID: ${mod.id}</span>
+
+            <div class="flex items-center gap-1.5">
+                <button onclick="openModEditor('${mod.id}', ${isBat})" class="mod-action-pill" title="Открыть в Code Studio">
+                    <span class="mdl-icon text-[11px]">&#xE70F;</span>
+                    <span>Код и свойства</span>
                 </button>
-                <button onclick="exportMod('${mod.id}', ${isBat}, '${safeName}')" class="text-[#60A5FA] hover:text-blue-300 transition cursor-pointer flex items-center gap-1" title="Экспортировать в .zip">
-                    <span class="mdl-icon text-[11px]">&#xE78C;</span><span>Экспорт</span>
+                <button onclick="exportMod('${mod.id}', ${isBat}, '${safeName}')" class="mod-action-pill" title="Упаковать мод в .zip архив">
+                    <span class="mdl-icon text-[11px]">&#xE78C;</span>
+                    <span>Экспорт</span>
                 </button>
-                <button onclick="promptDeleteMod('${mod.id}', ${isBat}, '${safeName}')" class="text-[#F44336] hover:text-red-300 transition cursor-pointer flex items-center gap-1" title="Удалить мод">
-                    <span class="mdl-icon text-[11px]">&#xE74D;</span><span>Удалить</span>
+                <button onclick="promptDeleteMod('${mod.id}', ${isBat}, '${safeName}')" class="mod-action-pill danger" title="Удалить мод с диска">
+                    <span class="mdl-icon text-[11px]">&#xE74D;</span>
                 </button>
             </div>
         </div>
@@ -7188,7 +7763,7 @@ function promptDisableAllMods() {
 
     showConfirm(
         'Отключить всё',
-        'Вы уверены, что хотите отключить все моды в этой категории?',
+        'Вы уверены, что хотите отключить все активные моды в этой категории?',
         'Отключить',
         () => sendCmd('disableAllMods', { isBat }),
         true
@@ -7199,7 +7774,7 @@ function promptDeleteMod(id, isBat, name) {
     sendCmd('playClick');
     showConfirm(
         'Удаление мода',
-        `Удалить мод «${name}» навсегда?\nЭто удалит все файлы мода с диска.`,
+        `Удалить мод «${name}» навсегда?\nЭто удалит папку мода и все его файлы с диска.`,
         'Удалить',
         () => sendCmd('deleteMod', { id, isBat, name }),
         true
@@ -7213,9 +7788,12 @@ function exportMod(id, isBat, name) {
 
 function openCreateModModal() {
     sendCmd('playClick');
+    if (appState.modsSubTab === 'guide') {
+        switchModsSubTab('bat');
+    }
     document.getElementById('new-mod-name').value = 'Мой новый мод';
     document.getElementById('new-mod-author').value = 'You';
-    document.getElementById('new-mod-desc').value = 'Описание мода';
+    document.getElementById('new-mod-desc').value = 'Пользовательская модификация обхода';
     sendCmd('generateModId', { baseName: 'custom_mod' });
     document.getElementById('create-mod-modal').classList.add('open');
 }
@@ -7246,17 +7824,17 @@ function updateModIdValidationUI(cleanId, isTaken, isEmpty) {
     const btn = document.getElementById('btn-confirm-create-mod');
     if (isEmpty) {
         status.innerText = '⚠ Введите корректный ID (a-z, 0-9)';
-        status.className = 'text-[11px] font-mono text-amber-400';
+        status.className = 'text-[11px] font-mono text-[#FF8C00]';
         btn.disabled = true;
         btn.style.opacity = '0.5';
     } else if (isTaken) {
         status.innerText = '❌ Такой ID уже занят!';
-        status.className = 'text-[11px] font-mono text-red-400';
+        status.className = 'text-[11px] font-mono text-[#F44336]';
         btn.disabled = true;
         btn.style.opacity = '0.5';
     } else {
         status.innerText = `✓ ID «${cleanId}» уникален`;
-        status.className = 'text-[11px] font-mono text-emerald-400';
+        status.className = 'text-[11px] font-mono text-brand';
         btn.disabled = false;
         btn.style.opacity = '1';
     }
@@ -7265,7 +7843,7 @@ function updateModIdValidationUI(cleanId, isTaken, isEmpty) {
 function confirmCreateMod() {
     sendCmd('playClick');
     sendCmd('createMod', {
-        isBat: appState.modsSubTab === 'bat',
+        isBat: appState.modsSubTab !== 'list',
         id: document.getElementById('new-mod-id').value,
         name: document.getElementById('new-mod-name').value,
         author: document.getElementById('new-mod-author').value,
@@ -7446,7 +8024,7 @@ function cleanDomainsList() {
     const removed = Math.max(0, rawLines.length - uniqueSorted.length);
     ta.value = uniqueSorted.join('\n');
     onEditorTextInput();
-    setEditorStatus(`Готово! Доменов: ${uniqueSorted.length} (удалено: ${removed})`, 'text-blue-400');
+    setEditorStatus(`Готово! Доменов: ${uniqueSorted.length} (удалено: ${removed})`, 'text-[#60A5FA]');
 }
 
 function editorFindNext() {
@@ -7466,9 +8044,9 @@ function editorFindNext() {
         ta.focus();
         ta.setSelectionRange(idx, idx + query.length);
         const lineNum = text.substring(0, idx).split('\n').length;
-        setEditorStatus(`Найдено на строке ${lineNum}`, 'text-blue-400');
+        setEditorStatus(`Найдено на строке ${lineNum}`, 'text-[#60A5FA]');
     } else {
-        setEditorStatus('Совпадений не найдено', 'text-red-400');
+        setEditorStatus('Совпадений не найдено', 'text-[#F44336]');
     }
 }
 
@@ -7485,9 +8063,9 @@ function editorReplaceAll() {
     if (count > 0) {
         ta.value = ta.value.replace(regex, replacement);
         onEditorTextInput();
-        setEditorStatus(`Заменено совпадений: ${count}`, 'text-emerald-400');
+        setEditorStatus(`Заменено совпадений: ${count}`, 'text-[#4ADE80]');
     } else {
-        setEditorStatus('Совпадений для замены нет', 'text-red-400');
+        setEditorStatus('Совпадений для замены нет', 'text-[#F44336]');
     }
 }
 

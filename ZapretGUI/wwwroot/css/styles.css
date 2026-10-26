@@ -385,3 +385,113 @@ body {
 .wizard-step.active {
     display: flex;
 }
+/* =========================================================
+   ВКЛАДКА МОДИФИКАЦИЙ (WORKSHOP CARDS & SEGMENTED CONTROL)
+   ========================================================= */
+.mods-seg-btn {
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #888888;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    cursor: pointer;
+}
+.mods-seg-btn:hover {
+    color: #E0E0E0;
+    background: rgba(255, 255, 255, 0.03);
+}
+.mods-seg-btn.active {
+    background: #242424;
+    color: #FFFFFF;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+    border: 1px solid #333333;
+}
+
+/* Адаптация под минималистичный (компактный) режим 850x520 */
+body.compact-mode #main-container {
+    padding: 14px 18px;
+}
+body.compact-mode #mods-cat-desc {
+    display: none;
+}
+body.compact-mode .mod-workshop-card {
+    padding: 12px 14px;
+}
+
+.mod-workshop-card {
+    position: relative;
+    background: #161616;
+    border: 1px solid #262626;
+    border-radius: 12px;
+    padding: 16px;
+    transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    overflow: hidden;
+    opacity: 0;
+    animation: modCardReveal 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.mod-workshop-card:hover {
+    transform: translateY(-2px);
+    border-color: #3A3A3A;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+.mod-workshop-card.is-active {
+    background: linear-gradient(135deg, rgba(16, 124, 16, 0.10) 0%, #151815 100%);
+    border-color: var(--accent-color);
+    box-shadow: 0 0 25px rgba(16, 124, 16, 0.12);
+}
+.mod-workshop-card::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: transparent;
+    transition: background 0.25s ease;
+}
+.mod-workshop-card.is-active::before {
+    background: var(--accent-light);
+    box-shadow: 0 0 10px var(--accent-light);
+}
+
+@keyframes modCardReveal {
+    from {
+        opacity: 0;
+        transform: translateY(10px) scale(0.99);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.mod-action-pill {
+    padding: 5px 10px;
+    border-radius: 6px;
+    background: #1F1F1F;
+    border: 1px solid #2C2C2C;
+    font-size: 11.5px;
+    font-weight: 500;
+    color: #AAAAAA;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    transition: all 0.15s ease;
+    cursor: pointer;
+}
+.mod-action-pill:hover {
+    background: #292929;
+    border-color: #444444;
+    color: #FFFFFF;
+}
+.mod-action-pill.danger:hover {
+    background: rgba(209, 52, 56, 0.15);
+    border-color: #D13438;
+    color: #F44336;
+}

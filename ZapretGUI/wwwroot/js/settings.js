@@ -77,9 +77,10 @@ function onSettingsChanged() {
 }
 
 function applyVisualSettingsLive() {
-    document.body.classList.toggle('colorblind-mode', appState.settings.colorblindMode);
+    const isCompact = !!appState.settings.compactMode;
+    document.body.classList.toggle('colorblind-mode', !!appState.settings.colorblindMode);
+    document.body.classList.toggle('compact-mode', isCompact);
 
-    const isCompact = appState.settings.compactMode;
     const statsPanel = document.getElementById('home-stats-panel');
     const logsPanel = document.getElementById('home-logs-panel');
     const btnCol = document.getElementById('home-btn-col');
@@ -89,6 +90,15 @@ function applyVisualSettingsLive() {
     logsPanel.classList.toggle('hidden', isCompact);
     btnCol.className = isCompact ? 'col-span-6 flex flex-col items-center justify-center' : 'col-span-4 flex flex-col items-center justify-center';
     cardsCol.className = isCompact ? 'col-span-6 flex flex-col gap-3' : 'col-span-4 flex flex-col gap-3';
+
+    const guideGrid = document.getElementById('mods-guide-grid');
+    if (guideGrid) {
+        guideGrid.className = isCompact ? 'flex flex-col gap-2.5' : 'grid grid-cols-2 gap-3';
+    }
+
+    if (typeof renderModsView === 'function') {
+        renderModsView();
+    }
 }
 
 function updateRoutingStatusUI(rs) {

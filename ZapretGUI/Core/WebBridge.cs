@@ -1209,41 +1209,68 @@ namespace ZapretGUI.Core
 
         private void HandleSaveSettings(JsonElement s)
         {
-            if (s.TryGetProperty("autoStart", out var autoStart)) StartupHelper.SetAutoStart(autoStart.GetBoolean());
-            if (s.TryGetProperty("startMinimized", out var sm)) SettingsManager.Current.StartMinimized = sm.GetBoolean();
-            if (s.TryGetProperty("minimizeOnClose", out var moc)) SettingsManager.Current.MinimizeOnClose = moc.GetBoolean();
-            if (s.TryGetProperty("notificationsEnabled", out var ne)) SettingsManager.Current.NotificationsEnabled = ne.GetBoolean();
+            var cur = SettingsManager.Current;
 
-            if (s.TryGetProperty("focusMode", out var fm)) SettingsManager.Current.FocusMode = fm.GetBoolean();
+            if (s.TryGetProperty("autoStart", out var autoStart))
+            {
+                bool wantAuto = autoStart.GetBoolean();
+                if (StartupHelper.IsAutoStartEnabled() != wantAuto)
+                    StartupHelper.SetAutoStart(wantAuto);
+            }
+
+            if (s.TryGetProperty("startMinimized", out var sm)) cur.StartMinimized = sm.GetBoolean();
+            if (s.TryGetProperty("minimizeOnClose", out var moc)) cur.MinimizeOnClose = moc.GetBoolean();
+            if (s.TryGetProperty("notificationsEnabled", out var ne)) cur.NotificationsEnabled = ne.GetBoolean();
+            if (s.TryGetProperty("focusMode", out var fm)) cur.FocusMode = fm.GetBoolean();
+
             if (s.TryGetProperty("compactMode", out var cm))
             {
-                SettingsManager.Current.CompactMode = cm.GetBoolean();
-                if (_mainWindow is MainWindow mw)
-                    mw.AnimateWindowSize(SettingsManager.Current.CompactMode);
+                bool newCompact = cm.GetBoolean();
+                if (cur.CompactMode != newCompact)
+                {
+                    cur.CompactMode = newCompact;
+                    if (_mainWindow is MainWindow mw)
+                        mw.AnimateWindowSize(newCompact);
+                }
             }
+
             if (s.TryGetProperty("hardwareAcceleration", out var ha))
             {
-                var useGpu = ha.GetBoolean();
-                SettingsManager.Current.HardwareAcceleration = useGpu;
-                _mainWindow.Dispatcher.Invoke(() =>
+                bool useGpu = ha.GetBoolean();
+                if (cur.HardwareAcceleration != useGpu)
                 {
-                    RenderOptions.ProcessRenderMode = useGpu ? RenderMode.Default : RenderMode.SoftwareOnly;
-                });
+                    cur.HardwareAcceleration = useGpu;
+                    _mainWindow.Dispatcher.Invoke(() =>
+                    {
+                        RenderOptions.ProcessRenderMode = useGpu ? RenderMode.Default : RenderMode.SoftwareOnly;
+                    });
+                }
             }
+
             if (s.TryGetProperty("colorblindMode", out var cb))
             {
-                SettingsManager.Current.ColorblindMode = cb.GetBoolean();
-                UIHelper.ApplyThemeColors();
+                bool newCb = cb.GetBoolean();
+                if (cur.ColorblindMode != newCb)
+                {
+                    cur.ColorblindMode = newCb;
+                    UIHelper.ApplyThemeColors();
+                }
             }
 
             if (s.TryGetProperty("pingUrl", out var pu))
             {
                 var urlStr = pu.GetString();
-                SettingsManager.Current.PingUrl = string.IsNullOrWhiteSpace(urlStr) ? AppConstants.DefaultPingUrl : urlStr.Trim();
+                cur.PingUrl = string.IsNullOrWhiteSpace(urlStr) ? AppConstants.DefaultPingUrl : urlStr.Trim();
             }
-            if (s.TryGetProperty("statsUpdateInterval", out var sui)) SettingsManager.Current.StatsUpdateInterval = Math.Max(1, sui.GetInt32());
-            if (s.TryGetProperty("autoRestartServices", out var ars)) SettingsManager.Current.AutoRestartServices = ars.GetBoolean();
-            if (s.TryGetProperty("hostsSourceIndex", out var hsi)) SettingsManager.Current.HostsSourceIndex = Math.Clamp(hsi.GetInt32(), 0, 3);
+
+            if (s.TryGetProperty("statsUpdateInterval", out var sui))
+                cur.StatsUpdateInterval = Math.Max(1, sui.GetInt32());
+
+            if (s.TryGetProperty("autoRestartServices", out var ars))
+                cur.AutoRestartServices = ars.GetBoolean();
+
+            if (s.TryGetProperty("hostsSourceIndex", out var hsi))
+                cur.HostsSourceIndex = Math.Clamp(hsi.GetInt32(), 0, 3);
 
             SettingsManager.Save();
         }
