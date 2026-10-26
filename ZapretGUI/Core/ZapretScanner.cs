@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Windows.Threading;
+using System.Timers;
 
 namespace ZapretGUI.Core
 {
@@ -18,9 +18,10 @@ namespace ZapretGUI.Core
 
         private Process? _scanProcess;
         private CancellationTokenSource? _scanCts;
-        private List<string> _topConfigs = new List<string>();
+        private readonly List<string> _topConfigs = new List<string>();
 
         public event Action<string>? LogMessage;
+        public event Action<string, int, int>? ConfigTested; // fileName, okCount, totalCount
         public event Action<List<string>>? ScanCompleted;
         public event Action<Exception>? ScanFailed;
 
@@ -33,8 +34,8 @@ namespace ZapretGUI.Core
             _topConfigs.Clear();
             _scanCts = new CancellationTokenSource();
 
-            var hideTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
-            hideTimer.Tick += (s, ev) =>
+            using var hideTimer = new System.Timers.Timer(100);
+            hideTimer.Elapsed += (s, ev) =>
             {
                 foreach (var p in Process.GetProcessesByName(AppConstants.ZapretProcessName))
                 {
@@ -77,7 +78,7 @@ namespace ZapretGUI.Core
                         if (_scanCts.Token.IsCancellationRequested) break;
 
                         var line = await _scanProcess.StandardOutput.ReadLineAsync();
-                        if (string.IsNullOrWhiteSpace(line)) 
+                        if (string.IsNullOrWhiteSpace(line))
                             continue;
 
                         line = Regex.Replace(line, @"\x1B\[[0-9;]*[a-zA-Z]", "");
@@ -144,16 +145,20 @@ namespace ZapretGUI.Core
             if (statsMatch.Success)
             {
                 var batName = statsMatch.Groups[1].Value.Trim();
-                var okCount = statsMatch.Groups[2].Value;
-                var errCount = statsMatch.Groups[3].Value;
+                var okStr = statsMatch.Groups[2].Value;
+                var errStr = statsMatch.Groups[3].Value;
 
-                if (errCount == "0" && okCount != "0")
+                int.TryParse(okStr, out int ok);
+                int.TryParse(errStr, out int err);
+                ConfigTested?.Invoke(batName, ok, ok + err);
+
+                if (err == 0 && ok > 0)
                 {
                     if (!_topConfigs.Contains(batName)) _topConfigs.Add(batName);
-                    return $"      ✨ {batName} -> Работает идеально (Успешно: {okCount})";
+                    return $"      ✨ {batName} -> Работает идеально (Успешно: {okStr})";
                 }
                 else
-                    return $"      ⚠️ {batName} -> Есть блокировки (Успешно: {okCount}, Ошибок: {errCount})";
+                    return $"      ⚠️ {batName} -> Есть блокировки (Успешно: {okStr}, Ошибок: {errStr})";
             }
 
             if (line.Contains("Best config:"))

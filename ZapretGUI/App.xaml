@@ -12,10 +12,6 @@
                 <ui:ControlsDictionary />
             </ResourceDictionary.MergedDictionaries>
 
-            <localCore:ActiveStatusToBrushConverter x:Key="ActiveStatusToBrushConverter" />
-            <localCore:ActiveStatusToIconConverter x:Key="ActiveStatusToIconConverter" />
-            <localCore:PingToBrushConverter x:Key="PingToBrushConverter" />
-
             <SolidColorBrush x:Key="BrandSuccessBrush" Color="#107C10" />
             <SolidColorBrush x:Key="BrandErrorBrush" Color="#D13438" />
             <SolidColorBrush x:Key="BrandWarningBrush" Color="#FF8C00" />

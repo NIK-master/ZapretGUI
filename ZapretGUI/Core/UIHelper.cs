@@ -21,24 +21,11 @@ namespace ZapretGUI.Core
         public static void ApplyThemeColors()
         {
             var res = System.Windows.Application.Current?.Resources;
-            if (res == null) 
+            if (res == null)
                 return;
 
             res["BrandSuccessBrush"] = GetSuccessBrush();
             res["BrandErrorBrush"] = GetErrorBrush();
-        }
-
-        public static T? FindParent<T>(DependencyObject? child, string? name = null) where T : FrameworkElement
-        {
-            if (child == null) return null;
-            DependencyObject? parent = VisualTreeHelper.GetParent(child);
-            while (parent != null)
-            {
-                if (parent is T typed && (name == null || typed.Name == name))
-                    return typed;
-                parent = VisualTreeHelper.GetParent(parent);
-            }
-            return null;
         }
 
         public static void ShowAlert(string title, string message, bool isError = false)
@@ -49,17 +36,11 @@ namespace ZapretGUI.Core
                 var icon = isError ? "\xE783" : "\xE946";
 
                 var mainWin = System.Windows.Application.Current.MainWindow;
-                if (mainWin != null && mainWin.IsVisible)
-                    AnimationHelper.ApplyBlur(mainWin, 8, TimeSpan.FromSeconds(0.15));
-
                 var dlg = new UpdateWindow(title, message, "ОК", showCancel: false, accentHex: accent, iconGlyph: icon);
                 if (mainWin != null && mainWin.IsVisible)
                     dlg.Owner = mainWin;
 
                 dlg.ShowDialog();
-
-                if (mainWin != null && mainWin.IsVisible)
-                    AnimationHelper.RemoveBlur(mainWin, TimeSpan.FromSeconds(0.15));
             });
         }
 
@@ -71,18 +52,11 @@ namespace ZapretGUI.Core
                 var icon = isDanger ? "\xE7BA" : "\xE897";
 
                 var mainWin = System.Windows.Application.Current.MainWindow;
-                if (mainWin != null && mainWin.IsVisible)
-                    AnimationHelper.ApplyBlur(mainWin, 8, TimeSpan.FromSeconds(0.15));
-
                 var dlg = new UpdateWindow(title, message, confirmText, showCancel: true, accentHex: accent, iconGlyph: icon);
                 if (mainWin != null && mainWin.IsVisible)
                     dlg.Owner = mainWin;
 
                 dlg.ShowDialog();
-
-                if (mainWin != null && mainWin.IsVisible)
-                    AnimationHelper.RemoveBlur(mainWin, TimeSpan.FromSeconds(0.15));
-
                 return dlg.Result;
             });
         }

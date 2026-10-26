@@ -1,0 +1,2666 @@
+﻿<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zapret for ADHD</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            --accent-color: #10B981;
+            --accent-glow: rgba(16, 185, 129, 0.45);
+            --danger-color: #EF4444;
+            --warning-color: #F59E0B;
+            --bg-dark: #0A0A0C;
+            --card-bg: #141417;
+        }
+
+        body.colorblind-mode {
+            --accent-color: #0078D7;
+            --accent-glow: rgba(0, 120, 215, 0.45);
+            --danger-color: #FF8C00;
+            --warning-color: #FFB900;
+        }
+
+        * {
+            user-select: none;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: #F4F4F5;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            overflow: hidden;
+            margin: 0;
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #3F3F46;
+            border-radius: 99px;
+        }
+
+        .glass-card {
+            background: var(--card-bg);
+            border: 1px solid #27272A;
+            transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+            .glass-card:hover {
+                border-color: #3F3F46;
+            }
+
+        /* Кибер-тумблер */
+        .cyber-toggle {
+            appearance: none;
+            width: 44px;
+            height: 24px;
+            background: #27272A;
+            border: 1px solid #3F3F46;
+            border-radius: 999px;
+            position: relative;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            flex-shrink: 0;
+        }
+
+            .cyber-toggle::after {
+                content: '';
+                position: absolute;
+                top: 2px;
+                left: 2px;
+                width: 18px;
+                height: 18px;
+                background: #888888;
+                border-radius: 50%;
+                transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+            }
+
+            .cyber-toggle:checked {
+                background: var(--accent-color);
+                border-color: var(--accent-color);
+            }
+
+                .cyber-toggle:checked::after {
+                    transform: translateX(20px);
+                    background: white;
+                }
+
+        /* Главная круглая кнопка */
+        .power-btn {
+            position: relative;
+            width: 190px;
+            height: 190px;
+            border-radius: 9999px;
+            background: radial-gradient(circle at 50% 30%, #1C1C21, #0E0E11);
+            border: 3px solid #27272A;
+            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            cursor: pointer;
+        }
+
+            .power-btn:hover {
+                transform: scale(1.03);
+                border-color: #52525B;
+            }
+
+            .power-btn:active {
+                transform: scale(0.95);
+            }
+
+            .power-btn.active {
+                border-color: var(--accent-color);
+                box-shadow: 0 0 45px var(--accent-glow), inset 0 0 20px var(--accent-glow);
+                animation: pulseGlow 2.4s infinite ease-in-out;
+            }
+
+        @keyframes pulseGlow {
+            0%, 100% {
+                box-shadow: 0 0 30px var(--accent-glow), inset 0 0 12px var(--accent-glow);
+            }
+
+            50% {
+                box-shadow: 0 0 65px var(--accent-glow), inset 0 0 28px var(--accent-glow);
+            }
+        }
+
+        /* Анимация вкладок и модальных оверлеев */
+        .tab-view {
+            display: none;
+            animation: slideUpFade 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+            .tab-view.active {
+                display: flex;
+            }
+
+        .modal-overlay {
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+        }
+
+            .modal-overlay.open {
+                opacity: 1;
+                pointer-events: auto;
+            }
+
+        .modal-box {
+            transform: scale(0.95) translateY(10px);
+            transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .modal-overlay.open .modal-box {
+            transform: scale(1) translateY(0);
+        }
+
+        @keyframes slideUpFade {
+            from {
+                opacity: 0;
+                transform: translateY(14px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Карточки модов и пинга серверов */
+        .mod-card-enter {
+            animation: modSlideIn 0.24s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        @keyframes modSlideIn {
+            from {
+                opacity: 0;
+                transform: translateX(18px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .server-ping-card {
+            background: #1C1C20;
+            border: 1px solid #2A2A30;
+            border-radius: 8px;
+            padding: 10px 14px;
+            min-width: 132px;
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+            position: relative;
+            overflow: hidden;
+        }
+
+            .server-ping-card:hover {
+                transform: scale(1.05);
+                border-color: #52525B;
+                z-index: 10;
+            }
+
+        /* Shimmer-скелетон для диагностики */
+        .shimmer-box {
+            position: relative;
+            overflow: hidden;
+            background: #222227;
+        }
+
+            .shimmer-box::after {
+                content: '';
+                position: absolute;
+                top: 0;
+                left: -150%;
+                width: 150%;
+                height: 100%;
+                background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent);
+                animation: shimmerAnim 1.3s infinite;
+            }
+
+        @keyframes shimmerAnim {
+            100% {
+                left: 150%;
+            }
+        }
+
+        /* Анимации пасхалок Диагностики */
+        .easter-spin {
+            animation: easterRotate 0.55s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        @keyframes easterRotate {
+            from {
+                transform: rotate(0deg);
+            }
+
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .easter-fly {
+            animation: easterFlyPlane 0.75s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        @keyframes easterFlyPlane {
+            0% {
+                transform: translate(0, 0);
+                opacity: 1;
+            }
+
+            45% {
+                transform: translate(90px, -90px);
+                opacity: 0;
+            }
+
+            50% {
+                transform: translate(-45px, 45px);
+                opacity: 0;
+            }
+
+            100% {
+                transform: translate(0, 0);
+                opacity: 1;
+            }
+        }
+
+        .glitch-anim {
+            animation: glitchShake 0.35s ease;
+        }
+
+        @keyframes glitchShake {
+            0%, 100% {
+                transform: translateX(0);
+            }
+
+            20%, 60% {
+                transform: translateX(-8px) skewX(-2deg);
+            }
+
+            40%, 80% {
+                transform: translateX(8px) skewX(2deg);
+            }
+        }
+
+        .dot-online {
+            background-color: var(--accent-color);
+            box-shadow: 0 0 8px var(--accent-color);
+            animation: breathe 2s infinite ease-in-out;
+        }
+
+        .dot-offline {
+            background-color: var(--danger-color);
+            box-shadow: 0 0 8px var(--danger-color);
+        }
+
+        @keyframes breathe {
+            0%, 100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.3;
+            }
+        }
+
+        .spin-anim {
+            animation: spin 0.9s linear infinite;
+        }
+
+        @keyframes spin {
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .editor-tool-btn {
+            background: #1F1F23;
+            color: #D4D4D8;
+            border: 1px solid #2E2E34;
+            border-radius: 6px;
+            padding: 4px 9px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+            .editor-tool-btn:hover {
+                background: #2E2E36;
+                border-color: #4A4A55;
+                color: white;
+            }
+
+        .setting-row {
+            padding: 12px 14px;
+            border-radius: 10px;
+            transition: background 0.15s ease;
+        }
+
+            .setting-row:hover {
+                background: rgba(255, 255, 255, 0.03);
+            }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col rounded-xl border border-zinc-800 overflow-hidden bg-[#0A0A0C]">
+
+    <!-- ШАПКА ОКНА (TITLE BAR) -->
+    <header id="titlebar" class="h-11 bg-[#121215] border-b border-zinc-800/80 flex items-center justify-between pr-3 shrink-0 cursor-move">
+        <div class="flex items-center">
+            <button onclick="toggleSidebar()" class="w-11 h-11 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-800/50 transition cursor-pointer">
+                ☰
+            </button>
+
+            <div class="flex items-center gap-5 ml-2 pointer-events-none">
+                <span class="font-semibold text-sm text-zinc-300">Zapret for ADHD</span>
+
+                <div class="flex items-center gap-4 text-xs text-zinc-400">
+                    <div class="flex items-center gap-1.5">
+                        <span id="dot-net" class="w-2 h-2 rounded-full dot-online"></span>
+                        <span>Сеть</span>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <span id="dot-zapret" class="w-2 h-2 rounded-full dot-offline"></span>
+                        <span>Zapret</span>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <span id="dot-proxy" class="w-2 h-2 rounded-full dot-offline"></span>
+                        <span>TgWsProxy</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-1">
+            <button onclick="sendCmd('windowMinimize')" class="w-8 h-7 rounded hover:bg-zinc-800 text-zinc-400 hover:text-white transition flex items-center justify-center">—</button>
+            <button onclick="sendCmd('windowClose')" class="w-8 h-7 rounded hover:bg-red-500/20 text-red-400 hover:text-red-300 transition flex items-center justify-center">✕</button>
+        </div>
+    </header>
+
+    <!-- ОСНОВНОЙ КОНТЕЙНЕР -->
+    <div class="flex flex-1 overflow-hidden relative">
+
+        <!-- БОКОВОЕ МЕНЮ (SIDEBAR) -->
+        <aside id="sidebar" class="w-56 bg-[#141418] border-r border-zinc-800/80 p-3 flex flex-col justify-between shrink-0 transition-all duration-200 overflow-hidden">
+            <nav class="flex flex-col gap-2 w-50">
+                <button onclick="switchTab('home', this)" class="nav-btn active flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-semibold bg-zinc-800 text-white border-l-4 border-emerald-500 transition-all cursor-pointer">
+                    <span>⚡</span><span>Главная</span>
+                </button>
+                <button onclick="switchTab('mods', this)" class="nav-btn flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium text-zinc-400 hover:bg-zinc-800/40 hover:text-zinc-200 transition-all cursor-pointer">
+                    <span>🧩</span><span>Модификации</span>
+                </button>
+                <button onclick="switchTab('diag', this)" class="nav-btn flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium text-zinc-400 hover:bg-zinc-800/40 hover:text-zinc-200 transition-all cursor-pointer">
+                    <span>📡</span><span>Диагностика</span>
+                </button>
+                <button onclick="switchTab('settings', this)" class="nav-btn flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium text-zinc-400 hover:bg-zinc-800/40 hover:text-zinc-200 transition-all cursor-pointer">
+                    <span>⚙️</span><span>Настройки</span>
+                </button>
+            </nav>
+
+            <div class="text-center text-[11px] text-zinc-600 font-mono pb-1">
+                Zapret for ADHD <span id="app-version">v3.5</span>
+            </div>
+        </aside>
+
+        <!-- ГЛАВНАЯ ОБЛАСТЬ ВКЛАДОК -->
+        <main id="main-container" class="flex-1 p-6 overflow-y-auto relative bg-[#0E0E11]">
+
+            <!-- ================================================================= -->
+            <!-- ВКЛАДКА 1: ГЛАВНАЯ (HOMEVIEW)                                     -->
+            <!-- ================================================================= -->
+            <section id="tab-home" class="tab-view active flex-col h-full justify-between gap-4">
+                <div class="text-center pt-1">
+                    <h1 id="home-header-title" class="text-2xl font-bold tracking-tight">⚡ Починить Telegram и Discord</h1>
+                    <p class="text-sm text-zinc-400 mt-1">Одна кнопка — запустит всё необходимое.</p>
+                </div>
+
+                <div class="grid grid-cols-12 gap-6 items-center my-auto">
+                    <div id="home-btn-col" class="col-span-4 flex flex-col items-center justify-center">
+                        <button id="main-toggle-btn" onclick="onMainToggleClick()" class="power-btn flex flex-col items-center justify-center">
+                            <span class="text-5xl mb-2">⚡</span>
+                            <span id="main-btn-text" class="text-sm font-semibold text-zinc-100">Починить интернет</span>
+                        </button>
+                    </div>
+
+                    <div id="home-stats-panel" class="col-span-4 glass-card rounded-2xl p-4 flex flex-col gap-3">
+                        <div class="flex justify-between items-center">
+                            <div>
+                                <div class="text-xs text-zinc-400 font-semibold">⬇ Входящий</div>
+                                <div class="mt-0.5"><span id="stat-rx" class="text-2xl font-bold font-mono text-white">0.0</span> <span class="text-xs text-zinc-500">Мбит/с</span></div>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-xs text-zinc-400 font-semibold">⬆ Исходящий</div>
+                                <div class="mt-0.5"><span id="stat-tx" class="text-2xl font-bold font-mono text-white">0.0</span> <span class="text-xs text-zinc-500">Мбит/с</span></div>
+                            </div>
+                        </div>
+
+                        <canvas id="traffic-chart" width="260" height="58" class="w-full h-14 rounded-lg bg-zinc-950/70 border border-zinc-800/60"></canvas>
+
+                        <div class="flex items-center justify-between pt-2 border-t border-zinc-800/80">
+                            <div>
+                                <div class="text-xs text-zinc-400 font-semibold">Пинг (EU Frankfurt)</div>
+                                <div class="mt-0.5"><span id="stat-ping" class="text-xl font-bold font-mono text-emerald-400">...</span> <span class="text-xs text-zinc-500">мс</span></div>
+                            </div>
+                            <button onclick="refreshPing()" class="w-8 h-8 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 flex items-center justify-center transition cursor-pointer" title="Обновить пинг">
+                                <span id="ping-refresh-icon" class="inline-block text-sm">↻</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="home-cards-col" class="col-span-4 flex flex-col gap-3">
+                        <div class="glass-card rounded-2xl p-4">
+                            <div class="flex items-center justify-between mb-1">
+                                <span class="font-semibold text-[15px]">Настройки Zapret</span>
+                                <input id="chk-zapret" type="checkbox" checked onchange="onModuleToggleChange()" class="cyber-toggle">
+                            </div>
+                            <div id="zapret-status-label" class="text-xs text-red-400 font-medium mb-3">Остановлен</div>
+
+                            <div id="btn-open-config" onclick="openConfigModal()" class="bg-[#1E1E24] hover:bg-[#27272F] border border-zinc-800 rounded-xl p-2.5 mb-2 cursor-pointer transition flex items-center justify-between">
+                                <div class="overflow-hidden pr-2">
+                                    <div class="text-[11px] text-zinc-400">Текущий конфиг:</div>
+                                    <div id="txt-main-profile" class="text-xs font-mono font-semibold text-white truncate">general.bat</div>
+                                </div>
+                                <span class="text-zinc-400 text-sm">⚙</span>
+                            </div>
+
+                            <div id="btn-open-gf" onclick="openGameFilterModal()" class="bg-[#1E1E24] hover:bg-[#27272F] border border-zinc-800 rounded-xl p-2.5 cursor-pointer transition flex items-center justify-between">
+                                <div class="overflow-hidden pr-2">
+                                    <div class="text-[11px] text-zinc-400">Игровой фильтр (Game Filter):</div>
+                                    <div id="txt-gf-status" class="text-xs font-mono font-semibold text-zinc-400 truncate">Отключен</div>
+                                </div>
+                                <span class="text-blue-400 text-sm">🎮</span>
+                            </div>
+                        </div>
+
+                        <div class="glass-card rounded-2xl p-4 flex items-center justify-between">
+                            <div>
+                                <div class="font-semibold text-[15px]">TgWsProxy</div>
+                                <div class="text-xs text-zinc-400 mt-0.5">Прокси для Telegram</div>
+                            </div>
+                            <input id="chk-proxy" type="checkbox" checked onchange="onModuleToggleChange()" class="cyber-toggle">
+                        </div>
+                    </div>
+                </div>
+
+                <div id="home-logs-panel" class="glass-card rounded-xl p-3.5 h-52 flex flex-col bg-[#0A0A0C]">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-xs font-semibold text-zinc-400">Лог событий</span>
+                        <div class="flex items-center gap-3">
+                            <button onclick="clearLogs()" class="text-xs text-zinc-400 hover:text-white flex items-center gap-1 transition cursor-pointer">
+                                <span>🗑</span><span>Очистить</span>
+                            </button>
+                            <button onclick="exportLogs()" class="text-xs text-zinc-400 hover:text-white flex items-center gap-1 transition cursor-pointer">
+                                <span>💾</span><span>Экспорт</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div id="log-box" class="flex-1 overflow-y-auto font-mono text-[13px] space-y-1 text-zinc-300 select-text pr-2"></div>
+                </div>
+            </section>
+
+            <!-- ================================================================= -->
+            <!-- ВКЛАДКА 2: МОДИФИКАЦИИ (MODSVIEW)                                 -->
+            <!-- ================================================================= -->
+            <section id="tab-mods" class="tab-view h-full gap-5">
+                <div class="w-52 bg-[#0C0C0E] border border-zinc-800/90 rounded-xl p-3 flex flex-col shrink-0">
+                    <div class="text-lg font-bold text-white px-2 mb-4">Модификации</div>
+
+                    <button id="mod-tab-bat" onclick="switchModsSubTab('bat')" class="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-semibold bg-[#2A2A2A] text-white mb-1.5 transition cursor-pointer text-left">
+                        <span>📁</span><span>.bat Стратегии</span>
+                    </button>
+
+                    <button id="mod-tab-list" onclick="switchModsSubTab('list')" class="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-semibold text-zinc-400 hover:bg-zinc-800/50 hover:text-white mb-2 transition cursor-pointer text-left">
+                        <span>🌐</span><span>Листы доменов</span>
+                    </button>
+
+                    <div class="h-[1px] bg-zinc-800 my-2"></div>
+
+                    <button id="mod-tab-guide" onclick="switchModsSubTab('guide')" class="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-semibold text-zinc-400 hover:bg-zinc-800/50 hover:text-white transition cursor-pointer text-left">
+                        <span>📖</span><span>Руководство</span>
+                    </button>
+                </div>
+
+                <div class="flex-1 flex flex-col overflow-hidden">
+                    <div class="mb-3 shrink-0">
+                        <h2 id="mods-cat-title" class="text-xl font-bold text-white">.bat Стратегии</h2>
+                        <p id="mods-cat-desc" class="text-xs text-zinc-400 mt-1 mb-3">Пользовательские скрипты обхода для специфичных игр и задач.</p>
+
+                        <div id="mods-action-bar" class="flex flex-wrap items-center gap-2">
+                            <button onclick="promptDisableAllMods()" class="px-3 py-1.5 rounded-lg border border-zinc-700/80 hover:bg-zinc-800 text-red-400 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer">
+                                <span>✕</span><span>Отключить всё</span>
+                            </button>
+                            <button onclick="sendCmd('importMod')" class="px-3 py-1.5 rounded-lg border border-zinc-700/80 hover:bg-zinc-800 text-blue-400 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer">
+                                <span>📥</span><span>Импорт (.zip)</span>
+                            </button>
+                            <button onclick="sendCmd('openFolder', { folder: 'mods' })" class="px-3 py-1.5 rounded-lg border border-zinc-700/80 hover:bg-zinc-800 text-zinc-300 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer">
+                                <span>📂</span><span>Папка</span>
+                            </button>
+                            <button onclick="openCreateModModal()" class="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 transition cursor-pointer">
+                                <span>＋</span><span>Создать</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="mods-lists-container" class="flex-1 overflow-y-auto pr-2 space-y-3">
+                        <div id="active-mods-section" class="hidden">
+                            <div class="text-[11px] font-bold text-emerald-400 tracking-wider uppercase mb-2">ВКЛЮЧЕННЫЕ МОДЫ</div>
+                            <div id="active-mods-list" class="space-y-2.5"></div>
+                        </div>
+
+                        <div id="mods-divider" class="h-[1px] bg-zinc-800 my-3 hidden"></div>
+
+                        <div id="available-mods-section" class="hidden">
+                            <div class="text-[11px] font-bold text-zinc-400 tracking-wider uppercase mb-2">ДОСТУПНЫЕ МОДЫ</div>
+                            <div id="available-mods-list" class="space-y-2.5"></div>
+                        </div>
+
+                        <div id="mods-empty-state" class="flex flex-col items-center justify-center py-16 text-zinc-500 hidden">
+                            <div class="text-4xl mb-2 opacity-40">⊘</div>
+                            <div class="text-sm font-semibold">В этой категории нет установленных модов</div>
+                        </div>
+                    </div>
+
+                    <div id="mods-guide-container" class="flex-1 overflow-y-auto pr-2 space-y-3 hidden">
+                        <div class="p-4 rounded-xl bg-[#0A1F0A] border border-emerald-600/60 flex items-center gap-4">
+                            <span class="text-2xl">⚡</span>
+                            <div>
+                                <div class="font-bold text-sm text-white mb-1">Система модификаций Zapret</div>
+                                <div class="text-xs text-zinc-300 leading-relaxed">Здесь вы можете создавать собственные стратегии обхода, собирать списки доменов и обмениваться готовыми модами с другими пользователями. Все изменения изолированы и не ломают базовые файлы программы.</div>
+                            </div>
+                        </div>
+
+                        <div class="glass-card rounded-xl p-4 space-y-2">
+                            <div class="font-bold text-sm text-white flex items-center gap-2"><span class="text-blue-400">📁</span> 1. ДВА ТИПА МОДИФИКАЦИЙ</div>
+                            <p class="text-xs text-zinc-300 leading-relaxed">
+                                <b class="text-emerald-400">• .bat Стратегии:</b> Индивидуальные профили запуска ядра <code class="text-white">winws.exe</code> (например, под конкретные игры или провайдеров). При включении такой мод автоматически появляется в списке выбора конфигураций на «Главной» вкладке с префиксом <code class="text-white">mod_</code>.
+                            </p>
+                            <p class="text-xs text-zinc-300 leading-relaxed">
+                                <b class="text-blue-400">• Листы доменов:</b> Именованные списки сайтов. Когда вы включаете такой мод, программа автоматически внедряет его домены в общий список <code class="text-white">list-general.txt</code> без дубликатов. При отключении мода его сайты аккуратно удаляются из общего списка.
+                            </p>
+                        </div>
+
+                        <div class="glass-card rounded-xl p-4 space-y-1.5 text-xs text-zinc-300 leading-relaxed">
+                            <div class="font-bold text-sm text-white flex items-center gap-2 mb-1"><span class="text-emerald-400">＋</span> 2. СОЗДАНИЕ И АКТИВАЦИЯ</div>
+                            <div><b class="text-white">1.</b> Выберите слева нужную категорию («.bat Стратегии» или «Листы доменов») и нажмите зелёную кнопку <b class="text-emerald-400">«+ Создать»</b>.</div>
+                            <div><b class="text-white">2.</b> Укажите технический ID папки (на английском), отображаемое название, автора и краткое описание.</div>
+                            <div><b class="text-white">3.</b> Для стратегий программа автоматически подготовит базовый рабочий шаблон с вызовом <code class="text-white">winws.exe</code>.</div>
+                            <div><b class="text-white">4.</b> Нажмите <b class="text-blue-400">«Включить»</b> на карточке мода, чтобы активировать его.</div>
+                        </div>
+
+                        <div class="glass-card rounded-xl p-4 space-y-1.5 text-xs text-zinc-300 leading-relaxed">
+                            <div class="font-bold text-sm text-white flex items-center gap-2 mb-1"><span class="text-amber-400">✎</span> 3. РЕДАКТОР КОДА И СВОЙСТВ</div>
+                            <div><b class="text-white">• Паспорт мода:</b> В верхней панели вы можете в любой момент изменить Название, Автора, Версию и Описание мода.</div>
+                            <div><b class="text-white">• Быстрые сниппеты (.bat):</b> Нажимайте на готовые кнопки (<code class="text-emerald-400">--new ^, --filter-tcp, %BIN%, %LISTS%</code>) для мгновенной вставки аргументов.</div>
+                            <div><b class="text-white">• Проверка синтаксиса (.bat):</b> Кнопка <span class="text-emerald-400">«✓ Проверить синтаксис»</span> тестирует скрипт на незакрытые кавычки, наличие вызова ядра и правильность флагов.</div>
+                            <div><b class="text-white">• Авто-очистка доменов (Листы):</b> Кнопка <span class="text-blue-400">«Очистить дубли и URL (A-Z)»</span> сама превратит ссылки вида <code class="text-white">https://www.site.com/page</code> в чистый домен <code class="text-white">site.com</code>, удалит дубликаты и отсортирует список.</div>
+                        </div>
+
+                        <div class="glass-card rounded-xl p-4 space-y-1.5 text-xs text-zinc-300 leading-relaxed">
+                            <div class="font-bold text-sm text-white flex items-center gap-2 mb-1"><span class="text-purple-400">📦</span> 4. ИМПОРТ И ЭКСПОРТ (.ZIP / .NETFIX-MOD)</div>
+                            <div><b class="text-blue-400">• Экспорт:</b> Нажмите «Экспорт» на карточке любого мода. Программа упакует скрипт/список и его паспорт (<code class="text-white">mod.json</code>) в готовый архив.</div>
+                            <div><b class="text-emerald-400">• Импорт:</b> Нажмите «Импорт (.zip)» в верхней панели и выберите архив — программа сама определит категорию и установит мод.</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ================================================================= -->
+            <!-- ВКЛАДКА 3: ДИАГНОСТИКА (ПОЛНЫЙ ПЕРЕНОС DIAGNOSTICSVIEW)           -->
+            <!-- ================================================================= -->
+            <section id="tab-diag" class="tab-view flex-col gap-4">
+                <!-- Верхняя шапка с прогресс-баром и кнопкой запуска -->
+                <div class="flex items-center justify-between gap-4">
+                    <div>
+                        <h2 class="text-2xl font-bold text-white">Мониторинг сети</h2>
+                        <p id="diag-status-txt" class="text-xs text-zinc-400 mt-1">Ожидание проверки...</p>
+                    </div>
+
+                    <div id="diag-progress-wrap" class="flex-1 max-w-md h-1.5 bg-zinc-800 rounded-full overflow-hidden hidden">
+                        <div id="diag-progress-bar" class="h-full bg-emerald-500 transition-all duration-300" style="width: 0%"></div>
+                    </div>
+
+                    <button id="btn-run-diag" onclick="runDiagnostics()" class="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white transition cursor-pointer shrink-0">
+                        Запустить проверку
+                    </button>
+                </div>
+
+                <!-- Карточки вердиктов Telegram и Discord (с пасхалками по 5 кликам!) -->
+                <div class="grid grid-cols-2 gap-4">
+                    <div id="diag-tg-card" class="glass-card rounded-xl p-4 flex items-center gap-4">
+                        <span id="diag-tg-emoji" onclick="onTgEmojiClick()" class="text-3xl cursor-pointer inline-block select-none" title="Нажми 5 раз...">✈️</span>
+                        <div>
+                            <div id="diag-tg-title" class="text-base font-bold text-white">Telegram</div>
+                            <div id="diag-tg-sub" class="text-xs text-zinc-400 mt-0.5">Ожидание данных...</div>
+                        </div>
+                    </div>
+
+                    <div id="diag-ds-card" class="glass-card rounded-xl p-4 flex items-center gap-4">
+                        <span id="diag-ds-emoji" onclick="onDiscordEmojiClick()" class="text-3xl cursor-pointer inline-block select-none" title="Нажми 5 раз...">🎮</span>
+                        <div>
+                            <div id="diag-ds-title" class="text-base font-bold text-white">Discord</div>
+                            <div id="diag-ds-sub" class="text-xs text-zinc-400 mt-0.5">Ожидание данных...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Активные процессы в системе -->
+                <div class="glass-card rounded-xl p-4">
+                    <div class="text-sm font-semibold text-zinc-200 mb-3">Активные процессы в системе</div>
+                    <div class="flex flex-wrap gap-6 text-xs font-semibold">
+                        <div class="flex items-center gap-2">
+                            <span id="proc-dot-tg" class="w-2.5 h-2.5 rounded-full bg-zinc-600"></span>
+                            <span>Telegram</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span id="proc-dot-ds" class="w-2.5 h-2.5 rounded-full bg-zinc-600"></span>
+                            <span>Discord</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span id="proc-dot-zp" class="w-2.5 h-2.5 rounded-full bg-zinc-600"></span>
+                            <span>Zapret (winws)</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span id="proc-dot-tw" class="w-2.5 h-2.5 rounded-full bg-zinc-600"></span>
+                            <span>TgWsProxy</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Доступность серверов Telegram и Discord -->
+                <div class="glass-card rounded-xl p-4">
+                    <div class="text-sm font-semibold text-zinc-200 mb-3">Доступность серверов Telegram (DC & Порты)</div>
+                    <div id="diag-dc-grid" class="flex flex-wrap gap-2.5 mb-5"></div>
+
+                    <div class="text-sm font-semibold text-zinc-200 mb-3">Доступность серверов Discord</div>
+                    <div id="diag-discord-grid" class="flex flex-wrap gap-2.5"></div>
+                </div>
+
+                <!-- Рекомендации по итогам проверки -->
+                <div class="glass-card rounded-xl p-4 mb-2">
+                    <div class="text-sm font-semibold text-zinc-200 mb-2.5">Рекомендации по итогам проверки</div>
+                    <div id="diag-recs-list" class="space-y-2 text-xs text-zinc-300">
+                        <div class="text-zinc-500">Запустите проверку, чтобы получить подробные рекомендации по обходу блокировок.</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ================================================================= -->
+            <!-- ВКЛАДКА 4: НАСТРОЙКИ (ПОЛНЫЙ ПЕРЕНОС SETTINGSVIEW)                -->
+            <!-- ================================================================= -->
+            <section id="tab-settings" class="tab-view flex-col gap-4 pb-6">
+                <div>
+                    <h2 class="text-2xl font-bold text-white">Настройки</h2>
+                    <p class="text-xs text-zinc-400 mt-1">Управление поведением и параметрами приложения.</p>
+                </div>
+
+                <!-- БЛОК 1: СИСТЕМНЫЕ НАСТРОЙКИ -->
+                <div class="glass-card rounded-xl p-5 space-y-1">
+                    <div class="flex items-center gap-2.5 text-base font-semibold text-white mb-3">
+                        <span class="text-zinc-400">⚙</span><span>Системные настройки</span>
+                    </div>
+
+                    <div class="setting-row flex items-center justify-between">
+                        <div>
+                            <div class="text-sm font-semibold text-white">Автозагрузка Windows</div>
+                            <div class="text-xs text-zinc-400 mt-0.5">Запускать программу при включении компьютера</div>
+                        </div>
+                        <input id="set-autostart" type="checkbox" onchange="onSettingsChanged()" class="cyber-toggle">
+                    </div>
+
+                    <div class="setting-row flex items-center justify-between">
+                        <div>
+                            <div class="text-sm font-semibold text-white">Запускать свернутым</div>
+                            <div class="text-xs text-zinc-400 mt-0.5">Прятать окно в системный трей при старте программы</div>
+                        </div>
+                        <input id="set-start-minimized" type="checkbox" onchange="onSettingsChanged()" class="cyber-toggle">
+                    </div>
+
+                    <div class="setting-row flex items-center justify-between">
+                        <div>
+                            <div class="text-sm font-semibold text-white">Сворачивать при закрытии</div>
+                            <div class="text-xs text-zinc-400 mt-0.5">Кнопка [X] не закрывает программу, а прячет её в трей</div>
+                        </div>
+                        <input id="set-minimize-close" type="checkbox" onchange="onSettingsChanged()" class="cyber-toggle">
+                    </div>
+
+                    <div class="setting-row flex items-center justify-between">
+                        <div>
+                            <div class="text-sm font-semibold text-white">Уведомления Windows (Тихий режим)</div>
+                            <div class="text-xs text-zinc-400 mt-0.5">Показывать всплывающие окна при обрыве сети или запуске/остановке служб</div>
+                        </div>
+                        <input id="set-notifications" type="checkbox" onchange="onSettingsChanged()" class="cyber-toggle">
+                    </div>
+                </div>
+
+                <!-- БЛОК 2: ВИЗУАЛЬНЫЕ ЭФФЕКТЫ -->
+                <div class="glass-card rounded-xl p-5 space-y-1">
+                    <div class="flex items-center gap-2.5 text-base font-semibold text-white mb-3">
+                        <span class="text-zinc-400">👁</span><span>Визуальные эффекты</span>
+                    </div>
+
+                    <div class="setting-row flex items-center justify-between">
+                        <div>
+                            <div class="text-sm font-semibold text-white">Режим фокусировки (Без глитчей)</div>
+                            <div class="text-xs text-zinc-400 mt-0.5">Отключить тряску камеры, эффект VHS и резкие вспышки</div>
+                        </div>
+                        <input id="set-focus-mode" type="checkbox" onchange="onSettingsChanged()" class="cyber-toggle">
+                    </div>
+
+                    <div class="setting-row flex items-center justify-between">
+                        <div>
+                            <div class="text-sm font-semibold text-white">Минималистичный интерфейс</div>
+                            <div class="text-xs text-zinc-400 mt-0.5">Скрыть графики скорости и логи, оставив только кнопки</div>
+                        </div>
+                        <input id="set-compact-mode" type="checkbox" onchange="onSettingsChanged()" class="cyber-toggle">
+                    </div>
+
+                    <div class="setting-row flex items-center justify-between">
+                        <div>
+                            <div class="text-sm font-semibold text-white">Аппаратное ускорение (GPU)</div>
+                            <div class="text-xs text-zinc-400 mt-0.5">Использовать видеокарту для отрисовки интерфейса</div>
+                        </div>
+                        <input id="set-hw-accel" type="checkbox" onchange="onSettingsChanged()" class="cyber-toggle">
+                    </div>
+
+                    <div class="setting-row flex items-center justify-between">
+                        <div>
+                            <div class="text-sm font-semibold text-white">Режим цветовой слепоты</div>
+                            <div class="text-xs text-zinc-400 mt-0.5">Заменить красно-зеленые точки индикаторов на оранжево-синие</div>
+                        </div>
+                        <input id="set-colorblind" type="checkbox" onchange="onSettingsChanged()" class="cyber-toggle">
+                    </div>
+                </div>
+
+                <!-- БЛОК 3: СЕТЬ И ДИАГНОСТИКА -->
+                <div class="glass-card rounded-xl p-5 space-y-2">
+                    <div class="flex items-center gap-2.5 text-base font-semibold text-white mb-2">
+                        <span class="text-zinc-400">🌐</span><span>Сеть и диагностика</span>
+                    </div>
+
+                    <div class="setting-row flex items-center justify-between gap-4">
+                        <div>
+                            <div class="text-sm font-semibold text-white">Адрес сервера для пинга</div>
+                            <div class="text-xs text-zinc-400 mt-0.5">URL для проверки соединения (по умолчанию Франкфурт AWS)</div>
+                        </div>
+                        <input id="set-ping-url" type="text" onblur="onSettingsChanged()" class="w-64 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-1.5 text-xs font-mono text-white focus:outline-none focus:border-emerald-500 select-text">
+                    </div>
+
+                    <div class="setting-row flex items-center justify-between gap-4">
+                        <div>
+                            <div class="text-sm font-semibold text-white">Интервал обновления статистики</div>
+                            <div class="text-xs text-zinc-400 mt-0.5">Как часто опрашивать сеть и перерисовывать графики</div>
+                        </div>
+                        <div onclick="openIntervalSelector()" class="bg-[#222227] hover:bg-[#2A2A32] border border-zinc-700 rounded-lg px-3.5 py-2 min-w-[155px] flex items-center justify-between cursor-pointer transition">
+                            <span id="txt-selected-interval" class="text-xs font-semibold text-white">1 секунда</span>
+                            <span class="text-zinc-400 text-xs ml-2">▼</span>
+                        </div>
+                    </div>
+
+                    <div class="setting-row flex items-center justify-between">
+                        <div>
+                            <div class="text-sm font-semibold text-white">Авто-перезапуск при обрыве</div>
+                            <div class="text-xs text-zinc-400 mt-0.5">Автоматически перезапускать службы при восстановлении сети</div>
+                        </div>
+                        <input id="set-autorestart" type="checkbox" onchange="onSettingsChanged()" class="cyber-toggle">
+                    </div>
+                </div>
+
+                <!-- БЛОК 4: СПИСКИ МАРШРУТИЗАЦИИ (IPSET И HOSTS) -->
+                <div class="glass-card rounded-xl p-5 space-y-4">
+                    <div class="flex items-center gap-2.5 text-base font-semibold text-white">
+                        <span class="text-zinc-400">📁</span><span>Списки маршрутизации (IPSet и Hosts)</span>
+                    </div>
+
+                    <!-- IPSet -->
+                    <div class="setting-row space-y-2">
+                        <div class="flex items-center gap-2.5 flex-wrap">
+                            <span class="text-sm font-semibold text-white">Фильтрация по подсетям (IPSet Filter)</span>
+                            <span id="badge-ipset-status" class="px-2 py-0.5 rounded bg-slate-800 text-blue-400 font-mono text-[11px] font-semibold">Проверка...</span>
+                        </div>
+                        <div class="text-xs text-zinc-400">Режим работы базы заблокированных IP-адресов (ipset-all.txt) и её обновление из репозитория Flowseal</div>
+
+                        <div class="flex flex-wrap items-center gap-2.5 pt-1">
+                            <div onclick="openIpSetSelector()" class="bg-[#222227] hover:bg-[#2A2A32] border border-zinc-700 rounded-lg px-3.5 py-1.5 min-w-[220px] flex items-center justify-between cursor-pointer transition">
+                                <div>
+                                    <div class="text-[10px] text-zinc-400">Режим фильтрации:</div>
+                                    <div id="txt-selected-ipset" class="text-xs font-semibold text-white">По списку (Loaded)</div>
+                                </div>
+                                <span class="text-zinc-400 text-xs ml-3">▼</span>
+                            </div>
+
+                            <button id="btn-update-ipset" onclick="updateIpSetFromWeb()" class="px-4 py-2.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-white transition cursor-pointer">
+                                🔄 Обновить базу IP
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Системный файл Hosts -->
+                    <div class="setting-row space-y-2">
+                        <div class="flex items-center gap-2.5 flex-wrap">
+                            <span class="text-sm font-semibold text-white">Системный файл Hosts (ChatGPT, AI, Spotify и др.)</span>
+                            <span id="badge-hosts-status" class="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 font-mono text-[11px] font-semibold">Проверка...</span>
+                        </div>
+                        <div class="text-xs text-zinc-400">Автоматическое внедрение обходных IP-адресов в системный файл hosts без потери ваших личных записей</div>
+
+                        <div class="flex flex-wrap items-center gap-2.5 pt-1">
+                            <div onclick="openHostsSourceSelector()" class="bg-[#222227] hover:bg-[#2A2A32] border border-zinc-700 rounded-lg px-3.5 py-1.5 min-w-[250px] flex items-center justify-between cursor-pointer transition">
+                                <div>
+                                    <div class="text-[10px] text-zinc-400">Источник списка Hosts:</div>
+                                    <div id="txt-selected-hosts" class="text-xs font-semibold text-white">Flowseal + V3nilla (Рекомендуется)</div>
+                                </div>
+                                <span class="text-zinc-400 text-xs ml-3">▼</span>
+                            </div>
+
+                            <button id="btn-update-hosts" onclick="updateSystemHosts()" class="px-4 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white transition cursor-pointer">
+                                ⚡ Обновить
+                            </button>
+                            <button onclick="promptClearHosts()" class="px-4 py-2.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-zinc-200 transition cursor-pointer">
+                                Очистить
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Папка профилей -->
+                    <div class="setting-row flex items-center justify-between">
+                        <div>
+                            <div class="text-sm font-semibold text-white">Профили маршрутизации и списки</div>
+                            <div class="text-xs text-zinc-400 mt-0.5">Открыть директорию с .bat конфигурациями Zapret и папкой lists</div>
+                        </div>
+                        <button onclick="sendCmd('openFolder', { folder: 'zapret' })" class="px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-white transition cursor-pointer">
+                            Открыть папку
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Кнопки Обновления, Сброса и Футер -->
+                <div class="flex flex-col items-center gap-2.5 pt-2">
+                    <button id="btn-check-updates" onclick="checkUpdatesManual()" class="px-6 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white transition cursor-pointer">
+                        Проверить обновления
+                    </button>
+                    <button onclick="promptResetSettings()" class="px-6 py-2 rounded-lg bg-red-600/20 hover:bg-red-600/30 border border-red-500/40 text-xs font-semibold text-red-400 transition cursor-pointer">
+                        Сбросить все настройки
+                    </button>
+
+                    <div class="text-center mt-4 pb-4 text-xs text-zinc-600">
+                        <div class="font-semibold">Zapret for ADHD v3.5</div>
+                        <div class="mt-1">
+                            Разработано с ❤️ |
+                            <span onclick="sendCmd('openUrl', { url: 'https://github.com/NIK-master/ZapretGUI' })" class="text-emerald-500 hover:underline cursor-pointer">Страница на GitHub</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+
+        <!-- ===================================================================== -->
+        <!-- ОВЕРЛЕЙ 1: НАСТРОЙКА КОНФИГА ZAPRET                                   -->
+        <!-- ===================================================================== -->
+        <div id="config-modal" onclick="if(event.target===this) closeConfigModal()" class="modal-overlay fixed inset-0 bg-black/75 backdrop-blur-sm z-40 flex items-center justify-center p-4">
+            <div class="modal-box bg-[#141417] border border-zinc-800 rounded-2xl w-[550px] p-5 shadow-2xl flex flex-col max-h-[85vh]">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-lg bg-blue-950 border border-blue-800 flex items-center justify-center text-blue-400">⚙</div>
+                        <div>
+                            <div class="text-xs text-zinc-400">Zapret</div>
+                            <div class="text-base font-bold text-white">Настройка конфига</div>
+                        </div>
+                    </div>
+                    <button onclick="closeConfigModal()" class="text-zinc-400 hover:text-white text-lg px-2 cursor-pointer">✕</button>
+                </div>
+
+                <div class="mb-4 text-sm font-bold">
+                    <span class="text-white">Активный конфиг: </span>
+                    <span id="modal-active-profile" class="font-mono text-emerald-400">general.bat</span>
+                </div>
+
+                <div class="flex items-center justify-between mb-2.5">
+                    <span class="text-xs font-semibold text-zinc-400">Доступные конфиги</span>
+                    <span id="modal-configs-count" class="text-xs font-mono font-semibold bg-slate-800 text-blue-400 px-2.5 py-1 rounded-md">0 конфигов</span>
+                </div>
+
+                <div id="profile-cards-list" class="flex-1 overflow-y-auto space-y-2 pr-1 max-h-[290px] mb-4"></div>
+
+                <button id="btn-start-scan" onclick="toggleSmartScan()" class="w-full py-3.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-white transition flex items-center justify-center gap-2 cursor-pointer">
+                    <span id="scan-btn-icon">🔍</span>
+                    <span id="scan-btn-text">Запустить авто-подбор (Smart DPI Scan)</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- ===================================================================== -->
+        <!-- ОВЕРЛЕЙ 2: ИГРОВОЙ ФИЛЬТР (GAME FILTER)                               -->
+        <!-- ===================================================================== -->
+        <div id="gf-modal" onclick="if(event.target===this) closeGameFilterModal()" class="modal-overlay fixed inset-0 bg-black/75 backdrop-blur-sm z-40 flex items-center justify-center p-4">
+            <div class="modal-box bg-[#141417] border border-zinc-800 rounded-2xl w-[490px] p-5 shadow-2xl flex flex-col">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-lg bg-blue-950 border border-blue-800 flex items-center justify-center text-blue-400">🎮</div>
+                        <div>
+                            <div class="text-xs text-zinc-400">Маршрутизация игровых портов</div>
+                            <div class="text-base font-bold text-white">Настройка Game Filter</div>
+                        </div>
+                    </div>
+                    <button onclick="closeGameFilterModal()" class="text-zinc-400 hover:text-white text-lg px-2 cursor-pointer">✕</button>
+                </div>
+
+                <div class="text-xs font-semibold text-zinc-300 mb-2">Режим перехвата трафика игр:</div>
+
+                <div id="gf-modes-list" class="space-y-2 mb-4">
+                    <div onclick="selectGfMode('disabled')" data-mode="disabled" class="gf-mode-card p-3 rounded-xl border border-zinc-800 bg-[#18181B] hover:bg-zinc-800/70 cursor-pointer flex items-center justify-between transition">
+                        <div>
+                            <div class="text-xs font-bold text-white">Отключен</div>
+                            <div class="text-[11px] text-zinc-400">По умолчанию — фильтрация игровых портов выключена (порт 12)</div>
+                        </div>
+                        <span class="gf-check text-sm font-bold text-zinc-600">→</span>
+                    </div>
+                    <div onclick="selectGfMode('all')" data-mode="all" class="gf-mode-card p-3 rounded-xl border border-zinc-800 bg-[#18181B] hover:bg-zinc-800/70 cursor-pointer flex items-center justify-between transition">
+                        <div>
+                            <div class="text-xs font-bold text-emerald-400">TCP и UDP (Рекомендуется)</div>
+                            <div class="text-[11px] text-zinc-400">Полный обход для большинства онлайн-игр и игровых лаунчеров</div>
+                        </div>
+                        <span class="gf-check text-sm font-bold text-zinc-600">→</span>
+                    </div>
+                    <div onclick="selectGfMode('tcp')" data-mode="tcp" class="gf-mode-card p-3 rounded-xl border border-zinc-800 bg-[#18181B] hover:bg-zinc-800/70 cursor-pointer flex items-center justify-between transition">
+                        <div>
+                            <div class="text-xs font-bold text-white">Только TCP</div>
+                            <div class="text-[11px] text-zinc-400">Перехват только TCP-соединений игровых серверов</div>
+                        </div>
+                        <span class="gf-check text-sm font-bold text-zinc-600">→</span>
+                    </div>
+                    <div onclick="selectGfMode('udp')" data-mode="udp" class="gf-mode-card p-3 rounded-xl border border-zinc-800 bg-[#18181B] hover:bg-zinc-800/70 cursor-pointer flex items-center justify-between transition">
+                        <div>
+                            <div class="text-xs font-bold text-white">Только UDP</div>
+                            <div class="text-[11px] text-zinc-400">Перехват только UDP-трафика (голосовые чаты и динамичные шутеры)</div>
+                        </div>
+                        <span class="gf-check text-sm font-bold text-zinc-600">→</span>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3 mb-4">
+                    <div>
+                        <label class="text-xs text-zinc-400 block mb-1">Диапазон TCP портов:</label>
+                        <input id="gf-tcp-input" type="text" value="1024-65535" class="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-1.5 text-xs font-mono text-white focus:outline-none focus:border-emerald-500 select-text">
+                    </div>
+                    <div>
+                        <label class="text-xs text-zinc-400 block mb-1">Диапазон UDP портов:</label>
+                        <input id="gf-udp-input" type="text" value="1024-65535" class="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-1.5 text-xs font-mono text-white focus:outline-none focus:border-emerald-500 select-text">
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between pt-2">
+                    <button onclick="resetGfPorts()" class="px-3 py-1.5 rounded-lg border border-zinc-700 text-xs text-zinc-400 hover:text-white transition cursor-pointer">
+                        Сбросить (1024-65535)
+                    </button>
+                    <div class="flex items-center gap-2">
+                        <button onclick="closeGameFilterModal()" class="px-4 py-1.5 rounded-lg border border-zinc-700 text-xs text-zinc-300 hover:bg-zinc-800 transition cursor-pointer">
+                            Отмена
+                        </button>
+                        <button onclick="saveGameFilter()" class="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-white transition cursor-pointer">
+                            💾 Применить
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===================================================================== -->
+        <!-- ОВЕРЛЕЙ 3: СОЗДАНИЕ НОВОГО МОДА                                       -->
+        <!-- ===================================================================== -->
+        <div id="create-mod-modal" onclick="if(event.target===this) closeCreateModModal()" class="modal-overlay fixed inset-0 bg-black/75 backdrop-blur-sm z-40 flex items-center justify-center p-4">
+            <div class="modal-box bg-[#141417] border border-zinc-800 rounded-2xl w-[430px] p-5 shadow-2xl">
+                <h3 class="text-base font-bold text-white mb-3">Создать новый мод</h3>
+
+                <label class="text-xs text-zinc-400 block mb-1">Отображаемое имя:</label>
+                <input id="new-mod-name" type="text" oninput="onNewModNameInput()" class="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-1.5 text-xs text-white mb-2.5 focus:outline-none focus:border-emerald-500 select-text">
+
+                <div class="flex justify-between items-center mb-1">
+                    <span class="text-xs text-zinc-400">Уникальный ID (папка, англ.):</span>
+                    <span id="new-mod-id-status" class="text-[11px] font-mono text-emerald-400">✓ ID свободен</span>
+                </div>
+                <div class="flex gap-2 mb-2.5">
+                    <input id="new-mod-id" type="text" oninput="onNewModIdInput()" class="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-1.5 text-xs font-mono text-white focus:outline-none focus:border-emerald-500 select-text">
+                    <button onclick="regenerateModId()" class="editor-tool-btn px-3" title="Сгенерировать уникальный ID">🎲</button>
+                </div>
+
+                <label class="text-xs text-zinc-400 block mb-1">Автор:</label>
+                <input id="new-mod-author" type="text" class="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-1.5 text-xs text-white mb-2.5 focus:outline-none focus:border-emerald-500 select-text">
+
+                <label class="text-xs text-zinc-400 block mb-1">Описание:</label>
+                <input id="new-mod-desc" type="text" class="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-1.5 text-xs text-white mb-4 focus:outline-none focus:border-emerald-500 select-text">
+
+                <div class="flex justify-end gap-2">
+                    <button onclick="closeCreateModModal()" class="px-4 py-1.5 rounded-lg border border-zinc-700 text-xs text-zinc-300 hover:bg-zinc-800 transition cursor-pointer">Отмена</button>
+                    <button id="btn-confirm-create-mod" onclick="confirmCreateMod()" class="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-white transition cursor-pointer">Создать</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===================================================================== -->
+        <!-- ОВЕРЛЕЙ 4: СТУДИЯ РЕДАКТИРОВАНИЯ МОДА (CODE STUDIO)                   -->
+        <!-- ===================================================================== -->
+        <div id="editor-modal" class="modal-overlay fixed inset-0 bg-black/80 backdrop-blur-sm z-40 flex items-center justify-center p-4">
+            <div class="modal-box bg-[#141417] border border-zinc-800 rounded-2xl w-full max-w-[840px] h-[640px] p-4 shadow-2xl flex flex-col">
+                <div class="flex items-center justify-between mb-2.5 shrink-0">
+                    <div class="flex items-center gap-2.5">
+                        <div class="w-7 h-7 rounded-md bg-blue-950 border border-blue-800 flex items-center justify-center text-blue-400 text-xs">✎</div>
+                        <div>
+                            <div id="editor-title" class="text-sm font-bold text-white">Редактор мода</div>
+                            <div id="editor-subtitle" class="text-[11px] font-mono text-zinc-400">ID: mod_folder • strategy.bat</div>
+                        </div>
+                    </div>
+                    <button onclick="toggleEditorMetaPanel()" class="editor-tool-btn">⚙ Свойства мода</button>
+                </div>
+
+                <div id="editor-meta-panel" class="bg-[#1A1A1E] border border-zinc-800 rounded-xl p-2.5 mb-2 shrink-0">
+                    <div class="grid grid-cols-12 gap-2.5 mb-2">
+                        <div class="col-span-6">
+                            <label class="text-[11px] text-zinc-400 block mb-0.5">Название мода:</label>
+                            <input id="edit-mod-name" type="text" class="w-full bg-zinc-900 border border-zinc-700 rounded px-2.5 py-1 text-xs text-white select-text">
+                        </div>
+                        <div class="col-span-4">
+                            <label class="text-[11px] text-zinc-400 block mb-0.5">Автор:</label>
+                            <input id="edit-mod-author" type="text" class="w-full bg-zinc-900 border border-zinc-700 rounded px-2.5 py-1 text-xs text-white select-text">
+                        </div>
+                        <div class="col-span-2">
+                            <label class="text-[11px] text-zinc-400 block mb-0.5">Версия:</label>
+                            <input id="edit-mod-version" type="text" class="w-full bg-zinc-900 border border-zinc-700 rounded px-2.5 py-1 text-xs font-mono text-white select-text">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="text-[11px] text-zinc-400 block mb-0.5">Описание:</label>
+                        <input id="edit-mod-desc" type="text" class="w-full bg-zinc-900 border border-zinc-700 rounded px-2.5 py-1 text-xs text-white select-text">
+                    </div>
+                </div>
+
+                <div class="bg-[#18181B] border border-zinc-800 rounded-lg p-1.5 mb-2 flex items-center justify-between shrink-0 flex-wrap gap-1">
+                    <div class="flex items-center gap-1 flex-wrap">
+                        <button onclick="document.execCommand('undo')" class="editor-tool-btn" title="Отменить (Ctrl+Z)">↶</button>
+                        <button onclick="document.execCommand('redo')" class="editor-tool-btn" title="Повторить (Ctrl+Y)">↷</button>
+                        <span class="w-[1px] h-4 bg-zinc-700 mx-1"></span>
+                        <button onclick="toggleEditorSearch()" class="editor-tool-btn" title="Поиск и замена (Ctrl+F)">🔍 Поиск</button>
+                        <button id="btn-word-wrap" onclick="toggleEditorWordWrap()" class="editor-tool-btn">Перенос: Вкл</button>
+                        <span class="w-[1px] h-4 bg-zinc-700 mx-1"></span>
+
+                        <div id="editor-bat-tools" class="flex items-center gap-1">
+                            <button onclick="commentCurrentLine()" class="editor-tool-btn font-mono">:: Коммент</button>
+                            <button onclick="validateCurrentBat()" class="editor-tool-btn text-emerald-400">✓ Проверить синтаксис</button>
+                        </div>
+
+                        <div id="editor-list-tools" class="hidden items-center gap-1">
+                            <button onclick="cleanDomainsList()" class="editor-tool-btn text-blue-400">✨ Очистить дубли и URL (A-Z)</button>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center gap-1">
+                        <button onclick="changeEditorFontSize(-1)" class="editor-tool-btn font-mono font-bold">A-</button>
+                        <button onclick="changeEditorFontSize(1)" class="editor-tool-btn font-mono font-bold">A+</button>
+                    </div>
+                </div>
+
+                <div id="editor-search-panel" class="bg-[#1C1C22] border border-blue-600/80 rounded-lg p-2 mb-2 hidden items-center gap-2 shrink-0">
+                    <input id="editor-find-input" type="text" placeholder="Найти текст..." class="flex-1 bg-zinc-900 border border-zinc-700 rounded px-2.5 py-1 text-xs font-mono text-white select-text">
+                    <input id="editor-replace-input" type="text" placeholder="Заменить на..." class="flex-1 bg-zinc-900 border border-zinc-700 rounded px-2.5 py-1 text-xs font-mono text-white select-text">
+                    <button onclick="editorFindNext()" class="editor-tool-btn">Найти далее</button>
+                    <button onclick="editorReplaceAll()" class="editor-tool-btn">Заменить всё</button>
+                    <button onclick="toggleEditorSearch()" class="editor-tool-btn">✕</button>
+                </div>
+
+                <div id="editor-snippets-bar" class="flex items-center gap-1 overflow-x-auto pb-1 mb-1.5 shrink-0">
+                    <span class="text-[11px] text-zinc-500 mr-1">Вставка:</span>
+                    <button onclick="insertSnippet('&quot;%BIN%winws.exe&quot; ')" class="editor-tool-btn font-mono">winws.exe</button>
+                    <button onclick="insertSnippet('--new ^\n')" class="editor-tool-btn font-mono">--new ^</button>
+                    <button onclick="insertSnippet('--filter-tcp=80,443 ')" class="editor-tool-btn font-mono">--filter-tcp</button>
+                    <button onclick="insertSnippet('--filter-udp=443,50000-50100 ')" class="editor-tool-btn font-mono">--filter-udp</button>
+                    <button onclick="insertSnippet('--hostlist=&quot;%LISTS%list-general.txt&quot; ')" class="editor-tool-btn font-mono">--hostlist</button>
+                    <button onclick="insertSnippet('--dpi-desync=fake,split2 ')" class="editor-tool-btn font-mono">--dpi-desync</button>
+                    <button onclick="insertSnippet('%BIN%')" class="editor-tool-btn font-mono">%BIN%</button>
+                    <button onclick="insertSnippet('%LISTS%')" class="editor-tool-btn font-mono">%LISTS%</button>
+                </div>
+
+                <div class="flex-1 bg-[#0C0C0E] border border-zinc-800 rounded-xl overflow-hidden flex relative">
+                    <div id="editor-line-numbers" class="w-11 bg-[#121216] border-r border-zinc-800/80 py-2.5 px-2 text-right font-mono text-[13px] text-zinc-600 overflow-hidden select-none leading-[1.45]">1</div>
+                    <textarea id="editor-textarea"
+                              oninput="onEditorTextInput()"
+                              onscroll="syncEditorScroll()"
+                              onclick="updateEditorCursorPos()"
+                              onkeyup="updateEditorCursorPos()"
+                              onkeydown="onEditorKeyDown(event)"
+                              spellcheck="false"
+                              class="flex-1 bg-transparent text-emerald-400 font-mono text-[13px] p-2.5 focus:outline-none resize-none leading-[1.45] select-text overflow-auto"></textarea>
+                </div>
+
+                <div class="flex items-center justify-between mt-2.5 pt-1 shrink-0">
+                    <div class="flex items-center gap-4 text-xs font-mono text-zinc-400">
+                        <span id="editor-cursor-pos">Стр: 1, Столб: 1</span>
+                        <span id="editor-stats-info">Строк: 1</span>
+                        <span id="editor-status-msg" class="text-emerald-400 truncate max-w-[260px]"></span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button onclick="closeEditorModal()" class="px-4 py-1.5 rounded-lg border border-zinc-700 text-xs text-zinc-300 hover:bg-zinc-800 transition cursor-pointer">Отмена</button>
+                        <button onclick="saveEditorChanges(false)" class="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-white transition cursor-pointer">💾 Сохранить мод</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===================================================================== -->
+        <!-- ОВЕРЛЕЙ 5: ФИРМЕННОЕ МЕНЮ ВЫБОРА ОПЦИЙ НАСТРОЕК                       -->
+        <!-- ===================================================================== -->
+        <div id="selection-modal" onclick="if(event.target===this) closeSelectionModal()" class="modal-overlay fixed inset-0 bg-black/75 backdrop-blur-sm z-40 flex items-center justify-center p-4">
+            <div class="modal-box bg-[#141417] border border-zinc-800 rounded-2xl w-[480px] p-5 shadow-2xl">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-lg bg-blue-950 border border-blue-800 flex items-center justify-center text-blue-400">⚙</div>
+                        <div>
+                            <div id="sel-modal-sub" class="text-xs text-zinc-400">Параметры</div>
+                            <div id="sel-modal-title" class="text-base font-bold text-white">Выберите вариант</div>
+                        </div>
+                    </div>
+                    <button onclick="closeSelectionModal()" class="text-zinc-400 hover:text-white text-lg px-2 cursor-pointer">✕</button>
+                </div>
+                <div id="sel-modal-list" class="space-y-2"></div>
+            </div>
+        </div>
+
+        <!-- ===================================================================== -->
+        <!-- ОВЕРЛЕЙ 6: УНИВЕРСАЛЬНОЕ ОКНО ПОДТВЕРЖДЕНИЯ И УВЕДОМЛЕНИЙ             -->
+        <!-- ===================================================================== -->
+        <div id="confirm-modal" class="modal-overlay fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div class="modal-box bg-[#141417] border border-zinc-800 rounded-2xl w-[420px] p-5 shadow-2xl">
+                <h3 id="confirm-title" class="text-base font-bold text-white mb-2">Подтверждение</h3>
+                <p id="confirm-msg" class="text-xs text-zinc-300 leading-relaxed whitespace-pre-line mb-5"></p>
+                <div class="flex justify-end gap-2">
+                    <button id="confirm-cancel-btn" onclick="closeConfirmModal(false)" class="px-4 py-1.5 rounded-lg border border-zinc-700 text-xs text-zinc-300 hover:bg-zinc-800 transition cursor-pointer">
+                        Отмена
+                    </button>
+                    <button id="confirm-ok-btn" onclick="closeConfirmModal(true)" class="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-white transition cursor-pointer">
+                        ОК
+                    </button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+                // =========================================================================
+                // КОНСТАНТЫ ОПЦИЙ НАСТРОЕК (КАК В SETTINGSVIEW)
+                // =========================================================================
+                const INTERVAL_OPTIONS = [
+                    { title: "1 секунда", value: 1, desc: "Максимальная плавность графиков и мгновенный отклик монитора скорости" },
+                    { title: "3 секунды", value: 3, desc: "Сбалансированный режим опроса сетевого интерфейса" },
+                    { title: "5 секунд", value: 5, desc: "Экономичный режим с минимальной нагрузкой на систему" }
+                ];
+
+                const IPSET_OPTIONS = [
+                    { title: "По списку (Loaded)", mode: "loaded", desc: "Использовать полную базу заблокированных подсетей из файла ipset-all.txt" },
+                    { title: "Отключен (None)", mode: "none", desc: "Подставить адрес-заглушку 203.0.113.113/32 и отключить фильтрацию по IP" },
+                    { title: "Весь трафик (Any)", mode: "any", desc: "Очистить ipset-all.txt, чтобы правила применялись ко всем IP-адресам" }
+                ];
+
+                const HOSTS_OPTIONS = [
+                    { title: "Flowseal (Базовый)", idx: 0, desc: "Официальный список доменов из репозитория zapret-discord-youtube (Telegram, Discord и др.)" },
+                    { title: "V3nilla (ChatGPT, AI, Сервисы)", idx: 1, desc: "Разблокировка ChatGPT, OpenAI, Claude, Gemini, Spotify, Instagram, Notion и GitHub без рекламы" },
+                    { title: "Flowseal + V3nilla (Рекомендуется)", idx: 2, desc: "Объединяет оба списка без дубликатов для максимальной доступности всех сервисов" },
+                    { title: "V3nilla Full (+ AdBlock 0.0.0.0)", idx: 3, desc: "Полный файл V3nilla, включая тысячи правил блокировки рекламы и телеметрии (0.0.0.0)" }
+                ];
+
+                // =========================================================================
+                // ГЛОБАЛЬНОЕ СОСТОЯНИЕ ПРИЛОЖЕНИЯ
+                // =========================================================================
+                let appState = {
+                    isRunning: false,
+                    zapretRunning: false,
+                    proxyRunning: false,
+                    isScanning: false,
+                    firstTimeScanPrompted: false,
+                    selectedProfile: 'general.bat',
+                    currentPing: -1,
+                    configs: [],
+                    gameFilter: { mode: 'disabled', tcp: '1024-65535', udp: '1024-65535' },
+                    modsSubTab: 'bat',
+                    batMods: [],
+                    listMods: [],
+                    editingMod: { id: '', isBat: true, wordWrap: true, fontSize: 13 },
+                    settings: {
+                        focusMode: false,
+                        compactMode: false,
+                        colorblindMode: false,
+                        statsUpdateInterval: 1,
+                        hostsSourceIndex: 2,
+                        ipSetMode: 'loaded'
+                    }
+                };
+
+                let lastProgressLogEl = null;
+                let confirmCallback = null;
+                let selectionCallback = null;
+
+                // Счетчики кликов для пасхалок Диагностики
+                let tgClicks = 0, lastTgClick = 0;
+                let dsClicks = 0, lastDsClick = 0;
+
+                function sendCmd(action, payload = {}) {
+                    if (window.chrome && window.chrome.webview) {
+                        window.chrome.webview.postMessage({ action, ...payload });
+                    }
+                }
+
+                document.getElementById('titlebar').addEventListener('mousedown', (e) => {
+                    if (e.target.tagName !== 'BUTTON') sendCmd('windowDrag');
+                });
+
+                if (window.chrome && window.chrome.webview) {
+                    window.chrome.webview.addEventListener('message', event => {
+                        const msg = event.data;
+                        if (msg && msg.type) handleBackendEvent(msg.type, msg.data);
+                    });
+                }
+
+                // =========================================================================
+                // ОБРАБОТКА СОБЫТИЙ ИЗ C#
+                // =========================================================================
+                function handleBackendEvent(type, data) {
+                    switch (type) {
+                        case 'initData':
+                            document.getElementById('app-version').innerText = data.version;
+                            document.getElementById('chk-zapret').checked = data.settings.zapretEnabled;
+                            document.getElementById('chk-proxy').checked = data.settings.tgProxyEnabled;
+
+                            appState.firstTimeScanPrompted = data.settings.firstTimeScanPrompted;
+                            appState.selectedProfile = data.settings.selectedProfileName || 'general.bat';
+                            appState.gameFilter = {
+                                mode: data.settings.gameFilterMode || 'disabled',
+                                tcp: data.settings.gameFilterTcpRange || '1024-65535',
+                                udp: data.settings.gameFilterUdpRange || '1024-65535'
+                            };
+
+                            // Заполняем вкладку Настройки
+                            document.getElementById('set-autostart').checked = data.isAutoStart;
+                            document.getElementById('set-start-minimized').checked = data.settings.startMinimized;
+                            document.getElementById('set-minimize-close').checked = data.settings.minimizeOnClose;
+                            document.getElementById('set-notifications').checked = data.settings.notificationsEnabled;
+                            document.getElementById('set-focus-mode').checked = data.settings.focusMode;
+                            document.getElementById('set-compact-mode').checked = data.settings.compactMode;
+                            document.getElementById('set-hw-accel').checked = data.settings.hardwareAcceleration;
+                            document.getElementById('set-colorblind').checked = data.settings.colorblindMode;
+                            document.getElementById('set-ping-url').value = data.settings.pingUrl || 'https://dynamodb.eu-central-1.amazonaws.com';
+                            document.getElementById('set-autorestart').checked = data.settings.autoRestartServices;
+
+                            appState.settings.focusMode = data.settings.focusMode;
+                            appState.settings.compactMode = data.settings.compactMode;
+                            appState.settings.colorblindMode = data.settings.colorblindMode;
+                            appState.settings.statsUpdateInterval = data.settings.statsUpdateInterval || 1;
+                            appState.settings.hostsSourceIndex = data.settings.hostsSourceIndex ?? 2;
+
+                            const intOpt = INTERVAL_OPTIONS.find(o => o.value === appState.settings.statsUpdateInterval) || INTERVAL_OPTIONS[0];
+                            document.getElementById('txt-selected-interval').innerText = intOpt.title;
+
+                            const hostOpt = HOSTS_OPTIONS[appState.settings.hostsSourceIndex] || HOSTS_OPTIONS[2];
+                            document.getElementById('txt-selected-hosts').innerText = hostOpt.title;
+
+                            if (data.routingStatus) updateRoutingStatusUI(data.routingStatus);
+
+                            applyVisualSettingsLive();
+
+                            appState.batMods = data.batMods || [];
+                            appState.listMods = data.listMods || [];
+
+                            initConfigsList(data.profiles || ['general.bat']);
+                            renderModsView();
+                            prepareDiagSkeletons();
+                            updateGameFilterBadge(data.gameFilterStatus, appState.gameFilter.mode !== 'disabled');
+                            updateRunningUI(data.zapretRunning, data.proxyRunning);
+
+                            if (data.zapretRunning || data.proxyRunning)
+                                appendLog(new Date().toLocaleTimeString(), 'Интерфейс загружен. Найдены активные процессы в фоне.');
+                            else
+                                appendLog(new Date().toLocaleTimeString(), 'Интерфейс загружен. Ожидание команд...');
+                            break;
+
+                        case 'routingStatusUpdated':
+                            updateRoutingStatusUI(data);
+                            document.getElementById('btn-update-ipset').innerText = '🔄 Обновить базу IP';
+                            document.getElementById('btn-update-ipset').disabled = false;
+                            document.getElementById('btn-update-hosts').innerText = '⚡ Обновить';
+                            document.getElementById('btn-update-hosts').disabled = false;
+                            break;
+
+                        case 'updatesCheckFinished':
+                            document.getElementById('btn-check-updates').innerText = 'Проверить обновления';
+                            document.getElementById('btn-check-updates').disabled = false;
+                            break;
+
+                        case 'modsUpdated':
+                            appState.batMods = data.batMods || [];
+                            appState.listMods = data.listMods || [];
+                            initConfigsList(data.profiles || ['general.bat']);
+                            renderModsView();
+                            break;
+
+                        case 'modIdGenerated':
+                            document.getElementById('new-mod-id').value = data.id;
+                            updateModIdValidationUI(data.id, false, false);
+                            break;
+
+                        case 'modIdChecked':
+                            updateModIdValidationUI(data.cleanId, data.isTaken, data.isEmpty);
+                            break;
+
+                        case 'modCreated':
+                            closeCreateModModal();
+                            break;
+
+                        case 'modContentLoaded':
+                            openEditorWithData(data);
+                            break;
+
+                        case 'batValidationResult':
+                            if (data.isValid) {
+                                setEditorStatus('✓ Синтаксис корректен!', 'text-emerald-400');
+                            } else {
+                                setEditorStatus('⚠ Ошибка в скрипте', 'text-red-400');
+                                showAlert('Проверка синтаксиса Zapret', data.errorMessage, true);
+                            }
+                            break;
+
+                        case 'modSaveSyntaxWarning':
+                            showConfirm(
+                                'Предупреждение синтаксиса Zapret',
+                                `В скрипте обнаружена проблема:\n\n${data.errorMessage}\n\nВсё равно сохранить файл?`,
+                                'Сохранить всё равно',
+                                () => saveEditorChanges(true)
+                            );
+                            break;
+
+                        case 'modContentSaved':
+                            closeEditorModal();
+                            break;
+
+                        case 'promptRestartZapret':
+                            showConfirm(
+                                'Перезапустить Zapret?',
+                                `${data.reason}\n\nФайл list-general.txt был обновлен в прямом эфире, но для применения новых доменов в уже работающем ядре winws.exe требуется перезапуск. Перезапустить сейчас?`,
+                                '🔄 Перезапустить',
+                                () => sendCmd('restartBypass')
+                            );
+                            break;
+
+                        case 'diagProgress':
+                            document.getElementById('diag-status-txt').innerText = data.status;
+                            document.getElementById('diag-progress-bar').style.width = `${data.progress}%`;
+                            break;
+
+                        case 'diagResult':
+                            renderDiagnosticsReport(data);
+                            break;
+
+                        case 'log':
+                            appendLog(data.time, data.message, data.isProgress);
+                            break;
+
+                        case 'netStats':
+                            document.getElementById('stat-rx').innerText = data.download.toFixed(1);
+                            document.getElementById('stat-tx').innerText = data.upload.toFixed(1);
+                            updateChart(data.download);
+                            updateRunningUI(data.zapretRunning, data.proxyRunning);
+                            break;
+
+                        case 'netStatus':
+                            document.getElementById('dot-net').className = `w-2 h-2 rounded-full ${data.isOnline ? 'dot-online' : 'dot-offline'}`;
+                            break;
+
+                        case 'pingResult':
+                            document.getElementById('ping-refresh-icon').classList.remove('spin-anim');
+                            appState.currentPing = data.ping;
+                            document.getElementById('stat-ping').innerText = data.ping >= 0 ? data.ping : '—';
+                            document.getElementById('dot-net').className = `w-2 h-2 rounded-full ${data.ping >= 0 ? 'dot-online' : 'dot-offline'}`;
+                            appState.configs.forEach(c => c.pingMs = data.ping > 0 ? data.ping : 999999);
+                            renderConfigCards();
+                            break;
+
+                        case 'bypassState':
+                            updateRunningUI(data.zapretRunning, data.proxyRunning);
+                            break;
+
+                        case 'configTested':
+                            const item = appState.configs.find(c => c.fileName.toLowerCase() === data.fileName.toLowerCase());
+                            if (item) {
+                                item.testsOk = data.ok;
+                                item.testsTotal = data.total;
+                                if (appState.currentPing > 0) item.pingMs = appState.currentPing;
+                                renderConfigCards();
+                            }
+                            break;
+
+                        case 'scanState':
+                            appState.isScanning = data.isScanning;
+                            updateScanButtonUI();
+                            break;
+
+                        case 'scanCompleted':
+                            appState.isScanning = false;
+                            updateScanButtonUI();
+                            if (data.topConfigs && data.topConfigs.length > 0) {
+                                appState.configs.forEach(c => c.topRank = 999999);
+                                data.topConfigs.forEach((name, idx) => {
+                                    const cfg = appState.configs.find(c => c.fileName.toLowerCase() === name.toLowerCase());
+                                    if (cfg) cfg.topRank = idx;
+                                });
+                                selectProfile(data.bestConfig);
+                                appendLog(new Date().toLocaleTimeString(), `🏆 Сканирование завершено! Выбрана лучшая стратегия: ${data.bestConfig}`);
+                            } else {
+                                appendLog(new Date().toLocaleTimeString(), '⚠ Сканирование завершено, но ни одна стратегия не сработала.');
+                            }
+                            break;
+
+                        case 'gameFilterSaved':
+                            appState.gameFilter = { mode: data.mode, tcp: data.tcp, udp: data.udp };
+                            updateGameFilterBadge(data.statusText, data.mode !== 'disabled');
+                            closeGameFilterModal();
+
+                            if (appState.zapretRunning) {
+                                showConfirm(
+                                    'Перезапустить Zapret?',
+                                    'Настройки Игрового фильтра сохранены. Чтобы новые диапазоны портов вступили в силу в работающем обходе, требуется перезапуск. Перезапустить сейчас?',
+                                    'Перезапустить',
+                                    () => sendCmd('saveGameFilter', { ...appState.gameFilter, restartIfRunning: true })
+                                );
+                            }
+                            break;
+
+                        case 'errorGlitch':
+                            if (!appState.settings.focusMode) {
+                                const mc = document.getElementById('main-container');
+                                mc.classList.remove('glitch-anim');
+                                void mc.offsetWidth;
+                                mc.classList.add('glitch-anim');
+                            }
+                            break;
+
+                        case 'alert':
+                            showAlert(data.title, data.message, data.isError);
+                            break;
+                    }
+                }
+
+                // =========================================================================
+                // ЛОГИКА ВКЛАДКИ 3: ДИАГНОСТИКА (DIAGNOSTICSVIEW + ПАСХАЛКИ)
+                // =========================================================================
+                function prepareDiagSkeletons(shimmer = false) {
+                    const dcs = [1, 2, 3, 4, 5];
+                    const ports = [443, 80, 5222];
+                    const dcGrid = document.getElementById('diag-dc-grid');
+
+                    let dcHtml = '';
+                    dcs.forEach(dc => {
+                        ports.forEach(port => {
+                            dcHtml += `
+                            <div class="server-ping-card ${shimmer ? 'shimmer-box' : ''}">
+                                <div class="text-xs font-bold text-zinc-400">DC ${dc} :${port}</div>
+                                <div class="text-sm font-mono font-bold text-zinc-600 mt-1">${shimmer ? '...' : '—'}</div>
+                            </div>`;
+                        });
+                    });
+                    dcGrid.innerHTML = dcHtml;
+
+                    const dsLabels = ['Gateway', 'Media', 'API'];
+                    document.getElementById('diag-discord-grid').innerHTML = dsLabels.map(lbl => `
+                        <div class="server-ping-card ${shimmer ? 'shimmer-box' : ''}">
+                            <div class="text-xs font-bold text-zinc-400">${lbl}</div>
+                            <div class="text-sm font-mono font-bold text-zinc-600 mt-1">${shimmer ? '...' : '—'}</div>
+                        </div>
+                    `).join('');
+                }
+
+                function runDiagnostics() {
+                    sendCmd('playClick');
+                    document.getElementById('btn-run-diag').disabled = true;
+                    document.getElementById('btn-run-diag').style.opacity = '0.5';
+                    document.getElementById('diag-progress-wrap').classList.remove('hidden');
+                    document.getElementById('diag-progress-bar').style.width = '5%';
+                    prepareDiagSkeletons(true);
+                    sendCmd('runDiagnostics');
+                }
+
+                function getPingColorHex(latency, ok) {
+                    const isCb = appState.settings.colorblindMode;
+                    const okColor = isCb ? '#0078D7' : '#10B981';
+                    const warnColor = isCb ? '#FFB900' : '#F59E0B';
+                    const errColor = isCb ? '#FF8C00' : '#EF4444';
+
+                    if (!ok || latency == null) return errColor;
+                    return latency < 120 ? okColor : warnColor;
+                }
+
+                function computeHumanVerdict(r) {
+                    const blocks = r.blockTypes || [];
+                    const app = r.appStatus || {};
+                    const dcResults = r.dcResults || [];
+                    const pingResults = r.pingResults || [];
+                    const dcOk = dcResults.filter(x => x.ok).length;
+                    const dcTot = dcResults.length;
+                    const pingOk = pingResults.some(p => p.ok);
+                    const bypass = !!app.zapretRunning;
+
+                    const isCb = appState.settings.colorblindMode;
+                    const successColor = isCb ? '#0078D7' : '#10B981';
+                    const errorColor = isCb ? '#FF8C00' : '#EF4444';
+                    const warningColor = isCb ? '#FFB900' : '#F59E0B';
+
+                    // BlockType enum: 0=None, 1=Throttling, 2=IpBlock, 3=SniBlock, 4=DnsSpoof, 5=MediaThrottle
+                    const hasSniBlock = blocks.includes(3);
+                    const hasIpBlock = blocks.includes(2);
+
+                    if (app.tgWsProxyRunning)
+                        return { title: 'tg-ws-proxy активен', detail: 'Telegram работает через прокси локально.', color: successColor };
+                    if (!pingOk && dcOk === 0)
+                        return { title: 'Интернета нет', detail: 'Ни один сервер не отвечает.', color: errorColor };
+                    if (hasSniBlock)
+                        return bypass
+                            ? { title: 'Telegram работает (обходчик активен)', detail: 'DPI обнаружен, но обходчик запущен.', color: successColor }
+                            : { title: 'Telegram заблокирован (DPI)', detail: 'Нужен Zapret.', color: errorColor };
+                    if (hasIpBlock)
+                        return bypass
+                            ? { title: 'Telegram работает', detail: 'IP заблокированы, но обходчик компенсирует.', color: successColor }
+                            : { title: 'Серверы заблокированы', detail: 'Нужен VPN.', color: errorColor };
+                    if (dcOk >= Math.max(Math.floor(dcTot / 2), 1))
+                        return { title: 'Telegram работает нормально', detail: 'Серверы отвечают быстро.', color: successColor };
+
+                    return { title: 'Ситуация неоднозначная', detail: 'Проблемы со связью.', color: warningColor };
+                }
+
+                function computeDiscordVerdict(r) {
+                    const app = r.appStatus || {};
+                    const bypass = !!app.zapretRunning;
+                    const dsPing = r.discordPing || [];
+
+                    const isCb = appState.settings.colorblindMode;
+                    const successColor = isCb ? '#0078D7' : '#10B981';
+                    const errorColor = isCb ? '#FF8C00' : '#EF4444';
+                    const warningColor = isCb ? '#FFB900' : '#F59E0B';
+
+                    if (dsPing.length > 0 && dsPing.every(p => !p.ok))
+                        return bypass
+                            ? { title: 'Сбои в Discord', detail: 'Обходчик работает, но серверы недоступны. Возможно, стоит сменить профиль.', color: warningColor }
+                            : { title: 'Discord полностью заблокирован', detail: 'API и Gateway не отвечают. Включи Zapret.', color: errorColor };
+
+                    if (r.udpResult && r.udpResult.blocked)
+                        return bypass
+                            ? { title: 'Discord работает (обходчик активен)', detail: 'UDP заблокирован, но Zapret маршрутизирует трафик.', color: successColor }
+                            : { title: 'Проблемы с голосом', detail: 'Чаты работают, но UDP заблокирован. Звонки не пройдут.', color: warningColor };
+
+                    return { title: 'Discord работает нормально', detail: 'Все нужные порты и серверы доступны.', color: successColor };
+                }
+
+                function renderDiagnosticsReport(report) {
+                    document.getElementById('diag-status-txt').innerText = 'Проверка завершена.';
+                    document.getElementById('diag-progress-wrap').classList.add('hidden');
+                    document.getElementById('btn-run-diag').disabled = false;
+                    document.getElementById('btn-run-diag').style.opacity = '1';
+
+                    // Вердикты
+                    const tgV = computeHumanVerdict(report);
+                    const tgCard = document.getElementById('diag-tg-card');
+                    tgCard.style.borderColor = tgV.color;
+                    tgCard.style.background = '';
+                    document.getElementById('diag-tg-title').innerText = tgV.title;
+                    document.getElementById('diag-tg-title').style.color = 'white';
+                    document.getElementById('diag-tg-sub').innerText = tgV.detail;
+
+                    const dsV = computeDiscordVerdict(report);
+                    const dsCard = document.getElementById('diag-ds-card');
+                    dsCard.style.borderColor = dsV.color;
+                    dsCard.style.background = '';
+                    document.getElementById('diag-ds-title').innerText = dsV.title;
+                    document.getElementById('diag-ds-title').style.color = 'white';
+                    document.getElementById('diag-ds-sub').innerText = dsV.detail;
+
+                    // Активные процессы
+                    const st = report.appStatus || {};
+                    document.getElementById('proc-dot-tg').className = `w-2.5 h-2.5 rounded-full ${st.telegramRunning ? 'dot-online' : 'dot-offline'}`;
+                    document.getElementById('proc-dot-ds').className = `w-2.5 h-2.5 rounded-full ${st.discordRunning ? 'dot-online' : 'dot-offline'}`;
+                    document.getElementById('proc-dot-zp').className = `w-2.5 h-2.5 rounded-full ${st.zapretRunning ? 'dot-online' : 'dot-offline'}`;
+                    document.getElementById('proc-dot-tw').className = `w-2.5 h-2.5 rounded-full ${st.tgWsProxyRunning ? 'dot-online' : 'dot-offline'}`;
+
+                    // Серверы Telegram
+                    document.getElementById('diag-dc-grid').innerHTML = (report.dcResults || []).map(dc => {
+                        const c = getPingColorHex(dc.latencyMs, dc.ok);
+                        return `
+                        <div class="server-ping-card">
+                            <div class="text-xs font-bold text-zinc-400">${dc.title}</div>
+                            <div class="text-sm font-mono font-bold mt-1" style="color:${c}">${dc.pingText}</div>
+                        </div>`;
+                    }).join('');
+
+                    // Серверы Discord
+                    document.getElementById('diag-discord-grid').innerHTML = (report.discordPing || []).map(ds => {
+                        const c = getPingColorHex(ds.latencyMs, ds.ok);
+                        return `
+                        <div class="server-ping-card">
+                            <div class="text-xs font-bold text-zinc-400">${ds.title}</div>
+                            <div class="text-sm font-mono font-bold mt-1" style="color:${c}">${ds.pingText}</div>
+                        </div>`;
+                    }).join('');
+
+                    // Рекомендации
+                    const recs = report.recommendations || [];
+                    document.getElementById('diag-recs-list').innerHTML = recs.length
+                        ? recs.map(r => `<div class="flex items-start gap-2.5 p-2 rounded-lg bg-zinc-900/50"><span>💡</span><span class="whitespace-pre-line leading-relaxed">${r}</span></div>`).join('')
+                        : '<div class="text-emerald-400">Все сервисы работают стабильно, дополнительных действий не требуется!</div>';
+                }
+
+                // Пасхалка 1: Режим Дурова (5 кликов по ✈️)
+                function onTgEmojiClick() {
+                    const now = Date.now();
+                    if (now - lastTgClick > 1500) tgClicks = 0;
+                    tgClicks++;
+                    lastTgClick = now;
+
+                    if (tgClicks >= 5) {
+                        tgClicks = 0;
+                        sendCmd('playSuccess');
+                        const title = document.getElementById('diag-tg-title');
+                        const sub = document.getElementById('diag-tg-sub');
+                        const card = document.getElementById('diag-tg-card');
+                        const emoji = document.getElementById('diag-tg-emoji');
+
+                        title.innerText = 'Telegram (Режим Дурова)';
+                        title.style.color = '#00E5FF';
+                        sub.innerText = 'Свободу интернету! Трафик летит напрямую.';
+                        card.style.borderColor = '#00E5FF';
+                        card.style.background = '#001A22';
+
+                        emoji.classList.remove('easter-fly');
+                        void emoji.offsetWidth;
+                        emoji.classList.add('easter-fly');
+                    }
+                }
+
+                // Пасхалка 2: Режим турбо-деда (5 кликов по 🎮)
+                function onDiscordEmojiClick() {
+                    const now = Date.now();
+                    if (now - lastDsClick > 1500) dsClicks = 0;
+                    dsClicks++;
+                    lastDsClick = now;
+
+                    if (dsClicks >= 5) {
+                        dsClicks = 0;
+                        sendCmd('playSuccess');
+                        const title = document.getElementById('diag-ds-title');
+                        const sub = document.getElementById('diag-ds-sub');
+                        const card = document.getElementById('diag-ds-card');
+                        const emoji = document.getElementById('diag-ds-emoji');
+
+                        title.innerText = 'Discord (Режим турбо-деда)';
+                        title.style.color = '#FF00FF';
+                        sub.innerText = 'Никакие блокировки больше не страшны!';
+                        card.style.borderColor = '#FF00FF';
+                        card.style.background = '#1A001A';
+
+                        emoji.classList.remove('easter-spin');
+                        void emoji.offsetWidth;
+                        emoji.classList.add('easter-spin');
+                    }
+                }
+
+                // =========================================================================
+                // ЛОГИКА ВКЛАДКИ 4: НАСТРОЙКИ (SETTINGSVIEW)
+                // =========================================================================
+                function onSettingsChanged() {
+                    sendCmd('playClick');
+
+                    appState.settings.focusMode = document.getElementById('set-focus-mode').checked;
+                    appState.settings.compactMode = document.getElementById('set-compact-mode').checked;
+                    appState.settings.colorblindMode = document.getElementById('set-colorblind').checked;
+
+                    applyVisualSettingsLive();
+
+                    sendCmd('saveSettings', {
+                        settings: {
+                            autoStart: document.getElementById('set-autostart').checked,
+                            startMinimized: document.getElementById('set-start-minimized').checked,
+                            minimizeOnClose: document.getElementById('set-minimize-close').checked,
+                            notificationsEnabled: document.getElementById('set-notifications').checked,
+                            focusMode: appState.settings.focusMode,
+                            compactMode: appState.settings.compactMode,
+                            hardwareAcceleration: document.getElementById('set-hw-accel').checked,
+                            colorblindMode: appState.settings.colorblindMode,
+                            pingUrl: document.getElementById('set-ping-url').value,
+                            statsUpdateInterval: appState.settings.statsUpdateInterval,
+                            autoRestartServices: document.getElementById('set-autorestart').checked,
+                            hostsSourceIndex: appState.settings.hostsSourceIndex
+                        }
+                    });
+                }
+
+                function applyVisualSettingsLive() {
+                    // Режим цветовой слепоты
+                    document.body.classList.toggle('colorblind-mode', appState.settings.colorblindMode);
+
+                    // Минималистичный интерфейс (Compact Mode)
+                    const isCompact = appState.settings.compactMode;
+                    const statsPanel = document.getElementById('home-stats-panel');
+                    const logsPanel = document.getElementById('home-logs-panel');
+                    const btnCol = document.getElementById('home-btn-col');
+                    const cardsCol = document.getElementById('home-cards-col');
+
+                    statsPanel.classList.toggle('hidden', isCompact);
+                    logsPanel.classList.toggle('hidden', isCompact);
+                    btnCol.className = isCompact ? 'col-span-6 flex flex-col items-center justify-center' : 'col-span-4 flex flex-col items-center justify-center';
+                    cardsCol.className = isCompact ? 'col-span-6 flex flex-col gap-3' : 'col-span-4 flex flex-col gap-3';
+                }
+
+                function updateRoutingStatusUI(rs) {
+                    appState.settings.ipSetMode = rs.ipMode || 'loaded';
+                    document.getElementById('badge-ipset-status').innerText = rs.ipStatusText || 'Неизвестно';
+
+                    const ipOpt = IPSET_OPTIONS.find(o => o.mode === appState.settings.ipSetMode) || IPSET_OPTIONS[0];
+                    document.getElementById('txt-selected-ipset').innerText = ipOpt.title;
+
+                    const hostsBadge = document.getElementById('badge-hosts-status');
+                    hostsBadge.innerText = rs.hostsStatusText || 'Не применен';
+                    hostsBadge.className = `px-2 py-0.5 rounded font-mono text-[11px] font-semibold ${rs.hostsApplied ? 'bg-emerald-950 text-emerald-400' : 'bg-zinc-800 text-zinc-400'}`;
+                }
+
+                function openSelectionModal(title, subTitle, items, onSelect) {
+                    sendCmd('playClick');
+                    selectionCallback = onSelect;
+                    document.getElementById('sel-modal-title').innerText = title;
+                    document.getElementById('sel-modal-sub').innerText = subTitle;
+
+                    document.getElementById('sel-modal-list').innerHTML = items.map((item, idx) => `
+                        <div onclick="chooseSelectionOption(${idx})"
+                             class="p-3.5 rounded-xl border cursor-pointer transition flex items-center justify-between ${item.selected ? 'bg-[#172554] border-blue-600' : 'bg-[#18181B] border-zinc-800 hover:bg-zinc-800/80'}">
+                            <div class="pr-3">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <span class="text-sm font-semibold text-white">${item.title}</span>
+                                    ${item.selected ? '<span class="px-1.5 py-0.5 text-[10px] font-semibold bg-blue-900 text-blue-300 rounded">выбрано</span>' : ''}
+                                </div>
+                                <div class="text-xs text-zinc-400 leading-relaxed">${item.desc}</div>
+                            </div>
+                            <span class="text-base font-bold ${item.selected ? 'text-blue-400' : 'text-zinc-600'}">${item.selected ? '✓' : '→'}</span>
+                        </div>
+                    `).join('');
+
+                    document.getElementById('selection-modal').classList.add('open');
+                }
+
+                function closeSelectionModal() {
+                    sendCmd('playClick');
+                    document.getElementById('selection-modal').classList.remove('open');
+                    selectionCallback = null;
+                }
+
+                function chooseSelectionOption(idx) {
+                    const cb = selectionCallback;
+                    closeSelectionModal();
+                    if (cb) cb(idx);
+                }
+
+                function openIntervalSelector() {
+                    const items = INTERVAL_OPTIONS.map(o => ({ ...o, selected: o.value === appState.settings.statsUpdateInterval }));
+                    openSelectionModal('Интервал обновления статистики', 'Сеть и диагностика', items, idx => {
+                        const chosen = INTERVAL_OPTIONS[idx];
+                        appState.settings.statsUpdateInterval = chosen.value;
+                        document.getElementById('txt-selected-interval').innerText = chosen.title;
+                        onSettingsChanged();
+                    });
+                }
+
+                function openIpSetSelector() {
+                    const items = IPSET_OPTIONS.map(o => ({ ...o, selected: o.mode === appState.settings.ipSetMode }));
+                    openSelectionModal('Режим фильтрации IPSet', 'База подсетей ipset-all.txt', items, idx => {
+                        const chosen = IPSET_OPTIONS[idx];
+                        sendCmd('setIpSetMode', { mode: chosen.mode });
+                    });
+                }
+
+                function openHostsSourceSelector() {
+                    const items = HOSTS_OPTIONS.map(o => ({ ...o, selected: o.idx === appState.settings.hostsSourceIndex }));
+                    openSelectionModal('Источник списка Hosts', 'Системный файл C:\\Windows\\System32\\drivers\\etc\\hosts', items, idx => {
+                        const chosen = HOSTS_OPTIONS[idx];
+                        appState.settings.hostsSourceIndex = chosen.idx;
+                        document.getElementById('txt-selected-hosts').innerText = chosen.title;
+                        onSettingsChanged();
+                    });
+                }
+
+                function updateIpSetFromWeb() {
+                    sendCmd('playClick');
+                    const btn = document.getElementById('btn-update-ipset');
+                    btn.innerText = 'Загрузка...';
+                    btn.disabled = true;
+                    sendCmd('updateIpSet');
+                }
+
+                function updateSystemHosts() {
+                    sendCmd('playClick');
+                    const btn = document.getElementById('btn-update-hosts');
+                    btn.innerText = 'Загрузка...';
+                    btn.disabled = true;
+                    sendCmd('updateHosts', { sourceIndex: appState.settings.hostsSourceIndex });
+                }
+
+                function promptClearHosts() {
+                    sendCmd('playClick');
+                    showConfirm(
+                        'Очистка записей Zapret из Hosts',
+                        'Удалить все добавленные программой обходные записи из системного файла hosts?\nВаши собственные записи затронуты не будут.',
+                        'Очистить',
+                        () => sendCmd('clearHosts'),
+                        true
+                    );
+                }
+
+                function checkUpdatesManual() {
+                    sendCmd('playClick');
+                    const btn = document.getElementById('btn-check-updates');
+                    btn.innerText = 'Проверка...';
+                    btn.disabled = true;
+                    sendCmd('checkUpdates');
+                }
+
+                function promptResetSettings() {
+                    sendCmd('playClick');
+                    showConfirm(
+                        'Сброс настроек',
+                        'Вы уверены, что хотите вернуть все настройки к состоянию по умолчанию? Это действие нельзя отменить.',
+                        'Сбросить',
+                        () => sendCmd('resetSettings'),
+                        true
+                    );
+                }
+
+                // =========================================================================
+                // ЛОГИКА ВКЛАДКИ 2: МОДИФИКАЦИИ (MODSVIEW + CODE STUDIO)
+                // =========================================================================
+                function switchModsSubTab(subTab) {
+                    sendCmd('playClick');
+                    appState.modsSubTab = subTab;
+
+                    const btnBat = document.getElementById('mod-tab-bat');
+                    const btnList = document.getElementById('mod-tab-list');
+                    const btnGuide = document.getElementById('mod-tab-guide');
+
+                    const inactiveCls = 'flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-semibold text-zinc-400 hover:bg-zinc-800/50 hover:text-white transition cursor-pointer text-left';
+                    const activeCls = 'flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-semibold bg-[#2A2A2A] text-white transition cursor-pointer text-left';
+
+                    btnBat.className = (subTab === 'bat' ? activeCls : inactiveCls) + ' mb-1.5';
+                    btnList.className = (subTab === 'list' ? activeCls : inactiveCls) + ' mb-2';
+                    btnGuide.className = subTab === 'guide' ? activeCls : inactiveCls;
+
+                    const title = document.getElementById('mods-cat-title');
+                    const desc = document.getElementById('mods-cat-desc');
+                    const actions = document.getElementById('mods-action-bar');
+                    const listsContainer = document.getElementById('mods-lists-container');
+                    const guideContainer = document.getElementById('mods-guide-container');
+
+                    if (subTab === 'guide') {
+                        title.innerText = 'Руководство';
+                        desc.innerText = 'Ответы на частые вопросы и инструкции.';
+                        actions.classList.add('hidden');
+                        listsContainer.classList.add('hidden');
+                        guideContainer.classList.remove('hidden');
+                    } else {
+                        actions.classList.remove('hidden');
+                        listsContainer.classList.remove('hidden');
+                        guideContainer.classList.add('hidden');
+
+                        if (subTab === 'bat') {
+                            title.innerText = '.bat Стратегии';
+                            desc.innerText = 'Пользовательские скрипты обхода для специфичных игр и задач.';
+                        } else {
+                            title.innerText = 'Листы доменов';
+                            desc.innerText = 'Списки сайтов и сервисов для маршрутизации трафика (обновляются в прямом эфире).';
+                        }
+                        renderModsView();
+                    }
+                }
+
+                function renderModsView() {
+                    if (appState.modsSubTab === 'guide') return;
+
+                    const isBat = appState.modsSubTab === 'bat';
+                    const source = isBat ? appState.batMods : appState.listMods;
+
+                    const activeMods = source.filter(m => m.isActive);
+                    const availableMods = source.filter(m => !m.isActive);
+
+                    document.getElementById('active-mods-section').classList.toggle('hidden', activeMods.length === 0);
+                    document.getElementById('available-mods-section').classList.toggle('hidden', availableMods.length === 0);
+                    document.getElementById('mods-divider').classList.toggle('hidden', !(activeMods.length > 0 && availableMods.length > 0));
+                    document.getElementById('mods-empty-state').classList.toggle('hidden', source.length > 0);
+
+                    document.getElementById('active-mods-list').innerHTML = activeMods.map(m => buildModCardHtml(m, isBat)).join('');
+                    document.getElementById('available-mods-list').innerHTML = availableMods.map(m => buildModCardHtml(m, isBat)).join('');
+                }
+
+                function escapeStr(str) {
+                    return (str || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                }
+
+                function buildModCardHtml(mod, isBat) {
+                    const cardBorder = mod.isActive
+                        ? 'bg-[#0A1F0A] border-emerald-600/80'
+                        : 'bg-[#18181B] border-zinc-800 hover:bg-[#222227]';
+
+                    const btnCls = mod.isActive
+                        ? 'bg-[#7F1D1D] hover:bg-red-800 text-white'
+                        : 'bg-[#1E3A8A] hover:bg-blue-800 text-white';
+
+                    const btnLabel = mod.isActive ? '✕ Убрать' : 'Включить ▶';
+                    const safeName = escapeStr(mod.meta.name);
+
+                    return `
+                    <div class="mod-card-enter p-3.5 rounded-xl border ${cardBorder} flex items-center justify-between gap-4 transition">
+                        <div class="overflow-hidden">
+                            <div class="flex items-center gap-2">
+                                <span class="font-bold text-[15px] text-white truncate">${mod.meta.name}</span>
+                                <span class="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 font-mono text-[11px]">v${mod.meta.version || '1.0'}</span>
+                            </div>
+                            <div class="text-xs text-emerald-400 mt-0.5">Автор: ${mod.meta.author || 'Аноним'}</div>
+                            <div class="text-xs text-zinc-400 mt-1 line-clamp-2">${mod.meta.description || ''}</div>
+                        </div>
+
+                        <div class="flex flex-col items-end shrink-0 min-w-[135px]">
+                            <button onclick="toggleMod('${mod.id}', ${isBat}, '${safeName}')" class="w-full py-1.5 px-3 rounded-lg text-xs font-semibold transition cursor-pointer ${btnCls}">
+                                ${btnLabel}
+                            </button>
+                            <div class="flex items-center gap-2.5 mt-2 text-xs">
+                                <button onclick="openModEditor('${mod.id}', ${isBat})" class="text-zinc-400 hover:text-white transition cursor-pointer" title="Редактировать мод">✎ Изменить</button>
+                                <button onclick="exportMod('${mod.id}', ${isBat}, '${safeName}')" class="text-blue-400 hover:text-blue-300 transition cursor-pointer" title="Экспортировать в .zip">📤 Экспорт</button>
+                                <button onclick="promptDeleteMod('${mod.id}', ${isBat}, '${safeName}')" class="text-red-400 hover:text-red-300 transition cursor-pointer" title="Удалить мод">🗑 Удалить</button>
+                            </div>
+                        </div>
+                    </div>`;
+                }
+
+                function toggleMod(id, isBat, name) {
+                    sendCmd('playClick');
+                    sendCmd('toggleMod', { id, isBat, name });
+                }
+
+                function promptDisableAllMods() {
+                    sendCmd('playClick');
+                    const isBat = appState.modsSubTab === 'bat';
+                    const activeCount = (isBat ? appState.batMods : appState.listMods).filter(m => m.isActive).length;
+                    if (activeCount === 0) return;
+
+                    showConfirm(
+                        'Отключить всё',
+                        'Вы уверены, что хотите отключить все моды в этой категории?',
+                        'Отключить',
+                        () => sendCmd('disableAllMods', { isBat }),
+                        true
+                    );
+                }
+
+                function promptDeleteMod(id, isBat, name) {
+                    sendCmd('playClick');
+                    showConfirm(
+                        'Удаление мода',
+                        `Удалить мод «${name}» навсегда?\nЭто удалит все файлы мода с диска.`,
+                        'Удалить',
+                        () => sendCmd('deleteMod', { id, isBat, name }),
+                        true
+                    );
+                }
+
+                function exportMod(id, isBat, name) {
+                    sendCmd('playClick');
+                    sendCmd('exportMod', { id, isBat, name });
+                }
+
+                function openCreateModModal() {
+                    sendCmd('playClick');
+                    document.getElementById('new-mod-name').value = 'Мой новый мод';
+                    document.getElementById('new-mod-author').value = 'You';
+                    document.getElementById('new-mod-desc').value = 'Описание мода';
+                    sendCmd('generateModId', { baseName: 'custom_mod' });
+                    document.getElementById('create-mod-modal').classList.add('open');
+                }
+
+                function closeCreateModModal() {
+                    sendCmd('playClick');
+                    document.getElementById('create-mod-modal').classList.remove('open');
+                }
+
+                function regenerateModId() {
+                    sendCmd('playClick');
+                    const name = document.getElementById('new-mod-name').value || 'mod';
+                    sendCmd('generateModId', { baseName: name });
+                }
+
+                function onNewModNameInput() {
+                    const name = document.getElementById('new-mod-name').value || 'mod';
+                    sendCmd('generateModId', { baseName: name });
+                }
+
+                function onNewModIdInput() {
+                    const id = document.getElementById('new-mod-id').value;
+                    sendCmd('checkModId', { id });
+                }
+
+                function updateModIdValidationUI(cleanId, isTaken, isEmpty) {
+                    const status = document.getElementById('new-mod-id-status');
+                    const btn = document.getElementById('btn-confirm-create-mod');
+                    if (isEmpty) {
+                        status.innerText = '⚠ Введите корректный ID (a-z, 0-9)';
+                        status.className = 'text-[11px] font-mono text-amber-400';
+                        btn.disabled = true;
+                        btn.style.opacity = '0.5';
+                    } else if (isTaken) {
+                        status.innerText = '❌ Такой ID уже занят!';
+                        status.className = 'text-[11px] font-mono text-red-400';
+                        btn.disabled = true;
+                        btn.style.opacity = '0.5';
+                    } else {
+                        status.innerText = `✓ ID «${cleanId}» уникален`;
+                        status.className = 'text-[11px] font-mono text-emerald-400';
+                        btn.disabled = false;
+                        btn.style.opacity = '1';
+                    }
+                }
+
+                function confirmCreateMod() {
+                    sendCmd('playClick');
+                    sendCmd('createMod', {
+                        isBat: appState.modsSubTab === 'bat',
+                        id: document.getElementById('new-mod-id').value,
+                        name: document.getElementById('new-mod-name').value,
+                        author: document.getElementById('new-mod-author').value,
+                        description: document.getElementById('new-mod-desc').value
+                    });
+                }
+
+                function openModEditor(id, isBat) {
+                    sendCmd('playClick');
+                    sendCmd('getModContent', { id, isBat });
+                }
+
+                function openEditorWithData(data) {
+                    appState.editingMod.id = data.id;
+                    appState.editingMod.isBat = data.isBat;
+
+                    document.getElementById('editor-title').innerText = `Редактор: ${data.meta.name}`;
+                    document.getElementById('editor-subtitle').innerText = `Уникальный ID: ${data.id} • Файл: ${data.fileName}`;
+
+                    document.getElementById('edit-mod-name').value = data.meta.name || '';
+                    document.getElementById('edit-mod-author').value = data.meta.author || '';
+                    document.getElementById('edit-mod-version').value = data.meta.version || '1.0';
+                    document.getElementById('edit-mod-desc').value = data.meta.description || '';
+
+                    document.getElementById('editor-bat-tools').style.display = data.isBat ? 'flex' : 'none';
+                    document.getElementById('editor-snippets-bar').style.display = data.isBat ? 'flex' : 'none';
+                    document.getElementById('editor-list-tools').style.display = data.isBat ? 'none' : 'flex';
+
+                    const ta = document.getElementById('editor-textarea');
+                    ta.value = data.content || '';
+                    setEditorStatus('', '');
+                    onEditorTextInput();
+                    updateEditorCursorPos();
+
+                    document.getElementById('editor-modal').classList.add('open');
+                }
+
+                function closeEditorModal() {
+                    sendCmd('playClick');
+                    document.getElementById('editor-modal').classList.remove('open');
+                }
+
+                function toggleEditorMetaPanel() {
+                    sendCmd('playClick');
+                    document.getElementById('editor-meta-panel').classList.toggle('hidden');
+                }
+
+                function toggleEditorSearch() {
+                    sendCmd('playClick');
+                    const p = document.getElementById('editor-search-panel');
+                    const isHidden = p.classList.contains('hidden');
+                    if (isHidden) {
+                        p.classList.remove('hidden');
+                        p.classList.add('flex');
+                        document.getElementById('editor-find-input').focus();
+                    } else {
+                        p.classList.add('hidden');
+                        p.classList.remove('flex');
+                        document.getElementById('editor-textarea').focus();
+                    }
+                }
+
+                function toggleEditorWordWrap() {
+                    appState.editingMod.wordWrap = !appState.editingMod.wordWrap;
+                    const ta = document.getElementById('editor-textarea');
+                    ta.style.whiteSpace = appState.editingMod.wordWrap ? 'pre-wrap' : 'pre';
+                    document.getElementById('btn-word-wrap').innerText = `Перенос: ${appState.editingMod.wordWrap ? 'Вкл' : 'Выкл'}`;
+                }
+
+                function changeEditorFontSize(delta) {
+                    const next = appState.editingMod.fontSize + delta;
+                    if (next >= 10 && next <= 24) {
+                        appState.editingMod.fontSize = next;
+                        document.getElementById('editor-textarea').style.fontSize = `${next}px`;
+                        document.getElementById('editor-line-numbers').style.fontSize = `${next}px`;
+                    }
+                }
+
+                function onEditorTextInput() {
+                    const ta = document.getElementById('editor-textarea');
+                    const lines = ta.value.split('\n');
+                    const count = Math.max(1, lines.length);
+
+                    let nums = '';
+                    for (let i = 1; i <= count; i++) nums += i + '\n';
+                    document.getElementById('editor-line-numbers').innerText = nums;
+
+                    if (!appState.editingMod.isBat) {
+                        const nonEmpty = lines.filter(l => l.trim().length > 0).length;
+                        document.getElementById('editor-stats-info').innerText = `Строк: ${count} (Доменов: ${nonEmpty})`;
+                    } else {
+                        document.getElementById('editor-stats-info').innerText = `Строк: ${count} • Символов: ${ta.value.length}`;
+                    }
+                }
+
+                function syncEditorScroll() {
+                    const ta = document.getElementById('editor-textarea');
+                    document.getElementById('editor-line-numbers').scrollTop = ta.scrollTop;
+                }
+
+                function updateEditorCursorPos() {
+                    const ta = document.getElementById('editor-textarea');
+                    const upToCaret = ta.value.substring(0, ta.selectionStart);
+                    const lines = upToCaret.split('\n');
+                    const row = lines.length;
+                    const col = lines[lines.length - 1].length + 1;
+                    document.getElementById('editor-cursor-pos').innerText = `Стр: ${row}, Столб: ${col}`;
+                }
+
+                function onEditorKeyDown(e) {
+                    if (e.ctrlKey && e.key.toLowerCase() === 'f') {
+                        e.preventDefault();
+                        toggleEditorSearch();
+                    } else if (e.ctrlKey && e.key.toLowerCase() === 's') {
+                        e.preventDefault();
+                        saveEditorChanges(false);
+                    }
+                }
+
+                function insertSnippet(snippet) {
+                    const ta = document.getElementById('editor-textarea');
+                    const start = ta.selectionStart;
+                    const end = ta.selectionEnd;
+                    ta.value = ta.value.substring(0, start) + snippet + ta.value.substring(end);
+                    ta.selectionStart = ta.selectionEnd = start + snippet.length;
+                    ta.focus();
+                    onEditorTextInput();
+                }
+
+                function commentCurrentLine() {
+                    const ta = document.getElementById('editor-textarea');
+                    const caret = ta.selectionStart;
+                    const lines = ta.value.split('\n');
+                    const lineIdx = ta.value.substring(0, caret).split('\n').length - 1;
+
+                    if (lineIdx >= 0 && lineIdx < lines.length) {
+                        const line = lines[lineIdx];
+                        if (line.trimStart().startsWith('::')) {
+                            const idx = line.indexOf('::');
+                            lines[lineIdx] = line.slice(0, idx) + line.slice(idx + 2).trimStart();
+                        } else {
+                            lines[lineIdx] = ':: ' + line;
+                        }
+                        ta.value = lines.join('\n');
+                        ta.focus();
+                        onEditorTextInput();
+                    }
+                }
+
+                function validateCurrentBat() {
+                    sendCmd('playClick');
+                    sendCmd('validateBatMod', {
+                        name: document.getElementById('edit-mod-name').value || 'Текущий скрипт',
+                        content: document.getElementById('editor-textarea').value
+                    });
+                }
+
+                function cleanDomainsList() {
+                    sendCmd('playClick');
+                    const ta = document.getElementById('editor-textarea');
+                    const rawLines = ta.value.split(/\r?\n/).filter(l => l.trim().length > 0);
+                    const cleaned = [];
+
+                    rawLines.forEach(raw => {
+                        let d = raw.trim().toLowerCase();
+                        if (!d || d.startsWith('#') || d.startsWith('//')) return;
+                        if (d.startsWith('http://')) d = d.substring(7);
+                        else if (d.startsWith('https://')) d = d.substring(8);
+                        if (d.startsWith('www.')) d = d.substring(4);
+                        const slashIdx = d.indexOf('/');
+                        if (slashIdx > 0) d = d.substring(0, slashIdx);
+                        const colonIdx = d.indexOf(':');
+                        if (colonIdx > 0) d = d.substring(0, colonIdx);
+                        if (d && d.includes('.')) cleaned.push(d);
+                    });
+
+                    const uniqueSorted = [...new Set(cleaned)].sort();
+                    const removed = Math.max(0, rawLines.length - uniqueSorted.length);
+                    ta.value = uniqueSorted.join('\n');
+                    onEditorTextInput();
+                    setEditorStatus(`Готово! Доменов: ${uniqueSorted.length} (удалено: ${removed})`, 'text-blue-400');
+                }
+
+                function editorFindNext() {
+                    const query = document.getElementById('editor-find-input').value;
+                    if (!query) return;
+                    const ta = document.getElementById('editor-textarea');
+                    const text = ta.value.toLowerCase();
+                    const q = query.toLowerCase();
+
+                    let start = ta.selectionEnd;
+                    if (start >= text.length) start = 0;
+
+                    let idx = text.indexOf(q, start);
+                    if (idx === -1 && start > 0) idx = text.indexOf(q, 0);
+
+                    if (idx >= 0) {
+                        ta.focus();
+                        ta.setSelectionRange(idx, idx + query.length);
+                        const lineNum = text.substring(0, idx).split('\n').length;
+                        setEditorStatus(`Найдено на строке ${lineNum}`, 'text-blue-400');
+                    } else {
+                        setEditorStatus('Совпадений не найдено', 'text-red-400');
+                    }
+                }
+
+                function editorReplaceAll() {
+                    const query = document.getElementById('editor-find-input').value;
+                    const replacement = document.getElementById('editor-replace-input').value || '';
+                    if (!query) return;
+
+                    const ta = document.getElementById('editor-textarea');
+                    const regex = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+                    const matches = ta.value.match(regex);
+                    const count = matches ? matches.length : 0;
+
+                    if (count > 0) {
+                        ta.value = ta.value.replace(regex, replacement);
+                        onEditorTextInput();
+                        setEditorStatus(`Заменено совпадений: ${count}`, 'text-emerald-400');
+                    } else {
+                        setEditorStatus('Совпадений для замены нет', 'text-red-400');
+                    }
+                }
+
+                function setEditorStatus(msg, colorCls) {
+                    const el = document.getElementById('editor-status-msg');
+                    el.innerText = msg;
+                    el.className = `truncate max-w-[260px] ${colorCls}`;
+                }
+
+                function saveEditorChanges(bypassWarning = false) {
+                    sendCmd('playClick');
+                    sendCmd('saveModContent', {
+                        id: appState.editingMod.id,
+                        isBat: appState.editingMod.isBat,
+                        name: document.getElementById('edit-mod-name').value,
+                        author: document.getElementById('edit-mod-author').value,
+                        version: document.getElementById('edit-mod-version').value,
+                        description: document.getElementById('edit-mod-desc').value,
+                        content: document.getElementById('editor-textarea').value,
+                        bypassWarning
+                    });
+                }
+
+                // =========================================================================
+                // ЛОГИКА ВКЛАДКИ 1: ГЛАВНАЯ (HOMEVIEW)
+                // =========================================================================
+                function onMainToggleClick() {
+                    sendCmd('playClick');
+
+                    if (!appState.isRunning) {
+                        const useZapret = document.getElementById('chk-zapret').checked;
+                        const useProxy = document.getElementById('chk-proxy').checked;
+
+                        if (useZapret && !appState.firstTimeScanPrompted) {
+                            appState.firstTimeScanPrompted = true;
+                            sendCmd('markFirstScanPrompted');
+
+                            showConfirm(
+                                'Первый запуск Zapret',
+                                'Перед первым включением рекомендуется протестировать стратегии обхода, чтобы выбрать самую быструю и стабильную для вашего провайдера.\n\nЗапустить автоматическое тестирование конфигураций сейчас?',
+                                'Запустить тест',
+                                () => {
+                                    openConfigModal();
+                                    toggleSmartScan();
+                                }
+                            );
+                            return;
+                        }
+
+                        sendCmd('toggleBypass', {
+                            profile: appState.selectedProfile,
+                            useZapret,
+                            useProxy
+                        });
+                    } else {
+                        sendCmd('toggleBypass');
+                    }
+                }
+
+                function onModuleToggleChange() {
+                    sendCmd('playClick');
+                    sendCmd('updateModuleToggles', {
+                        useZapret: document.getElementById('chk-zapret').checked,
+                        useProxy: document.getElementById('chk-proxy').checked
+                    });
+                }
+
+                function refreshPing() {
+                    sendCmd('playClick');
+                    document.getElementById('stat-ping').innerText = '...';
+                    document.getElementById('ping-refresh-icon').classList.add('spin-anim');
+                    sendCmd('ping');
+                }
+
+                function updateRunningUI(zapretRunning, proxyRunning) {
+                    appState.zapretRunning = zapretRunning;
+                    appState.proxyRunning = proxyRunning;
+                    appState.isRunning = zapretRunning || proxyRunning;
+
+                    const btn = document.getElementById('main-toggle-btn');
+                    const txt = document.getElementById('main-btn-text');
+                    const lbl = document.getElementById('zapret-status-label');
+
+                    btn.classList.toggle('active', appState.isRunning);
+                    txt.innerText = appState.isRunning ? 'Остановить' : 'Починить интернет';
+
+                    lbl.innerText = zapretRunning ? 'Работает' : 'Остановлен';
+                    lbl.className = `text-xs font-medium mb-3 ${zapretRunning ? 'text-emerald-400' : 'text-red-400'}`;
+
+                    const cfgBtn = document.getElementById('btn-open-config');
+                    const gfBtn = document.getElementById('btn-open-gf');
+                    cfgBtn.style.opacity = appState.isRunning ? '0.5' : '1';
+                    cfgBtn.style.pointerEvents = appState.isRunning ? 'none' : 'auto';
+                    gfBtn.style.opacity = appState.isRunning ? '0.5' : '1';
+                    gfBtn.style.pointerEvents = appState.isRunning ? 'none' : 'auto';
+
+                    document.getElementById('dot-zapret').className = `w-2 h-2 rounded-full ${zapretRunning ? 'dot-online' : 'dot-offline'}`;
+                    document.getElementById('dot-proxy').className = `w-2 h-2 rounded-full ${proxyRunning ? 'dot-online' : 'dot-offline'}`;
+                }
+
+                function initConfigsList(fileNames) {
+                    const existingMap = {};
+                    appState.configs.forEach(c => existingMap[c.fileName.toLowerCase()] = c);
+
+                    appState.configs = fileNames.map(name => existingMap[name.toLowerCase()] || ({
+                        fileName: name,
+                        topRank: 999999,
+                        pingMs: appState.currentPing > 0 ? appState.currentPing : 999999,
+                        testsOk: -1,
+                        testsTotal: -1
+                    }));
+
+                    if (!fileNames.some(f => f.toLowerCase() === appState.selectedProfile.toLowerCase()) && fileNames.length > 0) {
+                        appState.selectedProfile = fileNames[0];
+                    }
+
+                    document.getElementById('txt-main-profile').innerText = appState.selectedProfile;
+                    document.getElementById('modal-active-profile').innerText = appState.selectedProfile;
+                    renderConfigCards();
+                }
+
+                function sortConfigs() {
+                    appState.configs.sort((a, b) => {
+                        if (a.topRank !== b.topRank) return a.topRank - b.topRank;
+                        const rateA = a.testsTotal > 0 ? a.testsOk / a.testsTotal : -1;
+                        const rateB = b.testsTotal > 0 ? b.testsOk / b.testsTotal : -1;
+                        if (rateA !== rateB) return rateB - rateA;
+                        if (a.pingMs !== b.pingMs) return a.pingMs - b.pingMs;
+                        return a.fileName.localeCompare(b.fileName);
+                    });
+                }
+
+                function renderConfigCards() {
+                    sortConfigs();
+                    const list = document.getElementById('profile-cards-list');
+                    document.getElementById('modal-configs-count').innerText = `${appState.configs.length} конфигов`;
+
+                    list.innerHTML = appState.configs.map(cfg => {
+                        const isActive = cfg.fileName.toLowerCase() === appState.selectedProfile.toLowerCase();
+                        const pingStr = cfg.pingMs < 999999 ? `${cfg.pingMs}` : '—';
+                        const testStr = cfg.testsTotal > 0 ? `${cfg.testsOk}/${cfg.testsTotal}` : 'не проводились';
+                        const metaInfo = `Пинг: ${pingStr} мс • Тесты: ${testStr}`;
+
+                        return `
+                        <div onclick="selectProfile('${cfg.fileName}')"
+                             class="p-3.5 rounded-xl border cursor-pointer transition flex items-center justify-between ${isActive ? 'bg-[#172554] border-blue-600' : 'bg-[#18181B] border-zinc-800 hover:bg-zinc-800/80'}">
+                            <div>
+                                <div class="flex items-center gap-2.5 mb-1">
+                                    <span class="font-mono text-sm font-semibold text-emerald-400">${cfg.fileName}</span>
+                                    ${isActive ? '<span class="px-1.5 py-0.5 text-[10px] font-semibold bg-blue-900 text-blue-300 rounded">активный</span>' : ''}
+                                </div>
+                                <div class="text-xs text-zinc-400">${metaInfo}</div>
+                            </div>
+                            <span class="text-base font-bold ${isActive ? 'text-blue-400' : 'text-zinc-600'}">${isActive ? '✓' : '→'}</span>
+                        </div>`;
+                    }).join('');
+                }
+
+                function selectProfile(fileName) {
+                    sendCmd('playClick');
+                    appState.selectedProfile = fileName;
+                    document.getElementById('txt-main-profile').innerText = fileName;
+                    document.getElementById('modal-active-profile').innerText = fileName;
+                    sendCmd('selectProfile', { profile: fileName });
+                    renderConfigCards();
+                }
+
+                function openConfigModal() {
+                    sendCmd('playClick');
+                    renderConfigCards();
+                    document.getElementById('config-modal').classList.add('open');
+                }
+
+                function closeConfigModal() {
+                    sendCmd('playClick');
+                    document.getElementById('config-modal').classList.remove('open');
+                }
+
+                function toggleSmartScan() {
+                    sendCmd('playClick');
+                    sendCmd('startScan');
+                }
+
+                function updateScanButtonUI() {
+                    const icon = document.getElementById('scan-btn-icon');
+                    const text = document.getElementById('scan-btn-text');
+                    if (appState.isScanning) {
+                        icon.innerText = '🛑';
+                        text.innerText = 'Остановить тесты';
+                    } else {
+                        icon.innerText = '🔍';
+                        text.innerText = 'Запустить авто-подбор (Smart DPI Scan)';
+                    }
+                }
+
+                function updateGameFilterBadge(statusText, isEnabled) {
+                    const el = document.getElementById('txt-gf-status');
+                    el.innerText = statusText;
+                    el.className = `text-xs font-mono font-semibold truncate ${isEnabled ? 'text-emerald-400' : 'text-zinc-400'}`;
+                }
+
+                function openGameFilterModal() {
+                    sendCmd('playClick');
+                    selectGfMode(appState.gameFilter.mode);
+                    document.getElementById('gf-tcp-input').value = appState.gameFilter.tcp;
+                    document.getElementById('gf-udp-input').value = appState.gameFilter.udp;
+                    document.getElementById('gf-modal').classList.add('open');
+                }
+
+                function closeGameFilterModal() {
+                    sendCmd('playClick');
+                    document.getElementById('gf-modal').classList.remove('open');
+                }
+
+                function selectGfMode(mode) {
+                    appState.gameFilter.mode = mode;
+                    document.querySelectorAll('.gf-mode-card').forEach(card => {
+                        const isSelected = card.getAttribute('data-mode') === mode;
+                        card.className = `gf-mode-card p-3 rounded-xl border cursor-pointer flex items-center justify-between transition ${isSelected ? 'bg-[#172554] border-blue-600' : 'bg-[#18181B] border-zinc-800 hover:bg-zinc-800/70'}`;
+                        const check = card.querySelector('.gf-check');
+                        check.innerText = isSelected ? '✓' : '→';
+                        check.className = `gf-check text-sm font-bold ${isSelected ? 'text-blue-400' : 'text-zinc-600'}`;
+                    });
+                }
+
+                function resetGfPorts() {
+                    sendCmd('playClick');
+                    document.getElementById('gf-tcp-input').value = '1024-65535';
+                    document.getElementById('gf-udp-input').value = '1024-65535';
+                }
+
+                function saveGameFilter() {
+                    sendCmd('playClick');
+                    sendCmd('saveGameFilter', {
+                        mode: appState.gameFilter.mode,
+                        tcp: document.getElementById('gf-tcp-input').value,
+                        udp: document.getElementById('gf-udp-input').value,
+                        restartIfRunning: false
+                    });
+                }
+
+                function appendLog(time, message, isProgress = false) {
+                    const box = document.getElementById('log-box');
+                    const text = `[${time}] ${message}`;
+
+                    if (isProgress && lastProgressLogEl) {
+                        lastProgressLogEl.innerText = text;
+                        return;
+                    }
+
+                    while (box.children.length >= 250) {
+                        box.removeChild(box.firstChild);
+                    }
+
+                    const div = document.createElement('div');
+                    let color = 'text-zinc-400';
+                    if (message.includes('ОШИБКА') || message.includes('⚠') || message.includes('🛑') || message.includes('❌'))
+                        color = 'text-red-400 font-bold';
+                    else if (message.includes('✅') || message.includes('✨') || message.includes('🏆'))
+                        color = 'text-emerald-400';
+                    else if (message.includes('🔍'))
+                        color = 'text-blue-400';
+
+                    div.className = color;
+                    div.innerText = text;
+                    box.appendChild(div);
+                    box.scrollTop = box.scrollHeight;
+
+                    lastProgressLogEl = isProgress ? div : null;
+                }
+
+                function clearLogs() {
+                    sendCmd('playClick');
+                    document.getElementById('log-box').innerHTML = '';
+                    lastProgressLogEl = null;
+                }
+
+                function exportLogs() {
+                    sendCmd('playClick');
+                    const text = Array.from(document.getElementById('log-box').children).map(el => el.innerText).join('\r\n');
+                    sendCmd('exportLogs', { text });
+                }
+
+                function showAlert(title, message, isError = false) {
+                    confirmCallback = null;
+                    document.getElementById('confirm-title').innerText = title;
+                    document.getElementById('confirm-msg').innerText = message;
+                    document.getElementById('confirm-cancel-btn').style.display = 'none';
+                    const okBtn = document.getElementById('confirm-ok-btn');
+                    okBtn.innerText = 'ОК';
+                    okBtn.className = `px-4 py-1.5 rounded-lg text-xs font-semibold text-white transition cursor-pointer ${isError ? 'bg-red-600 hover:bg-red-500' : 'bg-emerald-600 hover:bg-emerald-500'}`;
+                    document.getElementById('confirm-modal').classList.add('open');
+                }
+
+                function showConfirm(title, message, confirmText, onConfirm, isDanger = false) {
+                    confirmCallback = onConfirm;
+                    document.getElementById('confirm-title').innerText = title;
+                    document.getElementById('confirm-msg').innerText = message;
+                    document.getElementById('confirm-cancel-btn').style.display = 'inline-block';
+                    const okBtn = document.getElementById('confirm-ok-btn');
+                    okBtn.innerText = confirmText;
+                    okBtn.className = `px-4 py-1.5 rounded-lg text-xs font-semibold text-white transition cursor-pointer ${isDanger ? 'bg-red-600 hover:bg-red-500' : 'bg-emerald-600 hover:bg-emerald-500'}`;
+                    document.getElementById('confirm-modal').classList.add('open');
+                }
+
+                function closeConfirmModal(accepted) {
+                    sendCmd('playClick');
+                    document.getElementById('confirm-modal').classList.remove('open');
+                    if (accepted && confirmCallback) {
+                        const cb = confirmCallback;
+                        confirmCallback = null;
+                        cb();
+                    }
+                }
+
+                const rxHistory = new Array(30).fill(0);
+                function updateChart(rxValue) {
+                    rxHistory.push(rxValue);
+                    rxHistory.shift();
+
+                    const canvas = document.getElementById('traffic-chart');
+                    const ctx = canvas.getContext('2d');
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                    const maxVal = Math.max(10, ...rxHistory);
+                    ctx.beginPath();
+                    ctx.strokeStyle = appState.settings.colorblindMode ? '#0078D7' : '#10B981';
+                    ctx.lineWidth = 2;
+
+                    rxHistory.forEach((val, idx) => {
+                        const x = (idx / (rxHistory.length - 1)) * canvas.width;
+                        const y = canvas.height - (val / maxVal) * (canvas.height - 12) - 6;
+                        if (idx === 0) ctx.moveTo(x, y);
+                        else ctx.lineTo(x, y);
+                    });
+                    ctx.stroke();
+                }
+
+                let sidebarOpen = true;
+                function toggleSidebar() {
+                    sendCmd('playClick');
+                    sidebarOpen = !sidebarOpen;
+                    const sb = document.getElementById('sidebar');
+                    sb.style.width = sidebarOpen ? '224px' : '0px';
+                    sb.style.padding = sidebarOpen ? '12px' : '0px';
+                    sb.style.borderRightWidth = sidebarOpen ? '1px' : '0px';
+                }
+
+                function switchTab(tabId, btn) {
+                    sendCmd('playClick');
+                    document.querySelectorAll('.tab-view').forEach(el => el.classList.remove('active'));
+                    document.getElementById('tab-' + tabId).classList.add('active');
+
+                    document.querySelectorAll('.nav-btn').forEach(b => {
+                        b.className = 'nav-btn flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium text-zinc-400 hover:bg-zinc-800/40 hover:text-zinc-200 transition-all cursor-pointer';
+                    });
+                    btn.className = 'nav-btn active flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-semibold bg-zinc-800 text-white border-l-4 border-emerald-500 transition-all cursor-pointer';
+                }
+
+                window.addEventListener('DOMContentLoaded', () => sendCmd('init'));
+    </script>
+</body>
+</html>

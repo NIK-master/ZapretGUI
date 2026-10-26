@@ -1,13 +1,13 @@
 ﻿using System;
 using System.Diagnostics;
 using System.Net.NetworkInformation;
-using System.Windows.Threading;
+using System.Timers;
 
 namespace ZapretGUI.Core
 {
     public class NetworkMonitor
     {
-        private readonly DispatcherTimer _networkTimer;
+        private readonly System.Timers.Timer _networkTimer;
         private readonly Stopwatch _elapsedStopwatch = new Stopwatch();
         private long _lastBytesReceived = 0;
         private long _lastBytesSent = 0;
@@ -18,9 +18,9 @@ namespace ZapretGUI.Core
 
         public NetworkMonitor()
         {
-            _networkTimer = new DispatcherTimer();
+            _networkTimer = new System.Timers.Timer();
             UpdateIntervalFromSettings();
-            _networkTimer.Tick += Timer_Tick;
+            _networkTimer.Elapsed += Timer_Tick;
 
             SettingsManager.SettingsSaved += UpdateIntervalFromSettings;
         }
@@ -28,7 +28,7 @@ namespace ZapretGUI.Core
         public void UpdateIntervalFromSettings()
         {
             int seconds = Math.Max(1, SettingsManager.Current.StatsUpdateInterval);
-            _networkTimer.Interval = TimeSpan.FromSeconds(seconds);
+            _networkTimer.Interval = seconds * 1000;
         }
 
         public void Start()
@@ -44,7 +44,7 @@ namespace ZapretGUI.Core
             _elapsedStopwatch.Stop();
         }
 
-        private void Timer_Tick(object? sender, EventArgs e)
+        private void Timer_Tick(object? sender, ElapsedEventArgs e)
         {
             var isAvailable = NetworkInterface.GetIsNetworkAvailable();
 
