@@ -31,7 +31,7 @@
         <StackPanel Margin="0,15,0,10">
             <Grid Margin="15,0,15,15">
                 <TextBlock Text="Zapret for ADHD" Foreground="White" FontSize="15" FontWeight="Bold" HorizontalAlignment="Left" VerticalAlignment="Center"/>
-                <TextBlock Text="v3.0" Foreground="#555555" FontSize="12" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                <TextBlock x:Name="TxtTrayVersion" Text="v4.0" Foreground="#555555" FontSize="12" HorizontalAlignment="Right" VerticalAlignment="Center"/>
             </Grid>
 
             <Button x:Name="BtnTogglePower" Background="#1B3320" BorderThickness="1" BorderBrush="#2E5C37" Cursor="Hand" Margin="15,0,15,15" Padding="0,10" HorizontalAlignment="Stretch" Click="BtnTogglePower_Click">

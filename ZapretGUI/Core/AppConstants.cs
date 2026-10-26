@@ -3,7 +3,7 @@
     public static class AppConstants
     {
         // Основные
-        public const string AppVersion = "v3.5";
+        public const string AppVersion = "v4.0";
         public const string CoreFilesDirectory = "ZapretFiles";
         public const string ModsDirectory = "Mods";
         public const string ZapretProcessName = "winws";

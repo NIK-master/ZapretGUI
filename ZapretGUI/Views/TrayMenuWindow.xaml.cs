@@ -13,6 +13,7 @@ namespace ZapretGUI.Views
         public TrayMenuWindow()
         {
             InitializeComponent();
+            TxtTrayVersion.Text = AppConstants.AppVersion;
         }
 
         public void RefreshState()

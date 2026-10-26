@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
+using System.Runtime.InteropServices;
 using System.Linq;
 using System.Text.Json;
 using System.Threading;
@@ -16,6 +17,11 @@ namespace ZapretGUI.Core
 {
     public class WebBridge
     {
+        [DllImport("user32.dll")]
+        private static extern bool ReleaseCapture();
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr SendMessage(IntPtr hWnd, int Msg, int wParam, int lParam);
         private readonly WebView2 _webView;
         private readonly Window _mainWindow;
         private readonly ModManager _modManager = new ModManager();
@@ -209,7 +215,16 @@ namespace ZapretGUI.Core
                     break;
 
                 case "windowDrag":
-                    _mainWindow.Dispatcher.Invoke(() => { try { _mainWindow.DragMove(); } catch { } });
+                    _mainWindow.Dispatcher.Invoke(() =>
+                    {
+                        try
+                        {
+                            var hwnd = new WindowInteropHelper(_mainWindow).Handle;
+                            ReleaseCapture();
+                            SendMessage(hwnd, 0xA1 /* WM_NCLBUTTONDOWN */, 0x2 /* HT_CAPTION */, 0);
+                        }
+                        catch { }
+                    });
                     break;
 
                 case "windowMinimize":

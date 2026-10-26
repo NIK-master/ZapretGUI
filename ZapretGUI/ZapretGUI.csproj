@@ -28,6 +28,12 @@
   </ItemGroup>
 
   <ItemGroup>
+	<Content Include="wwwroot\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	</Content>
+  </ItemGroup>
+
+  <ItemGroup>
     <Resource Include="Assets\freepik__толстая,_сплошная,_монолитная_буква_z_белого.png">
       <CopyToOutputDirectory>Never</CopyToOutputDirectory>
     </Resource>

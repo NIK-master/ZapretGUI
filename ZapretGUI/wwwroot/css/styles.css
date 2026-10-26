@@ -1,0 +1,309 @@
+:root {
+    --accent-color: #107C10;
+    --accent-light: #4CAF50;
+    --accent-glow: rgba(16, 124, 16, 0.55);
+    --danger-color: #D13438;
+    --warning-color: #FF8C00;
+    --bg-dark: #0A0A0A;
+    --bg-content: #121212;
+    --card-bg: #181818;
+    --border-color: #2A2A2A;
+}
+
+body.colorblind-mode {
+    --accent-color: #0078D7;
+    --accent-light: #60A5FA;
+    --accent-glow: rgba(0, 120, 215, 0.55);
+    --danger-color: #FF8C00;
+    --warning-color: #FFB900;
+}
+
+* {
+    user-select: none;
+    box-sizing: border-box;
+}
+
+body {
+    background-color: var(--bg-dark);
+    color: #FFFFFF;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    overflow: hidden;
+    margin: 0;
+}
+
+/* Системный шрифт монохромных иконок Windows (как в оригинальном WPF и трее) */
+.mdl-icon {
+    font-family: 'Segoe MDL2 Assets', 'Segoe Fluent Icons', sans-serif;
+    font-style: normal;
+    font-weight: normal;
+    display: inline-block;
+    line-height: 1;
+}
+
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+::-webkit-scrollbar-thumb {
+    background: #3A3A3A;
+    border-radius: 99px;
+}
+
+.glass-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.glass-card:hover {
+    border-color: #3E3E3E;
+}
+
+/* Кибер-тумблер в точности как CyberToggleStyle */
+.cyber-toggle {
+    appearance: none;
+    width: 44px;
+    height: 24px;
+    background: #2A2A2A;
+    border: 1px solid #3A3A3A;
+    border-radius: 999px;
+    position: relative;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    flex-shrink: 0;
+}
+.cyber-toggle:hover {
+    border-color: #555555;
+}
+.cyber-toggle::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 18px;
+    height: 18px;
+    background: #888888;
+    border-radius: 50%;
+    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.cyber-toggle:checked {
+    background: var(--accent-color);
+    border-color: var(--accent-color);
+}
+.cyber-toggle:checked::after {
+    transform: translateX(20px);
+    background: #FFFFFF;
+}
+
+/* Главная круглая кнопка */
+.power-btn {
+    position: relative;
+    width: 190px;
+    height: 190px;
+    border-radius: 9999px;
+    background: #121212;
+    border: 3px solid #2A2A2A;
+    transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+    cursor: pointer;
+}
+.power-btn:hover {
+    transform: scale(1.03);
+    border-color: #444444;
+}
+.power-btn:active {
+    transform: scale(0.95);
+}
+.power-btn.active {
+    border-color: var(--accent-color);
+    box-shadow: 0 0 45px var(--accent-glow);
+    animation: pulseGlow 2.2s infinite ease-in-out;
+}
+
+@keyframes pulseGlow {
+    0%, 100% { box-shadow: 0 0 28px var(--accent-glow); }
+    50% { box-shadow: 0 0 65px var(--accent-glow); }
+}
+
+/* Кнопки акцентного цвета */
+.btn-brand {
+    background-color: var(--accent-color);
+    color: #FFFFFF;
+    transition: opacity 0.15s ease, transform 0.1s ease;
+}
+.btn-brand:hover {
+    opacity: 0.9;
+}
+.btn-brand:active {
+    transform: scale(0.98);
+}
+
+.text-brand {
+    color: var(--accent-light);
+}
+
+/* Переходы вкладок и модальных окон */
+.tab-view {
+    display: none;
+    animation: slideUpFade 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.tab-view.active {
+    display: flex;
+}
+
+.modal-overlay {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+}
+.modal-overlay.open {
+    opacity: 1;
+    pointer-events: auto;
+}
+.modal-box {
+    transform: scale(0.95) translateY(10px);
+    transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.modal-overlay.open .modal-box {
+    transform: scale(1) translateY(0);
+}
+
+@keyframes slideUpFade {
+    from { opacity: 0; transform: translateY(14px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.mod-card-enter {
+    animation: modSlideIn 0.24s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+@keyframes modSlideIn {
+    from { opacity: 0; transform: translateX(18px); }
+    to { opacity: 1; transform: translateX(0); }
+}
+
+.server-ping-card {
+    background: #1E1E1E;
+    border: 1px solid #2A2A2A;
+    border-radius: 8px;
+    padding: 10px 14px;
+    min-width: 132px;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    position: relative;
+    overflow: hidden;
+}
+.server-ping-card:hover {
+    transform: scale(1.04);
+    border-color: #555555;
+    z-index: 10;
+}
+
+.shimmer-box {
+    position: relative;
+    overflow: hidden;
+    background: #222222;
+}
+.shimmer-box::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -150%;
+    width: 150%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent);
+    animation: shimmerAnim 1.3s infinite;
+}
+@keyframes shimmerAnim {
+    100% { left: 150%; }
+}
+
+.easter-spin {
+    animation: easterRotate 0.55s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes easterRotate {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.easter-fly {
+    animation: easterFlyPlane 0.75s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes easterFlyPlane {
+    0% { transform: translate(0, 0); opacity: 1; }
+    45% { transform: translate(90px, -90px); opacity: 0; }
+    50% { transform: translate(-45px, 45px); opacity: 0; }
+    100% { transform: translate(0, 0); opacity: 1; }
+}
+
+.glitch-anim {
+    animation: glitchShake 0.35s ease;
+}
+@keyframes glitchShake {
+    0%, 100% { transform: translateX(0); }
+    20%, 60% { transform: translateX(-8px) skewX(-2deg); }
+    40%, 80% { transform: translateX(8px) skewX(2deg); }
+}
+
+.dot-online {
+    background-color: var(--accent-color);
+    box-shadow: 0 0 8px var(--accent-color);
+    animation: breathe 2s infinite ease-in-out;
+}
+.dot-offline {
+    background-color: var(--danger-color);
+    box-shadow: 0 0 8px var(--danger-color);
+}
+@keyframes breathe {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+
+.spin-anim {
+    animation: spin 0.9s linear infinite;
+}
+@keyframes spin {
+    100% { transform: rotate(360deg); }
+}
+
+.editor-tool-btn {
+    background: #1E1E1E;
+    color: #D4D4D8;
+    border: 1px solid #2E2E2E;
+    border-radius: 6px;
+    padding: 4px 9px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.editor-tool-btn:hover {
+    background: #2A2A2A;
+    border-color: #4A4A4A;
+    color: white;
+}
+
+.setting-row {
+    padding: 12px 14px;
+    border-radius: 8px;
+    transition: background 0.15s ease;
+}
+.setting-row:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+#splash-overlay {
+    transition: opacity 0.45s ease;
+}
+#splash-terminal {
+    text-shadow: 0 0 8px rgba(57, 255, 20, 0.45);
+}
+
+.wizard-step {
+    display: none;
+    animation: slideUpFade 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.wizard-step.active {
+    display: flex;
+}
