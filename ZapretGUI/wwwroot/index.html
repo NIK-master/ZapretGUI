@@ -199,78 +199,106 @@
 			<main id="main-container" class="flex-1 p-5 overflow-y-auto relative bg-[#121212]">
 
 				<!-- ВКЛАДКА 1: ГЛАВНАЯ (HOMEVIEW) -->
-				<section id="tab-home" class="tab-view active flex-col h-full justify-between gap-4">
-					<div class="text-center pt-1">
-						<h1 id="home-header-title" class="text-[26px] font-bold tracking-tight text-white flex items-center justify-center gap-2.5">
+				<section id="tab-home" class="tab-view active flex-col h-full justify-between gap-3">
+					<div class="text-center pt-0.5">
+						<h1 id="home-header-title" class="text-[25px] font-bold tracking-tight text-white flex items-center justify-center gap-2.5">
 							<span class="mdl-icon text-2xl text-brand">&#xE945;</span>
 							<span>Починить Telegram и Discord</span>
 						</h1>
-						<p class="text-sm text-[#A0A0A0] mt-1">Одна кнопка — запустит всё необходимое.</p>
+						<p class="text-xs text-[#A0A0A0] mt-1">Одна кнопка — запустит всё необходимое.</p>
 					</div>
 
-					<div class="grid grid-cols-12 gap-6 items-center my-auto">
-						<!-- Круглая кнопка с оригинальной иконкой питания &#xE7E8; -->
+					<div class="grid grid-cols-12 gap-5 items-center my-auto">
+						<!-- КОЛОНКА 1: ОРБИТАЛЬНЫЙ РЕАКТОР + ТАЙМЕР СЕССИИ -->
 						<div id="home-btn-col" class="col-span-4 flex flex-col items-center justify-center">
-							<button id="main-toggle-btn" onclick="onMainToggleClick()" class="power-btn flex flex-col items-center justify-center">
-								<span class="mdl-icon text-[44px] text-white mb-2.5">&#xE7E8;</span>
-								<span id="main-btn-text" class="text-sm font-semibold text-white">Починить интернет</span>
-							</button>
+							<div id="reactor-container" class="reactor-wrap">
+								<div class="reactor-ambient"></div>
+								<div class="reactor-ring-outer"></div>
+								<div class="reactor-ring-inner"></div>
+
+								<button id="main-toggle-btn" onclick="onMainToggleClick()" class="power-btn flex flex-col items-center justify-center">
+									<span class="power-icon-glyph mdl-icon text-[42px] text-white mb-2 transition-all">&#xE7E8;</span>
+									<span id="main-btn-text" class="text-sm font-semibold text-white">Починить интернет</span>
+								</button>
+							</div>
+
+							<!-- Живой бейдж статуса и таймер аптайма -->
+							<div id="session-badge" class="mt-2.5 px-3 py-1 rounded-full bg-[#181818] border border-[#2A2A2A] flex items-center gap-2 text-[11px] font-mono text-[#888888] transition-all">
+								<span id="session-dot" class="w-1.5 h-1.5 rounded-full bg-[#555555]"></span>
+								<span id="session-text">ОЖИДАНИЕ ЗАПУСКА</span>
+							</div>
 						</div>
 
-						<!-- Панель статистики сети -->
+						<!-- КОЛОНКА 2: ТЕЛЕМЕТРИЯ И ДВУХКАНАЛЬНЫЙ ГРАФИК -->
 						<div id="home-stats-panel" class="col-span-4 glass-card rounded-xl p-4 flex flex-col gap-3">
 							<div class="flex justify-between items-center">
-								<div class="flex items-center gap-3">
-									<span class="mdl-icon text-lg text-[#A0A0A0]">&#xE896;</span>
+								<div class="flex items-center gap-2.5">
+									<div class="w-7 h-7 rounded-lg bg-[#107C10]/15 border border-[#107C10]/40 flex items-center justify-center text-brand">
+										<span class="mdl-icon text-xs">&#xE896;</span>
+									</div>
 									<div>
-										<div class="text-xs text-[#A0A0A0] font-semibold">Входящий</div>
-										<div class="mt-0.5">
-											<span id="stat-rx" class="text-2xl font-bold font-mono text-white">0.0</span>
-											<span class="text-xs text-[#888888]">Мбит/с</span>
+										<div class="text-[11px] text-[#A0A0A0] font-semibold">Входящий</div>
+										<div class="leading-none mt-0.5">
+											<span id="stat-rx" class="text-xl font-bold font-mono text-white">0.0</span>
+											<span class="text-[11px] text-[#888888]">Мбит/с</span>
 										</div>
 									</div>
 								</div>
-								<div class="flex items-center gap-3">
-									<span class="mdl-icon text-lg text-[#A0A0A0]">&#xE898;</span>
+								<div class="flex items-center gap-2.5">
 									<div class="text-right">
-										<div class="text-xs text-[#A0A0A0] font-semibold">Исходящий</div>
-										<div class="mt-0.5">
-											<span id="stat-tx" class="text-2xl font-bold font-mono text-white">0.0</span>
-											<span class="text-xs text-[#888888]">Мбит/с</span>
+										<div class="text-[11px] text-[#A0A0A0] font-semibold">Исходящий</div>
+										<div class="leading-none mt-0.5">
+											<span id="stat-tx" class="text-xl font-bold font-mono text-white">0.0</span>
+											<span class="text-[11px] text-[#888888]">Мбит/с</span>
 										</div>
+									</div>
+									<div class="w-7 h-7 rounded-lg bg-[#3B82F6]/15 border border-[#3B82F6]/40 flex items-center justify-center text-[#60A5FA]">
+										<span class="mdl-icon text-xs">&#xE898;</span>
 									</div>
 								</div>
 							</div>
 
-							<canvas id="traffic-chart" width="260" height="58" class="w-full h-14 rounded-lg bg-[#0A0A0A] border border-[#2A2A2A]"></canvas>
+							<!-- График с легендой пиковой скорости -->
+							<div class="relative">
+								<canvas id="traffic-chart" width="280" height="68" class="w-full h-[68px] rounded-lg bg-[#0A0A0A] border border-[#2A2A2A]"></canvas>
+								<div class="absolute top-1.5 right-2 flex items-center gap-2 pointer-events-none">
+									<span id="stat-peak" class="text-[10px] font-mono text-[#666666]">Пик: 0.0 Мбит/с</span>
+								</div>
+							</div>
 
 							<div class="flex items-center justify-between pt-2 border-t border-[#2A2A2A]">
-								<div class="flex items-center gap-3">
-									<span class="mdl-icon text-lg text-[#A0A0A0]">&#xE916;</span>
+								<div class="flex items-center gap-2.5">
+									<span class="mdl-icon text-base text-[#A0A0A0]">&#xE916;</span>
 									<div>
-										<div class="text-xs text-[#A0A0A0] font-semibold">Пинг (EU Frankfurt)</div>
-										<div class="mt-0.5">
-											<span id="stat-ping" class="text-xl font-bold font-mono text-white">...</span>
-											<span class="text-xs text-[#888888]">мс</span>
+										<div class="flex items-center gap-1.5">
+											<span class="text-[11px] text-[#A0A0A0] font-semibold">Пинг (EU Frankfurt)</span>
+											<span id="ping-quality-badge" class="px-1.5 py-0.2 rounded text-[9px] font-mono font-semibold bg-[#222222] text-[#888888]">—</span>
+										</div>
+										<div class="mt-0.5 leading-none">
+											<span id="stat-ping" class="text-lg font-bold font-mono text-white">...</span>
+											<span class="text-[11px] text-[#888888]">мс</span>
 										</div>
 									</div>
 								</div>
-								<button onclick="refreshPing()" class="w-8 h-8 rounded-lg bg-[#222222] hover:bg-[#2A2A2A] text-[#A0A0A0] hover:text-white flex items-center justify-center transition cursor-pointer" title="Обновить пинг">
+								<button onclick="refreshPing()" class="w-8 h-8 rounded-lg bg-[#222222] hover:bg-[#2A2A2A] border border-[#333333] text-[#A0A0A0] hover:text-white flex items-center justify-center transition cursor-pointer" title="Обновить пинг">
 									<span id="ping-refresh-icon" class="mdl-icon text-sm">&#xE149;</span>
 								</button>
 							</div>
 						</div>
 
-						<!-- Карточки модулей справа -->
+						<!-- КОЛОНКА 3: КАРТОЧКИ МОДУЛЕЙ -->
 						<div id="home-cards-col" class="col-span-4 flex flex-col gap-2.5">
 							<div class="glass-card rounded-xl p-4">
 								<div class="flex items-center justify-between mb-1">
-									<span class="font-semibold text-[15px] text-white">Настройки Zapret</span>
+									<div class="flex items-center gap-2">
+										<span class="mdl-icon text-sm text-brand">&#xE72E;</span>
+										<span class="font-semibold text-[15px] text-white">Настройки Zapret</span>
+									</div>
 									<input id="chk-zapret" type="checkbox" checked="" onchange="onModuleToggleChange()" class="cyber-toggle">
                             </div>
 								<div id="zapret-status-label" class="text-xs text-[#D13438] font-medium mb-3">Остановлен</div>
 
-								<div id="btn-open-config" onclick="openConfigModal()" class="bg-[#222222] hover:bg-[#2A2A2A] rounded-lg px-3 py-2 mb-2 cursor-pointer transition flex items-center justify-between">
+								<div id="btn-open-config" onclick="openConfigModal()" class="bg-[#222222] hover:bg-[#2A2A2A] border border-transparent hover:border-[#3A3A3A] rounded-lg px-3 py-2 mb-2 cursor-pointer transition flex items-center justify-between">
 									<div class="overflow-hidden pr-2">
 										<div class="text-[11px] text-[#888888]">Текущий конфиг:</div>
 										<div id="txt-main-profile" class="text-[13px] font-mono font-semibold text-white truncate">general.bat</div>
@@ -278,7 +306,7 @@
 									<span class="mdl-icon text-[#888888] text-[15px]">&#xE713;</span>
 								</div>
 
-								<div id="btn-open-gf" onclick="openGameFilterModal()" class="bg-[#222222] hover:bg-[#2A2A2A] rounded-lg px-3 py-2 cursor-pointer transition flex items-center justify-between">
+								<div id="btn-open-gf" onclick="openGameFilterModal()" class="bg-[#222222] hover:bg-[#2A2A2A] border border-transparent hover:border-[#3A3A3A] rounded-lg px-3 py-2 cursor-pointer transition flex items-center justify-between">
 									<div class="overflow-hidden pr-2">
 										<div class="text-[11px] text-[#888888]">Игровой фильтр (Game Filter):</div>
 										<div id="txt-gf-status" class="text-xs font-mono font-semibold text-[#A0A0A0] truncate">Отключен</div>
@@ -289,30 +317,49 @@
 
 							<div class="glass-card rounded-xl px-4 py-3 flex items-center justify-between">
 								<div>
-									<div class="font-semibold text-[15px] text-white">TgWsProxy</div>
-									<div class="text-xs text-[#A0A0A0] mt-0.5">Прокси для Telegram</div>
+									<div class="flex items-center gap-2">
+										<span class="mdl-icon text-sm text-[#60A5FA]">&#xE709;</span>
+										<span class="font-semibold text-[15px] text-white">TgWsProxy</span>
+									</div>
+									<div id="proxy-status-label" class="text-xs text-[#A0A0A0] mt-0.5">Прокси для Telegram</div>
 								</div>
 								<input id="chk-proxy" type="checkbox" checked="" onchange="onModuleToggleChange()" class="cyber-toggle">
                         </div>
 						</div>
 					</div>
 
-					<!-- Панель логов -->
-					<div id="home-logs-panel" class="rounded-lg border border-[#2A2A2A] p-3.5 h-[225px] flex flex-col bg-[#0A0A0A]">
-						<div class="flex items-center justify-between mb-2">
-							<span class="text-sm font-semibold text-[#A0A0A0]">Лог событий</span>
-							<div class="flex items-center gap-4">
-								<button onclick="clearLogs()" class="text-xs text-[#A0A0A0] hover:text-white flex items-center gap-1.5 transition cursor-pointer">
+					<!-- ПАНЕЛЬ ЛОГОВ С ФИЛЬТРОМ И ПОИСКОМ -->
+					<div id="home-logs-panel" class="rounded-xl border border-[#2A2A2A] p-3 h-[215px] flex flex-col bg-[#0A0A0A]">
+						<div class="flex items-center justify-between gap-2 mb-2 pb-1.5 border-b border-[#1A1A1A]">
+							<div class="flex items-center gap-2">
+								<span class="mdl-icon text-xs text-brand">&#xE756;</span>
+								<span class="text-xs font-semibold text-[#CCCCCC]">Лог событий</span>
+								<span id="log-counter-badge" class="px-1.5 py-0.5 rounded bg-[#181818] border border-[#2A2A2A] font-mono text-[10px] text-[#888888]">0</span>
+
+								<!-- Быстрые таблетки фильтрации -->
+								<div class="flex items-center gap-1 ml-2">
+									<button id="log-filter-all" onclick="setLogFilter('all')" class="px-2 py-0.5 rounded text-[11px] font-semibold bg-[#2A2A2A] text-white cursor-pointer transition">Все</button>
+									<button id="log-filter-err" onclick="setLogFilter('err')" class="px-2 py-0.5 rounded text-[11px] font-medium text-[#888888] hover:text-white cursor-pointer transition">Ошибки</button>
+								</div>
+							</div>
+
+							<div class="flex items-center gap-3">
+								<div class="relative flex items-center">
+									<span class="mdl-icon text-[10px] text-[#666666] absolute left-2 pointer-events-none">&#xE721;</span>
+									<input id="log-search-input" type="text" oninput="applyLogFilters()" placeholder="Поиск в логах..." class="bg-[#141414] border border-[#2A2A2A] focus:border-[#444444] rounded-md pl-6 pr-2 py-0.5 text-[11px] text-white focus:outline-none w-36 select-text">
+                            </div>
+
+								<button onclick="clearLogs()" class="text-xs text-[#A0A0A0] hover:text-white flex items-center gap-1 transition cursor-pointer">
 									<span class="mdl-icon text-xs">&#xE74D;</span>
 									<span>Очистить</span>
 								</button>
-								<button onclick="exportLogs()" class="text-xs text-[#A0A0A0] hover:text-white flex items-center gap-1.5 transition cursor-pointer">
+								<button onclick="exportLogs()" class="text-xs text-[#A0A0A0] hover:text-white flex items-center gap-1 transition cursor-pointer">
 									<span class="mdl-icon text-xs">&#xE78C;</span>
 									<span>Экспорт</span>
 								</button>
 							</div>
 						</div>
-						<div id="log-box" class="flex-1 overflow-y-auto font-mono text-[13px] space-y-1 text-[#CCCCCC] select-text pr-2"></div>
+						<div id="log-box" class="flex-1 overflow-y-auto font-mono text-[12.5px] space-y-1 text-[#CCCCCC] select-text pr-2"></div>
 					</div>
 				</section>
 

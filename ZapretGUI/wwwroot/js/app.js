@@ -83,7 +83,7 @@ function updateWizardUI() {
 
     const dots = document.getElementById('wiz-dots');
     dots.innerHTML = [0, 1, 2, 3, 4].map(i =>
-        `<span class="w-2 h-2 rounded-full transition-all ${i === wizardStep ? 'bg-emerald-500 scale-125' : 'bg-zinc-700'}"></span>`
+        `<span class="w-2 h-2 rounded-full transition-all ${i === wizardStep ? 'bg-[#107C10] scale-125' : 'bg-[#333333]'}"></span>`
     ).join('');
 
     const btnBack = document.getElementById('wiz-btn-back');
@@ -199,6 +199,13 @@ let confirmCallback = null;
 let isBackendConfirm = false;
 let selectionCallback = null;
 
+// Таймер активной сессии обхода
+let sessionStartTime = null;
+let sessionTimerId = null;
+
+// Фильтр логов
+let currentLogFilter = 'all';
+
 function sendCmd(action, payload = {}) {
     if (window.chrome && window.chrome.webview) {
         window.chrome.webview.postMessage({ action, ...payload });
@@ -231,6 +238,11 @@ function handleBackendEvent(type, data) {
             updateGameFilterBadge(data.gameFilterStatus, appState.gameFilter.mode !== 'disabled');
             updateRunningUI(data.zapretRunning, data.proxyRunning);
 
+            if (data.zapretRunning || data.proxyRunning)
+                appendLog(new Date().toLocaleTimeString(), 'Интерфейс загружен. Найдены активные процессы в фоне.');
+            else
+                appendLog(new Date().toLocaleTimeString(), 'Интерфейс загружен. Ожидание команд...');
+
             if (data.isFirstRun) {
                 openWizardModal();
             }
@@ -243,7 +255,7 @@ function handleBackendEvent(type, data) {
         case 'wizardCompleted':
             wizardFinished = true;
             document.getElementById('wiz-finish-status').innerText = 'Всё готово!';
-            document.getElementById('wiz-finish-status').className = 'text-xl font-bold text-emerald-400 mb-2';
+            document.getElementById('wiz-finish-status').className = 'text-xl font-bold text-brand mb-2';
             document.getElementById('wiz-finish-bar').style.width = '100%';
             const btnNext = document.getElementById('wiz-btn-next');
             btnNext.disabled = false;
@@ -258,9 +270,9 @@ function handleBackendEvent(type, data) {
 
         case 'routingStatusUpdated':
             updateRoutingStatusUI(data);
-            document.getElementById('btn-update-ipset').innerText = '🔄 Обновить базу IP';
+            document.getElementById('btn-update-ipset').innerHTML = '<span class="mdl-icon text-xs">&#xE149;</span><span>Обновить базу IP</span>';
             document.getElementById('btn-update-ipset').disabled = false;
-            document.getElementById('btn-update-hosts').innerText = '⚡ Обновить';
+            document.getElementById('btn-update-hosts').innerHTML = '<span class="mdl-icon text-xs">&#xE945;</span><span>Обновить</span>';
             document.getElementById('btn-update-hosts').disabled = false;
             break;
 
@@ -295,9 +307,9 @@ function handleBackendEvent(type, data) {
 
         case 'batValidationResult':
             if (data.isValid) {
-                setEditorStatus('✓ Синтаксис корректен!', 'text-emerald-400');
+                setEditorStatus('✓ Синтаксис корректен!', 'text-[#4ADE80]');
             } else {
-                setEditorStatus('⚠ Ошибка в скрипте', 'text-red-400');
+                setEditorStatus('⚠ Ошибка в скрипте', 'text-[#F44336]');
                 showAlert('Проверка синтаксиса Zapret', data.errorMessage, true);
             }
             break;
@@ -319,7 +331,7 @@ function handleBackendEvent(type, data) {
             showConfirm(
                 'Перезапустить Zapret?',
                 `${data.reason}\n\nФайл list-general.txt был обновлен в прямом эфире, но для применения новых доменов в уже работающем ядре winws.exe требуется перезапуск. Перезапустить сейчас?`,
-                '🔄 Перезапустить',
+                'Перезапустить',
                 () => sendCmd('restartBypass')
             );
             break;
@@ -340,7 +352,7 @@ function handleBackendEvent(type, data) {
         case 'netStats':
             document.getElementById('stat-rx').innerText = data.download.toFixed(1);
             document.getElementById('stat-tx').innerText = data.upload.toFixed(1);
-            updateChart(data.download);
+            updateChart(data.download, data.upload);
             updateRunningUI(data.zapretRunning, data.proxyRunning);
             break;
 
@@ -351,7 +363,7 @@ function handleBackendEvent(type, data) {
         case 'pingResult':
             document.getElementById('ping-refresh-icon').classList.remove('spin-anim');
             appState.currentPing = data.ping;
-            document.getElementById('stat-ping').innerText = data.ping >= 0 ? data.ping : '—';
+            updatePingDisplay(data.ping);
             document.getElementById('dot-net').className = `w-2 h-2 rounded-full ${data.ping >= 0 ? 'dot-online' : 'dot-offline'}`;
             appState.configs.forEach(c => c.pingMs = data.ping > 0 ? data.ping : 999999);
             renderConfigCards();
@@ -425,6 +437,60 @@ function handleBackendEvent(type, data) {
 // =========================================================================
 // 4. ЛОГИКА ВКЛАДКИ 1: ГЛАВНАЯ (HOMEVIEW)
 // =========================================================================
+function updatePingDisplay(pingMs) {
+    const pingEl = document.getElementById('stat-ping');
+    const badgeEl = document.getElementById('ping-quality-badge');
+    const isCb = appState.settings.colorblindMode;
+
+    if (pingMs < 0) {
+        pingEl.innerText = '—';
+        pingEl.style.color = isCb ? '#FF8C00' : '#D13438';
+        badgeEl.innerText = 'Недоступен';
+        badgeEl.className = 'px-1.5 py-0.2 rounded text-[9px] font-mono font-semibold bg-[#2A1215] text-[#F44336]';
+        return;
+    }
+
+    pingEl.innerText = pingMs;
+    if (pingMs < 80) {
+        pingEl.style.color = isCb ? '#60A5FA' : '#4CAF50';
+        badgeEl.innerText = 'Отлично';
+        badgeEl.className = 'px-1.5 py-0.2 rounded text-[9px] font-mono font-semibold bg-[#1A2E1A] text-[#4ADE80]';
+    } else if (pingMs < 150) {
+        pingEl.style.color = '#FF8C00';
+        badgeEl.innerText = 'Норма';
+        badgeEl.className = 'px-1.5 py-0.2 rounded text-[9px] font-mono font-semibold bg-[#2E2210] text-[#F59E0B]';
+    } else {
+        pingEl.style.color = isCb ? '#FF8C00' : '#D13438';
+        badgeEl.innerText = 'Высокий';
+        badgeEl.className = 'px-1.5 py-0.2 rounded text-[9px] font-mono font-semibold bg-[#2A1215] text-[#F44336]';
+    }
+}
+
+function formatUptime(ms) {
+    const totalSec = Math.max(0, Math.floor(ms / 1000));
+    const h = String(Math.floor(totalSec / 3600)).padStart(2, '0');
+    const m = String(Math.floor((totalSec % 3600) / 60)).padStart(2, '0');
+    const s = String(totalSec % 60).padStart(2, '0');
+    return `${h}:${m}:${s}`;
+}
+
+function updateSessionBadgeTick() {
+    const badge = document.getElementById('session-badge');
+    const dot = document.getElementById('session-dot');
+    const txt = document.getElementById('session-text');
+
+    if (appState.isRunning && sessionStartTime) {
+        const elapsed = Date.now() - sessionStartTime;
+        badge.className = 'mt-2.5 px-3 py-1 rounded-full bg-[#0F240F] border border-[#107C10] flex items-center gap-2 text-[11px] font-mono text-white transition-all';
+        dot.className = 'w-1.5 h-1.5 rounded-full dot-online';
+        txt.innerText = `АКТИВЕН • ${formatUptime(elapsed)}`;
+    } else {
+        badge.className = 'mt-2.5 px-3 py-1 rounded-full bg-[#181818] border border-[#2A2A2A] flex items-center gap-2 text-[11px] font-mono text-[#888888] transition-all';
+        dot.className = 'w-1.5 h-1.5 rounded-full bg-[#555555]';
+        txt.innerText = 'ОЖИДАНИЕ ЗАПУСКА';
+    }
+}
+
 function onMainToggleClick() {
     sendCmd('playClick');
 
@@ -474,19 +540,40 @@ function refreshPing() {
 }
 
 function updateRunningUI(zapretRunning, proxyRunning) {
+    const wasRunning = appState.isRunning;
     appState.zapretRunning = zapretRunning;
     appState.proxyRunning = proxyRunning;
     appState.isRunning = zapretRunning || proxyRunning;
 
+    if (appState.isRunning && !wasRunning) {
+        sessionStartTime = Date.now();
+        if (!sessionTimerId) sessionTimerId = setInterval(updateSessionBadgeTick, 1000);
+    } else if (!appState.isRunning) {
+        sessionStartTime = null;
+        if (sessionTimerId) {
+            clearInterval(sessionTimerId);
+            sessionTimerId = null;
+        }
+    }
+    updateSessionBadgeTick();
+
     const btn = document.getElementById('main-toggle-btn');
+    const reactor = document.getElementById('reactor-container');
     const txt = document.getElementById('main-btn-text');
     const lbl = document.getElementById('zapret-status-label');
+    const proxyLbl = document.getElementById('proxy-status-label');
 
     btn.classList.toggle('active', appState.isRunning);
+    reactor.classList.toggle('active', appState.isRunning);
     txt.innerText = appState.isRunning ? 'Остановить' : 'Починить интернет';
 
     lbl.innerText = zapretRunning ? 'Работает' : 'Остановлен';
-    lbl.className = `text-xs font-medium mb-3 ${zapretRunning ? 'text-emerald-400' : 'text-red-400'}`;
+    lbl.className = `text-xs font-medium mb-3 ${zapretRunning ? 'text-brand' : 'text-[#D13438]'}`;
+
+    if (proxyLbl) {
+        proxyLbl.innerText = proxyRunning ? 'Работает локально (:1080)' : 'Прокси для Telegram';
+        proxyLbl.className = `text-xs mt-0.5 ${proxyRunning ? 'text-brand font-medium' : 'text-[#A0A0A0]'}`;
+    }
 
     const cfgBtn = document.getElementById('btn-open-config');
     const gfBtn = document.getElementById('btn-open-gf');
@@ -547,7 +634,7 @@ function renderConfigCards() {
              class="p-3.5 rounded-xl border cursor-pointer transition flex items-center justify-between ${isActive ? 'bg-[#172554] border-blue-600' : 'bg-[#18181B] border-zinc-800 hover:bg-zinc-800/80'}">
             <div>
                 <div class="flex items-center gap-2.5 mb-1">
-                    <span class="font-mono text-sm font-semibold text-emerald-400">${cfg.fileName}</span>
+                    <span class="font-mono text-sm font-semibold text-brand">${cfg.fileName}</span>
                     ${isActive ? '<span class="px-1.5 py-0.5 text-[10px] font-semibold bg-blue-900 text-blue-300 rounded">активный</span>' : ''}
                 </div>
                 <div class="text-xs text-zinc-400">${metaInfo}</div>
@@ -599,7 +686,7 @@ function updateScanButtonUI() {
 function updateGameFilterBadge(statusText, isEnabled) {
     const el = document.getElementById('txt-gf-status');
     el.innerText = statusText;
-    el.className = `text-xs font-mono font-semibold truncate ${isEnabled ? 'text-emerald-400' : 'text-zinc-400'}`;
+    el.className = `text-xs font-mono font-semibold truncate ${isEnabled ? 'text-brand' : 'text-[#A0A0A0]'}`;
 }
 
 function openGameFilterModal() {
@@ -619,10 +706,10 @@ function selectGfMode(mode) {
     appState.gameFilter.mode = mode;
     document.querySelectorAll('.gf-mode-card').forEach(card => {
         const isSelected = card.getAttribute('data-mode') === mode;
-        card.className = `gf-mode-card p-3 rounded-xl border cursor-pointer flex items-center justify-between transition ${isSelected ? 'bg-[#172554] border-blue-600' : 'bg-[#18181B] border-zinc-800 hover:bg-zinc-800/70'}`;
+        card.className = `gf-mode-card p-3 rounded-lg border cursor-pointer flex items-center justify-between transition ${isSelected ? 'bg-[#172554] border-blue-600' : 'bg-[#18181B] border-[#27272A] hover:bg-[#27272A]'}`;
         const check = card.querySelector('.gf-check');
         check.innerText = isSelected ? '✓' : '→';
-        check.className = `gf-check text-sm font-bold ${isSelected ? 'text-blue-400' : 'text-zinc-600'}`;
+        check.className = `gf-check text-sm font-bold ${isSelected ? 'text-blue-400' : 'text-[#3F3F46]'}`;
     });
 }
 
@@ -642,6 +729,39 @@ function saveGameFilter() {
     });
 }
 
+// =========================================================================
+// 5. ПАНЕЛЬ ЛОГОВ С ПОИСКОМ И ФИЛЬТРАМИ
+// =========================================================================
+function setLogFilter(mode) {
+    sendCmd('playClick');
+    currentLogFilter = mode;
+    const btnAll = document.getElementById('log-filter-all');
+    const btnErr = document.getElementById('log-filter-err');
+
+    btnAll.className = mode === 'all'
+        ? 'px-2 py-0.5 rounded text-[11px] font-semibold bg-[#2A2A2A] text-white cursor-pointer transition'
+        : 'px-2 py-0.5 rounded text-[11px] font-medium text-[#888888] hover:text-white cursor-pointer transition';
+
+    btnErr.className = mode === 'err'
+        ? 'px-2 py-0.5 rounded text-[11px] font-semibold bg-[#3B181C] text-[#F44336] cursor-pointer transition'
+        : 'px-2 py-0.5 rounded text-[11px] font-medium text-[#888888] hover:text-white cursor-pointer transition';
+
+    applyLogFilters();
+}
+
+function applyLogFilters() {
+    const box = document.getElementById('log-box');
+    const query = (document.getElementById('log-search-input')?.value || '').toLowerCase();
+
+    Array.from(box.children).forEach(el => {
+        const isErr = el.dataset.isErr === '1';
+        const text = el.innerText.toLowerCase();
+        const matchMode = currentLogFilter === 'all' || isErr;
+        const matchQuery = !query || text.includes(query);
+        el.style.display = (matchMode && matchQuery) ? '' : 'none';
+    });
+}
+
 function appendLog(time, message, isProgress = false) {
     const box = document.getElementById('log-box');
     const text = `[${time}] ${message}`;
@@ -656,17 +776,27 @@ function appendLog(time, message, isProgress = false) {
     }
 
     const div = document.createElement('div');
-    let color = 'text-zinc-400';
-    if (message.includes('ОШИБКА') || message.includes('⚠') || message.includes('🛑') || message.includes('❌'))
-        color = 'text-red-400 font-bold';
-    else if (message.includes('✅') || message.includes('✨') || message.includes('🏆'))
-        color = 'text-emerald-400';
-    else if (message.includes('🔍'))
-        color = 'text-blue-400';
+    let color = 'text-[#A0A0A0]';
+    let isErr = false;
 
+    if (message.includes('ОШИБКА') || message.includes('⚠') || message.includes('🛑') || message.includes('❌') || message.includes('ERR')) {
+        color = 'text-[#F44336] font-semibold';
+        isErr = true;
+    } else if (message.includes('✅') || message.includes('✨') || message.includes('🏆')) {
+        color = 'text-brand';
+    } else if (message.includes('🔍') || message.includes('[Auto]')) {
+        color = 'text-[#60A5FA]';
+    }
+
+    div.dataset.isErr = isErr ? '1' : '0';
     div.className = color;
     div.innerText = text;
     box.appendChild(div);
+
+    const counter = document.getElementById('log-counter-badge');
+    if (counter) counter.innerText = box.children.length;
+
+    applyLogFilters();
     box.scrollTop = box.scrollHeight;
 
     lastProgressLogEl = isProgress ? div : null;
@@ -675,6 +805,8 @@ function appendLog(time, message, isProgress = false) {
 function clearLogs() {
     sendCmd('playClick');
     document.getElementById('log-box').innerHTML = '';
+    const counter = document.getElementById('log-counter-badge');
+    if (counter) counter.innerText = '0';
     lastProgressLogEl = null;
 }
 
@@ -692,7 +824,7 @@ function showAlert(title, message, isError = false) {
     document.getElementById('confirm-cancel-btn').style.display = 'none';
     const okBtn = document.getElementById('confirm-ok-btn');
     okBtn.innerText = 'ОК';
-    okBtn.className = `px-4 py-1.5 rounded-lg text-xs font-semibold text-white transition cursor-pointer ${isError ? 'bg-red-600 hover:bg-red-500' : 'bg-emerald-600 hover:bg-emerald-500'}`;
+    okBtn.className = `px-4 py-1.5 rounded-md text-xs font-semibold text-white transition cursor-pointer ${isError ? 'bg-[#D13438] hover:opacity-90' : 'btn-brand'}`;
     document.getElementById('confirm-modal').classList.add('open');
 }
 
@@ -703,7 +835,7 @@ function showConfirm(title, message, confirmText, onConfirm, isDanger = false) {
     document.getElementById('confirm-cancel-btn').style.display = 'inline-block';
     const okBtn = document.getElementById('confirm-ok-btn');
     okBtn.innerText = confirmText;
-    okBtn.className = `px-4 py-1.5 rounded-lg text-xs font-semibold text-white transition cursor-pointer ${isDanger ? 'bg-red-600 hover:bg-red-500' : 'bg-emerald-600 hover:bg-emerald-500'}`;
+    okBtn.className = `px-4 py-1.5 rounded-md text-xs font-semibold text-white transition cursor-pointer ${isDanger ? 'bg-[#D13438] hover:opacity-90' : 'btn-brand'}`;
     document.getElementById('confirm-modal').classList.add('open');
 }
 
@@ -724,27 +856,87 @@ function closeConfirmModal(accepted) {
     }
 }
 
+// =========================================================================
+// 6. ДВУХКАНАЛЬНЫЙ ГРАФИК ТРАФИКА С ГРАДИЕНТОМ И ПИКОМ
+// =========================================================================
 const rxHistory = new Array(30).fill(0);
-function updateChart(rxValue) {
+const txHistory = new Array(30).fill(0);
+let peakSpeedMbps = 0;
+
+function updateChart(rxValue, txValue = 0) {
     rxHistory.push(rxValue);
     rxHistory.shift();
+    txHistory.push(txValue);
+    txHistory.shift();
+
+    peakSpeedMbps = Math.max(peakSpeedMbps, rxValue, txValue);
+    const peakEl = document.getElementById('stat-peak');
+    if (peakEl) peakEl.innerText = `Пик: ${peakSpeedMbps.toFixed(1)} Мбит/с`;
 
     const canvas = document.getElementById('traffic-chart');
+    if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const w = canvas.width;
+    const h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
 
-    const maxVal = Math.max(10, ...rxHistory);
+    // Фоновая сетка
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
+    ctx.lineWidth = 1;
+    [0.33, 0.66].forEach(ratio => {
+        ctx.beginPath();
+        ctx.moveTo(0, h * ratio);
+        ctx.lineTo(w, h * ratio);
+        ctx.stroke();
+    });
+
+    const maxVal = Math.max(5, ...rxHistory, ...txHistory);
+    const isCb = appState.settings.colorblindMode;
+    const rxColor = isCb ? '#0078D7' : '#4CAF50';
+
+    // Заливка под кривой Download
+    const grad = ctx.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, isCb ? 'rgba(0, 120, 215, 0.35)' : 'rgba(76, 175, 80, 0.35)');
+    grad.addColorStop(1, 'rgba(0, 0, 0, 0.0)');
+
     ctx.beginPath();
-    ctx.strokeStyle = appState.settings.colorblindMode ? '#0078D7' : '#10B981';
-    ctx.lineWidth = 2;
-
     rxHistory.forEach((val, idx) => {
-        const x = (idx / (rxHistory.length - 1)) * canvas.width;
-        const y = canvas.height - (val / maxVal) * (canvas.height - 12) - 6;
+        const x = (idx / (rxHistory.length - 1)) * w;
+        const y = h - (val / maxVal) * (h - 14) - 5;
+        if (idx === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+    });
+    ctx.lineTo(w, h);
+    ctx.lineTo(0, h);
+    ctx.closePath();
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    // Линия Download
+    ctx.beginPath();
+    ctx.strokeStyle = rxColor;
+    ctx.lineWidth = 2;
+    rxHistory.forEach((val, idx) => {
+        const x = (idx / (rxHistory.length - 1)) * w;
+        const y = h - (val / maxVal) * (h - 14) - 5;
         if (idx === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
     });
     ctx.stroke();
+
+    // Пунктирная линия Upload
+    ctx.beginPath();
+    ctx.setLineDash([3, 3]);
+    ctx.strokeStyle = '#60A5FA';
+    ctx.lineWidth = 1.3;
+    txHistory.forEach((val, idx) => {
+        const x = (idx / (txHistory.length - 1)) * w;
+        const y = h - (val / maxVal) * (h - 14) - 5;
+        if (idx === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+    ctx.setLineDash([]);
 }
 
 let sidebarOpen = true;
@@ -752,8 +944,9 @@ function toggleSidebar() {
     sendCmd('playClick');
     sidebarOpen = !sidebarOpen;
     const sb = document.getElementById('sidebar');
-    sb.style.width = sidebarOpen ? '224px' : '0px';
-    sb.style.padding = sidebarOpen ? '12px' : '0px';
+    sb.style.width = sidebarOpen ? '220px' : '0px';
+    sb.style.paddingLeft = sidebarOpen ? '10px' : '0px';
+    sb.style.paddingRight = sidebarOpen ? '10px' : '0px';
     sb.style.borderRightWidth = sidebarOpen ? '1px' : '0px';
 }
 
@@ -769,8 +962,11 @@ function switchTab(tabId, btn) {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
+    // Фикс: проверяем !e.target.closest('button'), чтобы клик по иконке внутри кнопки не вызывал перетаскивание!
     document.getElementById('titlebar').addEventListener('mousedown', (e) => {
-        if (e.target.tagName !== 'BUTTON') sendCmd('windowDrag');
+        if (!e.target.closest('button')) {
+            sendCmd('windowDrag');
+        }
     });
 
     if (window.chrome && window.chrome.webview) {

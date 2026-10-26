@@ -31,7 +31,7 @@ body {
     margin: 0;
 }
 
-/* Системный шрифт монохромных иконок Windows (как в оригинальном WPF и трее) */
+/* Системный шрифт монохромных иконок Windows */
 .mdl-icon {
     font-family: 'Segoe MDL2 Assets', 'Segoe Fluent Icons', sans-serif;
     font-style: normal;
@@ -52,16 +52,24 @@ body {
     border-radius: 99px;
 }
 
+/* Тонкая техническая сетка на фоне главной области */
+#main-container {
+    background-color: var(--bg-content);
+    background-image: radial-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+    background-size: 22px 22px;
+}
+
 .glass-card {
     background: var(--card-bg);
     border: 1px solid var(--border-color);
     transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    position: relative;
 }
 .glass-card:hover {
     border-color: #3E3E3E;
 }
 
-/* Кибер-тумблер в точности как CyberToggleStyle */
+/* Кибер-тумблер */
 .cyber-toggle {
     appearance: none;
     width: 44px;
@@ -97,33 +105,103 @@ body {
     background: #FFFFFF;
 }
 
-/* Главная круглая кнопка */
+/* =========================================================
+   ОРБИТАЛЬНЫЙ РЕАКТОР И КРУГЛАЯ КНОПКА ЗАПУСКА
+   ========================================================= */
+.reactor-wrap {
+    position: relative;
+    width: 226px;
+    height: 226px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.reactor-ambient {
+    position: absolute;
+    inset: -25px;
+    border-radius: 9999px;
+    background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+    opacity: 0;
+    transition: opacity 0.5s ease;
+    pointer-events: none;
+}
+
+.reactor-ring-outer {
+    position: absolute;
+    inset: 0;
+    border-radius: 9999px;
+    border: 1px dashed #2E2E2E;
+    transition: border-color 0.4s ease, opacity 0.4s ease;
+    pointer-events: none;
+    animation: spinSlow 28s linear infinite;
+}
+
+.reactor-ring-inner {
+    position: absolute;
+    inset: 10px;
+    border-radius: 9999px;
+    border: 1px solid #222222;
+    border-top-color: #444444;
+    border-bottom-color: #444444;
+    transition: all 0.4s ease;
+    pointer-events: none;
+    animation: spinReverse 18s linear infinite;
+}
+
+.reactor-wrap.active .reactor-ambient {
+    opacity: 0.45;
+}
+.reactor-wrap.active .reactor-ring-outer {
+    border-color: var(--accent-light);
+    opacity: 0.55;
+    animation-duration: 10s;
+}
+.reactor-wrap.active .reactor-ring-inner {
+    border-color: rgba(255, 255, 255, 0.06);
+    border-top-color: var(--accent-light);
+    border-bottom-color: var(--accent-light);
+    animation-duration: 6s;
+}
+
+@keyframes spinSlow {
+    100% { transform: rotate(360deg); }
+}
+@keyframes spinReverse {
+    100% { transform: rotate(-360deg); }
+}
+
 .power-btn {
     position: relative;
-    width: 190px;
-    height: 190px;
+    width: 184px;
+    height: 184px;
     border-radius: 9999px;
-    background: #121212;
+    background: radial-gradient(circle at 50% 30%, #1C1C1C, #101010);
     border: 3px solid #2A2A2A;
     transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
     cursor: pointer;
+    z-index: 2;
 }
 .power-btn:hover {
     transform: scale(1.03);
-    border-color: #444444;
+    border-color: #484848;
 }
 .power-btn:active {
     transform: scale(0.95);
 }
 .power-btn.active {
     border-color: var(--accent-color);
-    box-shadow: 0 0 45px var(--accent-glow);
+    box-shadow: 0 0 40px var(--accent-glow), inset 0 0 18px rgba(16, 124, 16, 0.25);
     animation: pulseGlow 2.2s infinite ease-in-out;
+}
+.power-btn.active .power-icon-glyph {
+    color: var(--accent-light);
+    text-shadow: 0 0 16px var(--accent-glow);
 }
 
 @keyframes pulseGlow {
-    0%, 100% { box-shadow: 0 0 28px var(--accent-glow); }
-    50% { box-shadow: 0 0 65px var(--accent-glow); }
+    0%, 100% { box-shadow: 0 0 25px var(--accent-glow), inset 0 0 12px rgba(16, 124, 16, 0.2); }
+    50% { box-shadow: 0 0 55px var(--accent-glow), inset 0 0 24px rgba(16, 124, 16, 0.35); }
 }
 
 /* Кнопки акцентного цвета */
