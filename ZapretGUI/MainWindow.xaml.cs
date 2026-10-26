@@ -11,23 +11,17 @@ namespace ZapretGUI
     {
         private readonly TrayIconManager _trayIconManager;
         private WebBridge? _webBridge;
+        private readonly bool _isFirstRun;
 
         public MainWindow()
         {
             InitializeComponent();
 
             var configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.json");
-            var isFirstRun = !File.Exists(configPath);
+            _isFirstRun = !File.Exists(configPath);
 
             SettingsManager.Load();
             UIHelper.ApplyThemeColors();
-
-            if (isFirstRun)
-            {
-                var wizard = new Views.WizardWindow();
-                wizard.ShowDialog();
-                SettingsManager.Save();
-            }
 
             _trayIconManager = new TrayIconManager(this);
 
@@ -44,7 +38,9 @@ namespace ZapretGUI
             await InitializeWebViewAsync();
 
             BypassController.Current.NetMonitor.Start();
-            _ = CheckUpdatesOnStartupAsync();
+
+            if (!_isFirstRun)
+                _ = CheckUpdatesOnStartupAsync();
         }
 
         private async Task InitializeWebViewAsync()
@@ -56,17 +52,15 @@ namespace ZapretGUI
             MainWebView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
             MainWebView.CoreWebView2.Settings.IsZoomControlEnabled = false;
 
-            _webBridge = new WebBridge(MainWebView, this);
+            _webBridge = new WebBridge(MainWebView, this, _isFirstRun);
             MainWebView.CoreWebView2.WebMessageReceived += (s, e) =>
             {
                 _webBridge.HandleMessage(e.WebMessageAsJson);
             };
 
-            // 1. Ищем index.html рядом с .exe (для Release)
             var baseDir = AppDomain.CurrentDomain.BaseDirectory;
             var htmlPath = Path.Combine(baseDir, "wwwroot", "index.html");
 
-            // 2. Если в bin еще не скопировалось — ищем в корне проекта (удобно для Debug)
             if (!File.Exists(htmlPath))
             {
                 var projectRootHtml = Path.GetFullPath(Path.Combine(baseDir, @"..\..\..\wwwroot\index.html"));
@@ -74,7 +68,6 @@ namespace ZapretGUI
                     htmlPath = projectRootHtml;
             }
 
-            // 3. Также проверяем случай, если index.html лежит прямо в корне проекта
             if (!File.Exists(htmlPath))
             {
                 var rootFallback = Path.GetFullPath(Path.Combine(baseDir, @"..\..\..\index.html"));
@@ -86,26 +79,16 @@ namespace ZapretGUI
             {
                 MainWebView.CoreWebView2.Navigate(new Uri(htmlPath).AbsoluteUri);
             }
-            else
-            {
-                MainWebView.NavigateToString($@"
-                    <body style='background:#09090B;color:white;font-family:sans-serif;padding:40px;'>
-                        <h2 style='color:#EF4444;'>Файл wwwroot/index.html не найден!</h2>
-                        <p>Убедитесь, что в проекте создана папка <b>wwwroot</b> и внутри неё лежит файл <b>index.html</b>.</p>
-                        <p style='color:#888;font-family:monospace;'>Ожидаемый путь: {htmlPath}</p>
-                    </body>");
-            }
         }
 
         private async Task CheckUpdatesOnStartupAsync()
         {
             var stopServicesAction = () => { if (IsBypassRunning()) ToggleBypass(); };
             var progress = new Progress<string>(status =>
-                _webBridge?.SendEvent("log", new { message = $"[Updater] {status}", time = DateTime.Now.ToString("HH:mm:ss") }));
+                _webBridge?.SendEvent("log", new { message = $"[Updater] {status}", time = DateTime.Now.ToString("HH:mm:ss"), isProgress = status.Contains("Скачивание:") || status.Contains("Скачано:") }));
             await UpdateManager.RunUpdateWorkflowAsync(isManualCheck: false, stopServicesAction, progress);
         }
 
-        // Методы совместимости для системного трея (TrayIconManager)
         public void UpdateIndicators(bool isZapretRunning, bool isProxyRunning)
         {
             _webBridge?.SendEvent("bypassState", new

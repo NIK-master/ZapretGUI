@@ -19,10 +19,12 @@ namespace ZapretGUI.Core
         private readonly WebView2 _webView;
         private readonly Window _mainWindow;
         private readonly ModManager _modManager = new ModManager();
+        private bool _isFirstRun;
 
         private FileSystemWatcher? _modsWatcher;
         private CancellationTokenSource? _watcherDebounceCts;
         private bool _isInternalFileOp = false;
+        private TaskCompletionSource<bool>? _pendingConfirmTcs;
 
         private static readonly JsonSerializerOptions _jsonOptions = new JsonSerializerOptions
         {
@@ -30,13 +32,27 @@ namespace ZapretGUI.Core
             PropertyNameCaseInsensitive = true
         };
 
-        public WebBridge(WebView2 webView, Window mainWindow)
+        public WebBridge(WebView2 webView, Window mainWindow, bool isFirstRun = false)
         {
             _webView = webView;
             _mainWindow = mainWindow;
+            _isFirstRun = isFirstRun;
 
             _modManager.InitializeFolders();
             SetupLiveModsWatcher();
+
+            // Подключаем веб-диалоги для UpdateManager и UIHelper
+            UIHelper.WebAlertHandler = (title, message, isError) =>
+            {
+                SendEvent("alert", new { title, message, isError });
+            };
+
+            UIHelper.WebConfirmHandler = (title, message, confirmText, isDanger) =>
+            {
+                _pendingConfirmTcs = new TaskCompletionSource<bool>();
+                SendEvent("askConfirm", new { title, message, confirmText, isDanger });
+                return _pendingConfirmTcs.Task;
+            };
 
             BypassController.Current.OnLog += msg => SendEvent("log", new
             {
@@ -178,6 +194,20 @@ namespace ZapretGUI.Core
                     await SendInitialStateAsync();
                     break;
 
+                case "confirmResponse":
+                    var accepted = root.TryGetProperty("accepted", out var acc) && acc.GetBoolean();
+                    _pendingConfirmTcs?.TrySetResult(accepted);
+                    break;
+
+                case "runWizardSetup":
+                    await HandleRunWizardSetupAsync(root);
+                    break;
+
+                case "skipWizard":
+                    _isFirstRun = false;
+                    SettingsManager.Save();
+                    break;
+
                 case "windowDrag":
                     _mainWindow.Dispatcher.Invoke(() => { try { _mainWindow.DragMove(); } catch { } });
                     break;
@@ -266,7 +296,6 @@ namespace ZapretGUI.Core
                     HandleExportLogs(root);
                     break;
 
-                // ==================== КОМАНДЫ МОДИФИКАЦИЙ (MODSVIEW) ====================
                 case "getMods":
                     await BroadcastModsAndProfilesAsync();
                     break;
@@ -323,12 +352,10 @@ namespace ZapretGUI.Core
                     await HandleExportModAsync(root);
                     break;
 
-                // ==================== ДИАГНОСТИКА (DIAGNOSTICSVIEW) ====================
                 case "runDiagnostics":
                     await HandleRunDiagnosticsAsync();
                     break;
 
-                // ==================== НАСТРОЙКИ (SETTINGSVIEW) ====================
                 case "saveSettings":
                     HandleSaveSettings(root.GetProperty("settings"));
                     break;
@@ -369,6 +396,75 @@ namespace ZapretGUI.Core
                     Process.Start("explorer.exe", targetPath);
                     break;
             }
+        }
+
+        private async Task HandleRunWizardSetupAsync(JsonElement root)
+        {
+            var useZapret = root.TryGetProperty("useZapret", out var uz) ? uz.GetBoolean() : true;
+            var useTgProxy = root.TryGetProperty("useTgProxy", out var ut) ? ut.GetBoolean() : true;
+            var autoStart = root.TryGetProperty("autoStart", out var aus) ? aus.GetBoolean() : true;
+            var focusMode = root.TryGetProperty("focusMode", out var fm) ? fm.GetBoolean() : false;
+            var colorblind = root.TryGetProperty("colorblind", out var cb) ? cb.GetBoolean() : false;
+
+            void WizLog(string msg) => SendEvent("wizardLog", new
+            {
+                message = msg,
+                time = DateTime.Now.ToString("HH:mm:ss"),
+                isProgress = msg.Contains("Скачивание:") || msg.Contains("Скачано:")
+            });
+
+            WizLog("Инициализация модуля установки...");
+            await Task.Delay(200);
+
+            SettingsManager.Current.ZapretEnabled = useZapret;
+            SettingsManager.Current.TgProxyEnabled = useTgProxy;
+            SettingsManager.Current.FocusMode = focusMode;
+            SettingsManager.Current.ColorblindMode = colorblind;
+
+            WizLog("[Config] Сохранение пользовательских настроек UI...");
+            SettingsManager.Save();
+            UIHelper.ApplyThemeColors();
+            await Task.Delay(150);
+
+            if (autoStart)
+            {
+                WizLog("[System] Регистрация приложения в автозагрузке Windows...");
+                StartupHelper.SetAutoStart(true);
+                await Task.Delay(150);
+            }
+
+            WizLog("Проверка директорий...");
+            var zapretDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.CoreFilesDirectory);
+            if (!Directory.Exists(zapretDir))
+            {
+                WizLog($"[FS] Создание директории: {zapretDir}");
+                Directory.CreateDirectory(zapretDir);
+            }
+
+            if (useZapret || useTgProxy)
+            {
+                WizLog("=====================================");
+                WizLog("Запуск загрузки выбранных ядер...");
+                var progress = new Progress<string>(status => WizLog($"[Download] {status}"));
+
+                try
+                {
+                    await UpdateManager.InstallModulesSilentAsync(useZapret, useTgProxy, progress);
+                    WizLog("✅ Модули успешно загружены и распакованы.");
+                }
+                catch (Exception ex)
+                {
+                    WizLog($"[ERROR] Ошибка при загрузке: {ex.Message}");
+                }
+                WizLog("=====================================");
+            }
+
+            WizLog("Сборка завершена.");
+            WizLog("✅ Настройка успешно завершена. Можно закрывать окно.");
+
+            _isFirstRun = false;
+            SendEvent("wizardCompleted", new { });
+            await SendInitialStateAsync();
         }
 
         private object GetRoutingStatusObj()
@@ -932,6 +1028,7 @@ namespace ZapretGUI.Core
             SendEvent("initData", new
             {
                 version = AppConstants.AppVersion,
+                isFirstRun = _isFirstRun,
                 settings = SettingsManager.Current,
                 isAutoStart = StartupHelper.IsAutoStartEnabled(),
                 zapretRunning = BypassController.Current.Zapret.IsRunning,

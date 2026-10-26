@@ -339,175 +339,20 @@ namespace ZapretGUI
             UpdateIndicators(BypassController.Current.Zapret.IsRunning, BypassController.Current.TgProxy.IsRunning);
         }
 
-        public void AnimateWindowSize(bool isCompact) { }
+        public void AnimateWindowSize(bool isCompact)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                this.Width = isCompact ? 850 : 1100;
+                this.Height = isCompact ? 520 : 760;
+            });
+        }
 
         protected override void OnClosed(EventArgs e)
         {
             BypassController.Current.NetMonitor.Stop();
             _trayIconManager.Dispose();
             base.OnClosed(e);
-        }
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// ФАЙЛ: Core\AnimationHelper.cs
-////////////////////////////////////////////////////////////////////////////////
-
-using System;
-using System.Threading.Tasks;
-using System.Windows;
-using System.Windows.Media;
-using System.Windows.Media.Animation;
-using System.Windows.Media.Effects;
-
-namespace ZapretGUI.Core
-{
-    public static class AnimationHelper
-    {
-        public static void PlayGlitchEffect(UIElement grid, TranslateTransform translate, SkewTransform skew, DropShadowEffect shadow)
-        {
-            var shakeAnim = new DoubleAnimation(0, 10, TimeSpan.FromMilliseconds(40)) { AutoReverse = true, RepeatBehavior = new RepeatBehavior(4) };
-            var skewAnim = new DoubleAnimation(0, -3, TimeSpan.FromMilliseconds(30)) { AutoReverse = true, RepeatBehavior = new RepeatBehavior(5) };
-            var opacityAnim = new DoubleAnimation(1, 0.6, TimeSpan.FromMilliseconds(50)) { AutoReverse = true, RepeatBehavior = new RepeatBehavior(4) };
-            var shadowAnim = new DoubleAnimation(0, -15, TimeSpan.FromMilliseconds(40)) { AutoReverse = true, RepeatBehavior = new RepeatBehavior(4) };
-
-            shadowAnim.Completed += (s, e) => shadow.Opacity = 0;
-            shadow.Opacity = 1;
-
-            translate.BeginAnimation(TranslateTransform.XProperty, shakeAnim);
-            skew.BeginAnimation(SkewTransform.AngleXProperty, skewAnim);
-            grid.BeginAnimation(UIElement.OpacityProperty, opacityAnim);
-            shadow.BeginAnimation(DropShadowEffect.ShadowDepthProperty, shadowAnim);
-        }
-
-        public static void ApplyBlur(UIElement element, double radius, TimeSpan duration)
-        {
-            if (!(element.Effect is BlurEffect blur))
-            {
-                blur = new BlurEffect { Radius = 0, KernelType = KernelType.Gaussian };
-                element.Effect = blur;
-            }
-            var anim = new DoubleAnimation(radius, duration) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
-            blur.BeginAnimation(BlurEffect.RadiusProperty, anim);
-        }
-
-        public static void RemoveBlur(UIElement element, TimeSpan duration)
-        {
-            if (element.Effect is BlurEffect blur)
-            {
-                var anim = new DoubleAnimation(0, duration) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn } };
-                anim.Completed += (s, e) => element.Effect = null;
-                blur.BeginAnimation(BlurEffect.RadiusProperty, anim);
-            }
-        }
-
-        public static void ShowOverlay(UIElement overlayGrid, FrameworkElement contentBorder, UIElement? backgroundToBlur = null)
-        {
-            overlayGrid.Visibility = Visibility.Visible;
-            overlayGrid.Opacity = 0;
-
-            overlayGrid.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromSeconds(0.2)));
-
-            if (backgroundToBlur != null)
-                ApplyBlur(backgroundToBlur, 12, TimeSpan.FromSeconds(0.2));
-
-            if (contentBorder.RenderTransform is TransformGroup transformGroup)
-            {
-                var scale = transformGroup.Children[0] as ScaleTransform;
-                var translate = transformGroup.Children[1] as TranslateTransform;
-
-                if (scale != null && translate != null)
-                {
-                    var scaleUp = new DoubleAnimation(0.95, 1, TimeSpan.FromSeconds(0.2)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
-                    var slideUp = new DoubleAnimation(10, 0, TimeSpan.FromSeconds(0.2)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
-                    scale.BeginAnimation(ScaleTransform.ScaleXProperty, scaleUp);
-                    scale.BeginAnimation(ScaleTransform.ScaleYProperty, scaleUp);
-                    translate.BeginAnimation(TranslateTransform.YProperty, slideUp);
-                }
-            }
-        }
-
-        public static void HideOverlay(UIElement overlayGrid, FrameworkElement contentBorder, UIElement? blurredBackground = null)
-        {
-            var fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromSeconds(0.15));
-            fadeOut.Completed += (s, ev) => overlayGrid.Visibility = Visibility.Collapsed;
-            overlayGrid.BeginAnimation(UIElement.OpacityProperty, fadeOut);
-
-            if (blurredBackground != null)
-                RemoveBlur(blurredBackground, TimeSpan.FromSeconds(0.15));
-
-            if (contentBorder.RenderTransform is TransformGroup transformGroup)
-            {
-                var scale = transformGroup.Children[0] as ScaleTransform;
-                var translate = transformGroup.Children[1] as TranslateTransform;
-
-                if (scale != null && translate != null)
-                {
-                    var scaleDown = new DoubleAnimation(1, 0.95, TimeSpan.FromSeconds(0.15)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn } };
-                    var slideDown = new DoubleAnimation(0, 10, TimeSpan.FromSeconds(0.15)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn } };
-                    scale.BeginAnimation(ScaleTransform.ScaleXProperty, scaleDown);
-                    scale.BeginAnimation(ScaleTransform.ScaleYProperty, scaleDown);
-                    translate.BeginAnimation(TranslateTransform.YProperty, slideDown);
-                }
-            }
-        }
-
-        public static void ToggleExpandPanel(FrameworkElement panel, bool show, Action? onCompleted = null)
-        {
-            panel.RenderTransformOrigin = new System.Windows.Point(0.5, 0);
-            if (!(panel.RenderTransform is TransformGroup group) || group.Children.Count < 2)
-            {
-                group = new TransformGroup();
-                group.Children.Add(new ScaleTransform(1, show ? 0.85 : 1));
-                group.Children.Add(new TranslateTransform(0, show ? -8 : 0));
-                panel.RenderTransform = group;
-            }
-
-            var scale = (ScaleTransform)group.Children[0];
-            var translate = (TranslateTransform)group.Children[1];
-
-            if (show)
-            {
-                panel.Visibility = Visibility.Visible;
-                var fadeIn = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(220)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
-                var scaleIn = new DoubleAnimation(0.85, 1, TimeSpan.FromMilliseconds(220)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
-                var slideIn = new DoubleAnimation(-8, 0, TimeSpan.FromMilliseconds(220)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
-
-                fadeIn.Completed += (s, e) => onCompleted?.Invoke();
-
-                panel.BeginAnimation(UIElement.OpacityProperty, fadeIn);
-                scale.BeginAnimation(ScaleTransform.ScaleYProperty, scaleIn);
-                translate.BeginAnimation(TranslateTransform.YProperty, slideIn);
-            }
-            else
-            {
-                var fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(160)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn } };
-                var scaleOut = new DoubleAnimation(1, 0.85, TimeSpan.FromMilliseconds(160)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn } };
-                var slideOut = new DoubleAnimation(0, -8, TimeSpan.FromMilliseconds(160)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn } };
-
-                fadeOut.Completed += (s, e) =>
-                {
-                    panel.Visibility = Visibility.Collapsed;
-                    onCompleted?.Invoke();
-                };
-
-                panel.BeginAnimation(UIElement.OpacityProperty, fadeOut);
-                scale.BeginAnimation(ScaleTransform.ScaleYProperty, scaleOut);
-                translate.BeginAnimation(TranslateTransform.YProperty, slideOut);
-            }
-        }
-
-        public static async Task SlideOutAndHideAsync(FrameworkElement element, bool isRightDirection, int durationMs = 150)
-        {
-            var fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(durationMs));
-            var slideOut = new DoubleAnimation(0, isRightDirection ? 30 : -30, TimeSpan.FromMilliseconds(durationMs));
-
-            element.RenderTransform = new TranslateTransform();
-            element.BeginAnimation(UIElement.OpacityProperty, fadeOut);
-            element.RenderTransform.BeginAnimation(TranslateTransform.XProperty, slideOut);
-
-            await Task.Delay(durationMs);
         }
     }
 }
@@ -2476,24 +2321,11 @@ namespace ZapretGUI.Core
         public static void ApplyThemeColors()
         {
             var res = System.Windows.Application.Current?.Resources;
-            if (res == null) 
+            if (res == null)
                 return;
 
             res["BrandSuccessBrush"] = GetSuccessBrush();
             res["BrandErrorBrush"] = GetErrorBrush();
-        }
-
-        public static T? FindParent<T>(DependencyObject? child, string? name = null) where T : FrameworkElement
-        {
-            if (child == null) return null;
-            DependencyObject? parent = VisualTreeHelper.GetParent(child);
-            while (parent != null)
-            {
-                if (parent is T typed && (name == null || typed.Name == name))
-                    return typed;
-                parent = VisualTreeHelper.GetParent(parent);
-            }
-            return null;
         }
 
         public static void ShowAlert(string title, string message, bool isError = false)
@@ -2504,17 +2336,11 @@ namespace ZapretGUI.Core
                 var icon = isError ? "\xE783" : "\xE946";
 
                 var mainWin = System.Windows.Application.Current.MainWindow;
-                if (mainWin != null && mainWin.IsVisible)
-                    AnimationHelper.ApplyBlur(mainWin, 8, TimeSpan.FromSeconds(0.15));
-
                 var dlg = new UpdateWindow(title, message, "ОК", showCancel: false, accentHex: accent, iconGlyph: icon);
                 if (mainWin != null && mainWin.IsVisible)
                     dlg.Owner = mainWin;
 
                 dlg.ShowDialog();
-
-                if (mainWin != null && mainWin.IsVisible)
-                    AnimationHelper.RemoveBlur(mainWin, TimeSpan.FromSeconds(0.15));
             });
         }
 
@@ -2526,18 +2352,11 @@ namespace ZapretGUI.Core
                 var icon = isDanger ? "\xE7BA" : "\xE897";
 
                 var mainWin = System.Windows.Application.Current.MainWindow;
-                if (mainWin != null && mainWin.IsVisible)
-                    AnimationHelper.ApplyBlur(mainWin, 8, TimeSpan.FromSeconds(0.15));
-
                 var dlg = new UpdateWindow(title, message, confirmText, showCancel: true, accentHex: accent, iconGlyph: icon);
                 if (mainWin != null && mainWin.IsVisible)
                     dlg.Owner = mainWin;
 
                 dlg.ShowDialog();
-
-                if (mainWin != null && mainWin.IsVisible)
-                    AnimationHelper.RemoveBlur(mainWin, TimeSpan.FromSeconds(0.15));
-
                 return dlg.Result;
             });
         }
@@ -3069,6 +2888,8 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Interop;
+using System.Windows.Media;
 using Microsoft.Web.WebView2.Wpf;
 
 namespace ZapretGUI.Core
@@ -3253,6 +3074,16 @@ namespace ZapretGUI.Core
                     AudioHelper.PlayClick();
                     break;
 
+                case "playSuccess":
+                    AudioHelper.PlaySuccess();
+                    break;
+
+                case "openUrl":
+                    var url = root.GetProperty("url").GetString() ?? "";
+                    if (!string.IsNullOrWhiteSpace(url))
+                        Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+                    break;
+
                 case "toggleBypass":
                     await HandleToggleBypassAsync(root);
                     break;
@@ -3372,22 +3203,181 @@ namespace ZapretGUI.Core
                     await HandleExportModAsync(root);
                     break;
 
+                // ==================== ДИАГНОСТИКА (DIAGNOSTICSVIEW) ====================
                 case "runDiagnostics":
                     await HandleRunDiagnosticsAsync();
                     break;
 
+                // ==================== НАСТРОЙКИ (SETTINGSVIEW) ====================
                 case "saveSettings":
                     HandleSaveSettings(root.GetProperty("settings"));
                     break;
 
+                case "setIpSetMode":
+                    HandleSetIpSetMode(root);
+                    break;
+
+                case "updateIpSet":
+                    await HandleUpdateIpSetAsync();
+                    break;
+
+                case "updateHosts":
+                    await HandleUpdateHostsAsync(root);
+                    break;
+
+                case "clearHosts":
+                    HandleClearHosts();
+                    break;
+
+                case "checkUpdates":
+                    await HandleCheckUpdatesManualAsync();
+                    break;
+
+                case "resetSettings":
+                    await HandleResetSettingsAsync();
+                    break;
+
                 case "openFolder":
                     var folderType = root.GetProperty("folder").GetString();
-                    var targetPath = folderType == "mods"
-                        ? Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory)
-                        : AppDomain.CurrentDomain.BaseDirectory;
-                    if (Directory.Exists(targetPath))
-                        Process.Start("explorer.exe", targetPath);
+                    var targetPath = folderType switch
+                    {
+                        "mods" => Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory),
+                        "zapret" => Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.CoreFilesDirectory),
+                        _ => AppDomain.CurrentDomain.BaseDirectory
+                    };
+                    if (!Directory.Exists(targetPath)) Directory.CreateDirectory(targetPath);
+                    Process.Start("explorer.exe", targetPath);
                     break;
+            }
+        }
+
+        private object GetRoutingStatusObj()
+        {
+            var (ipMode, ipCount, ipStatusText) = ServiceToolsManager.GetIpSetStatus();
+            var (hostsApplied, hostsCount) = ServiceToolsManager.GetHostsStatus();
+
+            return new
+            {
+                ipMode,
+                ipCount,
+                ipStatusText,
+                hostsApplied,
+                hostsCount,
+                hostsStatusText = hostsApplied ? $"Активен ({hostsCount} домен.)" : "Не применен"
+            };
+        }
+
+        private void HandleSetIpSetMode(JsonElement root)
+        {
+            var targetMode = root.GetProperty("mode").GetString() ?? "loaded";
+            try
+            {
+                ServiceToolsManager.SetIpSetMode(targetMode);
+                SendEvent("routingStatusUpdated", GetRoutingStatusObj());
+            }
+            catch (Exception ex)
+            {
+                SendEvent("alert", new { title = "Режим IPSet", message = ex.Message, isError = true });
+                SendEvent("routingStatusUpdated", GetRoutingStatusObj());
+            }
+        }
+
+        private async Task HandleUpdateIpSetAsync()
+        {
+            try
+            {
+                int count = await ServiceToolsManager.UpdateIpSetFromWebAsync();
+                SendEvent("routingStatusUpdated", GetRoutingStatusObj());
+                SendEvent("alert", new { title = "База IPSet обновлена", message = $"Список ipset-all.txt успешно загружен из репозитория Flowseal!\nВсего подсетей в базе: {count}", isError = false });
+            }
+            catch (Exception ex)
+            {
+                SendEvent("routingStatusUpdated", GetRoutingStatusObj());
+                SendEvent("alert", new { title = "Ошибка обновления IPSet", message = $"Не удалось обновить список IPSet:\n{ex.Message}", isError = true });
+            }
+        }
+
+        private async Task HandleUpdateHostsAsync(JsonElement root)
+        {
+            int sourceIdx = root.TryGetProperty("sourceIndex", out var si) ? Math.Clamp(si.GetInt32(), 0, 3) : SettingsManager.Current.HostsSourceIndex;
+            SettingsManager.Current.HostsSourceIndex = sourceIdx;
+            SettingsManager.Save();
+
+            try
+            {
+                int count = await ServiceToolsManager.UpdateSystemHostsAsync(sourceIdx);
+                SendEvent("routingStatusUpdated", GetRoutingStatusObj());
+                SendEvent("alert", new { title = "Файл Hosts обновлен", message = $"В системный файл hosts успешно записано {count} актуальных правил маршрутизации, а DNS-кэш Windows очищен!\n\nВаши личные записи в файле hosts были бережно сохранены.", isError = false });
+            }
+            catch (UnauthorizedAccessException)
+            {
+                SendEvent("routingStatusUpdated", GetRoutingStatusObj());
+                SendEvent("alert", new { title = "Требуются права администратора", message = "Для изменения системного файла C:\\Windows\\System32\\drivers\\etc\\hosts перезапустите программу от имени Администратора!", isError = true });
+            }
+            catch (Exception ex)
+            {
+                SendEvent("routingStatusUpdated", GetRoutingStatusObj());
+                SendEvent("alert", new { title = "Ошибка обновления Hosts", message = $"Не удалось обновить системный файл hosts:\n{ex.Message}", isError = true });
+            }
+        }
+
+        private void HandleClearHosts()
+        {
+            try
+            {
+                ServiceToolsManager.ClearZapretHosts();
+                SendEvent("routingStatusUpdated", GetRoutingStatusObj());
+                SendEvent("alert", new { title = "Готово", message = "Записи Zapret успешно удалены из системного файла hosts, DNS-кэш сброшен.", isError = false });
+            }
+            catch (UnauthorizedAccessException)
+            {
+                SendEvent("alert", new { title = "Требуются права администратора", message = "Для изменения системного файла hosts запустите программу от имени Администратора!", isError = true });
+            }
+            catch (Exception ex)
+            {
+                SendEvent("alert", new { title = "Ошибка", message = $"Не удалось очистить файл hosts:\n{ex.Message}", isError = true });
+            }
+        }
+
+        private async Task HandleCheckUpdatesManualAsync()
+        {
+            Action stopServicesAction = () =>
+            {
+                if (_mainWindow is MainWindow mw && mw.IsBypassRunning())
+                    mw.ToggleBypass();
+            };
+
+            var progress = new Progress<string>(status =>
+                SendEvent("log", new { message = $"[Updater] {status}", time = DateTime.Now.ToString("HH:mm:ss"), isProgress = status.Contains("Скачивание:") || status.Contains("Скачано:") }));
+
+            await UpdateManager.RunUpdateWorkflowAsync(isManualCheck: true, stopServicesAction, progress);
+            await BroadcastModsAndProfilesAsync();
+            SendEvent("updatesCheckFinished", new { });
+        }
+
+        private async Task HandleResetSettingsAsync()
+        {
+            try
+            {
+                var settingsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.json");
+                if (File.Exists(settingsPath))
+                    File.Delete(settingsPath);
+
+                StartupHelper.SetAutoStart(false);
+
+                SettingsManager.Load();
+                ServiceToolsManager.SyncGameFilterFile();
+                UIHelper.ApplyThemeColors();
+
+                if (_mainWindow is MainWindow mw)
+                    mw.AnimateWindowSize(SettingsManager.Current.CompactMode);
+
+                await SendInitialStateAsync();
+                SendEvent("alert", new { title = "Готово", message = "Настройки успешно сброшены к состоянию по умолчанию.", isError = false });
+            }
+            catch (Exception ex)
+            {
+                SendEvent("alert", new { title = "Ошибка сброса", message = $"Ошибка при сбросе: {ex.Message}", isError = true });
             }
         }
 
@@ -3829,7 +3819,8 @@ namespace ZapretGUI.Core
                 profiles,
                 batMods,
                 listMods,
-                gameFilterStatus = ServiceToolsManager.GetGameFilterDisplayStatus()
+                gameFilterStatus = ServiceToolsManager.GetGameFilterDisplayStatus(),
+                routingStatus = GetRoutingStatusObj()
             });
 
             var pingMs = await BypassController.Current.CheckPingAsync();
@@ -3986,15 +3977,43 @@ namespace ZapretGUI.Core
 
         private void HandleSaveSettings(JsonElement s)
         {
-            if (s.TryGetProperty("minimizeOnClose", out var moc)) SettingsManager.Current.MinimizeOnClose = moc.GetBoolean();
-            if (s.TryGetProperty("startMinimized", out var sm)) SettingsManager.Current.StartMinimized = sm.GetBoolean();
-            if (s.TryGetProperty("notificationsEnabled", out var ne)) SettingsManager.Current.NotificationsEnabled = ne.GetBoolean();
-            if (s.TryGetProperty("autoRestartServices", out var ars)) SettingsManager.Current.AutoRestartServices = ars.GetBoolean();
-            if (s.TryGetProperty("colorblindMode", out var cb)) SettingsManager.Current.ColorblindMode = cb.GetBoolean();
             if (s.TryGetProperty("autoStart", out var autoStart)) StartupHelper.SetAutoStart(autoStart.GetBoolean());
+            if (s.TryGetProperty("startMinimized", out var sm)) SettingsManager.Current.StartMinimized = sm.GetBoolean();
+            if (s.TryGetProperty("minimizeOnClose", out var moc)) SettingsManager.Current.MinimizeOnClose = moc.GetBoolean();
+            if (s.TryGetProperty("notificationsEnabled", out var ne)) SettingsManager.Current.NotificationsEnabled = ne.GetBoolean();
+
+            if (s.TryGetProperty("focusMode", out var fm)) SettingsManager.Current.FocusMode = fm.GetBoolean();
+            if (s.TryGetProperty("compactMode", out var cm))
+            {
+                SettingsManager.Current.CompactMode = cm.GetBoolean();
+                if (_mainWindow is MainWindow mw)
+                    mw.AnimateWindowSize(SettingsManager.Current.CompactMode);
+            }
+            if (s.TryGetProperty("hardwareAcceleration", out var ha))
+            {
+                var useGpu = ha.GetBoolean();
+                SettingsManager.Current.HardwareAcceleration = useGpu;
+                _mainWindow.Dispatcher.Invoke(() =>
+                {
+                    RenderOptions.ProcessRenderMode = useGpu ? RenderMode.Default : RenderMode.SoftwareOnly;
+                });
+            }
+            if (s.TryGetProperty("colorblindMode", out var cb))
+            {
+                SettingsManager.Current.ColorblindMode = cb.GetBoolean();
+                UIHelper.ApplyThemeColors();
+            }
+
+            if (s.TryGetProperty("pingUrl", out var pu))
+            {
+                var urlStr = pu.GetString();
+                SettingsManager.Current.PingUrl = string.IsNullOrWhiteSpace(urlStr) ? AppConstants.DefaultPingUrl : urlStr.Trim();
+            }
+            if (s.TryGetProperty("statsUpdateInterval", out var sui)) SettingsManager.Current.StatsUpdateInterval = Math.Max(1, sui.GetInt32());
+            if (s.TryGetProperty("autoRestartServices", out var ars)) SettingsManager.Current.AutoRestartServices = ars.GetBoolean();
+            if (s.TryGetProperty("hostsSourceIndex", out var hsi)) SettingsManager.Current.HostsSourceIndex = Math.Clamp(hsi.GetInt32(), 0, 3);
 
             SettingsManager.Save();
-            SendEvent("log", new { message = "⚙ Настройки сохранены.", time = DateTime.Now.ToString("HH:mm:ss") });
         }
     }
 }
@@ -4454,1481 +4473,6 @@ namespace ZapretGUI.Core
             }
 
             return null;
-        }
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// ФАЙЛ: Views\DiagnosticsView.xaml
-////////////////////////////////////////////////////////////////////////////////
-
-<UserControl x:Class="ZapretGUI.Views.DiagnosticsView"
-             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
-             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
-             mc:Ignorable="d" 
-             d:DesignHeight="700" d:DesignWidth="900"
-             Foreground="White"
-             Background="Transparent">
-
-    <UserControl.Resources>
-        <!-- СТАТИЧНЫЙ СТИЛЬ: для больших панелей -->
-        <Style x:Key="CardStyle" TargetType="Border">
-            <Setter Property="Background" Value="{DynamicResource SurfaceBackgroundBrush}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource CardBorderBrush}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="CornerRadius" Value="10"/>
-            <Setter Property="Padding" Value="15"/>
-            <Setter Property="Margin" Value="0,0,0,15"/>
-        </Style>
-
-        <Style x:Key="HeaderStyle" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="16"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Foreground" Value="#E0E0E0"/>
-            <Setter Property="Margin" Value="0,0,0,10"/>
-        </Style>
-
-        <!-- ОБЩИЙ ШАБЛОН ДЛЯ МИНИ-КАРТОЧЕК ПИНГА -->
-        <DataTemplate x:Key="ServerPingTemplate">
-            <Border x:Name="MiniCard" Background="#1E1E1E" BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="1" 
-                    CornerRadius="6" Padding="12,8" Margin="4,4,10,10" MinWidth="130"
-                    RenderTransformOrigin="0.5,0.5" Panel.ZIndex="0">
-                <Border.RenderTransform>
-                    <ScaleTransform ScaleX="1" ScaleY="1"/>
-                </Border.RenderTransform>
-                <Grid>
-                    <Grid x:Name="RealData" Opacity="0">
-                        <Grid.RenderTransform>
-                            <TranslateTransform Y="5"/>
-                        </Grid.RenderTransform>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                        </Grid.RowDefinitions>
-
-                        <TextBlock Text="{Binding Title}" FontSize="12" Foreground="#A0A0A0" FontWeight="Bold"/>
-                        <TextBlock Grid.Row="1" Text="{Binding PingText}" FontFamily="Consolas" FontSize="14" FontWeight="Bold" 
-                            Foreground="{Binding LatencyMs, Converter={StaticResource PingToBrushConverter}}" Margin="0,4,0,0"/>
-                    </Grid>
-
-                    <Border x:Name="SkeletonLayer" Background="#222222" CornerRadius="4" Margin="-5" Visibility="Collapsed" ClipToBounds="True">
-                        <Border Width="200" HorizontalAlignment="Left">
-                            <Border.Background>
-                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                                    <GradientStop Color="Transparent" Offset="0"/>
-                                    <GradientStop Color="#15FFFFFF" Offset="0.5"/>
-                                    <GradientStop Color="Transparent" Offset="1"/>
-                                </LinearGradientBrush>
-                            </Border.Background>
-                            <Border.RenderTransform>
-                                <TranslateTransform x:Name="ShimmerTransform" X="-200"/>
-                            </Border.RenderTransform>
-                        </Border>
-                    </Border>
-                </Grid>
-            </Border>
-
-            <DataTemplate.Triggers>
-                <DataTrigger Binding="{Binding IsLoading}" Value="True">
-                    <Setter TargetName="SkeletonLayer" Property="Visibility" Value="Visible"/>
-                    <DataTrigger.EnterActions>
-                        <BeginStoryboard Name="ShimmerStoryboard">
-                            <Storyboard RepeatBehavior="Forever">
-                                <DoubleAnimation Storyboard.TargetName="ShimmerTransform" Storyboard.TargetProperty="X" From="-200" To="200" Duration="0:0:1.3" />
-                            </Storyboard>
-                        </BeginStoryboard>
-                    </DataTrigger.EnterActions>
-                </DataTrigger>
-                <DataTrigger Binding="{Binding IsLoading}" Value="False">
-                    <DataTrigger.EnterActions>
-                        <BeginStoryboard>
-                            <Storyboard>
-                                <DoubleAnimation Storyboard.TargetName="RealData" Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.4" />
-                                <DoubleAnimation Storyboard.TargetName="RealData" Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)" From="5" To="0" Duration="0:0:0.4">
-                                    <DoubleAnimation.EasingFunction>
-                                        <CubicEase EasingMode="EaseOut"/>
-                                    </DoubleAnimation.EasingFunction>
-                                </DoubleAnimation>
-                            </Storyboard>
-                        </BeginStoryboard>
-                    </DataTrigger.EnterActions>
-                </DataTrigger>
-
-                <Trigger Property="IsMouseOver" Value="True">
-                    <Setter TargetName="MiniCard" Property="Panel.ZIndex" Value="100"/>
-                    <Setter TargetName="MiniCard" Property="BorderBrush" Value="{DynamicResource CardHoverBorderBrush}"/>
-                </Trigger>
-                <EventTrigger RoutedEvent="MouseEnter">
-                    <BeginStoryboard>
-                        <Storyboard>
-                            <DoubleAnimation Storyboard.TargetName="MiniCard" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" To="1.04" Duration="0:0:0.1" />
-                            <DoubleAnimation Storyboard.TargetName="MiniCard" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" To="1.04" Duration="0:0:0.1" />
-                        </Storyboard>
-                    </BeginStoryboard>
-                </EventTrigger>
-                <EventTrigger RoutedEvent="MouseLeave">
-                    <BeginStoryboard>
-                        <Storyboard>
-                            <DoubleAnimation Storyboard.TargetName="MiniCard" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" To="1" Duration="0:0:0.25" />
-                            <DoubleAnimation Storyboard.TargetName="MiniCard" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" To="1" Duration="0:0:0.25" />
-                        </Storyboard>
-                    </BeginStoryboard>
-                </EventTrigger>
-            </DataTemplate.Triggers>
-        </DataTemplate>
-    </UserControl.Resources>
-
-    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16" ClipToBounds="False">
-        <Grid>
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/>
-            </Grid.RowDefinitions>
-
-            <Grid Grid.Row="0" Margin="4,0,4,20">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-
-                <StackPanel Grid.Column="0">
-                    <TextBlock Text="Мониторинг сети" FontSize="24" FontWeight="Bold"/>
-                    <TextBlock x:Name="TxtStatus" Text="Ожидание проверки..." Foreground="#A0A0A0" Margin="0,5,0,0"/>
-                </StackPanel>
-
-                <ProgressBar x:Name="MainProgress" Grid.Column="1" Height="4" Margin="20,0" 
-                             VerticalAlignment="Center" Foreground="{DynamicResource BrandSuccessBrush}" Background="#2A2A2A" BorderThickness="0"
-                             Visibility="Collapsed" IsIndeterminate="True"/>
-
-                <Button x:Name="BtnRunDiagnostics" Grid.Column="2" Content="Запустить проверку" Click="BtnRunDiagnostics_Click"
-                        Padding="15,8" Background="{DynamicResource BrandSuccessBrush}" Foreground="White" BorderThickness="0" Cursor="Hand" VerticalAlignment="Center">
-                    <Button.Resources>
-                        <Style TargetType="Border">
-                            <Setter Property="CornerRadius" Value="6"/>
-                        </Style>
-                    </Button.Resources>
-                </Button>
-            </Grid>
-
-            <Grid Grid.Row="1">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="1*"/>
-                    <ColumnDefinition Width="1*"/>
-                </Grid.ColumnDefinitions>
-
-                <Border x:Name="TelegramCard" Grid.Column="0" Style="{StaticResource CardStyle}" Margin="4,4,10,15">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-
-                        <TextBlock x:Name="TxtTgEmoji" Text="✈️" FontSize="24" VerticalAlignment="Center" Margin="0,0,15,0"
-                                   Cursor="Hand" MouseDown="TxtTgEmoji_MouseDown" RenderTransformOrigin="0.5,0.5">
-                            <TextBlock.RenderTransform>
-                                <TransformGroup>
-                                    <TranslateTransform x:Name="TgEmojiTranslate" X="0" Y="0"/>
-                                </TransformGroup>
-                            </TextBlock.RenderTransform>
-                        </TextBlock>
-
-                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                            <TextBlock x:Name="TxtTgMainStatus" Text="Telegram" FontSize="16" FontWeight="Bold"/>
-                            <TextBlock x:Name="TxtTgSubStatus" Text="Ожидание данных..." Foreground="#B0B0B0" TextWrapping="Wrap"/>
-                        </StackPanel>
-                    </Grid>
-                </Border>
-
-                <Border x:Name="DiscordCard" Grid.Column="1" Style="{StaticResource CardStyle}" Margin="10,4,4,15">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-
-                        <TextBlock x:Name="TxtDiscordEmoji" Text="🎮" FontSize="24" VerticalAlignment="Center" Margin="0,0,15,0"
-                                   Cursor="Hand" MouseDown="TxtDiscordEmoji_MouseDown" RenderTransformOrigin="0.5,0.5">
-                            <TextBlock.RenderTransform>
-                                <RotateTransform x:Name="DiscordEmojiRotation" Angle="0"/>
-                            </TextBlock.RenderTransform>
-                        </TextBlock>
-
-                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                            <TextBlock x:Name="TxtDiscordMainStatus" Text="Discord" FontSize="16" FontWeight="Bold"/>
-                            <TextBlock x:Name="TxtDiscordSubStatus" Text="Ожидание данных..." Foreground="#B0B0B0" TextWrapping="Wrap"/>
-                        </StackPanel>
-                    </Grid>
-                </Border>
-            </Grid>
-
-            <Border Grid.Row="2" Style="{StaticResource CardStyle}">
-                <StackPanel>
-                    <TextBlock Text="Активные процессы в системе" Style="{StaticResource HeaderStyle}"/>
-                    <WrapPanel Margin="0,10,0,0">
-                        <StackPanel Orientation="Horizontal" Margin="0,0,20,10">
-                            <Ellipse x:Name="DotTelegram" Width="10" Height="10" Fill="Gray" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                            <TextBlock Text="Telegram" FontWeight="SemiBold"/>
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal" Margin="0,0,20,10">
-                            <Ellipse x:Name="DotDiscord" Width="10" Height="10" Fill="Gray" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                            <TextBlock Text="Discord" FontWeight="SemiBold"/>
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal" Margin="0,0,20,10">
-                            <Ellipse x:Name="DotZapret" Width="10" Height="10" Fill="Gray" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                            <TextBlock Text="Zapret (winws)" FontWeight="SemiBold"/>
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal" Margin="0,0,20,10">
-                            <Ellipse x:Name="DotTgProxy" Width="10" Height="10" Fill="Gray" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                            <TextBlock Text="TgWsProxy" FontWeight="SemiBold"/>
-                        </StackPanel>
-                    </WrapPanel>
-                </StackPanel>
-            </Border>
-
-            <Border Grid.Row="3" Style="{StaticResource CardStyle}">
-                <StackPanel>
-                    <TextBlock Text="Доступность серверов Telegram (DC &amp; Порты)" Style="{StaticResource HeaderStyle}"/>
-                    <!-- Используем общий шаблон -->
-                    <ItemsControl x:Name="DcItemsControl" ItemTemplate="{StaticResource ServerPingTemplate}">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <WrapPanel Orientation="Horizontal"/>
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                    </ItemsControl>
-
-                    <TextBlock Text="Доступность серверов Discord" Style="{StaticResource HeaderStyle}" Margin="0,15,0,10"/>
-                    <!-- Выводим серверы Discord через тот же шаблон! -->
-                    <ItemsControl x:Name="DiscordItemsControl" ItemTemplate="{StaticResource ServerPingTemplate}">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <WrapPanel Orientation="Horizontal"/>
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                    </ItemsControl>
-                </StackPanel>
-            </Border>
-
-            <Border Grid.Row="4" Style="{StaticResource CardStyle}">
-                <StackPanel>
-                    <TextBlock Text="Рекомендации по итогам проверки" Style="{StaticResource HeaderStyle}"/>
-
-                    <ItemsControl x:Name="RecItemsControl">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <StackPanel Orientation="Horizontal" Margin="0,5" Opacity="0">
-                                    <StackPanel.RenderTransform>
-                                        <TranslateTransform Y="10"/>
-                                    </StackPanel.RenderTransform>
-
-                                    <TextBlock Text="💡" Margin="0,0,10,0"/>
-                                    <TextBlock Text="{Binding}" Foreground="#E0E0E0" TextWrapping="Wrap"/>
-
-                                    <StackPanel.Triggers>
-                                        <EventTrigger RoutedEvent="Loaded">
-                                            <BeginStoryboard>
-                                                <Storyboard>
-                                                    <DoubleAnimation Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.4"/>
-                                                    <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)" From="10" To="0" Duration="0:0:0.4">
-                                                        <DoubleAnimation.EasingFunction>
-                                                            <CubicEase EasingMode="EaseOut"/>
-                                                        </DoubleAnimation.EasingFunction>
-                                                    </DoubleAnimation>
-                                                </Storyboard>
-                                            </BeginStoryboard>
-                                        </EventTrigger>
-                                    </StackPanel.Triggers>
-                                </StackPanel>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </StackPanel>
-            </Border>
-
-        </Grid>
-    </ScrollViewer>
-</UserControl>
-
-////////////////////////////////////////////////////////////////////////////////
-// ФАЙЛ: Views\DiagnosticsView.xaml.cs
-////////////////////////////////////////////////////////////////////////////////
-
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Windows;
-using System.Windows.Controls;
-using ZapretGUI.Core;
-
-namespace ZapretGUI.Views
-{
-    public partial class DiagnosticsView : System.Windows.Controls.UserControl
-    {
-        private int _discordClickCount = 0;
-        private DateTime _lastDiscordClick = DateTime.MinValue;
-
-        private int _tgClickCount = 0;
-        private DateTime _lastTgClick = DateTime.MinValue;
-
-        public DiagnosticsView()
-        {
-            InitializeComponent();
-            PrepareSkeletons();
-        }
-
-        private void PrepareSkeletons()
-        {
-            var skeletons = new List<DcResult>();
-            var dcs = new[] { 1, 2, 3, 4, 5 };
-            var ports = new[] { 443, 80, 5222 };
-
-            foreach (var dc in dcs)
-            {
-                foreach (var port in ports)
-                    skeletons.Add(new DcResult { DcId = dc, Port = port, IsLoading = true });
-            }
-            DcItemsControl.ItemsSource = skeletons;
-
-            var dsSkeletons = new List<DiscordPingResult>
-            {
-                new DiscordPingResult { Label = "Gateway", IsLoading = true },
-                new DiscordPingResult { Label = "Media", IsLoading = true },
-                new DiscordPingResult { Label = "API", IsLoading = true }
-            };
-            DiscordItemsControl.ItemsSource = dsSkeletons;
-        }
-
-        private async void BtnRunDiagnostics_Click(object sender, RoutedEventArgs e)
-        {
-            AudioHelper.PlayClick();
-
-            BtnRunDiagnostics.IsEnabled = false;
-            MainProgress.Value = 0;
-            MainProgress.Visibility = Visibility.Visible;
-
-            PrepareSkeletons();
-
-            Action<double, string> progressCallback = (p, text) =>
-            {
-                Dispatcher.Invoke(() =>
-                {
-                    MainProgress.Value = p * 100;
-                    TxtStatus.Text = text;
-                });
-            };
-
-            var report = await DiagnosticsEngine.RunFullDiagnosticsAsync(progressCallback);
-
-            UpdateUI(report);
-
-            TxtStatus.Text = "Проверка завершена.";
-            MainProgress.Visibility = Visibility.Collapsed;
-            BtnRunDiagnostics.IsEnabled = true;
-
-            AudioHelper.PlaySuccess();
-        }
-
-        private void UpdateUI(DiagReport report)
-        {
-            var tgVerdict = HumanVerdict(report);
-            TxtTgMainStatus.Text = tgVerdict.title;
-            TxtTgSubStatus.Text = tgVerdict.detail;
-            TelegramCard.BorderBrush = UIHelper.GetBrushFromHex(tgVerdict.color);
-            TxtTgEmoji.Foreground = UIHelper.GetBrushFromHex(tgVerdict.color);
-
-            var dsVerdict = DiscordVerdict(report);
-            TxtDiscordMainStatus.Text = dsVerdict.title;
-            TxtDiscordSubStatus.Text = dsVerdict.detail;
-            DiscordCard.BorderBrush = UIHelper.GetBrushFromHex(dsVerdict.color);
-
-            var status = report.AppStatus ?? new AppStatus();
-
-            var successColor = (System.Windows.Media.SolidColorBrush)System.Windows.Application.Current.Resources["BrandSuccessBrush"];
-            var errorColor = (System.Windows.Media.SolidColorBrush)System.Windows.Application.Current.Resources["BrandErrorBrush"];
-
-            DotTelegram.Fill = status.TelegramRunning ? successColor : errorColor;
-            DotDiscord.Fill = status.DiscordRunning ? successColor : errorColor;
-            DotZapret.Fill = status.ZapretRunning ? successColor : errorColor;
-            DotTgProxy.Fill = status.TgWsProxyRunning ? successColor : errorColor;
-
-            RecItemsControl.ItemsSource = report.Recommendations;
-            DcItemsControl.ItemsSource = report.DcResults;
-            DiscordItemsControl.ItemsSource = report.DiscordPing;
-        }
-
-        private (string emoji, string title, string detail, string color) HumanVerdict(DiagReport r)
-        {
-            var blocks = new HashSet<BlockType>(r.BlockTypes);
-            var app = r.AppStatus;
-            var dcOk = r.DcResults.Count(x => x.Ok);
-            var dcTot = r.DcResults.Count;
-            var pingOk = r.PingResults.Any(p => p.Ok);
-            var bypass = app != null && app.ZapretRunning;
-
-            var isCb = SettingsManager.Current.ColorblindMode;
-            var successColor = isCb ? "#0078D7" : "#107C10";
-            var errorColor = isCb ? "#FF8C00" : "#D13438";
-            var warningColor = isCb ? "#FFB900" : "#FF8C00";
-
-            if (app?.TgWsProxyRunning == true)
-                return ("🟢", "tg-ws-proxy активен", "Telegram работает через прокси локально.", successColor);
-
-            if (!pingOk && dcOk == 0)
-                return ("🔴", "Интернета нет", "Ни один сервер не отвечает.", errorColor);
-
-            if (blocks.Contains(BlockType.SniBlock))
-                return bypass
-                    ? ("🟢", "Telegram работает (обходчик активен)", "DPI обнаружен, но обходчик запущен.", successColor)
-                    : ("🔴", "Telegram заблокирован (DPI)", "Нужен Zapret.", errorColor);
-
-            if (blocks.Contains(BlockType.IpBlock))
-                return bypass
-                    ? ("🟢", "Telegram работает", "IP заблокированы, но обходчик компенсирует.", successColor)
-                    : ("🔴", "Серверы заблокированы", "Нужен VPN.", errorColor);
-
-            if (dcOk >= Math.Max(dcTot / 2, 1))
-                return ("🟢", "Telegram работает нормально", "Серверы отвечают быстро.", successColor);
-
-            return ("🟡", "Ситуация неоднозначная", "Проблемы со связью.", warningColor);
-        }
-
-        private (string emoji, string title, string detail, string color) DiscordVerdict(DiagReport r)
-        {
-            var app = r.AppStatus;
-            var bypass = app != null && app.ZapretRunning;
-
-            var isCb = SettingsManager.Current.ColorblindMode;
-            var successColor = isCb ? "#0078D7" : "#107C10";
-            var errorColor = isCb ? "#FF8C00" : "#D13438";
-            var warningColor = isCb ? "#FFB900" : "#FF8C00";
-
-            if (r.DiscordPing != null && r.DiscordPing.Count > 0 && r.DiscordPing.All(p => !p.Ok))
-                return bypass
-                    ? ("🟡", "Сбои в Discord", "Обходчик работает, но серверы недоступны. Возможно, стоит сменить профиль.", warningColor)
-                    : ("🔴", "Discord полностью заблокирован", "API и Gateway не отвечают. Включи Zapret.", errorColor);
-
-            if (r.UdpResult?.Blocked == true)
-                return bypass
-                    ? ("🟢", "Discord работает (обходчик активен)", "UDP заблокирован, но Zapret маршрутизирует трафик.", successColor)
-                    : ("🟡", "Проблемы с голосом", "Чаты работают, но UDP заблокирован. Звонки не пройдут.", warningColor);
-
-            return ("🟢", "Discord работает нормально", "Все нужные порты и серверы доступны.", successColor);
-        }
-
-
-        private void TxtDiscordEmoji_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
-        {
-            if ((DateTime.Now - _lastDiscordClick).TotalSeconds > 1.5)
-                _discordClickCount = 0;
-
-            _discordClickCount++;
-            _lastDiscordClick = DateTime.Now;
-
-            if (_discordClickCount >= 5)
-            {
-                _discordClickCount = 0;
-                TriggerDiscordEasterEgg();
-            }
-        }
-
-        private void TriggerDiscordEasterEgg()
-        {
-            AudioHelper.PlaySuccess();
-
-            TxtDiscordMainStatus.Text = "Discord (Режим турбо-деда)";
-            TxtDiscordMainStatus.Foreground = UIHelper.GetBrushFromHex("#FF00FF");
-            TxtDiscordSubStatus.Text = "Никакие блокировки больше не страшны!";
-
-            var anim = new System.Windows.Media.Animation.DoubleAnimation(0, 360, TimeSpan.FromSeconds(0.5))
-            {
-                EasingFunction = new System.Windows.Media.Animation.BackEase { Amplitude = 0.5, EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut }
-            };
-
-            var storyboard = new System.Windows.Media.Animation.Storyboard();
-            storyboard.Children.Add(anim);
-            System.Windows.Media.Animation.Storyboard.SetTarget(anim, TxtDiscordEmoji);
-            System.Windows.Media.Animation.Storyboard.SetTargetProperty(anim, new PropertyPath("(UIElement.RenderTransform).(RotateTransform.Angle)"));
-            storyboard.Begin();
-
-            DiscordCard.BorderBrush = UIHelper.GetBrushFromHex("#FF00FF");
-            DiscordCard.Background = UIHelper.GetBrushFromHex("#1A001A");
-        }
-
-        private void TxtTgEmoji_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
-        {
-            if ((DateTime.Now - _lastTgClick).TotalSeconds > 1.5)
-                _tgClickCount = 0;
-
-            _tgClickCount++;
-            _lastTgClick = DateTime.Now;
-
-            if (_tgClickCount >= 5)
-            {
-                _tgClickCount = 0;
-                TriggerTelegramEasterEgg();
-            }
-        }
-
-        private void TriggerTelegramEasterEgg()
-        {
-            AudioHelper.PlaySuccess();
-
-            TxtTgMainStatus.Text = "Telegram (Режим Дурова)";
-            TxtTgMainStatus.Foreground = UIHelper.GetBrushFromHex("#00E5FF");
-            TxtTgSubStatus.Text = "Свободу интернету! Трафик летит напрямую.";
-
-            var flyX = new System.Windows.Media.Animation.DoubleAnimation(0, 150, TimeSpan.FromSeconds(0.3))
-            { EasingFunction = new System.Windows.Media.Animation.PowerEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseIn } };
-
-            var flyY = new System.Windows.Media.Animation.DoubleAnimation(0, -150, TimeSpan.FromSeconds(0.3))
-            { EasingFunction = new System.Windows.Media.Animation.PowerEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseIn } };
-
-            var fadeOut = new System.Windows.Media.Animation.DoubleAnimation(1, 0, TimeSpan.FromSeconds(0.3));
-
-            var transformGroup = TxtTgEmoji.RenderTransform as System.Windows.Media.TransformGroup;
-            var translateTransform = transformGroup?.Children[0] as System.Windows.Media.TranslateTransform;
-
-            if (translateTransform != null)
-            {
-                flyX.Completed += (s, ev) =>
-                {
-                    translateTransform.X = -50;
-                    translateTransform.Y = 50;
-
-                    var returnX = new System.Windows.Media.Animation.DoubleAnimation(-50, 0, TimeSpan.FromSeconds(0.4))
-                    { EasingFunction = new System.Windows.Media.Animation.BackEase { Amplitude = 0.5, EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut } };
-
-                    var returnY = new System.Windows.Media.Animation.DoubleAnimation(50, 0, TimeSpan.FromSeconds(0.4))
-                    { EasingFunction = new System.Windows.Media.Animation.BackEase { Amplitude = 0.5, EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut } };
-
-                    var fadeIn = new System.Windows.Media.Animation.DoubleAnimation(0, 1, TimeSpan.FromSeconds(0.4));
-
-                    translateTransform.BeginAnimation(System.Windows.Media.TranslateTransform.XProperty, returnX);
-                    translateTransform.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, returnY);
-                    TxtTgEmoji.BeginAnimation(UIElement.OpacityProperty, fadeIn);
-                };
-
-                translateTransform.BeginAnimation(System.Windows.Media.TranslateTransform.XProperty, flyX);
-                translateTransform.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, flyY);
-                TxtTgEmoji.BeginAnimation(UIElement.OpacityProperty, fadeOut);
-            }
-
-            TelegramCard.BorderBrush = UIHelper.GetBrushFromHex("#00E5FF");
-            TelegramCard.Background = UIHelper.GetBrushFromHex("#001A22");
-        }
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// ФАЙЛ: Views\SettingsView.xaml
-////////////////////////////////////////////////////////////////////////////////
-
-<UserControl x:Class="ZapretGUI.Views.SettingsView"
-             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
-             Foreground="White">
-
-    <UserControl.Resources>
-        <Style x:Key="SettingRowStyle" TargetType="Border">
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="CornerRadius" Value="8"/>
-            <Setter Property="Padding" Value="15,12"/>
-            <Setter Property="Margin" Value="-15,0,-15,8"/>
-            <Style.Triggers>
-                <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#08FFFFFF"/>
-                </Trigger>
-            </Style.Triggers>
-        </Style>
-
-        <!-- Стиль кликабельной плашки выбора (вместо системного ComboBox) -->
-        <Style x:Key="CyberSelectorBorderStyle" TargetType="Border">
-            <Setter Property="Background" Value="#222222"/>
-            <Setter Property="BorderBrush" Value="#333333"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="CornerRadius" Value="8"/>
-            <Setter Property="Padding" Value="12,8"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Style.Triggers>
-                <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#2A2A2A"/>
-                    <Setter Property="BorderBrush" Value="#4A4A4A"/>
-                </Trigger>
-            </Style.Triggers>
-        </Style>
-    </UserControl.Resources>
-
-    <UserControl.Triggers>
-        <EventTrigger RoutedEvent="Loaded">
-            <BeginStoryboard>
-                <Storyboard>
-                    <DoubleAnimation Storyboard.TargetName="MainGrid" Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.4"/>
-                    <DoubleAnimation Storyboard.TargetName="MainGrid" Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)" From="15" To="0" Duration="0:0:0.4">
-                        <DoubleAnimation.EasingFunction>
-                            <CubicEase EasingMode="EaseOut"/>
-                        </DoubleAnimation.EasingFunction>
-                    </DoubleAnimation>
-                </Storyboard>
-            </BeginStoryboard>
-        </EventTrigger>
-    </UserControl.Triggers>
-
-    <Grid x:Name="MainGrid" Margin="20" Opacity="0">
-        <Grid.RenderTransform>
-            <TranslateTransform Y="15"/>
-        </Grid.RenderTransform>
-
-        <Grid x:Name="ContentGrid">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/>
-            </Grid.RowDefinitions>
-
-            <StackPanel Grid.Row="0" Margin="0,10,0,24">
-                <TextBlock Text="Настройки" FontSize="28" FontWeight="Bold"/>
-                <TextBlock Text="Управление поведением и параметрами приложения." Foreground="#888888" FontSize="14" Margin="0,5,0,0"/>
-            </StackPanel>
-
-            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,10,0">
-                <StackPanel HorizontalAlignment="Stretch" Margin="0,0,20,20">
-
-                    <!-- БЛОК 1: СИСТЕМНЫЕ НАСТРОЙКИ -->
-                    <Border Background="#181818" CornerRadius="12" BorderBrush="#2A2A2A" BorderThickness="1" Margin="0,0,0,15" Padding="20">
-                        <StackPanel>
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
-                                <TextBlock Text="&#xE713;" FontFamily="Segoe MDL2 Assets" FontSize="18" Foreground="#888888" Margin="0,0,10,0" VerticalAlignment="Center"/>
-                                <TextBlock Text="Системные настройки" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                            </StackPanel>
-
-                            <Border Style="{StaticResource SettingRowStyle}">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <StackPanel Grid.Column="0" Margin="0,0,20,0" VerticalAlignment="Center">
-                                        <TextBlock Text="Автозагрузка Windows" FontSize="14" FontWeight="SemiBold"/>
-                                        <TextBlock Text="Запускать программу при включении компьютера" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
-                                    </StackPanel>
-                                    <CheckBox x:Name="ToggleAutoStart" Style="{StaticResource CyberToggleStyle}" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
-                                </Grid>
-                            </Border>
-
-                            <Border Style="{StaticResource SettingRowStyle}">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <StackPanel Grid.Column="0" Margin="0,0,20,0" VerticalAlignment="Center">
-                                        <TextBlock Text="Запускать свернутым" FontSize="14" FontWeight="SemiBold"/>
-                                        <TextBlock Text="Прятать окно в системный трей при старте программы" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
-                                    </StackPanel>
-                                    <CheckBox x:Name="ToggleStartMinimized" Style="{StaticResource CyberToggleStyle}" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
-                                </Grid>
-                            </Border>
-
-                            <Border Style="{StaticResource SettingRowStyle}">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <StackPanel Grid.Column="0" Margin="0,0,20,0" VerticalAlignment="Center">
-                                        <TextBlock Text="Сворачивать при закрытии" FontSize="14" FontWeight="SemiBold"/>
-                                        <TextBlock Text="Кнопка [X] не закрывает программу, а прячет её в трей" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
-                                    </StackPanel>
-                                    <CheckBox x:Name="ToggleMinimizeOnClose" Style="{StaticResource CyberToggleStyle}" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
-                                </Grid>
-                            </Border>
-
-                            <Border Style="{StaticResource SettingRowStyle}" Margin="-15,0,-15,0">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <StackPanel Grid.Column="0" Margin="0,0,20,0" VerticalAlignment="Center">
-                                        <TextBlock Text="Уведомления Windows (Тихий режим)" FontSize="14" FontWeight="SemiBold"/>
-                                        <TextBlock Text="Показывать всплывающие окна при обрыве сети или запуске/остановке служб" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
-                                    </StackPanel>
-                                    <CheckBox x:Name="ToggleNotifications" Style="{StaticResource CyberToggleStyle}" IsChecked="True" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
-                                </Grid>
-                            </Border>
-                        </StackPanel>
-                    </Border>
-
-                    <!-- БЛОК 2: ВИЗУАЛЬНЫЕ ЭФФЕКТЫ -->
-                    <Border Background="#181818" CornerRadius="12" BorderBrush="#2A2A2A" BorderThickness="1" Margin="0,0,0,15" Padding="20">
-                        <StackPanel>
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
-                                <TextBlock Text="&#xE890;" FontFamily="Segoe MDL2 Assets" FontSize="18" Foreground="#888888" Margin="0,0,10,0" VerticalAlignment="Center"/>
-                                <TextBlock Text="Визуальные эффекты" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                            </StackPanel>
-
-                            <Border Style="{StaticResource SettingRowStyle}">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <StackPanel Grid.Column="0" Margin="0,0,20,0" VerticalAlignment="Center">
-                                        <TextBlock Text="Режим фокусировки (Без глитчей)" FontSize="14" FontWeight="SemiBold"/>
-                                        <TextBlock Text="Отключить тряску камеры, эффект VHS и резкие вспышки" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
-                                    </StackPanel>
-                                    <CheckBox x:Name="ToggleFocusMode" Style="{StaticResource CyberToggleStyle}" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
-                                </Grid>
-                            </Border>
-
-                            <Border Style="{StaticResource SettingRowStyle}">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <StackPanel Grid.Column="0" Margin="0,0,20,0" VerticalAlignment="Center">
-                                        <TextBlock Text="Минималистичный интерфейс" FontSize="14" FontWeight="SemiBold"/>
-                                        <TextBlock Text="Скрыть графики скорости и логи, оставив только кнопки" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
-                                    </StackPanel>
-                                    <CheckBox x:Name="ToggleCompactMode" Style="{StaticResource CyberToggleStyle}" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
-                                </Grid>
-                            </Border>
-
-                            <Border Style="{StaticResource SettingRowStyle}">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <StackPanel Grid.Column="0" Margin="0,0,20,0" VerticalAlignment="Center">
-                                        <TextBlock Text="Аппаратное ускорение (GPU)" FontSize="14" FontWeight="SemiBold"/>
-                                        <TextBlock Text="Использовать видеокарту для отрисовки интерфейса" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
-                                    </StackPanel>
-                                    <CheckBox x:Name="ToggleHardwareAccel" Style="{StaticResource CyberToggleStyle}" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
-                                </Grid>
-                            </Border>
-
-                            <Border Style="{StaticResource SettingRowStyle}" Margin="-15,0,-15,0">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <StackPanel Grid.Column="0" Margin="0,0,20,0" VerticalAlignment="Center">
-                                        <TextBlock Text="Режим цветовой слепоты" FontSize="14" FontWeight="SemiBold"/>
-                                        <TextBlock Text="Заменить красно-зеленые точки индикаторов на оранжево-синие" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
-                                    </StackPanel>
-                                    <CheckBox x:Name="ToggleColorblind" Style="{StaticResource CyberToggleStyle}" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
-                                </Grid>
-                            </Border>
-                        </StackPanel>
-                    </Border>
-
-                    <!-- БЛОК 3: СЕТЬ И ДИАГНОСТИКА -->
-                    <Border Background="#181818" CornerRadius="12" BorderBrush="#2A2A2A" BorderThickness="1" Margin="0,0,0,15" Padding="20">
-                        <StackPanel>
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
-                                <TextBlock Text="&#xE774;" FontFamily="Segoe MDL2 Assets" FontSize="18" Foreground="#888888" Margin="0,0,10,0" VerticalAlignment="Center"/>
-                                <TextBlock Text="Сеть и диагностика" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                            </StackPanel>
-
-                            <Border Style="{StaticResource SettingRowStyle}">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="220"/>
-                                    </Grid.ColumnDefinitions>
-                                    <StackPanel Grid.Column="0" Margin="0,0,20,0" VerticalAlignment="Center">
-                                        <TextBlock Text="Адрес сервера для пинга" FontSize="14" FontWeight="SemiBold"/>
-                                        <TextBlock Text="URL для проверки соединения (по умолчанию Франкфурт AWS)" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
-                                    </StackPanel>
-                                    <ui:TextBox x:Name="TxtPingUrl" Grid.Column="1" Text="https://dynamodb.eu-central-1.amazonaws.com" VerticalAlignment="Center" LostFocus="TextInput_LostFocus"/>
-                                </Grid>
-                            </Border>
-
-                            <Border Style="{StaticResource SettingRowStyle}">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <StackPanel Grid.Column="0" Margin="0,0,20,0" VerticalAlignment="Center">
-                                        <TextBlock Text="Интервал обновления статистики" FontSize="14" FontWeight="SemiBold"/>
-                                        <TextBlock Text="Как часто опрашивать сеть и перерисовывать графики" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
-                                    </StackPanel>
-                                    <Border Grid.Column="1" Style="{StaticResource CyberSelectorBorderStyle}" MinWidth="150" VerticalAlignment="Center" MouseLeftButtonDown="BtnSelectInterval_MouseDown">
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="Auto"/>
-                                            </Grid.ColumnDefinitions>
-                                            <TextBlock x:Name="TxtSelectedInterval" Text="1 секунда" Foreground="White" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                                            <TextBlock Grid.Column="1" Text="&#xE70D;" FontFamily="Segoe MDL2 Assets" Foreground="#888888" FontSize="11" VerticalAlignment="Center" Margin="10,0,0,0"/>
-                                        </Grid>
-                                    </Border>
-                                </Grid>
-                            </Border>
-
-                            <Border Style="{StaticResource SettingRowStyle}" Margin="-15,0,-15,0">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <StackPanel Grid.Column="0" Margin="0,0,20,0" VerticalAlignment="Center">
-                                        <TextBlock Text="Авто-перезапуск при обрыве" FontSize="14" FontWeight="SemiBold"/>
-                                        <TextBlock Text="Автоматически перезапускать службы при восстановлении сети" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
-                                    </StackPanel>
-                                    <CheckBox x:Name="ToggleAutoRestart" Style="{StaticResource CyberToggleStyle}" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Click="Setting_Changed"/>
-                                </Grid>
-                            </Border>
-                        </StackPanel>
-                    </Border>
-
-                    <!-- БЛОК 4: СПИСКИ МАРШРУТИЗАЦИИ (IPSET И HOSTS) -->
-                    <Border Background="#181818" CornerRadius="12" BorderBrush="#2A2A2A" BorderThickness="1" Margin="0,0,0,25" Padding="20">
-                        <StackPanel>
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
-                                <TextBlock Text="&#xE8B7;" FontFamily="Segoe MDL2 Assets" FontSize="18" Foreground="#888888" Margin="0,0,10,0" VerticalAlignment="Center"/>
-                                <TextBlock Text="Списки маршрутизации (IPSet и Hosts)" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                            </StackPanel>
-
-                            <Border Style="{StaticResource SettingRowStyle}">
-                                <StackPanel>
-                                    <WrapPanel Orientation="Horizontal" Margin="0,0,0,4">
-                                        <TextBlock Text="Фильтрация по подсетям (IPSet Filter)" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                                        <Border Background="#1E293B" CornerRadius="5" Padding="8,3" VerticalAlignment="Center">
-                                            <TextBlock x:Name="TxtIpSetStatusBadge" Text="Проверка..." FontFamily="Consolas" FontSize="11" FontWeight="SemiBold" Foreground="#60A5FA"/>
-                                        </Border>
-                                    </WrapPanel>
-                                    <TextBlock Text="Режим работы базы заблокированных IP-адресов (ipset-all.txt) и её обновление из репозитория Flowseal" Foreground="#888888" FontSize="12" Margin="0,0,0,12" TextWrapping="Wrap"/>
-
-                                    <WrapPanel Orientation="Horizontal">
-                                        <Border Style="{StaticResource CyberSelectorBorderStyle}" MinWidth="220" Margin="0,0,10,4" MouseLeftButtonDown="BtnSelectIpSetMode_MouseDown">
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                </Grid.ColumnDefinitions>
-                                                <StackPanel>
-                                                    <TextBlock Text="Режим фильтрации:" Foreground="#888888" FontSize="10" Margin="0,0,0,2"/>
-                                                    <TextBlock x:Name="TxtSelectedIpSetMode" Text="По списку (Loaded)" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
-                                                </StackPanel>
-                                                <TextBlock Grid.Column="1" Text="&#xE70D;" FontFamily="Segoe MDL2 Assets" Foreground="#888888" FontSize="12" VerticalAlignment="Center" Margin="12,0,0,0"/>
-                                            </Grid>
-                                        </Border>
-
-                                        <ui:Button x:Name="BtnUpdateIpSet" Content="🔄 Обновить базу IP" Margin="0,0,0,4" VerticalAlignment="Stretch" Click="BtnUpdateIpSet_Click"/>
-                                    </WrapPanel>
-                                </StackPanel>
-                            </Border>
-
-                            <Border Style="{StaticResource SettingRowStyle}">
-                                <StackPanel>
-                                    <WrapPanel Orientation="Horizontal" Margin="0,0,0,4">
-                                        <TextBlock Text="Системный файл Hosts (ChatGPT, AI, Spotify и др.)" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                                        <Border Background="#1A2E1A" CornerRadius="5" Padding="8,3" VerticalAlignment="Center">
-                                            <TextBlock x:Name="TxtHostsStatusBadge" Text="Проверка..." FontFamily="Consolas" FontSize="11" FontWeight="SemiBold" Foreground="#4ADE80"/>
-                                        </Border>
-                                    </WrapPanel>
-                                    <TextBlock Text="Автоматическое внедрение обходных IP-адресов в системный файл hosts без потери ваших личных записей" Foreground="#888888" FontSize="12" Margin="0,0,0,12" TextWrapping="Wrap"/>
-
-                                    <WrapPanel Orientation="Horizontal">
-                                        <Border Style="{StaticResource CyberSelectorBorderStyle}" MinWidth="250" Margin="0,0,10,4" MouseLeftButtonDown="BtnSelectHostsSource_MouseDown">
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                </Grid.ColumnDefinitions>
-                                                <StackPanel>
-                                                    <TextBlock Text="Источник списка Hosts:" Foreground="#888888" FontSize="10" Margin="0,0,0,2"/>
-                                                    <TextBlock x:Name="TxtSelectedHostsSource" Text="Flowseal + V3nilla (Рекомендуется)" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
-                                                </StackPanel>
-                                                <TextBlock Grid.Column="1" Text="&#xE70D;" FontFamily="Segoe MDL2 Assets" Foreground="#888888" FontSize="12" VerticalAlignment="Center" Margin="12,0,0,0"/>
-                                            </Grid>
-                                        </Border>
-
-                                        <ui:Button x:Name="BtnUpdateHosts" Content="⚡ Обновить" Appearance="Primary" Margin="0,0,8,4" VerticalAlignment="Stretch" Click="BtnUpdateHosts_Click"/>
-                                        <ui:Button x:Name="BtnClearHosts" Content="Очистить" Margin="0,0,0,4" VerticalAlignment="Stretch" Click="BtnClearHosts_Click" ToolTip="Удалить записи Zapret из системного файла hosts"/>
-                                    </WrapPanel>
-                                </StackPanel>
-                            </Border>
-
-                            <Border Style="{StaticResource SettingRowStyle}" Margin="-15,0,-15,0">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <StackPanel Grid.Column="0" Margin="0,0,20,0" VerticalAlignment="Center">
-                                        <TextBlock Text="Профили маршрутизации и списки" FontSize="14" FontWeight="SemiBold"/>
-                                        <TextBlock Text="Открыть директорию с .bat конфигурациями Zapret и папкой lists" Foreground="#888888" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
-                                    </StackPanel>
-                                    <ui:Button Content="Открыть папку" Grid.Column="1" VerticalAlignment="Center" Click="BtnOpenZapretFolder_Click"/>
-                                </Grid>
-                            </Border>
-                        </StackPanel>
-                    </Border>
-
-                    <ui:Button Content="Проверить обновления" Appearance="Primary" HorizontalAlignment="Center" Margin="0,0,0,10" Click="BtnCheckUpdates_Click"/>
-
-                    <ui:Button Content="Сбросить все настройки" Appearance="Danger" HorizontalAlignment="Center" Margin="0,0,0,20" Click="BtnResetSettings_Click"/>
-
-                    <StackPanel HorizontalAlignment="Center" Margin="0,0,0,40">
-                        <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#444444" HorizontalAlignment="Center" Text="Zapret for ADHD v3.5"/>
-                        <TextBlock Foreground="#444444" FontSize="12" HorizontalAlignment="Center" Margin="0,5,0,0">
-                            <Run Text="Разработано с ❤️ | "/>
-                            <Hyperlink NavigateUri="https://github.com/NIK-master/ZapretGUI" RequestNavigate="Hyperlink_RequestNavigate" Foreground="#107C10" TextDecorations="None">
-                                Страница на GitHub
-                            </Hyperlink>
-                        </TextBlock>
-                    </StackPanel>
-
-                </StackPanel>
-            </ScrollViewer>
-        </Grid>
-
-        <!-- ФИРМЕННЫЙ ОВЕРЛЕЙ ВЫБОРА ОПЦИЙ (ВМЕСТО СИСТЕМНЫХ COMBOBOX) -->
-        <Grid x:Name="SelectionOverlay" Background="#CC000000" Visibility="Collapsed" Panel.ZIndex="200" MouseDown="SelectionOverlay_MouseDown">
-            <Border x:Name="SelectionContentBorder" Background="#141414" BorderBrush="#2A2A2A" BorderThickness="1" CornerRadius="12"
-                    HorizontalAlignment="Center" VerticalAlignment="Center" Padding="20" Width="480"
-                    MouseDown="SelectionContent_MouseDown" RenderTransformOrigin="0.5,0.5">
-                <Border.RenderTransform>
-                    <TransformGroup>
-                        <ScaleTransform ScaleX="0.95" ScaleY="0.95"/>
-                        <TranslateTransform Y="10"/>
-                    </TransformGroup>
-                </Border.RenderTransform>
-                <Border.Effect>
-                    <DropShadowEffect Color="Black" BlurRadius="40" ShadowDepth="10" Opacity="0.8"/>
-                </Border.Effect>
-
-                <StackPanel>
-                    <Grid Margin="0,0,0,16">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-
-                        <Border Grid.Column="0" Width="32" Height="32" Background="#1E3A8A" CornerRadius="8" Margin="0,0,12,0">
-                            <TextBlock Text="&#xE713;" FontFamily="Segoe MDL2 Assets" Foreground="#60A5FA" FontSize="15" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-
-                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                            <TextBlock x:Name="TxtSelectionSubTitle" Text="Параметры" Foreground="#888888" FontSize="12"/>
-                            <TextBlock x:Name="TxtSelectionTitle" Text="Выберите вариант" Foreground="White" FontSize="16" FontWeight="Bold"/>
-                        </StackPanel>
-
-                        <Button Grid.Column="2" Content="✕" Background="Transparent" Foreground="#888888" BorderThickness="0" FontSize="16" Cursor="Hand" Click="BtnCloseSelectionOverlay_Click" VerticalAlignment="Top"/>
-                    </Grid>
-
-                    <ListBox x:Name="SelectionListBox" Background="Transparent" BorderThickness="0" 
-                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                             ScrollViewer.VerticalScrollBarVisibility="Auto"
-                             SelectionChanged="SelectionListBox_SelectionChanged">
-                        <ListBox.ItemContainerStyle>
-                            <Style TargetType="ListBoxItem">
-                                <Setter Property="Padding" Value="0"/>
-                                <Setter Property="Margin" Value="0,0,0,8"/>
-                                <Setter Property="Cursor" Value="Hand"/>
-                                <Setter Property="Background" Value="Transparent"/>
-                                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                                <Setter Property="Template">
-                                    <Setter.Value>
-                                        <ControlTemplate TargetType="ListBoxItem">
-                                            <Border x:Name="CardBorder" Background="#18181B" BorderBrush="#27272A" BorderThickness="1" CornerRadius="10" Padding="15,12">
-                                                <Grid>
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="*"/>
-                                                        <ColumnDefinition Width="Auto"/>
-                                                    </Grid.ColumnDefinitions>
-
-                                                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                                                            <TextBlock Text="{Binding Title}" Foreground="White" FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap"/>
-                                                            <Border x:Name="ActiveBadge" Background="#1E3A8A" CornerRadius="4" Padding="6,2" Margin="10,0,0,0" Visibility="Collapsed" VerticalAlignment="Center">
-                                                                <TextBlock Text="выбрано" Foreground="#60A5FA" FontSize="10" FontWeight="SemiBold"/>
-                                                            </Border>
-                                                        </StackPanel>
-                                                        <TextBlock Text="{Binding Description}" Foreground="#888888" FontSize="12" TextWrapping="Wrap"/>
-                                                    </StackPanel>
-
-                                                    <TextBlock x:Name="ActionIcon" Grid.Column="1" Text="→" Foreground="#3F3F46" FontSize="16" VerticalAlignment="Center" Margin="12,0,0,0"/>
-                                                </Grid>
-                                            </Border>
-
-                                            <ControlTemplate.Triggers>
-                                                <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter TargetName="CardBorder" Property="Background" Value="#27272A"/>
-                                                </Trigger>
-                                                <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                                                    <Setter TargetName="CardBorder" Property="Background" Value="#172554"/>
-                                                    <Setter TargetName="CardBorder" Property="BorderBrush" Value="#2563EB"/>
-                                                    <Setter TargetName="ActiveBadge" Property="Visibility" Value="Visible"/>
-                                                    <Setter TargetName="ActionIcon" Property="Text" Value="✓"/>
-                                                    <Setter TargetName="ActionIcon" Property="Foreground" Value="#60A5FA"/>
-                                                </DataTrigger>
-                                            </ControlTemplate.Triggers>
-                                        </ControlTemplate>
-                                    </Setter.Value>
-                                </Setter>
-                            </Style>
-                        </ListBox.ItemContainerStyle>
-                    </ListBox>
-                </StackPanel>
-            </Border>
-        </Grid>
-
-    </Grid>
-</UserControl>
-
-////////////////////////////////////////////////////////////////////////////////
-// ФАЙЛ: Views\SettingsView.xaml.cs
-////////////////////////////////////////////////////////////////////////////////
-
-using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.IO;
-using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Input;
-using System.Windows.Interop;
-using ZapretGUI.Core;
-
-namespace ZapretGUI.Views
-{
-    public class SettingOptionItem
-    {
-        public string Title { get; set; } = "";
-        public string Description { get; set; } = "";
-        public bool IsSelected { get; set; }
-    }
-
-    public partial class SettingsView : System.Windows.Controls.UserControl
-    {
-        private bool _isLoadingSettings = false;
-        private int _selectedIntervalIndex = 0;
-        private int _selectedIpSetModeIndex = 0;
-        private int _selectedHostsSourceIndex = 2;
-
-        private Action<int>? _onOptionSelectedCallback;
-
-        private static readonly (string title, string desc)[] IntervalOptions =
-        [
-            ("1 секунда", "Максимальная плавность графиков и мгновенный отклик монитора скорости"),
-            ("3 секунды", "Сбалансированный режим опроса сетевого интерфейса"),
-            ("5 секунд", "Экономичный режим с минимальной нагрузкой на систему")
-        ];
-
-        private static readonly (string title, string desc)[] IpSetModeOptions =
-        [
-            ("По списку (Loaded)", "Использовать полную базу заблокированных подсетей из файла ipset-all.txt"),
-            ("Отключен (None)", "Подставить адрес-заглушку 203.0.113.113/32 и отключить фильтрацию по IP"),
-            ("Весь трафик (Any)", "Очистить ipset-all.txt, чтобы правила применялись ко всем IP-адресам")
-        ];
-
-        private static readonly (string title, string desc)[] HostsSourceOptions =
-        [
-            ("Flowseal (Базовый)", "Официальный список доменов из репозитория zapret-discord-youtube (Telegram, Discord и др.)"),
-            ("V3nilla (ChatGPT, AI, Сервисы)", "Разблокировка ChatGPT, OpenAI, Claude, Gemini, Spotify, Instagram, Notion и GitHub без рекламы"),
-            ("Flowseal + V3nilla (Рекомендуется)", "Объединяет оба списка без дубликатов для максимальной доступности всех сервисов"),
-            ("V3nilla Full (+ AdBlock 0.0.0.0)", "Полный файл V3nilla, включая тысячи правил блокировки рекламы и телеметрии (0.0.0.0)")
-        ];
-
-        public SettingsView()
-        {
-            InitializeComponent();
-            LoadSettings();
-        }
-
-        private void LoadSettings()
-        {
-            try
-            {
-                _isLoadingSettings = true;
-
-                ToggleAutoStart.IsChecked = StartupHelper.IsAutoStartEnabled();
-
-                var settings = SettingsManager.Current;
-
-                ToggleStartMinimized.IsChecked = settings.StartMinimized;
-                ToggleMinimizeOnClose.IsChecked = settings.MinimizeOnClose;
-                ToggleNotifications.IsChecked = settings.NotificationsEnabled;
-
-                ToggleFocusMode.IsChecked = settings.FocusMode;
-                ToggleCompactMode.IsChecked = settings.CompactMode;
-                ToggleHardwareAccel.IsChecked = settings.HardwareAcceleration;
-                ToggleColorblind.IsChecked = settings.ColorblindMode;
-
-                TxtPingUrl.Text = settings.PingUrl ?? AppConstants.DefaultPingUrl;
-                ToggleAutoRestart.IsChecked = settings.AutoRestartServices;
-
-                _selectedIntervalIndex = settings.StatsUpdateInterval switch
-                {
-                    3 => 1,
-                    5 => 2,
-                    _ => 0
-                };
-                TxtSelectedInterval.Text = IntervalOptions[_selectedIntervalIndex].title;
-
-                _selectedHostsSourceIndex = Math.Clamp(settings.HostsSourceIndex, 0, 3);
-                TxtSelectedHostsSource.Text = HostsSourceOptions[_selectedHostsSourceIndex].title;
-
-                RefreshIpSetAndHostsUI();
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Ошибка при загрузке настроек в UI: {ex.Message}");
-            }
-            finally
-            {
-                _isLoadingSettings = false;
-            }
-        }
-
-        private void RefreshIpSetAndHostsUI()
-        {
-            _isLoadingSettings = true;
-            try
-            {
-                var (ipMode, _, ipStatusText) = ServiceToolsManager.GetIpSetStatus();
-                TxtIpSetStatusBadge.Text = ipStatusText;
-
-                _selectedIpSetModeIndex = ipMode switch
-                {
-                    "loaded" => 0,
-                    "none" => 1,
-                    "any" => 2,
-                    _ => 0
-                };
-                TxtSelectedIpSetMode.Text = IpSetModeOptions[_selectedIpSetModeIndex].title;
-
-                var (hostsApplied, hostsCount) = ServiceToolsManager.GetHostsStatus();
-                TxtHostsStatusBadge.Text = hostsApplied ? $"Активен ({hostsCount} домен.)" : "Не применен";
-                TxtHostsStatusBadge.Foreground = hostsApplied ? UIHelper.GetBrushFromHex("#4ADE80") : UIHelper.GetBrushFromHex("#A0A0A0");
-            }
-            finally
-            {
-                _isLoadingSettings = false;
-            }
-        }
-
-        // --- ФИРМЕННОЕ МОДАЛЬНОЕ МЕНЮ ВЫБОРА ОПЦИЙ ---
-
-        private void OpenSelectionMenu(string title, string subTitle, (string title, string desc)[] options, int currentIndex, Action<int> onSelected)
-        {
-            AudioHelper.PlayClick();
-
-            TxtSelectionTitle.Text = title;
-            TxtSelectionSubTitle.Text = subTitle;
-            _onOptionSelectedCallback = null;
-
-            var items = new List<SettingOptionItem>();
-            for (int i = 0; i < options.Length; i++)
-            {
-                items.Add(new SettingOptionItem
-                {
-                    Title = options[i].title,
-                    Description = options[i].desc,
-                    IsSelected = (i == currentIndex)
-                });
-            }
-
-            SelectionListBox.ItemsSource = items;
-            _onOptionSelectedCallback = onSelected;
-
-            AnimationHelper.ShowOverlay(SelectionOverlay, SelectionContentBorder, ContentGrid);
-        }
-
-        private void CloseSelectionOverlay()
-        {
-            _onOptionSelectedCallback = null;
-            AnimationHelper.HideOverlay(SelectionOverlay, SelectionContentBorder, ContentGrid);
-        }
-
-        private void BtnCloseSelectionOverlay_Click(object sender, RoutedEventArgs e) => CloseSelectionOverlay();
-        private void SelectionOverlay_MouseDown(object sender, MouseButtonEventArgs e) => CloseSelectionOverlay();
-        private void SelectionContent_MouseDown(object sender, MouseButtonEventArgs e) => e.Handled = true;
-
-        private void SelectionListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (_onOptionSelectedCallback == null || SelectionListBox.SelectedIndex < 0) return;
-
-            int chosenIdx = SelectionListBox.SelectedIndex;
-            var callback = _onOptionSelectedCallback;
-
-            AudioHelper.PlayClick();
-            CloseSelectionOverlay();
-            callback.Invoke(chosenIdx);
-        }
-
-        private void BtnSelectInterval_MouseDown(object sender, MouseButtonEventArgs e)
-        {
-            OpenSelectionMenu(
-                "Интервал обновления статистики",
-                "Сеть и диагностика",
-                IntervalOptions,
-                _selectedIntervalIndex,
-                idx =>
-                {
-                    _selectedIntervalIndex = idx;
-                    TxtSelectedInterval.Text = IntervalOptions[idx].title;
-                    SaveAllSettings();
-                });
-        }
-
-        private void BtnSelectIpSetMode_MouseDown(object sender, MouseButtonEventArgs e)
-        {
-            OpenSelectionMenu(
-                "Режим фильтрации IPSet",
-                "База подсетей ipset-all.txt",
-                IpSetModeOptions,
-                _selectedIpSetModeIndex,
-                idx =>
-                {
-                    string targetMode = idx switch
-                    {
-                        1 => "none",
-                        2 => "any",
-                        _ => "loaded"
-                    };
-
-                    try
-                    {
-                        ServiceToolsManager.SetIpSetMode(targetMode);
-                        RefreshIpSetAndHostsUI();
-                    }
-                    catch (Exception ex)
-                    {
-                        UIHelper.ShowAlert("Режим IPSet", ex.Message, isError: true);
-                        RefreshIpSetAndHostsUI();
-                    }
-                });
-        }
-
-        private void BtnSelectHostsSource_MouseDown(object sender, MouseButtonEventArgs e)
-        {
-            OpenSelectionMenu(
-                "Источник списка Hosts",
-                "Системный файл C:\\Windows\\System32\\drivers\\etc\\hosts",
-                HostsSourceOptions,
-                _selectedHostsSourceIndex,
-                idx =>
-                {
-                    _selectedHostsSourceIndex = idx;
-                    TxtSelectedHostsSource.Text = HostsSourceOptions[idx].title;
-                    SaveAllSettings();
-                });
-        }
-
-        // --- СОХРАНЕНИЕ НАСТРОЕК И ДЕЙСТВИЯ ---
-
-        private void Setting_Changed(object sender, RoutedEventArgs e)
-        {
-            if (_isLoadingSettings) return;
-            AudioHelper.PlayClick();
-            SaveAllSettings();
-        }
-
-        private void TextInput_LostFocus(object sender, RoutedEventArgs e)
-        {
-            if (_isLoadingSettings) return;
-            SaveAllSettings();
-        }
-
-        private void SaveAllSettings()
-        {
-            if (!IsLoaded || _isLoadingSettings) return;
-
-            try
-            {
-                StartupHelper.SetAutoStart(ToggleAutoStart.IsChecked ?? true);
-
-                var useGpu = ToggleHardwareAccel.IsChecked ?? true;
-                System.Windows.Media.RenderOptions.ProcessRenderMode = useGpu ? RenderMode.Default : RenderMode.SoftwareOnly;
-
-                var settings = SettingsManager.Current;
-                settings.StartMinimized = ToggleStartMinimized.IsChecked ?? false;
-                settings.MinimizeOnClose = ToggleMinimizeOnClose.IsChecked ?? true;
-                settings.NotificationsEnabled = ToggleNotifications.IsChecked ?? true;
-
-                settings.FocusMode = ToggleFocusMode.IsChecked ?? false;
-                settings.CompactMode = ToggleCompactMode.IsChecked ?? false;
-                settings.HardwareAcceleration = useGpu;
-                settings.ColorblindMode = ToggleColorblind.IsChecked ?? false;
-
-                UIHelper.ApplyThemeColors();
-
-                settings.PingUrl = string.IsNullOrWhiteSpace(TxtPingUrl.Text) ? AppConstants.DefaultPingUrl : TxtPingUrl.Text;
-                settings.AutoRestartServices = ToggleAutoRestart.IsChecked ?? false;
-
-                settings.StatsUpdateInterval = _selectedIntervalIndex switch { 1 => 3, 2 => 5, _ => 1 };
-                settings.HostsSourceIndex = Math.Clamp(_selectedHostsSourceIndex, 0, 3);
-
-                SettingsManager.Save();
-            }
-            catch (Exception ex)
-            {
-                UIHelper.ShowAlert("Ошибка сохранения", $"Не удалось сохранить настройки: {ex.Message}", isError: true);
-            }
-        }
-
-        private async void BtnUpdateIpSet_Click(object sender, RoutedEventArgs e)
-        {
-            AudioHelper.PlayClick();
-            BtnUpdateIpSet.IsEnabled = false;
-            BtnUpdateIpSet.Content = "Загрузка...";
-
-            try
-            {
-                int count = await ServiceToolsManager.UpdateIpSetFromWebAsync();
-                RefreshIpSetAndHostsUI();
-                UIHelper.ShowAlert("База IPSet обновлена", $"Список ipset-all.txt успешно загружен из репозитория Flowseal!\nВсего подсетей в базе: {count}");
-            }
-            catch (Exception ex)
-            {
-                UIHelper.ShowAlert("Ошибка обновления IPSet", $"Не удалось обновить список IPSet:\n{ex.Message}", isError: true);
-            }
-            finally
-            {
-                BtnUpdateIpSet.Content = "🔄 Обновить базу IP";
-                BtnUpdateIpSet.IsEnabled = true;
-            }
-        }
-
-        private async void BtnUpdateHosts_Click(object sender, RoutedEventArgs e)
-        {
-            AudioHelper.PlayClick();
-            BtnUpdateHosts.IsEnabled = false;
-            BtnUpdateHosts.Content = "Загрузка...";
-
-            try
-            {
-                int sourceIdx = Math.Clamp(_selectedHostsSourceIndex, 0, 3);
-                int count = await ServiceToolsManager.UpdateSystemHostsAsync(sourceIdx);
-                RefreshIpSetAndHostsUI();
-
-                UIHelper.ShowAlert("Файл Hosts обновлен", $"В системный файл hosts успешно записано {count} актуальных правил маршрутизации, а DNS-кэш Windows очищен!\n\nВаши личные записи в файле hosts были бережно сохранены.");
-            }
-            catch (UnauthorizedAccessException)
-            {
-                UIHelper.ShowAlert("Требуются права администратора", "Для изменения системного файла C:\\Windows\\System32\\drivers\\etc\\hosts перезапустите программу от имени Администратора!", isError: true);
-            }
-            catch (Exception ex)
-            {
-                UIHelper.ShowAlert("Ошибка обновления Hosts", $"Не удалось обновить системный файл hosts:\n{ex.Message}", isError: true);
-            }
-            finally
-            {
-                BtnUpdateHosts.Content = "⚡ Обновить";
-                BtnUpdateHosts.IsEnabled = true;
-            }
-        }
-
-        private void BtnClearHosts_Click(object sender, RoutedEventArgs e)
-        {
-            AudioHelper.PlayClick();
-
-            bool confirm = UIHelper.ShowConfirm(
-                "Очистка записей Zapret из Hosts",
-                "Удалить все добавленные программой обходные записи из системного файла hosts?\nВаши собственные записи затронуты не будут.",
-                confirmText: "Очистить",
-                isDanger: true);
-
-            if (!confirm) return;
-
-            try
-            {
-                ServiceToolsManager.ClearZapretHosts();
-                RefreshIpSetAndHostsUI();
-                UIHelper.ShowAlert("Готово", "Записи Zapret успешно удалены из системного файла hosts, DNS-кэш сброшен.");
-            }
-            catch (UnauthorizedAccessException)
-            {
-                UIHelper.ShowAlert("Требуются права администратора", "Для изменения системного файла hosts запустите программу от имени Администратора!", isError: true);
-            }
-            catch (Exception ex)
-            {
-                UIHelper.ShowAlert("Ошибка", $"Не удалось очистить файл hosts:\n{ex.Message}", isError: true);
-            }
-        }
-
-        private void BtnOpenZapretFolder_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                var zapretFolder = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.CoreFilesDirectory);
-                if (!Directory.Exists(zapretFolder)) Directory.CreateDirectory(zapretFolder);
-                Process.Start("explorer.exe", zapretFolder);
-            }
-            catch (Exception ex)
-            {
-                UIHelper.ShowAlert("Ошибка", $"Не удалось открыть папку: {ex.Message}", isError: true);
-            }
-        }
-
-        private void BtnResetSettings_Click(object sender, RoutedEventArgs e)
-        {
-            var confirmed = UIHelper.ShowConfirm(
-                "Сброс настроек",
-                "Вы уверены, что хотите вернуть все настройки к состоянию по умолчанию? Это действие нельзя отменить.",
-                confirmText: "Сбросить",
-                isDanger: true);
-
-            if (confirmed)
-            {
-                try
-                {
-                    var settingsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.json");
-                    if (File.Exists(settingsPath))
-                        File.Delete(settingsPath);
-
-                    StartupHelper.SetAutoStart(false);
-
-                    SettingsManager.Load();
-                    ServiceToolsManager.SyncGameFilterFile();
-                    UIHelper.ApplyThemeColors();
-                    LoadSettings();
-
-                    UIHelper.ShowAlert("Готово", "Настройки успешно сброшены. Некоторые изменения вступят в силу после перезапуска программы.");
-                }
-                catch (Exception ex)
-                {
-                    UIHelper.ShowAlert("Ошибка сброса", $"Ошибка при сбросе: {ex.Message}", isError: true);
-                }
-            }
-        }
-
-        private void Hyperlink_RequestNavigate(object sender, System.Windows.Navigation.RequestNavigateEventArgs e)
-        {
-            Process.Start(new ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true });
-            e.Handled = true;
-        }
-
-        private async void BtnCheckUpdates_Click(object sender, RoutedEventArgs e)
-        {
-            if (sender is System.Windows.Controls.Button btn)
-                btn.IsEnabled = false;
-
-            Action stopServicesAction = () =>
-            {
-                if (System.Windows.Application.Current.MainWindow is MainWindow mw && mw.IsBypassRunning())
-                    mw.ToggleBypass();
-            };
-
-            await Core.UpdateManager.RunUpdateWorkflowAsync(isManualCheck: true, stopServicesAction, null);
-
-            if (sender is System.Windows.Controls.Button btnReEnable)
-                btnReEnable.IsEnabled = true;
         }
     }
 }

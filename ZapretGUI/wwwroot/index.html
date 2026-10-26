@@ -59,7 +59,6 @@
                 border-color: #3F3F46;
             }
 
-        /* Кибер-тумблер */
         .cyber-toggle {
             appearance: none;
             width: 44px;
@@ -95,7 +94,6 @@
                     background: white;
                 }
 
-        /* Главная круглая кнопка */
         .power-btn {
             position: relative;
             width: 190px;
@@ -132,7 +130,6 @@
             }
         }
 
-        /* Анимация вкладок и модальных оверлеев */
         .tab-view {
             display: none;
             animation: slideUpFade 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
@@ -145,7 +142,7 @@
         .modal-overlay {
             opacity: 0;
             pointer-events: none;
-            transition: opacity 0.2s ease;
+            transition: opacity 0.22s ease;
         }
 
             .modal-overlay.open {
@@ -155,7 +152,7 @@
 
         .modal-box {
             transform: scale(0.95) translateY(10px);
-            transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+            transition: transform 0.24s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
         .modal-overlay.open .modal-box {
@@ -174,7 +171,6 @@
             }
         }
 
-        /* Карточки модов и пинга серверов */
         .mod-card-enter {
             animation: modSlideIn 0.24s cubic-bezier(0.16, 1, 0.3, 1) forwards;
         }
@@ -208,7 +204,6 @@
                 z-index: 10;
             }
 
-        /* Shimmer-скелетон для диагностики */
         .shimmer-box {
             position: relative;
             overflow: hidden;
@@ -232,7 +227,6 @@
             }
         }
 
-        /* Анимации пасхалок Диагностики */
         .easter-spin {
             animation: easterRotate 0.55s cubic-bezier(0.34, 1.56, 0.64, 1);
         }
@@ -351,9 +345,163 @@
             .setting-row:hover {
                 background: rgba(255, 255, 255, 0.03);
             }
+
+        /* Загрузочный экран SplashWindow */
+        #splash-overlay {
+            transition: opacity 0.45s ease;
+        }
+
+        #splash-terminal {
+            text-shadow: 0 0 8px rgba(57, 255, 20, 0.45);
+        }
+
+        /* Анимация шагов Мастера настройки */
+        .wizard-step {
+            display: none;
+            animation: slideUpFade 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+            .wizard-step.active {
+                display: flex;
+            }
     </style>
 </head>
 <body class="h-screen w-screen flex flex-col rounded-xl border border-zinc-800 overflow-hidden bg-[#0A0A0C]">
+
+    <!-- ===================================================================== -->
+    <!-- SPLASH WINDOW: ЗАГРУЗОЧНЫЙ МАТРИЧНЫЙ ТЕРМИНАЛ                         -->
+    <!-- ===================================================================== -->
+    <div id="splash-overlay" class="fixed inset-0 bg-[#0A0A0C] z-[100] flex flex-col justify-between p-8">
+        <div class="flex items-center justify-between border-b border-zinc-800/80 pb-3">
+            <div class="flex items-center gap-2">
+                <span class="text-[#39FF14] font-mono font-bold text-sm">>_ ADHD ENGINE BOOTLOADER</span>
+            </div>
+            <button onclick="skipSplash()" class="text-xs font-mono text-zinc-500 hover:text-zinc-300 transition cursor-pointer">
+                [Пропустить Intro]
+            </button>
+        </div>
+
+        <pre id="splash-terminal" class="flex-1 overflow-y-auto font-mono text-[13px] text-[#39FF14] leading-[1.45] whitespace-pre-wrap my-4"></pre>
+    </div>
+
+    <!-- ===================================================================== -->
+    <!-- WIZARD WINDOW: МАСТЕР ПЕРВОНАЧАЛЬНОЙ НАСТРОЙКИ (5 ШАГОВ)              -->
+    <!-- ===================================================================== -->
+    <div id="wizard-overlay" class="modal-overlay fixed inset-0 bg-black/85 backdrop-blur-md z-[90] flex items-center justify-center p-4">
+        <div class="modal-box bg-[#0E0E11] border border-zinc-800 rounded-2xl w-[640px] h-[510px] p-7 shadow-2xl flex flex-col justify-between">
+
+            <!-- Шапка мастера -->
+            <div>
+                <div class="text-lg font-bold text-white">Первоначальная настройка</div>
+                <div class="text-xs text-zinc-500 font-mono mt-0.5">Zapret for ADHD v3.5</div>
+            </div>
+
+            <!-- Контент шагов -->
+            <div class="flex-1 flex items-center justify-center overflow-hidden my-4">
+
+                <!-- Шаг 1: Приветствие (Step1_IntroPage) -->
+                <div id="wiz-step-0" class="wizard-step active flex-col items-center text-center max-w-md">
+                    <div class="text-4xl font-bold text-white mb-3">👋 Привет!</div>
+                    <div class="text-base font-semibold text-emerald-400 mb-3">Для людей, у которых проблемы с интернетом...</div>
+                    <p class="text-sm text-zinc-400 leading-relaxed">
+                        Этот мастер поможет установить необходимые компоненты обхода блокировок и настроить систему всего за пару кликов. Мы всё сделаем за вас.
+                    </p>
+                </div>
+
+                <!-- Шаг 2: Приватность (Step2_PrivacyPage) -->
+                <div id="wiz-step-1" class="wizard-step flex-col items-center text-center max-w-md">
+                    <div class="text-5xl mb-3">🛡️</div>
+                    <div class="text-2xl font-bold text-white mb-2">Полная конфиденциальность</div>
+                    <div class="text-sm font-semibold text-zinc-200 mb-2">Программа НЕ СОБИРАЕТ ваши данные.</div>
+                    <p class="text-xs text-zinc-400 leading-relaxed">
+                        Все процессы обхода и модификации трафика выполняются исключительно локально на вашем компьютере. Мы не отправляем телеметрию, историю браузера или статистику использования на сторонние серверы.
+                    </p>
+                </div>
+
+                <!-- Шаг 3: Службы (Step4_ServicesConfig) -->
+                <div id="wiz-step-2" class="wizard-step flex-col w-full max-w-lg space-y-3">
+                    <div class="text-xl font-bold text-white text-center mb-2">Какие службы использовать?</div>
+
+                    <div class="glass-card rounded-xl p-4 flex items-center justify-between gap-4">
+                        <div>
+                            <div class="text-sm font-bold text-white">Zapret (Обход блокировок)</div>
+                            <div class="text-xs text-zinc-400 mt-1">Основной модуль для починки YouTube, Discord и других сервисов. Рекомендуется оставить включенным.</div>
+                        </div>
+                        <input id="wiz-chk-zapret" type="checkbox" checked class="cyber-toggle">
+                    </div>
+
+                    <div class="glass-card rounded-xl p-4 flex items-center justify-between gap-4">
+                        <div>
+                            <div class="text-sm font-bold text-white">TgWsProxy (Прокси для Telegram)</div>
+                            <div class="text-xs text-zinc-400 mt-1">Отдельный модуль для стабилизации работы десктопного клиента Telegram.</div>
+                        </div>
+                        <input id="wiz-chk-proxy" type="checkbox" checked class="cyber-toggle">
+                    </div>
+                </div>
+
+                <!-- Шаг 4: Доп. настройки (Step4_AdditionalSettings) -->
+                <div id="wiz-step-3" class="wizard-step flex-col w-full max-w-lg space-y-2.5">
+                    <div class="text-xl font-bold text-white text-center mb-2">Дополнительные настройки</div>
+
+                    <div class="glass-card rounded-xl p-3.5 flex items-center justify-between gap-4">
+                        <div>
+                            <div class="text-sm font-semibold text-white">Автозагрузка Windows</div>
+                            <div class="text-xs text-zinc-400 mt-0.5">Запускать программу при включении компьютера, чтобы сразу чинить интернет.</div>
+                        </div>
+                        <input id="wiz-chk-autostart" type="checkbox" checked class="cyber-toggle">
+                    </div>
+
+                    <div class="glass-card rounded-xl p-3.5 flex items-center justify-between gap-4">
+                        <div>
+                            <div class="text-sm font-semibold text-white">Режим фокусировки</div>
+                            <div class="text-xs text-zinc-400 mt-0.5">Отключить тряску интерфейса и глитчи при ошибках.</div>
+                        </div>
+                        <input id="wiz-chk-focus" type="checkbox" class="cyber-toggle">
+                    </div>
+
+                    <div class="glass-card rounded-xl p-3.5 flex items-center justify-between gap-4">
+                        <div>
+                            <div class="text-sm font-semibold text-white">Режим цветовой слепоты</div>
+                            <div class="text-xs text-zinc-400 mt-0.5">Заменить красно-зеленые индикаторы на сине-оранжевые.</div>
+                        </div>
+                        <input id="wiz-chk-colorblind" type="checkbox" class="cyber-toggle">
+                    </div>
+                </div>
+
+                <!-- Шаг 5: Установка и финал (Step5_FinishPage) -->
+                <div id="wiz-step-4" class="wizard-step flex-col w-full h-full justify-between">
+                    <div class="text-center mb-3">
+                        <div id="wiz-finish-status" class="text-xl font-bold text-white mb-2">Применение настроек...</div>
+                        <div class="w-80 mx-auto h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                            <div id="wiz-finish-bar" class="h-full bg-emerald-500 transition-all duration-300" style="width: 35%"></div>
+                        </div>
+                    </div>
+
+                    <div id="wiz-console-log" class="flex-1 bg-[#060608] border border-zinc-800 rounded-xl p-3 font-mono text-xs text-emerald-400 overflow-y-auto space-y-1"></div>
+                </div>
+
+            </div>
+
+            <!-- Нижняя навигация мастера -->
+            <div class="flex items-center justify-between pt-3 border-t border-zinc-800/80">
+                <button id="wiz-btn-skip" onclick="skipWizard()" class="px-4 py-2 rounded-lg bg-zinc-900 border border-zinc-700 text-xs text-zinc-300 hover:bg-zinc-800 transition cursor-pointer">
+                    Пропустить
+                </button>
+
+                <div id="wiz-dots" class="flex items-center gap-2"></div>
+
+                <div class="flex items-center gap-2">
+                    <button id="wiz-btn-back" onclick="wizardPrevStep()" class="px-4 py-2 rounded-lg bg-zinc-900 border border-zinc-700 text-xs text-zinc-300 hover:bg-zinc-800 transition cursor-pointer hidden">
+                        Назад
+                    </button>
+                    <button id="wiz-btn-next" onclick="wizardNextStep()" class="px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white transition cursor-pointer">
+                        Начать настройку
+                    </button>
+                </div>
+            </div>
+
+        </div>
+    </div>
 
     <!-- ШАПКА ОКНА (TITLE BAR) -->
     <header id="titlebar" class="h-11 bg-[#121215] border-b border-zinc-800/80 flex items-center justify-between pr-3 shrink-0 cursor-move">
@@ -616,10 +764,9 @@
             </section>
 
             <!-- ================================================================= -->
-            <!-- ВКЛАДКА 3: ДИАГНОСТИКА (ПОЛНЫЙ ПЕРЕНОС DIAGNOSTICSVIEW)           -->
+            <!-- ВКЛАДКА 3: ДИАГНОСТИКА (DIAGNOSTICSVIEW)                          -->
             <!-- ================================================================= -->
             <section id="tab-diag" class="tab-view flex-col gap-4">
-                <!-- Верхняя шапка с прогресс-баром и кнопкой запуска -->
                 <div class="flex items-center justify-between gap-4">
                     <div>
                         <h2 class="text-2xl font-bold text-white">Мониторинг сети</h2>
@@ -635,7 +782,6 @@
                     </button>
                 </div>
 
-                <!-- Карточки вердиктов Telegram и Discord (с пасхалками по 5 кликам!) -->
                 <div class="grid grid-cols-2 gap-4">
                     <div id="diag-tg-card" class="glass-card rounded-xl p-4 flex items-center gap-4">
                         <span id="diag-tg-emoji" onclick="onTgEmojiClick()" class="text-3xl cursor-pointer inline-block select-none" title="Нажми 5 раз...">✈️</span>
@@ -654,7 +800,6 @@
                     </div>
                 </div>
 
-                <!-- Активные процессы в системе -->
                 <div class="glass-card rounded-xl p-4">
                     <div class="text-sm font-semibold text-zinc-200 mb-3">Активные процессы в системе</div>
                     <div class="flex flex-wrap gap-6 text-xs font-semibold">
@@ -677,7 +822,6 @@
                     </div>
                 </div>
 
-                <!-- Доступность серверов Telegram и Discord -->
                 <div class="glass-card rounded-xl p-4">
                     <div class="text-sm font-semibold text-zinc-200 mb-3">Доступность серверов Telegram (DC & Порты)</div>
                     <div id="diag-dc-grid" class="flex flex-wrap gap-2.5 mb-5"></div>
@@ -686,7 +830,6 @@
                     <div id="diag-discord-grid" class="flex flex-wrap gap-2.5"></div>
                 </div>
 
-                <!-- Рекомендации по итогам проверки -->
                 <div class="glass-card rounded-xl p-4 mb-2">
                     <div class="text-sm font-semibold text-zinc-200 mb-2.5">Рекомендации по итогам проверки</div>
                     <div id="diag-recs-list" class="space-y-2 text-xs text-zinc-300">
@@ -696,7 +839,7 @@
             </section>
 
             <!-- ================================================================= -->
-            <!-- ВКЛАДКА 4: НАСТРОЙКИ (ПОЛНЫЙ ПЕРЕНОС SETTINGSVIEW)                -->
+            <!-- ВКЛАДКА 4: НАСТРОЙКИ (SETTINGSVIEW)                               -->
             <!-- ================================================================= -->
             <section id="tab-settings" class="tab-view flex-col gap-4 pb-6">
                 <div>
@@ -704,7 +847,6 @@
                     <p class="text-xs text-zinc-400 mt-1">Управление поведением и параметрами приложения.</p>
                 </div>
 
-                <!-- БЛОК 1: СИСТЕМНЫЕ НАСТРОЙКИ -->
                 <div class="glass-card rounded-xl p-5 space-y-1">
                     <div class="flex items-center gap-2.5 text-base font-semibold text-white mb-3">
                         <span class="text-zinc-400">⚙</span><span>Системные настройки</span>
@@ -743,7 +885,6 @@
                     </div>
                 </div>
 
-                <!-- БЛОК 2: ВИЗУАЛЬНЫЕ ЭФФЕКТЫ -->
                 <div class="glass-card rounded-xl p-5 space-y-1">
                     <div class="flex items-center gap-2.5 text-base font-semibold text-white mb-3">
                         <span class="text-zinc-400">👁</span><span>Визуальные эффекты</span>
@@ -782,7 +923,6 @@
                     </div>
                 </div>
 
-                <!-- БЛОК 3: СЕТЬ И ДИАГНОСТИКА -->
                 <div class="glass-card rounded-xl p-5 space-y-2">
                     <div class="flex items-center gap-2.5 text-base font-semibold text-white mb-2">
                         <span class="text-zinc-400">🌐</span><span>Сеть и диагностика</span>
@@ -816,13 +956,11 @@
                     </div>
                 </div>
 
-                <!-- БЛОК 4: СПИСКИ МАРШРУТИЗАЦИИ (IPSET И HOSTS) -->
                 <div class="glass-card rounded-xl p-5 space-y-4">
                     <div class="flex items-center gap-2.5 text-base font-semibold text-white">
                         <span class="text-zinc-400">📁</span><span>Списки маршрутизации (IPSet и Hosts)</span>
                     </div>
 
-                    <!-- IPSet -->
                     <div class="setting-row space-y-2">
                         <div class="flex items-center gap-2.5 flex-wrap">
                             <span class="text-sm font-semibold text-white">Фильтрация по подсетям (IPSet Filter)</span>
@@ -845,7 +983,6 @@
                         </div>
                     </div>
 
-                    <!-- Системный файл Hosts -->
                     <div class="setting-row space-y-2">
                         <div class="flex items-center gap-2.5 flex-wrap">
                             <span class="text-sm font-semibold text-white">Системный файл Hosts (ChatGPT, AI, Spotify и др.)</span>
@@ -871,7 +1008,6 @@
                         </div>
                     </div>
 
-                    <!-- Папка профилей -->
                     <div class="setting-row flex items-center justify-between">
                         <div>
                             <div class="text-sm font-semibold text-white">Профили маршрутизации и списки</div>
@@ -883,7 +1019,6 @@
                     </div>
                 </div>
 
-                <!-- Кнопки Обновления, Сброса и Футер -->
                 <div class="flex flex-col items-center gap-2.5 pt-2">
                     <button id="btn-check-updates" onclick="checkUpdatesManual()" class="px-6 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white transition cursor-pointer">
                         Проверить обновления
@@ -904,9 +1039,7 @@
 
         </main>
 
-        <!-- ===================================================================== -->
-        <!-- ОВЕРЛЕЙ 1: НАСТРОЙКА КОНФИГА ZAPRET                                   -->
-        <!-- ===================================================================== -->
+        <!-- ОВЕРЛЕЙ 1: НАСТРОЙКА КОНФИГА ZAPRET -->
         <div id="config-modal" onclick="if(event.target===this) closeConfigModal()" class="modal-overlay fixed inset-0 bg-black/75 backdrop-blur-sm z-40 flex items-center justify-center p-4">
             <div class="modal-box bg-[#141417] border border-zinc-800 rounded-2xl w-[550px] p-5 shadow-2xl flex flex-col max-h-[85vh]">
                 <div class="flex items-center justify-between mb-4">
@@ -939,9 +1072,7 @@
             </div>
         </div>
 
-        <!-- ===================================================================== -->
-        <!-- ОВЕРЛЕЙ 2: ИГРОВОЙ ФИЛЬТР (GAME FILTER)                               -->
-        <!-- ===================================================================== -->
+        <!-- ОВЕРЛЕЙ 2: ИГРОВОЙ ФИЛЬТР (GAME FILTER) -->
         <div id="gf-modal" onclick="if(event.target===this) closeGameFilterModal()" class="modal-overlay fixed inset-0 bg-black/75 backdrop-blur-sm z-40 flex items-center justify-center p-4">
             <div class="modal-box bg-[#141417] border border-zinc-800 rounded-2xl w-[490px] p-5 shadow-2xl flex flex-col">
                 <div class="flex items-center justify-between mb-4">
@@ -1015,9 +1146,7 @@
             </div>
         </div>
 
-        <!-- ===================================================================== -->
-        <!-- ОВЕРЛЕЙ 3: СОЗДАНИЕ НОВОГО МОДА                                       -->
-        <!-- ===================================================================== -->
+        <!-- ОВЕРЛЕЙ 3: СОЗДАНИЕ НОВОГО МОДА -->
         <div id="create-mod-modal" onclick="if(event.target===this) closeCreateModModal()" class="modal-overlay fixed inset-0 bg-black/75 backdrop-blur-sm z-40 flex items-center justify-center p-4">
             <div class="modal-box bg-[#141417] border border-zinc-800 rounded-2xl w-[430px] p-5 shadow-2xl">
                 <h3 class="text-base font-bold text-white mb-3">Создать новый мод</h3>
@@ -1047,9 +1176,7 @@
             </div>
         </div>
 
-        <!-- ===================================================================== -->
-        <!-- ОВЕРЛЕЙ 4: СТУДИЯ РЕДАКТИРОВАНИЯ МОДА (CODE STUDIO)                   -->
-        <!-- ===================================================================== -->
+        <!-- ОВЕРЛЕЙ 4: СТУДИЯ РЕДАКТИРОВАНИЯ МОДА (CODE STUDIO) -->
         <div id="editor-modal" class="modal-overlay fixed inset-0 bg-black/80 backdrop-blur-sm z-40 flex items-center justify-center p-4">
             <div class="modal-box bg-[#141417] border border-zinc-800 rounded-2xl w-full max-w-[840px] h-[640px] p-4 shadow-2xl flex flex-col">
                 <div class="flex items-center justify-between mb-2.5 shrink-0">
@@ -1155,9 +1282,7 @@
             </div>
         </div>
 
-        <!-- ===================================================================== -->
-        <!-- ОВЕРЛЕЙ 5: ФИРМЕННОЕ МЕНЮ ВЫБОРА ОПЦИЙ НАСТРОЕК                       -->
-        <!-- ===================================================================== -->
+        <!-- ОВЕРЛЕЙ 5: ФИРМЕННОЕ МЕНЮ ВЫБОРА ОПЦИЙ НАСТРОЕК -->
         <div id="selection-modal" onclick="if(event.target===this) closeSelectionModal()" class="modal-overlay fixed inset-0 bg-black/75 backdrop-blur-sm z-40 flex items-center justify-center p-4">
             <div class="modal-box bg-[#141417] border border-zinc-800 rounded-2xl w-[480px] p-5 shadow-2xl">
                 <div class="flex items-center justify-between mb-4">
@@ -1174,11 +1299,9 @@
             </div>
         </div>
 
-        <!-- ===================================================================== -->
-        <!-- ОВЕРЛЕЙ 6: УНИВЕРСАЛЬНОЕ ОКНО ПОДТВЕРЖДЕНИЯ И УВЕДОМЛЕНИЙ             -->
-        <!-- ===================================================================== -->
-        <div id="confirm-modal" class="modal-overlay fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div class="modal-box bg-[#141417] border border-zinc-800 rounded-2xl w-[420px] p-5 shadow-2xl">
+        <!-- ОВЕРЛЕЙ 6: УНИВЕРСАЛЬНОЕ ОКНО ПОДТВЕРЖДЕНИЯ И УВЕДОМЛЕНИЙ (UPDATEWINDOW) -->
+        <div id="confirm-modal" class="modal-overlay fixed inset-0 bg-black/75 backdrop-blur-sm z-[95] flex items-center justify-center p-4">
+            <div class="modal-box bg-[#141417] border border-zinc-800 rounded-2xl w-[430px] p-5 shadow-2xl">
                 <h3 id="confirm-title" class="text-base font-bold text-white mb-2">Подтверждение</h3>
                 <p id="confirm-msg" class="text-xs text-zinc-300 leading-relaxed whitespace-pre-line mb-5"></p>
                 <div class="flex justify-end gap-2">
@@ -1196,7 +1319,176 @@
 
     <script>
                 // =========================================================================
-                // КОНСТАНТЫ ОПЦИЙ НАСТРОЕК (КАК В SETTINGSVIEW)
+                // 0. SPLASH WINDOW (МАТРИЧНЫЙ ТЕРМИНАЛ ЗАГРУЗКИ)
+                // =========================================================================
+                const SPLASH_LINES = [
+                    "[ SYSTEM ] ADHD Engine initiated. Focus level: 4%",
+                    "[ OK     ] Coffee levels detected: Critical but acceptable.",
+                    "[ INFO   ] Inspecting deep internet blockages...",
+                    "[ SEARCH ] Looking for winws.exe...",
+                    "[ SEARCH ] Looking for tgwsproxy.exe...",
+                    "[ SEARCH ] Getting distracted by a random Wikipedia article...",
+                    "[ FIX    ] Focus restored! Files found.",
+                    "[ WARN   ] WinDivert64.sys loading... Please don't close this window or look at shiny objects.",
+                    "[ OK     ] WinDivert driver injected successfully.",
+                    "[ SOCKS5 ] tgwsproxy spinning up on port 1080...",
+                    "[ PACKET ] Fragmentation: ENABLED",
+                    "[ PACKET ] HTTP Host Spoofing: ACTIVE",
+                    "[ PACKET ] HTTPS SNI Trickery: ACTIVE",
+                    "[ BYPASS ] Shaking hands with forbidden packets...",
+                    "[ BYPASS ] Harder... Faster... Better... Stronger...",
+                    "[ OK     ] DPI bypassed! Access to the matrix granted.",
+                    "[ STATUS ] BYPASS ACTIVE. GO WATCH YOUTUBE IN 4K NOW!",
+                    "==========================================================================",
+                    "  ____   _    ____   ____   _____ _____   ______ ____   ____     ",
+                    " /_  /  / |  / __ \\ / __ \\ / ___//__  /   / ____// __ \\ / __ \\    ",
+                    "  / /  / /| |/ /_/ // /_/ // __/    / /   / /_   / / / // /_/ /    ",
+                    " / /_ / ___// ____// _, _// /___   / /   / __/  / /_/ // _, _/     ",
+                    "/____/_/  |_/_/   /_/ |_|/_____/  /_/   /_/     \\____//_/ |_|      ",
+                    "                                                                    ",
+                    "            ___     ____   _   _   ____                             ",
+                    "           /   |   / __ \\ / / / / / __ \\                            ",
+                    "          / /| |  / / / // /_/ / / / / /                            ",
+                    "         / ___ | / /_/ // __  / / /_/ /                             ",
+                    "        /_/  |_|/_____//_/ /_/ /_____/                              ",
+                    "=========================================================================="
+                ];
+
+                let splashSkipped = false;
+                async function runSplashSequence() {
+                    const term = document.getElementById('splash-terminal');
+                    for (let i = 0; i < SPLASH_LINES.length; i++) {
+                        if (splashSkipped) return;
+                        const line = SPLASH_LINES[i];
+                        term.textContent += line + '\n';
+                        term.scrollTop = term.scrollHeight;
+
+                        let delay = Math.floor(Math.random() * 80) + 15;
+                        if (line.includes('Wikipedia')) delay = 900;
+                        else if (line.includes('___') || line.includes('===') || line.includes('/_')) delay = 25;
+                        await new Promise(r => setTimeout(r, delay));
+                    }
+                    if (!splashSkipped) {
+                        await new Promise(r => setTimeout(r, 700));
+                        skipSplash();
+                    }
+                }
+
+                function skipSplash() {
+                    splashSkipped = true;
+                    const el = document.getElementById('splash-overlay');
+                    el.style.opacity = '0';
+                    el.style.pointerEvents = 'none';
+                    setTimeout(() => el.style.display = 'none', 450);
+                }
+
+                // =========================================================================
+                // 0.1 WIZARD WINDOW (5-ШАГОВЫЙ МАСТЕР ПЕРВОЙ НАСТРОЙКИ)
+                // =========================================================================
+                let wizardStep = 0;
+                let wizardFinished = false;
+                let lastWizProgressEl = null;
+
+                function openWizardModal() {
+                    wizardStep = 0;
+                    wizardFinished = false;
+                    updateWizardUI();
+                    document.getElementById('wizard-overlay').classList.add('open');
+                }
+
+                function updateWizardUI() {
+                    for (let i = 0; i < 5; i++) {
+                        document.getElementById('wiz-step-' + i).classList.toggle('active', i === wizardStep);
+                    }
+
+                    const dots = document.getElementById('wiz-dots');
+                    dots.innerHTML = [0, 1, 2, 3, 4].map(i =>
+                        `<span class="w-2 h-2 rounded-full transition-all ${i === wizardStep ? 'bg-emerald-500 scale-125' : 'bg-zinc-700'}"></span>`
+                    ).join('');
+
+                    const btnBack = document.getElementById('wiz-btn-back');
+                    const btnNext = document.getElementById('wiz-btn-next');
+                    const btnSkip = document.getElementById('wiz-btn-skip');
+
+                    if (wizardStep === 0) {
+                        btnNext.innerText = 'Начать настройку';
+                        btnBack.classList.add('hidden');
+                        btnSkip.classList.remove('hidden');
+                    } else if (wizardStep === 3) {
+                        btnNext.innerText = 'Применить и завершить';
+                        btnBack.classList.remove('hidden');
+                        btnSkip.classList.remove('hidden');
+                    } else if (wizardStep === 4) {
+                        btnNext.innerText = 'Закрыть';
+                        btnBack.classList.add('hidden');
+                        btnSkip.classList.add('hidden');
+                    } else {
+                        btnNext.innerText = 'Далее';
+                        btnBack.classList.remove('hidden');
+                        btnSkip.classList.remove('hidden');
+                    }
+                }
+
+                function wizardPrevStep() {
+                    sendCmd('playClick');
+                    if (wizardStep > 0 && wizardStep < 4) {
+                        wizardStep--;
+                        updateWizardUI();
+                    }
+                }
+
+                function wizardNextStep() {
+                    sendCmd('playClick');
+                    if (wizardStep === 3) {
+                        wizardStep = 4;
+                        updateWizardUI();
+
+                        const btnNext = document.getElementById('wiz-btn-next');
+                        btnNext.disabled = true;
+                        btnNext.style.opacity = '0.5';
+                        document.getElementById('wiz-console-log').innerHTML = '';
+
+                        sendCmd('runWizardSetup', {
+                            useZapret: document.getElementById('wiz-chk-zapret').checked,
+                            useTgProxy: document.getElementById('wiz-chk-proxy').checked,
+                            autoStart: document.getElementById('wiz-chk-autostart').checked,
+                            focusMode: document.getElementById('wiz-chk-focus').checked,
+                            colorblind: document.getElementById('wiz-chk-colorblind').checked
+                        });
+                    } else if (wizardStep === 4) {
+                        if (wizardFinished) {
+                            document.getElementById('wizard-overlay').classList.remove('open');
+                        }
+                    } else if (wizardStep < 3) {
+                        wizardStep++;
+                        updateWizardUI();
+                    }
+                }
+
+                function skipWizard() {
+                    sendCmd('playClick');
+                    sendCmd('skipWizard');
+                    document.getElementById('wizard-overlay').classList.remove('open');
+                }
+
+                function appendWizardLog(time, message, isProgress) {
+                    const box = document.getElementById('wiz-console-log');
+                    const text = `[${time}] ${message}`;
+
+                    if (isProgress && lastWizProgressEl) {
+                        lastWizProgressEl.innerText = text;
+                        return;
+                    }
+
+                    const div = document.createElement('div');
+                    div.innerText = text;
+                    box.appendChild(div);
+                    box.scrollTop = box.scrollHeight;
+                    lastWizProgressEl = isProgress ? div : null;
+                }
+
+                // =========================================================================
+                // КОНСТАНТЫ И СОСТОЯНИЕ ПРИЛОЖЕНИЯ
                 // =========================================================================
                 const INTERVAL_OPTIONS = [
                     { title: "1 секунда", value: 1, desc: "Максимальная плавность графиков и мгновенный отклик монитора скорости" },
@@ -1217,9 +1509,6 @@
                     { title: "V3nilla Full (+ AdBlock 0.0.0.0)", idx: 3, desc: "Полный файл V3nilla, включая тысячи правил блокировки рекламы и телеметрии (0.0.0.0)" }
                 ];
 
-                // =========================================================================
-                // ГЛОБАЛЬНОЕ СОСТОЯНИЕ ПРИЛОЖЕНИЯ
-                // =========================================================================
                 let appState = {
                     isRunning: false,
                     zapretRunning: false,
@@ -1246,9 +1535,9 @@
 
                 let lastProgressLogEl = null;
                 let confirmCallback = null;
+                let isBackendConfirm = false;
                 let selectionCallback = null;
 
-                // Счетчики кликов для пасхалок Диагностики
                 let tgClicks = 0, lastTgClick = 0;
                 let dsClicks = 0, lastDsClick = 0;
 
@@ -1287,7 +1576,6 @@
                                 udp: data.settings.gameFilterUdpRange || '1024-65535'
                             };
 
-                            // Заполняем вкладку Настройки
                             document.getElementById('set-autostart').checked = data.isAutoStart;
                             document.getElementById('set-start-minimized').checked = data.settings.startMinimized;
                             document.getElementById('set-minimize-close').checked = data.settings.minimizeOnClose;
@@ -1324,10 +1612,29 @@
                             updateGameFilterBadge(data.gameFilterStatus, appState.gameFilter.mode !== 'disabled');
                             updateRunningUI(data.zapretRunning, data.proxyRunning);
 
-                            if (data.zapretRunning || data.proxyRunning)
-                                appendLog(new Date().toLocaleTimeString(), 'Интерфейс загружен. Найдены активные процессы в фоне.');
-                            else
-                                appendLog(new Date().toLocaleTimeString(), 'Интерфейс загружен. Ожидание команд...');
+                            if (data.isFirstRun) {
+                                openWizardModal();
+                            }
+                            break;
+
+                        case 'wizardLog':
+                            appendWizardLog(data.time, data.message, data.isProgress);
+                            break;
+
+                        case 'wizardCompleted':
+                            wizardFinished = true;
+                            document.getElementById('wiz-finish-status').innerText = 'Всё готово!';
+                            document.getElementById('wiz-finish-status').className = 'text-xl font-bold text-emerald-400 mb-2';
+                            document.getElementById('wiz-finish-bar').style.width = '100%';
+                            const btnNext = document.getElementById('wiz-btn-next');
+                            btnNext.disabled = false;
+                            btnNext.style.opacity = '1';
+                            btnNext.innerText = 'Закрыть';
+                            break;
+
+                        case 'askConfirm':
+                            isBackendConfirm = true;
+                            showConfirm(data.title, data.message, data.confirmText || 'Да', null, data.isDanger);
                             break;
 
                         case 'routingStatusUpdated':
@@ -1560,7 +1867,6 @@
                     const errorColor = isCb ? '#FF8C00' : '#EF4444';
                     const warningColor = isCb ? '#FFB900' : '#F59E0B';
 
-                    // BlockType enum: 0=None, 1=Throttling, 2=IpBlock, 3=SniBlock, 4=DnsSpoof, 5=MediaThrottle
                     const hasSniBlock = blocks.includes(3);
                     const hasIpBlock = blocks.includes(2);
 
@@ -1611,7 +1917,6 @@
                     document.getElementById('btn-run-diag').disabled = false;
                     document.getElementById('btn-run-diag').style.opacity = '1';
 
-                    // Вердикты
                     const tgV = computeHumanVerdict(report);
                     const tgCard = document.getElementById('diag-tg-card');
                     tgCard.style.borderColor = tgV.color;
@@ -1628,14 +1933,12 @@
                     document.getElementById('diag-ds-title').style.color = 'white';
                     document.getElementById('diag-ds-sub').innerText = dsV.detail;
 
-                    // Активные процессы
                     const st = report.appStatus || {};
                     document.getElementById('proc-dot-tg').className = `w-2.5 h-2.5 rounded-full ${st.telegramRunning ? 'dot-online' : 'dot-offline'}`;
                     document.getElementById('proc-dot-ds').className = `w-2.5 h-2.5 rounded-full ${st.discordRunning ? 'dot-online' : 'dot-offline'}`;
                     document.getElementById('proc-dot-zp').className = `w-2.5 h-2.5 rounded-full ${st.zapretRunning ? 'dot-online' : 'dot-offline'}`;
                     document.getElementById('proc-dot-tw').className = `w-2.5 h-2.5 rounded-full ${st.tgWsProxyRunning ? 'dot-online' : 'dot-offline'}`;
 
-                    // Серверы Telegram
                     document.getElementById('diag-dc-grid').innerHTML = (report.dcResults || []).map(dc => {
                         const c = getPingColorHex(dc.latencyMs, dc.ok);
                         return `
@@ -1645,7 +1948,6 @@
                         </div>`;
                     }).join('');
 
-                    // Серверы Discord
                     document.getElementById('diag-discord-grid').innerHTML = (report.discordPing || []).map(ds => {
                         const c = getPingColorHex(ds.latencyMs, ds.ok);
                         return `
@@ -1655,14 +1957,12 @@
                         </div>`;
                     }).join('');
 
-                    // Рекомендации
                     const recs = report.recommendations || [];
                     document.getElementById('diag-recs-list').innerHTML = recs.length
                         ? recs.map(r => `<div class="flex items-start gap-2.5 p-2 rounded-lg bg-zinc-900/50"><span>💡</span><span class="whitespace-pre-line leading-relaxed">${r}</span></div>`).join('')
                         : '<div class="text-emerald-400">Все сервисы работают стабильно, дополнительных действий не требуется!</div>';
                 }
 
-                // Пасхалка 1: Режим Дурова (5 кликов по ✈️)
                 function onTgEmojiClick() {
                     const now = Date.now();
                     if (now - lastTgClick > 1500) tgClicks = 0;
@@ -1689,7 +1989,6 @@
                     }
                 }
 
-                // Пасхалка 2: Режим турбо-деда (5 кликов по 🎮)
                 function onDiscordEmojiClick() {
                     const now = Date.now();
                     if (now - lastDsClick > 1500) dsClicks = 0;
@@ -1747,10 +2046,8 @@
                 }
 
                 function applyVisualSettingsLive() {
-                    // Режим цветовой слепоты
                     document.body.classList.toggle('colorblind-mode', appState.settings.colorblindMode);
 
-                    // Минималистичный интерфейс (Compact Mode)
                     const isCompact = appState.settings.compactMode;
                     const statsPanel = document.getElementById('home-stats-panel');
                     const logsPanel = document.getElementById('home-logs-panel');
@@ -2586,6 +2883,7 @@
 
                 function showAlert(title, message, isError = false) {
                     confirmCallback = null;
+                    isBackendConfirm = false;
                     document.getElementById('confirm-title').innerText = title;
                     document.getElementById('confirm-msg').innerText = message;
                     document.getElementById('confirm-cancel-btn').style.display = 'none';
@@ -2609,6 +2907,13 @@
                 function closeConfirmModal(accepted) {
                     sendCmd('playClick');
                     document.getElementById('confirm-modal').classList.remove('open');
+
+                    if (isBackendConfirm) {
+                        isBackendConfirm = false;
+                        sendCmd('confirmResponse', { accepted });
+                        return;
+                    }
+
                     if (accepted && confirmCallback) {
                         const cb = confirmCallback;
                         confirmCallback = null;
@@ -2660,7 +2965,10 @@
                     btn.className = 'nav-btn active flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-semibold bg-zinc-800 text-white border-l-4 border-emerald-500 transition-all cursor-pointer';
                 }
 
-                window.addEventListener('DOMContentLoaded', () => sendCmd('init'));
+                window.addEventListener('DOMContentLoaded', () => {
+                    runSplashSequence();
+                    sendCmd('init');
+                });
     </script>
 </body>
 </html>

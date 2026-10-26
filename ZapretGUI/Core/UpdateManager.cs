@@ -97,7 +97,7 @@ namespace ZapretGUI.Core
             var appUpdate = await CheckForAppUpdateAsync();
             if (appUpdate.UpdateAvailable)
             {
-                var acceptApp = UIHelper.ShowConfirm(
+                var acceptApp = await UIHelper.ShowConfirmAsync(
                     "Обновление программы",
                     $"Доступна новая версия панели управления {appUpdate.Version} (текущая: {CurrentVersion})!\n\nПрограмма будет закрыта для установки обновления. Продолжить?",
                     confirmText: "Обновить");
@@ -137,7 +137,7 @@ namespace ZapretGUI.Core
                 }
                 else
                 {
-                    var acceptZapret = UIHelper.ShowConfirm(
+                    var acceptZapret = await UIHelper.ShowConfirmAsync(
                         "Обновление ядра Zapret",
                         $"Найдено обновление обхода Zapret от flowseal ({zapretUpdate.Version})!\n\nТекущая версия: {zapretUpdate.CurrentVersion}\nОбновить автоматически?",
                         confirmText: "Обновить");
@@ -173,7 +173,7 @@ namespace ZapretGUI.Core
                 }
                 else
                 {
-                    var acceptProxy = UIHelper.ShowConfirm(
+                    var acceptProxy = await UIHelper.ShowConfirmAsync(
                         "Обновление ядра TgWsProxy",
                         $"Найдено обновление прокси Telegram от flowseal ({proxyUpdate.Version})!\n\nТекущая версия: {proxyUpdate.CurrentVersion}\nОбновить автоматически?",
                         confirmText: "Обновить");

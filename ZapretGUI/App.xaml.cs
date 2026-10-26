@@ -1,5 +1,4 @@
-﻿using System;
-using System.Windows;
+﻿using System.Windows;
 using ZapretGUI.Core;
 
 namespace ZapretGUI
@@ -8,26 +7,20 @@ namespace ZapretGUI
     {
         private void Application_Startup(object sender, StartupEventArgs e)
         {
-            this.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+            SettingsManager.Load();
 
-            var splash = new Views.SplashWindow();
-            splash.Show();
+            var mainWindow = new MainWindow();
+            this.MainWindow = mainWindow;
 
-            splash.Closed += (s, args) =>
+            if (SettingsManager.Current.StartMinimized)
             {
-                var mainWindow = new MainWindow();
-                this.MainWindow = mainWindow;
-
-                if (SettingsManager.Current.StartMinimized)
-                {
-                    mainWindow.WindowState = WindowState.Minimized;
-                    mainWindow.Hide();
-                }
-                else
-                    mainWindow.Show();
-
-                this.ShutdownMode = ShutdownMode.OnMainWindowClose;
-            };
+                mainWindow.WindowState = WindowState.Minimized;
+                mainWindow.Hide();
+            }
+            else
+            {
+                mainWindow.Show();
+            }
         }
     }
 }

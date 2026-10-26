@@ -1,13 +1,15 @@
 ﻿using System;
-using System.Windows;
+using System.Threading.Tasks;
 using System.Windows.Media;
-using ZapretGUI.Views;
 
 namespace ZapretGUI.Core
 {
     public static class UIHelper
     {
         private static readonly BrushConverter _brushConverter = new BrushConverter();
+
+        public static Action<string, string, bool>? WebAlertHandler { get; set; }
+        public static Func<string, string, string, bool, Task<bool>>? WebConfirmHandler { get; set; }
 
         public static SolidColorBrush GetBrushFromHex(string hex)
             => (SolidColorBrush)_brushConverter.ConvertFromString(hex)!;
@@ -30,35 +32,15 @@ namespace ZapretGUI.Core
 
         public static void ShowAlert(string title, string message, bool isError = false)
         {
-            System.Windows.Application.Current.Dispatcher.Invoke(() =>
-            {
-                var accent = isError ? "#F44336" : "#107C10";
-                var icon = isError ? "\xE783" : "\xE946";
-
-                var mainWin = System.Windows.Application.Current.MainWindow;
-                var dlg = new UpdateWindow(title, message, "ОК", showCancel: false, accentHex: accent, iconGlyph: icon);
-                if (mainWin != null && mainWin.IsVisible)
-                    dlg.Owner = mainWin;
-
-                dlg.ShowDialog();
-            });
+            WebAlertHandler?.Invoke(title, message, isError);
         }
 
-        public static bool ShowConfirm(string title, string message, string confirmText = "Да", bool isDanger = false)
+        public static Task<bool> ShowConfirmAsync(string title, string message, string confirmText = "Да", bool isDanger = false)
         {
-            return System.Windows.Application.Current.Dispatcher.Invoke(() =>
-            {
-                var accent = isDanger ? "#F44336" : "#107C10";
-                var icon = isDanger ? "\xE7BA" : "\xE897";
+            if (WebConfirmHandler != null)
+                return WebConfirmHandler.Invoke(title, message, confirmText, isDanger);
 
-                var mainWin = System.Windows.Application.Current.MainWindow;
-                var dlg = new UpdateWindow(title, message, confirmText, showCancel: true, accentHex: accent, iconGlyph: icon);
-                if (mainWin != null && mainWin.IsVisible)
-                    dlg.Owner = mainWin;
-
-                dlg.ShowDialog();
-                return dlg.Result;
-            });
+            return Task.FromResult(false);
         }
     }
 }
