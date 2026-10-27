@@ -1,5 +1,5 @@
 // =========================================================================
-// ЛОГИКА ВКЛАДКИ 4: НАСТРОЙКИ (SETTINGSVIEW)
+// ЛОГИКА ВКЛАДКИ 4: НАСТРОЙКИ (BENTO GRID, ПРЕСЕТЫ И ФИЛЬТРЫ)
 // =========================================================================
 const INTERVAL_OPTIONS = [
     { title: "1 секунда", value: 1, desc: "Максимальная плавность графиков и мгновенный отклик монитора скорости" },
@@ -20,6 +20,75 @@ const HOSTS_OPTIONS = [
     { title: "V3nilla Full (+ AdBlock 0.0.0.0)", idx: 3, desc: "Полный файл V3nilla, включая тысячи правил блокировки рекламы и телеметрии (0.0.0.0)" }
 ];
 
+let saveToastTimer = null;
+let currentSettingsCat = 'all';
+
+function showSettingsSavedToast() {
+    const toast = document.getElementById('settings-save-toast');
+    if (!toast) return;
+    toast.style.opacity = '1';
+    if (saveToastTimer) clearTimeout(saveToastTimer);
+    saveToastTimer = setTimeout(() => {
+        toast.style.opacity = '0';
+    }, 1600);
+}
+
+function setSettingsCat(cat, btnEl) {
+    sendCmd('playClick');
+    currentSettingsCat = cat;
+
+    document.querySelectorAll('.set-cat-btn').forEach(b => b.classList.remove('active'));
+    if (btnEl) btnEl.classList.add('active');
+
+    filterSettingsView();
+}
+
+function filterSettingsView() {
+    const query = (document.getElementById('settings-search-input')?.value || '').trim().toLowerCase();
+
+    document.querySelectorAll('#tab-settings [data-set-group]').forEach(groupEl => {
+        const groupName = groupEl.getAttribute('data-set-group');
+        const catMatch = currentSettingsCat === 'all' || currentSettingsCat === groupName;
+
+        if (!catMatch && !query) {
+            groupEl.classList.add('hidden');
+            return;
+        }
+
+        if (!query) {
+            groupEl.classList.remove('hidden');
+            groupEl.querySelectorAll('[data-search]').forEach(row => row.style.display = '');
+            return;
+        }
+
+        // Если введен поисковый запрос — фильтруем отдельные строки
+        let anyVisibleInGroup = false;
+        const searchableRows = groupEl.querySelectorAll('[data-search]');
+
+        if (searchableRows.length === 0) {
+            const matchText = groupEl.innerText.toLowerCase().includes(query);
+            groupEl.classList.toggle('hidden', !matchText);
+            return;
+        }
+
+        searchableRows.forEach(row => {
+            const hay = (row.getAttribute('data-search') + ' ' + row.innerText).toLowerCase();
+            const matched = hay.includes(query);
+            row.style.display = matched ? '' : 'none';
+            if (matched) anyVisibleInGroup = true;
+        });
+
+        groupEl.classList.toggle('hidden', !anyVisibleInGroup);
+    });
+}
+
+function setPingUrlPreset(url) {
+    const input = document.getElementById('set-ping-url');
+    if (!input) return;
+    input.value = url;
+    onSettingsChanged();
+}
+
 function initSettingsFromBackend(data) {
     document.getElementById('set-autostart').checked = data.isAutoStart;
     document.getElementById('set-start-minimized').checked = data.settings.startMinimized;
@@ -31,6 +100,12 @@ function initSettingsFromBackend(data) {
     document.getElementById('set-colorblind').checked = data.settings.colorblindMode;
     document.getElementById('set-ping-url').value = data.settings.pingUrl || 'https://dynamodb.eu-central-1.amazonaws.com';
     document.getElementById('set-autorestart').checked = data.settings.autoRestartServices;
+
+    // Отображение установленных версий ядер
+    const zpVerEl = document.getElementById('txt-core-zapret-ver');
+    const prVerEl = document.getElementById('txt-core-proxy-ver');
+    if (zpVerEl) zpVerEl.innerText = (!data.settings.zapretCoreVersion || data.settings.zapretCoreVersion === '0.0.0') ? 'установлено' : data.settings.zapretCoreVersion;
+    if (prVerEl) prVerEl.innerText = (!data.settings.tgProxyCoreVersion || data.settings.tgProxyCoreVersion === '0.0.0') ? 'установлено' : data.settings.tgProxyCoreVersion;
 
     appState.settings.focusMode = data.settings.focusMode;
     appState.settings.compactMode = data.settings.compactMode;
@@ -57,6 +132,7 @@ function onSettingsChanged() {
     appState.settings.colorblindMode = document.getElementById('set-colorblind').checked;
 
     applyVisualSettingsLive();
+    showSettingsSavedToast();
 
     sendCmd('saveSettings', {
         settings: {
@@ -103,14 +179,16 @@ function applyVisualSettingsLive() {
 
 function updateRoutingStatusUI(rs) {
     appState.settings.ipSetMode = rs.ipMode || 'loaded';
-    document.getElementById('badge-ipset-status').innerText = rs.ipStatusText || 'Неизвестно';
+    const ipBadge = document.getElementById('badge-ipset-status');
+    ipBadge.innerText = rs.ipStatusText || 'Неизвестно';
+    ipBadge.className = `px-2 py-0.5 rounded font-mono text-[10px] font-semibold ${rs.ipMode === 'loaded' ? 'bg-[#0F240F] border border-[#107C10]/60 text-brand' : 'bg-[#222222] text-[#999999]'}`;
 
     const ipOpt = IPSET_OPTIONS.find(o => o.mode === appState.settings.ipSetMode) || IPSET_OPTIONS[0];
     document.getElementById('txt-selected-ipset').innerText = ipOpt.title;
 
     const hostsBadge = document.getElementById('badge-hosts-status');
     hostsBadge.innerText = rs.hostsStatusText || 'Не применен';
-    hostsBadge.className = `px-2 py-0.5 rounded font-mono text-[11px] font-semibold ${rs.hostsApplied ? 'bg-emerald-950 text-emerald-400' : 'bg-zinc-800 text-zinc-400'}`;
+    hostsBadge.className = `px-2 py-0.5 rounded font-mono text-[10px] font-semibold ${rs.hostsApplied ? 'bg-[#0F240F] border border-[#107C10]/60 text-brand' : 'bg-[#222222] text-[#888888]'}`;
 }
 
 function openSelectionModal(title, subTitle, items, onSelect) {
@@ -121,15 +199,15 @@ function openSelectionModal(title, subTitle, items, onSelect) {
 
     document.getElementById('sel-modal-list').innerHTML = items.map((item, idx) => `
         <div onclick="chooseSelectionOption(${idx})"
-             class="p-3.5 rounded-xl border cursor-pointer transition flex items-center justify-between ${item.selected ? 'bg-[#172554] border-blue-600' : 'bg-[#18181B] border-zinc-800 hover:bg-zinc-800/80'}">
+             class="p-3.5 rounded-xl border cursor-pointer transition flex items-center justify-between ${item.selected ? 'bg-[#0F240F] border-[#107C10]' : 'bg-[#181818] border-[#262626] hover:bg-[#222222]'}">
             <div class="pr-3">
                 <div class="flex items-center gap-2 mb-1">
                     <span class="text-sm font-semibold text-white">${item.title}</span>
-                    ${item.selected ? '<span class="px-1.5 py-0.5 text-[10px] font-semibold bg-blue-900 text-blue-300 rounded">выбрано</span>' : ''}
+                    ${item.selected ? '<span class="px-1.5 py-0.5 text-[10px] font-semibold bg-[#107C10]/30 text-brand border border-[#107C10]/50 rounded">выбрано</span>' : ''}
                 </div>
-                <div class="text-xs text-zinc-400 leading-relaxed">${item.desc}</div>
+                <div class="text-xs text-[#999999] leading-relaxed">${item.desc}</div>
             </div>
-            <span class="text-base font-bold ${item.selected ? 'text-blue-400' : 'text-zinc-600'}">${item.selected ? '✓' : '→'}</span>
+            <span class="text-base font-bold ${item.selected ? 'text-brand' : 'text-[#555555]'}">${item.selected ? '✓' : '→'}</span>
         </div>
     `).join('');
 
@@ -163,6 +241,7 @@ function openIpSetSelector() {
     openSelectionModal('Режим фильтрации IPSet', 'База подсетей ipset-all.txt', items, idx => {
         const chosen = IPSET_OPTIONS[idx];
         sendCmd('setIpSetMode', { mode: chosen.mode });
+        showSettingsSavedToast();
     });
 }
 

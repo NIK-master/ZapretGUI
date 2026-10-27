@@ -576,3 +576,82 @@ body.compact-mode #diag-dc-grid {
 body.compact-mode #diag-probes-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
 }
+/* =========================================================
+   ВКЛАДКА НАСТРОЕК (BENTO GRID & INTERACTIVE ROWS)
+   ========================================================= */
+.setting-item-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: #131313;
+    border: 1px solid #222222;
+    transition: all 0.18s ease;
+    cursor: pointer;
+}
+
+    .setting-item-row:hover {
+        background: #1B1B1B;
+        border-color: #333333;
+    }
+
+.setting-icon-box {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: #1D1D1D;
+    border: 1px solid #2C2C2C;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #999999;
+    flex-shrink: 0;
+    transition: all 0.2s ease;
+}
+
+.setting-item-row:hover .setting-icon-box {
+    color: #FFFFFF;
+    border-color: #3E3E3E;
+}
+
+.routing-subcard {
+    background: #131313;
+    border: 1px solid #232323;
+    border-radius: 12px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 10px;
+    transition: border-color 0.2s ease;
+}
+
+    .routing-subcard:hover {
+        border-color: #363636;
+    }
+
+.ping-preset-chip {
+    padding: 3px 8px;
+    border-radius: 6px;
+    background: #1C1C1C;
+    border: 1px solid #2C2C2C;
+    font-size: 10.5px;
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    color: #999999;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+    .ping-preset-chip:hover {
+        background: #262626;
+        color: #FFFFFF;
+        border-color: #444444;
+    }
+
+/* Авто-перестроение сетки настроек в 1 колонку при компактном режиме */
+body.compact-mode #settings-bento-top,
+body.compact-mode #settings-routing-grid {
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+}
