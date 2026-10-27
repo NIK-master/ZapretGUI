@@ -92,6 +92,9 @@ using System.Threading.Tasks;
 using System.Windows;
 using Microsoft.Web.WebView2.Core;
 using ZapretGUI.Core;
+using System.Windows.Interop;
+using System.Windows.Media;
+using System.Windows.Media.Animation;
 
 namespace ZapretGUI
 {
@@ -110,6 +113,17 @@ namespace ZapretGUI
 
             SettingsManager.Load();
             UIHelper.ApplyThemeColors();
+
+            if (SettingsManager.Current.CompactMode)
+            {
+                this.Width = 850;
+                this.Height = 520;
+            }
+
+            if (!SettingsManager.Current.HardwareAcceleration)
+            {
+                RenderOptions.ProcessRenderMode = RenderMode.SoftwareOnly;
+            }
 
             _trayIconManager = new TrayIconManager(this);
 
@@ -233,8 +247,27 @@ namespace ZapretGUI
         {
             Dispatcher.Invoke(() =>
             {
-                this.Width = isCompact ? 850 : 1100;
-                this.Height = isCompact ? 520 : 760;
+                var targetWidth = isCompact ? 850 : 1100;
+                var targetHeight = isCompact ? 520 : 760;
+
+                if (Math.Abs(this.ActualWidth - targetWidth) < 2 && Math.Abs(this.ActualHeight - targetHeight) < 2)
+                    return;
+
+                var duration = new Duration(TimeSpan.FromMilliseconds(320));
+                var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+
+                var deltaW = targetWidth - this.ActualWidth;
+                var deltaH = targetHeight - this.ActualHeight;
+
+                var widthAnim = new DoubleAnimation(this.ActualWidth, targetWidth, duration) { EasingFunction = ease };
+                var heightAnim = new DoubleAnimation(this.ActualHeight, targetHeight, duration) { EasingFunction = ease };
+                var leftAnim = new DoubleAnimation(this.Left, this.Left - deltaW / 2, duration) { EasingFunction = ease };
+                var topAnim = new DoubleAnimation(this.Top, this.Top - deltaH / 2, duration) { EasingFunction = ease };
+
+                this.BeginAnimation(Window.WidthProperty, widthAnim);
+                this.BeginAnimation(Window.HeightProperty, heightAnim);
+                this.BeginAnimation(Window.LeftProperty, leftAnim);
+                this.BeginAnimation(Window.TopProperty, topAnim);
             });
         }
 
@@ -3961,41 +3994,68 @@ namespace ZapretGUI.Core
 
         private void HandleSaveSettings(JsonElement s)
         {
-            if (s.TryGetProperty("autoStart", out var autoStart)) StartupHelper.SetAutoStart(autoStart.GetBoolean());
-            if (s.TryGetProperty("startMinimized", out var sm)) SettingsManager.Current.StartMinimized = sm.GetBoolean();
-            if (s.TryGetProperty("minimizeOnClose", out var moc)) SettingsManager.Current.MinimizeOnClose = moc.GetBoolean();
-            if (s.TryGetProperty("notificationsEnabled", out var ne)) SettingsManager.Current.NotificationsEnabled = ne.GetBoolean();
+            var cur = SettingsManager.Current;
 
-            if (s.TryGetProperty("focusMode", out var fm)) SettingsManager.Current.FocusMode = fm.GetBoolean();
+            if (s.TryGetProperty("autoStart", out var autoStart))
+            {
+                bool wantAuto = autoStart.GetBoolean();
+                if (StartupHelper.IsAutoStartEnabled() != wantAuto)
+                    StartupHelper.SetAutoStart(wantAuto);
+            }
+
+            if (s.TryGetProperty("startMinimized", out var sm)) cur.StartMinimized = sm.GetBoolean();
+            if (s.TryGetProperty("minimizeOnClose", out var moc)) cur.MinimizeOnClose = moc.GetBoolean();
+            if (s.TryGetProperty("notificationsEnabled", out var ne)) cur.NotificationsEnabled = ne.GetBoolean();
+            if (s.TryGetProperty("focusMode", out var fm)) cur.FocusMode = fm.GetBoolean();
+
             if (s.TryGetProperty("compactMode", out var cm))
             {
-                SettingsManager.Current.CompactMode = cm.GetBoolean();
-                if (_mainWindow is MainWindow mw)
-                    mw.AnimateWindowSize(SettingsManager.Current.CompactMode);
+                bool newCompact = cm.GetBoolean();
+                if (cur.CompactMode != newCompact)
+                {
+                    cur.CompactMode = newCompact;
+                    if (_mainWindow is MainWindow mw)
+                        mw.AnimateWindowSize(newCompact);
+                }
             }
+
             if (s.TryGetProperty("hardwareAcceleration", out var ha))
             {
-                var useGpu = ha.GetBoolean();
-                SettingsManager.Current.HardwareAcceleration = useGpu;
-                _mainWindow.Dispatcher.Invoke(() =>
+                bool useGpu = ha.GetBoolean();
+                if (cur.HardwareAcceleration != useGpu)
                 {
-                    RenderOptions.ProcessRenderMode = useGpu ? RenderMode.Default : RenderMode.SoftwareOnly;
-                });
+                    cur.HardwareAcceleration = useGpu;
+                    _mainWindow.Dispatcher.Invoke(() =>
+                    {
+                        RenderOptions.ProcessRenderMode = useGpu ? RenderMode.Default : RenderMode.SoftwareOnly;
+                    });
+                }
             }
+
             if (s.TryGetProperty("colorblindMode", out var cb))
             {
-                SettingsManager.Current.ColorblindMode = cb.GetBoolean();
-                UIHelper.ApplyThemeColors();
+                bool newCb = cb.GetBoolean();
+                if (cur.ColorblindMode != newCb)
+                {
+                    cur.ColorblindMode = newCb;
+                    UIHelper.ApplyThemeColors();
+                }
             }
 
             if (s.TryGetProperty("pingUrl", out var pu))
             {
                 var urlStr = pu.GetString();
-                SettingsManager.Current.PingUrl = string.IsNullOrWhiteSpace(urlStr) ? AppConstants.DefaultPingUrl : urlStr.Trim();
+                cur.PingUrl = string.IsNullOrWhiteSpace(urlStr) ? AppConstants.DefaultPingUrl : urlStr.Trim();
             }
-            if (s.TryGetProperty("statsUpdateInterval", out var sui)) SettingsManager.Current.StatsUpdateInterval = Math.Max(1, sui.GetInt32());
-            if (s.TryGetProperty("autoRestartServices", out var ars)) SettingsManager.Current.AutoRestartServices = ars.GetBoolean();
-            if (s.TryGetProperty("hostsSourceIndex", out var hsi)) SettingsManager.Current.HostsSourceIndex = Math.Clamp(hsi.GetInt32(), 0, 3);
+
+            if (s.TryGetProperty("statsUpdateInterval", out var sui))
+                cur.StatsUpdateInterval = Math.Max(1, sui.GetInt32());
+
+            if (s.TryGetProperty("autoRestartServices", out var ars))
+                cur.AutoRestartServices = ars.GetBoolean();
+
+            if (s.TryGetProperty("hostsSourceIndex", out var hsi))
+                cur.HostsSourceIndex = Math.Clamp(hsi.GetInt32(), 0, 3);
 
             SettingsManager.Save();
         }
@@ -5051,47 +5111,47 @@ namespace ZapretGUI.Views
 				</section>
 
 				<!-- ВКЛАДКА 2: МОДИФИКАЦИИ (MODSVIEW — WORKSHOP LAYOUT) -->
-				<section id="tab-mods" class="tab-view flex-col h-full gap-4">
+				<section id="tab-mods" class="tab-view flex-col h-full gap-3">
 
-					<!-- ВЕРХНЯЯ ШАПКА И СТАТИСТИКА -->
-					<div class="flex items-center justify-between gap-4 shrink-0">
-						<div>
-							<div class="flex items-center gap-3">
-								<h2 id="mods-cat-title" class="text-2xl font-bold text-white">Мастерская модификаций</h2>
-								<span id="mods-active-summary" class="px-2.5 py-0.5 rounded-full bg-[#181818] border border-[#2A2A2A] font-mono text-[11px] text-[#888888]">
+					<!-- ВЕРХНЯЯ ШАПКА И КНОПКИ ДЕЙСТВИЙ (С FLEX-WRAP ДЛЯ КОМПАКТНОГО ОКНА) -->
+					<div class="flex flex-wrap items-center justify-between gap-2.5 shrink-0">
+						<div class="min-w-[200px]">
+							<div class="flex items-center gap-2.5">
+								<h2 id="mods-cat-title" class="text-xl font-bold text-white whitespace-nowrap">Мастерская модификаций</h2>
+								<span id="mods-active-summary" class="px-2 py-0.5 rounded-full bg-[#181818] border border-[#2A2A2A] font-mono text-[11px] text-[#888888] whitespace-nowrap">
 									Активно: 0
 								</span>
 							</div>
-							<p id="mods-cat-desc" class="text-xs text-[#888888] mt-1">
+							<p id="mods-cat-desc" class="text-xs text-[#888888] mt-0.5">
 								Пользовательские скрипты обхода (.bat) и дополнительные списки доменов для маршрутизации.
 							</p>
 						</div>
 
 						<!-- Главные кнопки действий -->
-						<div id="mods-action-bar" class="flex items-center gap-2 shrink-0">
-							<button onclick="promptDisableAllMods()" class="px-3 py-2 rounded-lg bg-[#181818] border border-[#2A2A2A] hover:border-[#D13438]/60 hover:bg-[#2A1215] text-[#F44336] text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer" title="Отключить все моды в текущей категории">
+						<div id="mods-action-bar" class="flex flex-wrap items-center gap-1.5 shrink-0">
+							<button onclick="promptDisableAllMods()" class="px-2.5 py-1.5 rounded-lg bg-[#181818] border border-[#2A2A2A] hover:border-[#D13438]/60 hover:bg-[#2A1215] text-[#F44336] text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer whitespace-nowrap" title="Отключить все моды в текущей категории">
 								<span class="mdl-icon text-[11px]">&#xE711;</span>
-								<span>Отключить всё</span>
+								<span>Откл. всё</span>
 							</button>
-							<button onclick="sendCmd('importMod')" class="px-3 py-2 rounded-lg bg-[#181818] border border-[#2A2A2A] hover:border-[#444444] hover:bg-[#222222] text-[#CCCCCC] hover:text-white text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer">
+							<button onclick="sendCmd('importMod')" class="px-2.5 py-1.5 rounded-lg bg-[#181818] border border-[#2A2A2A] hover:border-[#444444] hover:bg-[#222222] text-[#CCCCCC] hover:text-white text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer whitespace-nowrap">
 								<span class="mdl-icon text-xs text-brand">&#xE8B5;</span>
 								<span>Импорт (.zip)</span>
 							</button>
-							<button onclick="sendCmd('openFolder', { folder: 'mods' })" class="px-3 py-2 rounded-lg bg-[#181818] border border-[#2A2A2A] hover:border-[#444444] hover:bg-[#222222] text-[#A0A0A0] hover:text-white text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer" title="Открыть папку Mods в Проводнике">
+							<button onclick="sendCmd('openFolder', { folder: 'mods' })" class="px-2.5 py-1.5 rounded-lg bg-[#181818] border border-[#2A2A2A] hover:border-[#444444] hover:bg-[#222222] text-[#A0A0A0] hover:text-white text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer whitespace-nowrap" title="Открыть папку Mods в Проводнике">
 								<span class="mdl-icon text-xs">&#xE8B7;</span>
 								<span>Папка</span>
 							</button>
-							<button onclick="openCreateModModal()" class="px-4 py-2 rounded-lg btn-brand text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-lg">
+							<button onclick="openCreateModModal()" class="px-3.5 py-1.5 rounded-lg btn-brand text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-lg whitespace-nowrap">
 								<span class="mdl-icon text-xs">&#xE710;</span>
-								<span>Создать мод</span>
+								<span>Создать</span>
 							</button>
 						</div>
 					</div>
 
-					<!-- ПАНЕЛЬ НАВИГАЦИИ: SEGMENTED CONTROL + ПОИСК + ПЕРЕКЛЮЧАТЕЛЬ СЕТКИ -->
-					<div class="flex items-center justify-between gap-3 bg-[#161616] border border-[#262626] rounded-xl p-1.5 shrink-0">
+					<!-- ПАНЕЛЬ НАВИГАЦИИ: SEGMENTED CONTROL + ПОИСК -->
+					<div class="flex flex-wrap items-center justify-between gap-2 bg-[#161616] border border-[#262626] rounded-xl p-1.5 shrink-0">
 						<!-- Переключатель вкладок -->
-						<div class="flex items-center gap-1">
+						<div class="flex items-center gap-1 overflow-x-auto">
 							<button id="mod-tab-bat" onclick="switchModsSubTab('bat')" class="mods-seg-btn active">
 								<span class="mdl-icon text-xs">&#xE756;</span>
 								<span>.bat Стратегии</span>
@@ -5110,14 +5170,14 @@ namespace ZapretGUI.Views
 							</button>
 						</div>
 
-						<!-- Поиск и вид отображения (скрываются на вкладке Руководство) -->
-						<div id="mods-filter-controls" class="flex items-center gap-2 pr-1">
-							<div class="relative flex items-center">
+						<!-- Поиск и вид отображения -->
+						<div id="mods-filter-controls" class="flex items-center gap-2 flex-1 min-w-[180px] justify-end">
+							<div class="relative flex items-center flex-1 max-w-[230px]">
 								<span class="mdl-icon text-[11px] text-[#666666] absolute left-2.5 pointer-events-none">&#xE721;</span>
-								<input id="mods-search-input" type="text" oninput="renderModsView()" placeholder="Поиск по названию, ID или автору..." class="bg-[#101010] border border-[#2A2A2A] focus:border-[#107C10] rounded-lg pl-7 pr-3 py-1 text-xs text-white focus:outline-none w-56 transition select-text">
+								<input id="mods-search-input" type="text" oninput="renderModsView()" placeholder="Поиск мода..." class="w-full bg-[#101010] border border-[#2A2A2A] focus:border-[#107C10] rounded-lg pl-7 pr-2.5 py-1 text-xs text-white focus:outline-none transition select-text">
                         </div>
 
-							<div class="flex items-center bg-[#101010] border border-[#2A2A2A] rounded-lg p-0.5">
+							<div id="mods-layout-Academic" class="flex items-center bg-[#101010] border border-[#2A2A2A] rounded-lg p-0.5 shrink-0">
 								<button id="btn-layout-grid" onclick="setModsLayout('grid')" class="w-7 h-6 rounded flex items-center justify-center bg-[#262626] text-white transition cursor-pointer" title="Сетка (2 колонки)">
 									<span class="mdl-icon text-xs">&#xF0E2;</span>
 								</button>
@@ -5129,9 +5189,9 @@ namespace ZapretGUI.Views
 					</div>
 
 					<!-- КОНТЕЙНЕР СПИСКА МОДОВ -->
-					<div id="mods-lists-container" class="flex-1 overflow-y-auto pr-1 space-y-4">
+					<div id="mods-lists-container" class="flex-1 overflow-y-auto pr-1 space-y-3">
 						<div id="active-mods-section" class="hidden">
-							<div class="flex items-center gap-2 mb-2.5">
+							<div class="flex items-center gap-2 mb-2">
 								<span class="w-2 h-2 rounded-full dot-online"></span>
 								<span class="text-xs font-bold text-brand tracking-wider uppercase">АКТИВНЫЕ МОДИФИКАЦИИ</span>
 							</div>
@@ -5141,7 +5201,7 @@ namespace ZapretGUI.Views
 						<div id="mods-divider" class="h-[1px] bg-[#242424] my-2 hidden"></div>
 
 						<div id="available-mods-section" class="hidden">
-							<div class="flex items-center gap-2 mb-2.5">
+							<div class="flex items-center gap-2 mb-2">
 								<span class="w-2 h-2 rounded-full bg-[#555555]"></span>
 								<span class="text-xs font-bold text-[#888888] tracking-wider uppercase">ДОСТУПНЫЕ В БИБЛИОТЕКЕ</span>
 							</div>
@@ -5149,20 +5209,20 @@ namespace ZapretGUI.Views
 						</div>
 
 						<!-- Красивое пустое состояние (Empty State) -->
-						<div id="mods-empty-state" class="h-[340px] rounded-2xl border border-dashed border-[#2A2A2A] bg-[#141414]/60 flex flex-col items-center justify-center text-center p-6 hidden">
-							<div class="w-14 h-14 rounded-2xl bg-[#1C1C1C] border border-[#2A2A2A] flex items-center justify-center text-[#666666] mb-3">
-								<span class="mdl-icon text-2xl">&#xE74C;</span>
+						<div id="mods-empty-state" class="h-[260px] rounded-2xl border border-dashed border-[#2A2A2A] bg-[#141414]/60 flex flex-col items-center justify-center text-center p-5 hidden">
+							<div class="w-12 h-12 rounded-2xl bg-[#1C1C1C] border border-[#2A2A2A] flex items-center justify-center text-[#666666] mb-2.5">
+								<span class="mdl-icon text-xl">&#xE74C;</span>
 							</div>
-							<div id="mods-empty-title" class="text-base font-bold text-white mb-1">В этой категории пока нет модов</div>
-							<p id="mods-empty-sub" class="text-xs text-[#888888] max-w-md mb-4 leading-relaxed">
+							<div id="mods-empty-title" class="text-sm font-bold text-white mb-1">В этой категории пока нет модов</div>
+							<p id="mods-empty-sub" class="text-xs text-[#888888] max-w-md mb-3.5 leading-relaxed">
 								Создайте собственную стратегию обхода с помощью встроенного редактора кода или импортируйте готовый архив (.zip / .netfix-mod).
 							</p>
-							<div class="flex items-center gap-2.5">
-								<button onclick="openCreateModModal()" class="px-4 py-2 rounded-lg btn-brand text-xs font-semibold flex items-center gap-1.5 cursor-pointer">
+							<div class="flex items-center gap-2">
+								<button onclick="openCreateModModal()" class="px-3.5 py-1.5 rounded-lg btn-brand text-xs font-semibold flex items-center gap-1.5 cursor-pointer">
 									<span class="mdl-icon text-xs">&#xE710;</span>
 									<span>Создать первый мод</span>
 								</button>
-								<button onclick="sendCmd('importMod')" class="px-4 py-2 rounded-lg bg-[#222222] hover:bg-[#2A2A2A] border border-[#333333] text-xs font-semibold text-white flex items-center gap-1.5 transition cursor-pointer">
+								<button onclick="sendCmd('importMod')" class="px-3.5 py-1.5 rounded-lg bg-[#222222] hover:bg-[#2A2A2A] border border-[#333333] text-xs font-semibold text-white flex items-center gap-1.5 transition cursor-pointer">
 									<span class="mdl-icon text-xs">&#xE8B5;</span>
 									<span>Импортировать .zip</span>
 								</button>
@@ -5170,11 +5230,11 @@ namespace ZapretGUI.Views
 						</div>
 					</div>
 
-					<!-- КОНТЕЙНЕР РУКОВОДСТВА (2-КОЛОНОЧНАЯ СЕТКА) -->
+					<!-- КОНТЕЙНЕР РУКОВОДСТВА -->
 					<div id="mods-guide-container" class="flex-1 overflow-y-auto pr-1 space-y-3 hidden">
-						<div class="p-4 rounded-xl bg-[#0F200F] border border-[#107C10] flex items-center gap-4">
-							<div class="w-11 h-11 rounded-xl bg-[#107C10]/20 border border-[#107C10] flex items-center justify-center text-brand shrink-0">
-								<span class="mdl-icon text-xl">&#xE945;</span>
+						<div class="p-3.5 rounded-xl bg-[#0F200F] border border-[#107C10] flex items-center gap-3.5">
+							<div class="w-10 h-10 rounded-xl bg-[#107C10]/20 border border-[#107C10] flex items-center justify-center text-brand shrink-0">
+								<span class="mdl-icon text-lg">&#xE945;</span>
 							</div>
 							<div>
 								<div class="font-bold text-sm text-white mb-0.5">Система модульных модификаций Zapret</div>
@@ -5184,7 +5244,7 @@ namespace ZapretGUI.Views
 							</div>
 						</div>
 
-						<div class="grid grid-cols-2 gap-3">
+						<div id="mods-guide-grid" class="grid grid-cols-2 gap-3">
 							<div class="glass-card rounded-xl p-4 space-y-2">
 								<div class="flex items-center gap-2.5">
 									<span class="w-6 h-6 rounded-md bg-[#222222] border border-[#333333] flex items-center justify-center font-mono text-xs font-bold text-brand">01</span>
@@ -5205,7 +5265,7 @@ namespace ZapretGUI.Views
 								</div>
 								<div class="space-y-1.5 text-xs text-[#BBBBBB] leading-relaxed">
 									<div>
-										<b class="text-white">1.</b> Выберите категорию сверху и нажмите зелёную кнопку <b class="text-brand">«+ Создать мод»</b>.
+										<b class="text-white">1.</b> Выберите категорию сверху и нажмите зелёную кнопку <b class="text-brand">«+ Создать»</b>.
 									</div>
 									<div>
 										<b class="text-white">2.</b> Укажите название, автора и уникальный технический ID папки.
@@ -6242,14 +6302,16 @@ body {
    ВКЛАДКА МОДИФИКАЦИЙ (WORKSHOP CARDS & SEGMENTED CONTROL)
    ========================================================= */
 .mods-seg-btn {
-    padding: 7px 14px;
+    padding: 6px 12px;
     border-radius: 8px;
-    font-size: 12.5px;
+    font-size: 12px;
     font-weight: 600;
     color: #888888;
     display: inline-flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
+    white-space: nowrap;
+    flex-shrink: 0;
     transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
     cursor: pointer;
 }
@@ -6262,6 +6324,17 @@ body {
     color: #FFFFFF;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
     border: 1px solid #333333;
+}
+
+/* Адаптация под минималистичный (компактный) режим 850x520 */
+body.compact-mode #main-container {
+    padding: 14px 18px;
+}
+body.compact-mode #mods-cat-desc {
+    display: none;
+}
+body.compact-mode .mod-workshop-card {
+    padding: 12px 14px;
 }
 
 .mod-workshop-card {
@@ -7648,7 +7721,8 @@ function renderModsView() {
     const activeMods = source.filter(m => m.isActive);
     const availableMods = source.filter(m => !m.isActive);
 
-    const gridClass = modsLayoutMode === 'grid' ? 'grid grid-cols-2 gap-3' : 'flex flex-col gap-2.5';
+    const useGrid = modsLayoutMode === 'grid' && !appState.settings.compactMode;
+    const gridClass = useGrid ? 'grid grid-cols-2 gap-3' : 'flex flex-col gap-2.5';
     const activeListEl = document.getElementById('active-mods-list');
     const availListEl = document.getElementById('available-mods-list');
     activeListEl.className = gridClass;
@@ -7736,7 +7810,7 @@ function buildModCardHtml(mod, isBat, index = 0) {
             <div class="flex items-center gap-1.5">
                 <button onclick="openModEditor('${mod.id}', ${isBat})" class="mod-action-pill" title="Открыть в Code Studio">
                     <span class="mdl-icon text-[11px]">&#xE70F;</span>
-                    <span>Код и свойства</span>
+                    <span>Код</span>
                 </button>
                 <button onclick="exportMod('${mod.id}', ${isBat}, '${safeName}')" class="mod-action-pill" title="Упаковать мод в .zip архив">
                     <span class="mdl-icon text-[11px]">&#xE78C;</span>
@@ -8172,9 +8246,10 @@ function onSettingsChanged() {
 }
 
 function applyVisualSettingsLive() {
-    document.body.classList.toggle('colorblind-mode', appState.settings.colorblindMode);
+    const isCompact = !!appState.settings.compactMode;
+    document.body.classList.toggle('colorblind-mode', !!appState.settings.colorblindMode);
+    document.body.classList.toggle('compact-mode', isCompact);
 
-    const isCompact = appState.settings.compactMode;
     const statsPanel = document.getElementById('home-stats-panel');
     const logsPanel = document.getElementById('home-logs-panel');
     const btnCol = document.getElementById('home-btn-col');
@@ -8184,6 +8259,15 @@ function applyVisualSettingsLive() {
     logsPanel.classList.toggle('hidden', isCompact);
     btnCol.className = isCompact ? 'col-span-6 flex flex-col items-center justify-center' : 'col-span-4 flex flex-col items-center justify-center';
     cardsCol.className = isCompact ? 'col-span-6 flex flex-col gap-3' : 'col-span-4 flex flex-col gap-3';
+
+    const guideGrid = document.getElementById('mods-guide-grid');
+    if (guideGrid) {
+        guideGrid.className = isCompact ? 'flex flex-col gap-2.5' : 'grid grid-cols-2 gap-3';
+    }
+
+    if (typeof renderModsView === 'function') {
+        renderModsView();
+    }
 }
 
 function updateRoutingStatusUI(rs) {

@@ -295,7 +295,7 @@
 										<span class="font-semibold text-[15px] text-white">Настройки Zapret</span>
 									</div>
 									<input id="chk-zapret" type="checkbox" checked="" onchange="onModuleToggleChange()" class="cyber-toggle">
-                            </div>
+								</div>
 								<div id="zapret-status-label" class="text-xs text-[#D13438] font-medium mb-3">Остановлен</div>
 
 								<div id="btn-open-config" onclick="openConfigModal()" class="bg-[#222222] hover:bg-[#2A2A2A] border border-transparent hover:border-[#3A3A3A] rounded-lg px-3 py-2 mb-2 cursor-pointer transition flex items-center justify-between">
@@ -324,7 +324,7 @@
 									<div id="proxy-status-label" class="text-xs text-[#A0A0A0] mt-0.5">Прокси для Telegram</div>
 								</div>
 								<input id="chk-proxy" type="checkbox" checked="" onchange="onModuleToggleChange()" class="cyber-toggle">
-                        </div>
+							</div>
 						</div>
 					</div>
 
@@ -347,7 +347,7 @@
 								<div class="relative flex items-center">
 									<span class="mdl-icon text-[10px] text-[#666666] absolute left-2 pointer-events-none">&#xE721;</span>
 									<input id="log-search-input" type="text" oninput="applyLogFilters()" placeholder="Поиск в логах..." class="bg-[#141414] border border-[#2A2A2A] focus:border-[#444444] rounded-md pl-6 pr-2 py-0.5 text-[11px] text-white focus:outline-none w-36 select-text">
-                            </div>
+								</div>
 
 								<button onclick="clearLogs()" class="text-xs text-[#A0A0A0] hover:text-white flex items-center gap-1 transition cursor-pointer">
 									<span class="mdl-icon text-xs">&#xE74D;</span>
@@ -428,7 +428,7 @@
 							<div class="relative flex items-center flex-1 max-w-[230px]">
 								<span class="mdl-icon text-[11px] text-[#666666] absolute left-2.5 pointer-events-none">&#xE721;</span>
 								<input id="mods-search-input" type="text" oninput="renderModsView()" placeholder="Поиск мода..." class="w-full bg-[#101010] border border-[#2A2A2A] focus:border-[#107C10] rounded-lg pl-7 pr-2.5 py-1 text-xs text-white focus:outline-none transition select-text">
-                        </div>
+							</div>
 
 							<div id="mods-layout-Academic" class="flex items-center bg-[#101010] border border-[#2A2A2A] rounded-lg p-0.5 shrink-0">
 								<button id="btn-layout-grid" onclick="setModsLayout('grid')" class="w-7 h-6 rounded flex items-center justify-center bg-[#262626] text-white transition cursor-pointer" title="Сетка (2 колонки)">
@@ -569,74 +569,177 @@
 				</section>
 
 				<!-- ВКЛАДКА 3: ДИАГНОСТИКА (DIAGNOSTICSVIEW) -->
-				<section id="tab-diag" class="tab-view flex-col gap-4">
-					<div class="flex items-center justify-between gap-4">
+				<section id="tab-diag" class="tab-view flex-col gap-3.5 pb-4">
+
+					<!-- ВЕРХНЯЯ ШАПКА, HEALTH SCORE И КНОПКИ -->
+					<div class="flex flex-wrap items-center justify-between gap-3">
 						<div>
-							<h2 class="text-2xl font-bold text-white">Мониторинг сети</h2>
-							<p id="diag-status-txt" class="text-xs text-[#A0A0A0] mt-1">Ожидание проверки...</p>
+							<div class="flex items-center gap-3">
+								<h2 class="text-2xl font-bold text-white">Мониторинг и диагностика сети</h2>
+								<div id="diag-health-badge" class="px-2.5 py-0.5 rounded-full bg-[#181818] border border-[#2A2A2A] font-mono text-xs text-[#888888] flex items-center gap-1.5">
+									<span class="w-1.5 h-1.5 rounded-full bg-[#555555]" id="diag-health-dot"></span>
+									<span id="diag-health-txt">Оценка: —</span>
+								</div>
+							</div>
+							<p id="diag-status-txt" class="text-xs text-[#888888] mt-0.5">
+								Глубокий анализ доступности серверов Telegram, Discord, DNS-подмены и ТСПУ-замедления.
+							</p>
 						</div>
 
-						<div id="diag-progress-wrap" class="flex-1 max-w-md h-1 bg-[#2A2A2A] rounded-full overflow-hidden hidden">
+						<div class="flex items-center gap-2 shrink-0">
+							<button id="btn-copy-diag" onclick="copyDiagnosticsReport()" class="px-3 py-2 rounded-lg bg-[#181818] hover:bg-[#222222] border border-[#2A2A2A] hover:border-[#3E3E3E] text-xs font-semibold text-[#BBBBBB] hover:text-white transition cursor-pointer hidden items-center gap-1.5" title="Скопировать результаты в буфер обмена">
+								<span class="mdl-icon text-xs">&#xE8C8;</span>
+								<span id="txt-copy-diag">Отчёт</span>
+							</button>
+
+							<button id="btn-run-diag" onclick="runDiagnostics()" class="px-4 py-2 rounded-lg btn-brand text-xs font-bold cursor-pointer flex items-center gap-2 shadow-lg">
+								<span id="diag-btn-icon" class="mdl-icon text-xs">&#xE9D9;</span>
+								<span id="diag-btn-text">Запустить проверку</span>
+							</button>
+						</div>
+					</div>
+
+					<!-- ПОШАГОВЫЙ ПРОГРЕСС-ПАЙПЛАЙН (ПОКАЗЫВАЕТСЯ ВО ВРЕМЯ СКАНИРОВАНИЯ) -->
+					<div id="diag-progress-wrap" class="glass-card rounded-xl p-3 flex-col gap-2.5 hidden">
+						<div class="flex items-center justify-between text-xs">
+							<span id="diag-step-label" class="font-semibold text-white">Инициализация сканера...</span>
+							<span id="diag-step-percent" class="font-mono text-brand font-bold">0%</span>
+						</div>
+						<div class="w-full h-1.5 bg-[#0A0A0A] border border-[#262626] rounded-full overflow-hidden">
 							<div id="diag-progress-bar" class="h-full bg-[#107C10] transition-all duration-300" style="width: 0%"></div>
 						</div>
-
-						<button id="btn-run-diag" onclick="runDiagnostics()" class="px-4 py-2 rounded-md btn-brand text-xs font-semibold cursor-pointer shrink-0">
-							Запустить проверку
-						</button>
-					</div>
-
-					<div class="grid grid-cols-2 gap-4">
-						<div id="diag-tg-card" class="glass-card rounded-xl p-4 flex items-center gap-4">
-							<span id="diag-tg-emoji" onclick="onTgEmojiClick()" class="mdl-icon text-2xl text-[#A0A0A0] cursor-pointer select-none" title="Нажми 5 раз...">&#xE709;</span>
-							<div>
-								<div id="diag-tg-title" class="text-base font-bold text-white">Telegram</div>
-								<div id="diag-tg-sub" class="text-xs text-[#B0B0B0] mt-0.5">Ожидание данных...</div>
-							</div>
-						</div>
-
-						<div id="diag-ds-card" class="glass-card rounded-xl p-4 flex items-center gap-4">
-							<span id="diag-ds-emoji" onclick="onDiscordEmojiClick()" class="mdl-icon text-2xl text-[#A0A0A0] cursor-pointer select-none" title="Нажми 5 раз...">&#xE7FC;</span>
-							<div>
-								<div id="diag-ds-title" class="text-base font-bold text-white">Discord</div>
-								<div id="diag-ds-sub" class="text-xs text-[#B0B0B0] mt-0.5">Ожидание данных...</div>
-							</div>
+						<div class="flex flex-wrap items-center gap-1.5 pt-0.5">
+							<span id="dstep-0" class="diag-step-pill"><span class="mdl-icon text-[10px]">&#xE713;</span>Процессы</span>
+							<span id="dstep-1" class="diag-step-pill"><span class="mdl-icon text-[10px]">&#xE709;</span>Telegram DC</span>
+							<span id="dstep-2" class="diag-step-pill"><span class="mdl-icon text-[10px]">&#xE774;</span>DNS Spoof</span>
+							<span id="dstep-3" class="diag-step-pill"><span class="mdl-icon text-[10px]">&#xEA18;</span>DPI / SNI</span>
+							<span id="dstep-4" class="diag-step-pill"><span class="mdl-icon text-[10px]">&#xE896;</span>ТСПУ Медиа</span>
+							<span id="dstep-5" class="diag-step-pill"><span class="mdl-icon text-[10px]">&#xE7FC;</span>Discord</span>
 						</div>
 					</div>
 
+					<!-- КАРТОЧКИ ГЛАВНЫХ ВЕРДИКТОВ (TELEGRAM & DISCORD) + АКТИВНЫЕ ПРОЦЕССЫ -->
+					<div class="grid grid-cols-12 gap-3">
+						<div id="diag-tg-card" class="col-span-4 glass-card rounded-xl p-3.5 flex items-center gap-3.5">
+							<div class="w-11 h-11 rounded-xl bg-[#1E1E1E] border border-[#2E2E2E] flex items-center justify-center shrink-0">
+								<span id="diag-tg-emoji" onclick="onTgEmojiClick()" class="mdl-icon text-xl text-[#A0A0A0] cursor-pointer select-none" title="Нажми 5 раз...">&#xE709;</span>
+							</div>
+							<div class="overflow-hidden">
+								<div id="diag-tg-title" class="text-sm font-bold text-white truncate">Telegram</div>
+								<div id="diag-tg-sub" class="text-xs text-[#999999] mt-0.5 leading-snug">Ожидание проверки...</div>
+							</div>
+						</div>
+
+						<div id="diag-ds-card" class="col-span-4 glass-card rounded-xl p-3.5 flex items-center gap-3.5">
+							<div class="w-11 h-11 rounded-xl bg-[#1E1E1E] border border-[#2E2E2E] flex items-center justify-center shrink-0">
+								<span id="diag-ds-emoji" onclick="onDiscordEmojiClick()" class="mdl-icon text-xl text-[#A0A0A0] cursor-pointer select-none" title="Нажми 5 раз...">&#xE7FC;</span>
+							</div>
+							<div class="overflow-hidden">
+								<div id="diag-ds-title" class="text-sm font-bold text-white truncate">Discord</div>
+								<div id="diag-ds-sub" class="text-xs text-[#999999] mt-0.5 leading-snug">Ожидание проверки...</div>
+							</div>
+						</div>
+
+						<!-- Компактная матрица процессов справа -->
+						<div class="col-span-4 glass-card rounded-xl p-3.5 flex flex-col justify-between">
+							<div class="text-[11px] font-bold text-[#888888] uppercase tracking-wider mb-1.5">Процессы в памяти</div>
+							<div class="grid grid-cols-2 gap-1.5 text-xs font-semibold">
+								<div class="flex items-center gap-2 bg-[#121212] border border-[#242424] rounded-md px-2.5 py-1">
+									<span id="proc-dot-tg" class="w-2 h-2 rounded-full bg-zinc-600 shrink-0"></span>
+									<span class="truncate">Telegram</span>
+								</div>
+								<div class="flex items-center gap-2 bg-[#121212] border border-[#242424] rounded-md px-2.5 py-1">
+									<span id="proc-dot-ds" class="w-2 h-2 rounded-full bg-zinc-600 shrink-0"></span>
+									<span class="truncate">Discord</span>
+								</div>
+								<div class="flex items-center gap-2 bg-[#121212] border border-[#242424] rounded-md px-2.5 py-1">
+									<span id="proc-dot-zp" class="w-2 h-2 rounded-full bg-zinc-600 shrink-0"></span>
+									<span class="truncate">winws.exe</span>
+								</div>
+								<div class="flex items-center gap-2 bg-[#121212] border border-[#242424] rounded-md px-2.5 py-1">
+									<span id="proc-dot-tw" class="w-2 h-2 rounded-full bg-zinc-600 shrink-0"></span>
+									<span class="truncate">TgWsProxy</span>
+								</div>
+							</div>
+						</div>
+					</div>
+
+					<!-- НОВЫЙ БЛОК: ГЛУБОКИЙ АНАЛИЗ ПРОТОКОЛОВ И ТСПУ (4 ИНДИКАТОРА) -->
+					<div id="diag-probes-grid" class="grid grid-cols-4 gap-2.5">
+						<div class="diag-probe-card">
+							<div id="probe-icon-dns" class="w-8 h-8 rounded-lg bg-[#202020] border border-[#2E2E2E] flex items-center justify-center text-[#888888] shrink-0">
+								<span class="mdl-icon text-sm">&#xE774;</span>
+							</div>
+							<div class="overflow-hidden">
+								<div class="text-[11px] text-[#888888]">Проверка DNS</div>
+								<div id="probe-val-dns" class="text-xs font-mono font-bold text-white truncate">—</div>
+							</div>
+						</div>
+
+						<div class="diag-probe-card">
+							<div id="probe-icon-dpi" class="w-8 h-8 rounded-lg bg-[#202020] border border-[#2E2E2E] flex items-center justify-center text-[#888888] shrink-0">
+								<span class="mdl-icon text-sm">&#xEA18;</span>
+							</div>
+							<div class="overflow-hidden">
+								<div class="text-[11px] text-[#888888]">DPI / TLS SNI</div>
+								<div id="probe-val-dpi" class="text-xs font-mono font-bold text-white truncate">—</div>
+							</div>
+						</div>
+
+						<div class="diag-probe-card">
+							<div id="probe-icon-media" class="w-8 h-8 rounded-lg bg-[#202020] border border-[#2E2E2E] flex items-center justify-center text-[#888888] shrink-0">
+								<span class="mdl-icon text-sm">&#xE896;</span>
+							</div>
+							<div class="overflow-hidden">
+								<div class="text-[11px] text-[#888888]">ТСПУ Медиа CDN</div>
+								<div id="probe-val-media" class="text-xs font-mono font-bold text-white truncate">—</div>
+							</div>
+						</div>
+
+						<div class="diag-probe-card">
+							<div id="probe-icon-udp" class="w-8 h-8 rounded-lg bg-[#202020] border border-[#2E2E2E] flex items-center justify-center text-[#888888] shrink-0">
+								<span class="mdl-icon text-sm">&#xE720;</span>
+							</div>
+							<div class="overflow-hidden">
+								<div class="text-[11px] text-[#888888]">Голос Discord UDP</div>
+								<div id="probe-val-udp" class="text-xs font-mono font-bold text-white truncate">—</div>
+							</div>
+						</div>
+					</div>
+
+					<!-- КЛАСТЕРНАЯ МАТРИЦА TELEGRAM DC (5 КОЛОНОК) И УЗЛЫ DISCORD -->
+					<div class="glass-card rounded-xl p-4 space-y-4">
+						<div>
+							<div class="flex items-center justify-between mb-2.5">
+								<div class="flex items-center gap-2">
+									<span class="mdl-icon text-xs text-brand">&#xE709;</span>
+									<span class="text-xs font-bold text-[#E0E0E0] uppercase tracking-wider">Кластеры дата-центров Telegram (DC 1–5)</span>
+								</div>
+								<span id="diag-dc-summary" class="text-[11px] font-mono text-[#888888]">15 портов</span>
+							</div>
+							<div id="diag-dc-grid" class="grid grid-cols-5 gap-2.5"></div>
+						</div>
+
+						<div class="pt-3 border-t border-[#242424]">
+							<div class="flex items-center justify-between mb-2.5">
+								<div class="flex items-center gap-2">
+									<span class="mdl-icon text-xs text-[#60A5FA]">&#xE7FC;</span>
+									<span class="text-xs font-bold text-[#E0E0E0] uppercase tracking-wider">Магистральные узлы Discord (TCP :443)</span>
+								</div>
+								<span id="diag-ds-summary" class="text-[11px] font-mono text-[#888888]">Gateway • Media • API</span>
+							</div>
+							<div id="diag-discord-grid" class="grid grid-cols-3 gap-2.5"></div>
+						</div>
+					</div>
+
+					<!-- РЕКОМЕНДАЦИИ ПО ИТОГАМ ДИАГНОСТИКИ -->
 					<div class="glass-card rounded-xl p-4">
-						<div class="text-base font-semibold text-[#E0E0E0] mb-3">Активные процессы в системе</div>
-						<div class="flex flex-wrap gap-6 text-xs font-semibold">
-							<div class="flex items-center gap-2">
-								<span id="proc-dot-tg" class="w-2.5 h-2.5 rounded-full bg-zinc-600"></span>
-								<span>Telegram</span>
-							</div>
-							<div class="flex items-center gap-2">
-								<span id="proc-dot-ds" class="w-2.5 h-2.5 rounded-full bg-zinc-600"></span>
-								<span>Discord</span>
-							</div>
-							<div class="flex items-center gap-2">
-								<span id="proc-dot-zp" class="w-2.5 h-2.5 rounded-full bg-zinc-600"></span>
-								<span>Zapret (winws)</span>
-							</div>
-							<div class="flex items-center gap-2">
-								<span id="proc-dot-tw" class="w-2.5 h-2.5 rounded-full bg-zinc-600"></span>
-								<span>TgWsProxy</span>
-							</div>
+						<div class="flex items-center gap-2 mb-2.5">
+							<span class="mdl-icon text-sm text-brand">&#xE946;</span>
+							<span class="text-xs font-bold text-[#E0E0E0] uppercase tracking-wider">Инженерное заключение и рекомендации</span>
 						</div>
-					</div>
-
-					<div class="glass-card rounded-xl p-4">
-						<div class="text-base font-semibold text-[#E0E0E0] mb-3">Доступность серверов Telegram (DC & Порты)</div>
-						<div id="diag-dc-grid" class="flex flex-wrap gap-2.5 mb-5"></div>
-
-						<div class="text-base font-semibold text-[#E0E0E0] mb-3">Доступность серверов Discord</div>
-						<div id="diag-discord-grid" class="flex flex-wrap gap-2.5"></div>
-					</div>
-
-					<div class="glass-card rounded-xl p-4 mb-2">
-						<div class="text-base font-semibold text-[#E0E0E0] mb-2.5">Рекомендации по итогам проверки</div>
 						<div id="diag-recs-list" class="space-y-2 text-xs text-[#E0E0E0]">
-							<div class="text-[#888888]">Запустите проверку, чтобы получить подробные рекомендации по обходу блокировок.</div>
+							<div class="text-[#777777] py-1">Нажмите «Запустить проверку», чтобы просканировать маршруты и получить рекомендации по обходу блокировок.</div>
 						</div>
 					</div>
 				</section>
@@ -660,7 +763,7 @@
 								<div class="text-xs text-[#888888] mt-0.5">Запускать программу при включении компьютера</div>
 							</div>
 							<input id="set-autostart" type="checkbox" onchange="onSettingsChanged()" class="cyber-toggle">
-                    </div>
+						</div>
 
 						<div class="setting-row flex items-center justify-between">
 							<div>
@@ -668,7 +771,7 @@
 								<div class="text-xs text-[#888888] mt-0.5">Прятать окно в системный трей при старте программы</div>
 							</div>
 							<input id="set-start-minimized" type="checkbox" onchange="onSettingsChanged()" class="cyber-toggle">
-                    </div>
+						</div>
 
 						<div class="setting-row flex items-center justify-between">
 							<div>
@@ -676,7 +779,7 @@
 								<div class="text-xs text-[#888888] mt-0.5">Кнопка [X] не закрывает программу, а прячет её в трей</div>
 							</div>
 							<input id="set-minimize-close" type="checkbox" onchange="onSettingsChanged()" class="cyber-toggle">
-                    </div>
+						</div>
 
 						<div class="setting-row flex items-center justify-between">
 							<div>
@@ -684,7 +787,7 @@
 								<div class="text-xs text-[#888888] mt-0.5">Показывать всплывающие окна при обрыве сети или запуске/остановке служб</div>
 							</div>
 							<input id="set-notifications" type="checkbox" onchange="onSettingsChanged()" class="cyber-toggle">
-                    </div>
+						</div>
 					</div>
 
 					<div class="glass-card rounded-xl p-5 space-y-1">
@@ -699,7 +802,7 @@
 								<div class="text-xs text-[#888888] mt-0.5">Отключить тряску камеры, эффект VHS и резкие вспышки</div>
 							</div>
 							<input id="set-focus-mode" type="checkbox" onchange="onSettingsChanged()" class="cyber-toggle">
-                    </div>
+						</div>
 
 						<div class="setting-row flex items-center justify-between">
 							<div>
@@ -707,7 +810,7 @@
 								<div class="text-xs text-[#888888] mt-0.5">Скрыть графики скорости и логи, оставив только кнопки</div>
 							</div>
 							<input id="set-compact-mode" type="checkbox" onchange="onSettingsChanged()" class="cyber-toggle">
-                    </div>
+						</div>
 
 						<div class="setting-row flex items-center justify-between">
 							<div>
@@ -715,7 +818,7 @@
 								<div class="text-xs text-[#888888] mt-0.5">Использовать видеокарту для отрисовки интерфейса</div>
 							</div>
 							<input id="set-hw-accel" type="checkbox" onchange="onSettingsChanged()" class="cyber-toggle">
-                    </div>
+						</div>
 
 						<div class="setting-row flex items-center justify-between">
 							<div>
@@ -723,7 +826,7 @@
 								<div class="text-xs text-[#888888] mt-0.5">Заменить красно-зеленые точки индикаторов на оранжево-синие</div>
 							</div>
 							<input id="set-colorblind" type="checkbox" onchange="onSettingsChanged()" class="cyber-toggle">
-                    </div>
+						</div>
 					</div>
 
 					<div class="glass-card rounded-xl p-5 space-y-2">
@@ -738,7 +841,7 @@
 								<div class="text-xs text-[#888888] mt-0.5">URL для проверки соединения (по умолчанию Франкфурт AWS)</div>
 							</div>
 							<input id="set-ping-url" type="text" onblur="onSettingsChanged()" class="w-64 bg-[#222222] border border-[#333333] rounded-lg px-3 py-1.5 text-xs font-mono text-white focus:outline-none focus:border-[#107C10] select-text">
-                    </div>
+						</div>
 
 						<div class="setting-row flex items-center justify-between gap-4">
 							<div>
@@ -757,7 +860,7 @@
 								<div class="text-xs text-[#888888] mt-0.5">Автоматически перезапускать службы при восстановлении сети</div>
 							</div>
 							<input id="set-autorestart" type="checkbox" onchange="onSettingsChanged()" class="cyber-toggle">
-                    </div>
+						</div>
 					</div>
 
 					<div class="glass-card rounded-xl p-5 space-y-4">

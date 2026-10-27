@@ -339,6 +339,9 @@ function handleBackendEvent(type, data) {
         case 'diagProgress':
             document.getElementById('diag-status-txt').innerText = data.status;
             document.getElementById('diag-progress-bar').style.width = `${data.progress}%`;
+            if (typeof updateDiagStepPills === 'function') {
+                updateDiagStepPills(data.progress, data.status);
+            }
             break;
 
         case 'diagResult':
