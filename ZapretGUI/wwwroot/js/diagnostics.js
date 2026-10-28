@@ -364,11 +364,60 @@ function formatCleanRecommendation(rawText) {
     const iconColor = isOk ? 'text-brand' : (isWarn ? 'text-[#F44336]' : 'text-[#60A5FA]');
     const glyph = isOk ? '&#xE73E;' : (isWarn ? '&#xE7BA;' : '&#xE946;');
 
+    // Подбираем кнопку быстрого действия под конкретную проблему
+    let actionBtnHtml = '';
+    if (rawText.includes('SNI-БЛОКИРОВКА') || rawText.includes('DISCORD API: Недоступен') || rawText.includes('Звонки не работают без Zapret')) {
+        actionBtnHtml = !appState.isRunning
+            ? `<button onclick="diagQuickAction('startBypass')" class="px-3 py-1.5 rounded-lg btn-brand text-[11px] font-bold cursor-pointer shrink-0 flex items-center gap-1.5 shadow">
+                   <span class="mdl-icon text-[10px]">&#xE7E8;</span><span>Включить обход</span>
+               </button>`
+            : `<button onclick="diagQuickAction('scanConfigs')" class="px-3 py-1.5 rounded-lg bg-[#222222] hover:bg-[#2C2C2C] border border-[#3A3A3A] text-white text-[11px] font-semibold cursor-pointer shrink-0 flex items-center gap-1.5 transition">
+                   <span class="mdl-icon text-[10px] text-brand">&#xE721;</span><span>Подобрать .bat</span>
+               </button>`;
+    } else if (rawText.includes('ТСПУ-ЗАМЕДЛЕНИЕ МЕДИА')) {
+        actionBtnHtml = !appState.proxyRunning
+            ? `<button onclick="diagQuickAction('enableProxy')" class="px-3 py-1.5 rounded-lg btn-brand text-[11px] font-bold cursor-pointer shrink-0 flex items-center gap-1.5 shadow">
+                   <span class="mdl-icon text-[10px]">&#xE709;</span><span>Запустить с TgWsProxy</span>
+               </button>`
+            : `<button onclick="diagQuickAction('scanConfigs')" class="px-3 py-1.5 rounded-lg bg-[#222222] hover:bg-[#2C2C2C] border border-[#3A3A3A] text-white text-[11px] font-semibold cursor-pointer shrink-0 flex items-center gap-1.5 transition">
+                   <span class="mdl-icon text-[10px] text-brand">&#xE721;</span><span>Сменить профиль</span>
+               </button>`;
+    } else if (rawText.includes('DNS-СПУФИНГ')) {
+        actionBtnHtml = `<button onclick="diagQuickAction('applyHosts')" class="px-3 py-1.5 rounded-lg bg-[#222222] hover:bg-[#2C2C2C] border border-[#107C10] text-brand text-[11px] font-bold cursor-pointer shrink-0 flex items-center gap-1.5 transition">
+                             <span class="mdl-icon text-[10px]">&#xE945;</span><span>Применить обходной Hosts</span>
+                         </button>`;
+    }
+
     return `
-    <div class="flex items-start gap-3 p-3 rounded-lg border ${borderCls}">
-        <span class="mdl-icon text-sm ${iconColor} mt-0.5 shrink-0">${glyph}</span>
-        <span class="whitespace-pre-line leading-relaxed text-[#E0E0E0]">${clean}</span>
+    <div class="flex items-center justify-between gap-3 p-3 rounded-lg border ${borderCls}">
+        <div class="flex items-start gap-3">
+            <span class="mdl-icon text-sm ${iconColor} mt-0.5 shrink-0">${glyph}</span>
+            <span class="whitespace-pre-line leading-relaxed text-[#E0E0E0]">${clean}</span>
+        </div>
+        ${actionBtnHtml}
     </div>`;
+}
+
+function diagQuickAction(act) {
+    sendCmd('playClick');
+    const navBtns = document.querySelectorAll('.nav-btn');
+
+    if (act === 'startBypass') {
+        switchTab('home', navBtns[0]);
+        if (!appState.isRunning) onMainToggleClick();
+    } else if (act === 'scanConfigs') {
+        switchTab('home', navBtns[0]);
+        openConfigModal();
+    } else if (act === 'enableProxy') {
+        document.getElementById('chk-proxy').checked = true;
+        onModuleToggleChange();
+        switchTab('home', navBtns[0]);
+        if (!appState.isRunning) onMainToggleClick();
+        else sendCmd('restartBypass');
+    } else if (act === 'applyHosts') {
+        switchTab('settings', navBtns[3]);
+        updateSystemHosts();
+    }
 }
 
 async function copyDiagnosticsReport() {

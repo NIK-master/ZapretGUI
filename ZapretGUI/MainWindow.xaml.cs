@@ -155,6 +155,20 @@ namespace ZapretGUI
             UpdateIndicators(BypassController.Current.Zapret.IsRunning, BypassController.Current.TgProxy.IsRunning);
         }
 
+        public async Task SelectProfileFromTrayAsync(string profileName)
+        {
+            SettingsManager.Current.SelectedProfileName = profileName;
+            SettingsManager.Save();
+
+            _webBridge?.SendEvent("profileSelected", new { profile = profileName });
+
+            if (BypassController.Current.Zapret.IsRunning)
+            {
+                await BypassController.Current.RestartServicesAsync(profileName);
+                UpdateIndicators(BypassController.Current.Zapret.IsRunning, BypassController.Current.TgProxy.IsRunning);
+            }
+        }
+
         public void AnimateWindowSize(bool isCompact)
         {
             Dispatcher.Invoke(() =>

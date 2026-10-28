@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Diagnostics;
+using System.IO;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
@@ -15,8 +16,6 @@ namespace ZapretGUI.Views
         {
             InitializeComponent();
             TxtTrayVersion.Text = AppConstants.AppVersion;
-
-            // Подписываемся на живое обновление скорости сети, пока открыто меню трея
             BypassController.Current.NetMonitor.StatsUpdated += OnNetStatsUpdated;
         }
 
@@ -207,6 +206,51 @@ namespace ZapretGUI.Views
             AudioHelper.PlayClick();
             BypassController.Current.NetMonitor.StatsUpdated -= OnNetStatsUpdated;
             System.Windows.Application.Current.Shutdown();
+        }
+        private void BtnPrevProfile_Click(object sender, RoutedEventArgs e)
+        {
+            _ = CycleProfileAsync(-1);
+        }
+
+        private void BtnNextProfile_Click(object sender, RoutedEventArgs e)
+        {
+            _ = CycleProfileAsync(1);
+        }
+
+        private async System.Threading.Tasks.Task CycleProfileAsync(int dir)
+        {
+            AudioHelper.PlayClick();
+            var folderPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.CoreFilesDirectory);
+            if (!System.IO.Directory.Exists(folderPath)) return;
+
+            var profiles = System.IO.Directory.GetFiles(folderPath, "*.bat")
+                .Select(System.IO.Path.GetFileName)
+                .Where(name => !string.IsNullOrEmpty(name) &&
+                              (name.StartsWith("general", StringComparison.OrdinalIgnoreCase) ||
+                               name.StartsWith("mod_", StringComparison.OrdinalIgnoreCase)))
+                .Cast<string>()
+                .OrderBy(n => n)
+                .ToList();
+
+            if (profiles.Count == 0) return;
+
+            var current = SettingsManager.Current.SelectedProfileName ?? "general.bat";
+            var idx = profiles.FindIndex(p => string.Equals(p, current, StringComparison.OrdinalIgnoreCase));
+            var nextIdx = idx < 0 ? 0 : (idx + dir + profiles.Count) % profiles.Count;
+            var nextProfile = profiles[nextIdx];
+
+            TxtActiveProfile.Text = nextProfile;
+
+            if (System.Windows.Application.Current.MainWindow is MainWindow mainWindow)
+            {
+                if (BypassController.Current.Zapret.IsRunning)
+                {
+                    TxtSubStatus.Text = $"Запуск {nextProfile}...";
+                    TxtSubStatus.Foreground = UIHelper.GetBrushFromHex("#FF8C00");
+                }
+                await mainWindow.SelectProfileFromTrayAsync(nextProfile);
+            }
+            SyncStatus();
         }
     }
 }

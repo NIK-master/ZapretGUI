@@ -728,3 +728,23 @@ body.compact-mode #settings-routing-grid {
 #wiz-left-panel.is-dragging {
     cursor: grabbing;
 }
+/* =========================================================
+   КОМПАКТНЫЙ ICON-RAIL SIDEBAR (СВОРАЧИВАНИЕ В ИКОНКИ 60PX)
+   ========================================================= */
+#sidebar.rail-mode {
+    width: 60px !important;
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+}
+#sidebar.rail-mode nav {
+    width: 100% !important;
+}
+#sidebar.rail-mode .nav-btn {
+    justify-content: center;
+    padding-left: 0;
+    padding-right: 0;
+}
+#sidebar.rail-mode .nav-btn span:not(.mdl-icon),
+#sidebar.rail-mode #sidebar-footer {
+    display: none;
+}

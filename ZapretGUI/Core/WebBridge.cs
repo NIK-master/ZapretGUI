@@ -399,6 +399,10 @@ namespace ZapretGUI.Core
                     await HandleImportModAsync();
                     break;
 
+                case "importDroppedFile":
+                    await HandleImportDroppedFileAsync(root);
+                    break;
+
                 case "exportMod":
                     await HandleExportModAsync(root);
                     break;
@@ -446,6 +450,8 @@ namespace ZapretGUI.Core
                     if (!Directory.Exists(targetPath)) Directory.CreateDirectory(targetPath);
                     Process.Start("explorer.exe", targetPath);
                     break;
+
+
             }
         }
 
@@ -1024,6 +1030,119 @@ namespace ZapretGUI.Core
                 _isInternalFileOp = false;
                 if (Directory.Exists(tempDir))
                     try { Directory.Delete(tempDir, true); } catch { }
+            }
+        }
+
+        private async Task HandleImportDroppedFileAsync(JsonElement root)
+        {
+            var fileName = root.GetProperty("fileName").GetString() ?? "dropped_mod";
+            var base64 = root.GetProperty("base64").GetString() ?? "";
+            if (string.IsNullOrEmpty(base64)) return;
+
+            var ext = Path.GetExtension(fileName).ToLowerInvariant();
+            var bytes = Convert.FromBase64String(base64);
+
+            if (ext == ".zip" || ext == ".netfix-mod")
+            {
+                var tempZip = Path.Combine(Path.GetTempPath(), "ZapretDrop_" + Guid.NewGuid().ToString("N") + ext);
+                var tempDir = Path.Combine(Path.GetTempPath(), "ZapretGUI_Drop_" + Guid.NewGuid().ToString("N"));
+                try
+                {
+                    _isInternalFileOp = true;
+                    await File.WriteAllBytesAsync(tempZip, bytes);
+                    Directory.CreateDirectory(tempDir);
+                    await Task.Run(() => ZipFile.ExtractToDirectory(tempZip, tempDir));
+
+                    var jsonFiles = Directory.GetFiles(tempDir, "mod.json", SearchOption.AllDirectories);
+                    if (jsonFiles.Length == 0)
+                    {
+                        SendEvent("alert", new { title = "Ошибка Drag & Drop", message = "В архиве не найден файл mod.json!", isError = true });
+                        return;
+                    }
+
+                    var jsonPath = jsonFiles[0];
+                    var modRootPath = Path.GetDirectoryName(jsonPath)!;
+                    var meta = JsonSerializer.Deserialize<ModMetaData>(await File.ReadAllTextAsync(jsonPath), _jsonOptions);
+                    if (meta == null) return;
+
+                    var baseCandidate = !string.IsNullOrWhiteSpace(meta.UniqueId)
+                        ? ModManager.SanitizeModId(meta.UniqueId)
+                        : ModManager.SanitizeModId(meta.Name);
+                    if (string.IsNullOrEmpty(baseCandidate))
+                        baseCandidate = ModManager.SanitizeModId(Path.GetFileNameWithoutExtension(fileName));
+
+                    var finalId = _modManager.IsModIdTaken(baseCandidate)
+                        ? _modManager.GenerateUniqueModId(baseCandidate)
+                        : baseCandidate;
+
+                    meta.UniqueId = finalId;
+                    await File.WriteAllTextAsync(jsonPath, JsonSerializer.Serialize(meta, new JsonSerializerOptions { WriteIndented = true }));
+
+                    var folderType = meta.IsBatStrategy ? "strategies" : "lists";
+                    var destPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, folderType, finalId);
+                    Directory.CreateDirectory(destPath);
+
+                    foreach (var file in Directory.GetFiles(modRootPath, "*.*", SearchOption.AllDirectories))
+                    {
+                        var rel = file.Substring(modRootPath.Length + 1);
+                        var target = Path.Combine(destPath, rel);
+                        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                        File.Copy(file, target, true);
+                    }
+
+                    await BroadcastModsAndProfilesAsync();
+                    AudioHelper.PlaySuccess();
+                    SendEvent("alert", new { title = "Мод импортирован", message = $"Архив «{meta.Name}» (ID: {finalId}) успешно установлен через Drag & Drop!", isError = false });
+                }
+                catch (Exception ex)
+                {
+                    SendEvent("alert", new { title = "Ошибка импорта", message = ex.Message, isError = true });
+                }
+                finally
+                {
+                    _isInternalFileOp = false;
+                    try { if (File.Exists(tempZip)) File.Delete(tempZip); } catch { }
+                    try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true); } catch { }
+                }
+            }
+            else if (ext == ".bat" || ext == ".txt")
+            {
+                var isBat = ext == ".bat";
+                var rawTitle = Path.GetFileNameWithoutExtension(fileName);
+                var finalId = _modManager.GenerateUniqueModId(rawTitle);
+                var folderName = isBat ? "strategies" : "lists";
+                var modFolderPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, folderName, finalId);
+
+                try
+                {
+                    _isInternalFileOp = true;
+                    Directory.CreateDirectory(modFolderPath);
+
+                    var meta = new ModMetaData
+                    {
+                        UniqueId = finalId,
+                        Name = rawTitle,
+                        Author = "Drag & Drop",
+                        Version = "1.0",
+                        Description = $"Создано автоматически из файла {fileName}",
+                        IsBatStrategy = isBat
+                    };
+
+                    await File.WriteAllTextAsync(Path.Combine(modFolderPath, "mod.json"), JsonSerializer.Serialize(meta, new JsonSerializerOptions { WriteIndented = true }));
+                    await File.WriteAllBytesAsync(Path.Combine(modFolderPath, isBat ? "strategy.bat" : "list.txt"), bytes);
+
+                    await BroadcastModsAndProfilesAsync();
+                    AudioHelper.PlaySuccess();
+                    SendEvent("alert", new { title = "Файл превращен в мод!", message = $"Файл «{fileName}» автоматически упакован в мод «{rawTitle}» (ID: {finalId}).", isError = false });
+                }
+                catch (Exception ex)
+                {
+                    SendEvent("alert", new { title = "Ошибка создания мода", message = ex.Message, isError = true });
+                }
+                finally
+                {
+                    _isInternalFileOp = false;
+                }
             }
         }
 

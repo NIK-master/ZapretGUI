@@ -243,6 +243,20 @@ namespace ZapretGUI
             UpdateIndicators(BypassController.Current.Zapret.IsRunning, BypassController.Current.TgProxy.IsRunning);
         }
 
+        public async Task SelectProfileFromTrayAsync(string profileName)
+        {
+            SettingsManager.Current.SelectedProfileName = profileName;
+            SettingsManager.Save();
+
+            _webBridge?.SendEvent("profileSelected", new { profile = profileName });
+
+            if (BypassController.Current.Zapret.IsRunning)
+            {
+                await BypassController.Current.RestartServicesAsync(profileName);
+                UpdateIndicators(BypassController.Current.Zapret.IsRunning, BypassController.Current.TgProxy.IsRunning);
+            }
+        }
+
         public void AnimateWindowSize(bool isCompact)
         {
             Dispatcher.Invoke(() =>
@@ -3192,6 +3206,10 @@ namespace ZapretGUI.Core
                     await HandleImportModAsync();
                     break;
 
+                case "importDroppedFile":
+                    await HandleImportDroppedFileAsync(root);
+                    break;
+
                 case "exportMod":
                     await HandleExportModAsync(root);
                     break;
@@ -3239,6 +3257,8 @@ namespace ZapretGUI.Core
                     if (!Directory.Exists(targetPath)) Directory.CreateDirectory(targetPath);
                     Process.Start("explorer.exe", targetPath);
                     break;
+
+
             }
         }
 
@@ -3817,6 +3837,119 @@ namespace ZapretGUI.Core
                 _isInternalFileOp = false;
                 if (Directory.Exists(tempDir))
                     try { Directory.Delete(tempDir, true); } catch { }
+            }
+        }
+
+        private async Task HandleImportDroppedFileAsync(JsonElement root)
+        {
+            var fileName = root.GetProperty("fileName").GetString() ?? "dropped_mod";
+            var base64 = root.GetProperty("base64").GetString() ?? "";
+            if (string.IsNullOrEmpty(base64)) return;
+
+            var ext = Path.GetExtension(fileName).ToLowerInvariant();
+            var bytes = Convert.FromBase64String(base64);
+
+            if (ext == ".zip" || ext == ".netfix-mod")
+            {
+                var tempZip = Path.Combine(Path.GetTempPath(), "ZapretDrop_" + Guid.NewGuid().ToString("N") + ext);
+                var tempDir = Path.Combine(Path.GetTempPath(), "ZapretGUI_Drop_" + Guid.NewGuid().ToString("N"));
+                try
+                {
+                    _isInternalFileOp = true;
+                    await File.WriteAllBytesAsync(tempZip, bytes);
+                    Directory.CreateDirectory(tempDir);
+                    await Task.Run(() => ZipFile.ExtractToDirectory(tempZip, tempDir));
+
+                    var jsonFiles = Directory.GetFiles(tempDir, "mod.json", SearchOption.AllDirectories);
+                    if (jsonFiles.Length == 0)
+                    {
+                        SendEvent("alert", new { title = "Ошибка Drag & Drop", message = "В архиве не найден файл mod.json!", isError = true });
+                        return;
+                    }
+
+                    var jsonPath = jsonFiles[0];
+                    var modRootPath = Path.GetDirectoryName(jsonPath)!;
+                    var meta = JsonSerializer.Deserialize<ModMetaData>(await File.ReadAllTextAsync(jsonPath), _jsonOptions);
+                    if (meta == null) return;
+
+                    var baseCandidate = !string.IsNullOrWhiteSpace(meta.UniqueId)
+                        ? ModManager.SanitizeModId(meta.UniqueId)
+                        : ModManager.SanitizeModId(meta.Name);
+                    if (string.IsNullOrEmpty(baseCandidate))
+                        baseCandidate = ModManager.SanitizeModId(Path.GetFileNameWithoutExtension(fileName));
+
+                    var finalId = _modManager.IsModIdTaken(baseCandidate)
+                        ? _modManager.GenerateUniqueModId(baseCandidate)
+                        : baseCandidate;
+
+                    meta.UniqueId = finalId;
+                    await File.WriteAllTextAsync(jsonPath, JsonSerializer.Serialize(meta, new JsonSerializerOptions { WriteIndented = true }));
+
+                    var folderType = meta.IsBatStrategy ? "strategies" : "lists";
+                    var destPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, folderType, finalId);
+                    Directory.CreateDirectory(destPath);
+
+                    foreach (var file in Directory.GetFiles(modRootPath, "*.*", SearchOption.AllDirectories))
+                    {
+                        var rel = file.Substring(modRootPath.Length + 1);
+                        var target = Path.Combine(destPath, rel);
+                        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                        File.Copy(file, target, true);
+                    }
+
+                    await BroadcastModsAndProfilesAsync();
+                    AudioHelper.PlaySuccess();
+                    SendEvent("alert", new { title = "Мод импортирован", message = $"Архив «{meta.Name}» (ID: {finalId}) успешно установлен через Drag & Drop!", isError = false });
+                }
+                catch (Exception ex)
+                {
+                    SendEvent("alert", new { title = "Ошибка импорта", message = ex.Message, isError = true });
+                }
+                finally
+                {
+                    _isInternalFileOp = false;
+                    try { if (File.Exists(tempZip)) File.Delete(tempZip); } catch { }
+                    try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true); } catch { }
+                }
+            }
+            else if (ext == ".bat" || ext == ".txt")
+            {
+                var isBat = ext == ".bat";
+                var rawTitle = Path.GetFileNameWithoutExtension(fileName);
+                var finalId = _modManager.GenerateUniqueModId(rawTitle);
+                var folderName = isBat ? "strategies" : "lists";
+                var modFolderPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, folderName, finalId);
+
+                try
+                {
+                    _isInternalFileOp = true;
+                    Directory.CreateDirectory(modFolderPath);
+
+                    var meta = new ModMetaData
+                    {
+                        UniqueId = finalId,
+                        Name = rawTitle,
+                        Author = "Drag & Drop",
+                        Version = "1.0",
+                        Description = $"Создано автоматически из файла {fileName}",
+                        IsBatStrategy = isBat
+                    };
+
+                    await File.WriteAllTextAsync(Path.Combine(modFolderPath, "mod.json"), JsonSerializer.Serialize(meta, new JsonSerializerOptions { WriteIndented = true }));
+                    await File.WriteAllBytesAsync(Path.Combine(modFolderPath, isBat ? "strategy.bat" : "list.txt"), bytes);
+
+                    await BroadcastModsAndProfilesAsync();
+                    AudioHelper.PlaySuccess();
+                    SendEvent("alert", new { title = "Файл превращен в мод!", message = $"Файл «{fileName}» автоматически упакован в мод «{rawTitle}» (ID: {finalId}).", isError = false });
+                }
+                catch (Exception ex)
+                {
+                    SendEvent("alert", new { title = "Ошибка создания мода", message = ex.Message, isError = true });
+                }
+                finally
+                {
+                    _isInternalFileOp = false;
+                }
             }
         }
 
@@ -4701,12 +4834,40 @@ namespace ZapretGUI.Core
                     </StackPanel>
                 </Border>
 
-                <!-- Текущий .bat профиль -->
-                <Border Grid.Column="2" Background="#181818" BorderBrush="#262626" BorderThickness="1" CornerRadius="6" Padding="8,4">
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Center">
-                        <TextBlock Text="&#xE756;" FontFamily="Segoe MDL2 Assets" Foreground="#4CAF50" FontSize="10" Margin="0,0,5,0" VerticalAlignment="Center"/>
-                        <TextBlock x:Name="TxtActiveProfile" Text="general.bat" Foreground="White" FontFamily="Consolas" FontSize="11" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-                    </StackPanel>
+                <!-- Интерактивный переключатель .bat профиля прямо из трея -->
+                <Border Grid.Column="2" Background="#181818" BorderBrush="#262626" BorderThickness="1" CornerRadius="6" Padding="3,2">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="20"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="20"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Button Grid.Column="0" Click="BtnPrevProfile_Click" ToolTip="Предыдущий конфиг" Cursor="Hand" Background="Transparent" BorderThickness="0">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border Background="{TemplateBinding Background}" CornerRadius="4">
+                                        <TextBlock Text="&#xE76B;" FontFamily="Segoe MDL2 Assets" Foreground="#888888" FontSize="9" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
+
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="2,0">
+                            <TextBlock Text="&#xE756;" FontFamily="Segoe MDL2 Assets" Foreground="#4CAF50" FontSize="9.5" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="TxtActiveProfile" Text="general.bat" Foreground="White" FontFamily="Consolas" FontSize="10.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" MaxWidth="92" ToolTip="Активный профиль обхода"/>
+                        </StackPanel>
+
+                        <Button Grid.Column="2" Click="BtnNextProfile_Click" ToolTip="Следующий конфиг" Cursor="Hand" Background="Transparent" BorderThickness="0">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border Background="{TemplateBinding Background}" CornerRadius="4">
+                                        <TextBlock Text="&#xE76C;" FontFamily="Segoe MDL2 Assets" Foreground="#888888" FontSize="9" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
+                    </Grid>
                 </Border>
             </Grid>
 
@@ -4850,6 +5011,7 @@ namespace ZapretGUI.Core
 
 using System;
 using System.Diagnostics;
+using System.IO;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
@@ -4865,8 +5027,6 @@ namespace ZapretGUI.Views
         {
             InitializeComponent();
             TxtTrayVersion.Text = AppConstants.AppVersion;
-
-            // Подписываемся на живое обновление скорости сети, пока открыто меню трея
             BypassController.Current.NetMonitor.StatsUpdated += OnNetStatsUpdated;
         }
 
@@ -5057,6 +5217,51 @@ namespace ZapretGUI.Views
             AudioHelper.PlayClick();
             BypassController.Current.NetMonitor.StatsUpdated -= OnNetStatsUpdated;
             System.Windows.Application.Current.Shutdown();
+        }
+        private void BtnPrevProfile_Click(object sender, RoutedEventArgs e)
+        {
+            _ = CycleProfileAsync(-1);
+        }
+
+        private void BtnNextProfile_Click(object sender, RoutedEventArgs e)
+        {
+            _ = CycleProfileAsync(1);
+        }
+
+        private async System.Threading.Tasks.Task CycleProfileAsync(int dir)
+        {
+            AudioHelper.PlayClick();
+            var folderPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.CoreFilesDirectory);
+            if (!System.IO.Directory.Exists(folderPath)) return;
+
+            var profiles = System.IO.Directory.GetFiles(folderPath, "*.bat")
+                .Select(System.IO.Path.GetFileName)
+                .Where(name => !string.IsNullOrEmpty(name) &&
+                              (name.StartsWith("general", StringComparison.OrdinalIgnoreCase) ||
+                               name.StartsWith("mod_", StringComparison.OrdinalIgnoreCase)))
+                .Cast<string>()
+                .OrderBy(n => n)
+                .ToList();
+
+            if (profiles.Count == 0) return;
+
+            var current = SettingsManager.Current.SelectedProfileName ?? "general.bat";
+            var idx = profiles.FindIndex(p => string.Equals(p, current, StringComparison.OrdinalIgnoreCase));
+            var nextIdx = idx < 0 ? 0 : (idx + dir + profiles.Count) % profiles.Count;
+            var nextProfile = profiles[nextIdx];
+
+            TxtActiveProfile.Text = nextProfile;
+
+            if (System.Windows.Application.Current.MainWindow is MainWindow mainWindow)
+            {
+                if (BypassController.Current.Zapret.IsRunning)
+                {
+                    TxtSubStatus.Text = $"Запуск {nextProfile}...";
+                    TxtSubStatus.Foreground = UIHelper.GetBrushFromHex("#FF8C00");
+                }
+                await mainWindow.SelectProfileFromTrayAsync(nextProfile);
+            }
+            SyncStatus();
         }
     }
 }
@@ -5354,8 +5559,13 @@ namespace ZapretGUI.Views
 					</div>
 				</div>
 			</div>
-
-			<div class="flex items-center gap-1">
+			
+			<div class="flex items-center gap-1.5">
+				<button onclick="openCommandPalette()" class="px-2.5 h-[26px] mr-1 rounded-md bg-[#1A1A1A] hover:bg-[#242424] border border-[#2C2C2C] text-[11px] font-mono text-[#999999] hover:text-white transition flex items-center gap-2 cursor-pointer" title="Быстрая палитра команд (Ctrl + K)">
+					<span class="mdl-icon text-[10px] text-brand">&#xE721;</span>
+					<span>Команды</span>
+					<kbd class="px-1 py-0.2 rounded bg-[#111111] border border-[#333333] text-[9.5px] text-[#777777]">Ctrl+K</kbd>
+				</button>
 				<button onclick="sendCmd('windowMinimize')" class="w-[35px] h-[30px] rounded hover:bg-[#222222] text-white transition flex items-center justify-center cursor-pointer">—</button>
 				<button onclick="sendCmd('windowClose')" class="w-[35px] h-[30px] rounded hover:bg-[#222222] text-[#D13438] transition flex items-center justify-center cursor-pointer">✕</button>
 			</div>
@@ -5364,28 +5574,28 @@ namespace ZapretGUI.Views
 		<!-- ОСНОВНОЙ КОНТЕЙНЕР -->
 		<div class="flex flex-1 overflow-hidden relative">
 
-			<!-- БОКОВОЕ МЕНЮ (SIDEBAR — точные цвета #181818 и #2A2A2A из оригинала) -->
+			<!-- БОКОВОЕ МЕНЮ (SIDEBAR С РЕЖИМОМ ICON-RAIL 60PX) -->
 			<aside id="sidebar" class="w-[220px] bg-[#181818] border-r border-[#2A2A2A] px-2.5 pt-5 pb-3 flex flex-col justify-between shrink-0 transition-all duration-200 overflow-hidden">
 				<nav class="flex flex-col gap-2.5 w-[200px]">
-					<button onclick="switchTab('home', this)" class="nav-btn active flex items-center gap-3 px-4 h-[40px] rounded-md text-sm font-semibold bg-[#2A2A2A] text-white border-l-[3px] border-[#107C10] transition-all cursor-pointer">
+					<button onclick="switchTab('home', this)" title="Главная" class="nav-btn active flex items-center gap-3 px-4 h-[40px] rounded-md text-sm font-semibold bg-[#2A2A2A] text-white border-l-[3px] border-[#107C10] transition-all cursor-pointer">
 						<span class="mdl-icon text-sm text-[#CCCCCC]">&#xE80F;</span>
 						<span>Главная</span>
 					</button>
-					<button onclick="switchTab('mods', this)" class="nav-btn flex items-center gap-3 px-4 h-[40px] rounded-md text-sm font-medium text-[#CCCCCC] hover:bg-[#222222] hover:text-white transition-all cursor-pointer">
+					<button onclick="switchTab('mods', this)" title="Модификации" class="nav-btn flex items-center gap-3 px-4 h-[40px] rounded-md text-sm font-medium text-[#CCCCCC] hover:bg-[#222222] hover:text-white transition-all cursor-pointer">
 						<span class="mdl-icon text-sm text-[#888888]">&#xE74C;</span>
 						<span>Модификации</span>
 					</button>
-					<button onclick="switchTab('diag', this)" class="nav-btn flex items-center gap-3 px-4 h-[40px] rounded-md text-sm font-medium text-[#CCCCCC] hover:bg-[#222222] hover:text-white transition-all cursor-pointer">
+					<button onclick="switchTab('diag', this)" title="Диагностика" class="nav-btn flex items-center gap-3 px-4 h-[40px] rounded-md text-sm font-medium text-[#CCCCCC] hover:bg-[#222222] hover:text-white transition-all cursor-pointer">
 						<span class="mdl-icon text-sm text-[#888888]">&#xE9D9;</span>
 						<span>Диагностика</span>
 					</button>
-					<button onclick="switchTab('settings', this)" class="nav-btn flex items-center gap-3 px-4 h-[40px] rounded-md text-sm font-medium text-[#CCCCCC] hover:bg-[#222222] hover:text-white transition-all cursor-pointer">
+					<button onclick="switchTab('settings', this)" title="Настройки" class="nav-btn flex items-center gap-3 px-4 h-[40px] rounded-md text-sm font-medium text-[#CCCCCC] hover:bg-[#222222] hover:text-white transition-all cursor-pointer">
 						<span class="mdl-icon text-sm text-[#888888]">&#xE713;</span>
 						<span>Настройки</span>
 					</button>
 				</nav>
 
-				<div class="text-center text-[11px] text-[#555555] font-mono pb-1">
+				<div id="sidebar-footer" class="text-center text-[11px] text-[#555555] font-mono pb-1 whitespace-nowrap">
 					Zapret for ADHD <span id="app-version" class="app-ver-text">v4.0</span>
 				</div>
 			</aside>
@@ -5453,10 +5663,16 @@ namespace ZapretGUI.Views
 								</div>
 							</div>
 
-							<!-- График с легендой пиковой скорости -->
+							<!-- Интерактивный график с прицелом, пиковой скоростью и трафиком за сессию -->
 							<div class="relative">
-								<canvas id="traffic-chart" width="280" height="68" class="w-full h-[68px] rounded-lg bg-[#0A0A0A] border border-[#2A2A2A]"></canvas>
-								<div class="absolute top-1.5 right-2 flex items-center gap-2 pointer-events-none">
+								<canvas id="traffic-chart"
+										width="280"
+										height="68"
+										onmousemove="onChartMouseMove(event)"
+										onmouseleave="onChartMouseLeave()"
+										class="w-full h-[68px] rounded-lg bg-[#0A0A0A] border border-[#2A2A2A] cursor-crosshair"></canvas>
+								<div class="absolute top-1.5 inset-x-2 flex items-center justify-between pointer-events-none">
+									<span id="stat-session-total" class="text-[10px] font-mono text-[#666666]">Сессия: ↓ 0 МБ • ↑ 0 МБ</span>
 									<span id="stat-peak" class="text-[10px] font-mono text-[#666666]">Пик: 0.0 Мбит/с</span>
 								</div>
 							</div>
@@ -6573,6 +6789,36 @@ namespace ZapretGUI.Views
 					</div>
 				</div>
 			</div>
+
+			<!-- ОВЕРЛЕЙ 7: ПАЛИТРА БЫСТРЫХ КОМАНД (CTRL + K) -->
+			<div id="cmd-palette-modal" onclick="if(event.target===this) closeCommandPalette()" class="modal-overlay fixed inset-0 bg-black/75 backdrop-blur-sm z-[98] flex items-start justify-center pt-20 p-4">
+				<div class="modal-box bg-[#141414] border border-[#2E2E2E] rounded-xl w-[520px] shadow-2xl overflow-hidden flex flex-col" onmousedown="event.preventDefault()">
+					<div class="flex items-center px-3.5 py-2.5 border-b border-[#242424] bg-[#101010]">
+						<span class="mdl-icon text-sm text-brand mr-2.5">&#xE721;</span>
+						<input id="cmd-palette-input"
+							   type="text"
+							   oninput="renderCommandPaletteList()"
+							   onkeydown="onCommandPaletteKeyDown(event)"
+							   placeholder="Введите команду, вкладку или имя .bat профиля..."
+							   class="flex-1 bg-transparent text-xs text-white focus:outline-none select-text font-mono">
+							<kbd class="px-1.5 py-0.5 rounded bg-[#1C1C1C] border border-[#333333] text-[10px] font-mono text-[#777777]">ESC</kbd>
+						</div>
+					<div id="cmd-palette-list" class="max-h-[310px] overflow-y-auto p-1.5 space-y-1"></div>
+					<div class="px-3.5 py-1.5 bg-[#101010] border-t border-[#222222] flex items-center justify-between text-[10px] font-mono text-[#666666]">
+						<span>↑↓ Навигация • Enter / Клик — Выполнить</span>
+						<span>Zapret Command Center</span>
+					</div>
+				</div>
+			</div>
+
+			<!-- ОВЕРЛЕЙ 8: ЗОНА DRAG & DROP ИМПОРТА МОДОВ -->
+			<div id="dropzone-overlay" class="fixed inset-3 rounded-2xl bg-[#0A160A]/90 backdrop-blur-md border-2 border-dashed border-[#4CAF50] z-[99] hidden flex-col items-center justify-center pointer-events-none">
+				<div class="w-16 h-16 rounded-2xl bg-[#107C10]/25 border border-[#4CAF50] flex items-center justify-center text-brand mb-3 shadow-lg">
+					<span class="mdl-icon text-3xl">&#xE8B5;</span>
+				</div>
+				<div class="text-lg font-bold text-white">Отпустите файл для мгновенного импорта мода</div>
+				<div class="text-xs font-mono text-brand mt-1">Поддерживаются: .zip, .netfix-mod, .bat (стратегии) и .txt (списки доменов)</div>
+			</div>
 		</div>
 
 		<!-- ПОДКЛЮЧЕНИЕ МОДУЛЬНЫХ СКРИПТОВ -->
@@ -7317,6 +7563,26 @@ body.compact-mode #settings-routing-grid {
 #wiz-left-panel.is-dragging {
     cursor: grabbing;
 }
+/* =========================================================
+   КОМПАКТНЫЙ ICON-RAIL SIDEBAR (СВОРАЧИВАНИЕ В ИКОНКИ 60PX)
+   ========================================================= */
+#sidebar.rail-mode {
+    width: 60px !important;
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+}
+#sidebar.rail-mode nav {
+    width: 100% !important;
+}
+#sidebar.rail-mode .nav-btn {
+    justify-content: center;
+    padding-left: 0;
+    padding-right: 0;
+}
+#sidebar.rail-mode .nav-btn span:not(.mdl-icon),
+#sidebar.rail-mode #sidebar-footer {
+    display: none;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 // ФАЙЛ: wwwroot\js\app.js
@@ -8032,6 +8298,13 @@ function handleBackendEvent(type, data) {
         case 'alert':
             showAlert(data.title, data.message, data.isError);
             break;
+
+        case 'profileSelected':
+            appState.selectedProfile = data.profile;
+            document.getElementById('txt-main-profile').innerText = data.profile;
+            document.getElementById('modal-active-profile').innerText = data.profile;
+            renderConfigCards();
+            break;
     }
 }
 
@@ -8453,11 +8726,32 @@ function closeConfirmModal(accepted) {
 }
 
 // =========================================================================
-// 6. ДВУХКАНАЛЬНЫЙ ГРАФИК ТРАФИКА С ГРАДИЕНТОМ И ПИКОМ
+// 6. ИНТЕРАКТИВНЫЙ ГРАФИК ТРАФИКА С ПРИЦЕЛОМ И СЧЕТЧИКОМ СЕССИИ
 // =========================================================================
 const rxHistory = new Array(30).fill(0);
 const txHistory = new Array(30).fill(0);
 let peakSpeedMbps = 0;
+let sessionRxMB = 0;
+let sessionTxMB = 0;
+let chartHoverIdx = -1;
+
+function formatTrafficSize(mb) {
+    if (mb >= 1024) return `${(mb / 1024).toFixed(2)} ГБ`;
+    return `${mb.toFixed(0)} МБ`;
+}
+
+function onChartMouseMove(e) {
+    const canvas = e.currentTarget;
+    const rect = canvas.getBoundingClientRect();
+    const relX = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    chartHoverIdx = Math.round(relX * (rxHistory.length - 1));
+    drawTrafficChart();
+}
+
+function onChartMouseLeave() {
+    chartHoverIdx = -1;
+    drawTrafficChart();
+}
 
 function updateChart(rxValue, txValue = 0) {
     rxHistory.push(rxValue);
@@ -8466,9 +8760,22 @@ function updateChart(rxValue, txValue = 0) {
     txHistory.shift();
 
     peakSpeedMbps = Math.max(peakSpeedMbps, rxValue, txValue);
-    const peakEl = document.getElementById('stat-peak');
-    if (peakEl) peakEl.innerText = `Пик: ${peakSpeedMbps.toFixed(1)} Мбит/с`;
+    const intervalSec = Math.max(1, appState.settings.statsUpdateInterval || 1);
+    sessionRxMB += (rxValue / 8.0) * intervalSec;
+    sessionTxMB += (txValue / 8.0) * intervalSec;
 
+    const peakEl = document.getElementById('stat-peak');
+    const totalEl = document.getElementById('stat-session-total');
+
+    if (chartHoverIdx < 0) {
+        if (peakEl) peakEl.innerText = `Пик: ${peakSpeedMbps.toFixed(1)} Мбит/с`;
+        if (totalEl) totalEl.innerText = `Сессия: ↓ ${formatTrafficSize(sessionRxMB)} • ↑ ${formatTrafficSize(sessionTxMB)}`;
+    }
+
+    drawTrafficChart();
+}
+
+function drawTrafficChart() {
     const canvas = document.getElementById('traffic-chart');
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -8476,7 +8783,6 @@ function updateChart(rxValue, txValue = 0) {
     const h = canvas.height;
     ctx.clearRect(0, 0, w, h);
 
-    // Фоновая сетка
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
     ctx.lineWidth = 1;
     [0.33, 0.66].forEach(ratio => {
@@ -8490,7 +8796,6 @@ function updateChart(rxValue, txValue = 0) {
     const isCb = appState.settings.colorblindMode;
     const rxColor = isCb ? '#0078D7' : '#4CAF50';
 
-    // Заливка под кривой Download
     const grad = ctx.createLinearGradient(0, 0, 0, h);
     grad.addColorStop(0, isCb ? 'rgba(0, 120, 215, 0.35)' : 'rgba(76, 175, 80, 0.35)');
     grad.addColorStop(1, 'rgba(0, 0, 0, 0.0)');
@@ -8498,7 +8803,7 @@ function updateChart(rxValue, txValue = 0) {
     ctx.beginPath();
     rxHistory.forEach((val, idx) => {
         const x = (idx / (rxHistory.length - 1)) * w;
-        const y = h - (val / maxVal) * (h - 14) - 5;
+        const y = h - (val / maxVal) * (h - 16) - 4;
         if (idx === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
     });
@@ -8508,31 +8813,64 @@ function updateChart(rxValue, txValue = 0) {
     ctx.fillStyle = grad;
     ctx.fill();
 
-    // Линия Download
     ctx.beginPath();
     ctx.strokeStyle = rxColor;
     ctx.lineWidth = 2;
     rxHistory.forEach((val, idx) => {
         const x = (idx / (rxHistory.length - 1)) * w;
-        const y = h - (val / maxVal) * (h - 14) - 5;
+        const y = h - (val / maxVal) * (h - 16) - 4;
         if (idx === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
     });
     ctx.stroke();
 
-    // Пунктирная линия Upload
     ctx.beginPath();
     ctx.setLineDash([3, 3]);
     ctx.strokeStyle = '#60A5FA';
     ctx.lineWidth = 1.3;
     txHistory.forEach((val, idx) => {
         const x = (idx / (txHistory.length - 1)) * w;
-        const y = h - (val / maxVal) * (h - 14) - 5;
+        const y = h - (val / maxVal) * (h - 16) - 4;
         if (idx === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
     });
     ctx.stroke();
     ctx.setLineDash([]);
+
+    const peakEl = document.getElementById('stat-peak');
+    const totalEl = document.getElementById('stat-session-total');
+
+    if (chartHoverIdx >= 0 && chartHoverIdx < rxHistory.length) {
+        const hx = (chartHoverIdx / (rxHistory.length - 1)) * w;
+        const rxVal = rxHistory[chartHoverIdx];
+        const txVal = txHistory[chartHoverIdx];
+        const ry = h - (rxVal / maxVal) * (h - 16) - 4;
+        const ty = h - (txVal / maxVal) * (h - 16) - 4;
+
+        ctx.beginPath();
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+        ctx.lineWidth = 1;
+        ctx.moveTo(hx, 0);
+        ctx.lineTo(hx, h);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.fillStyle = rxColor;
+        ctx.arc(hx, ry, 3.2, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.fillStyle = '#60A5FA';
+        ctx.arc(hx, ty, 2.8, 0, Math.PI * 2);
+        ctx.fill();
+
+        const secAgo = (rxHistory.length - 1 - chartHoverIdx) * Math.max(1, appState.settings.statsUpdateInterval || 1);
+        if (totalEl) totalEl.innerText = secAgo === 0 ? 'Сейчас:' : `-${secAgo} сек назад:`;
+        if (peakEl) peakEl.innerText = `↓ ${rxVal.toFixed(1)} • ↑ ${txVal.toFixed(1)} Мбит/с`;
+    } else {
+        if (peakEl) peakEl.innerText = `Пик: ${peakSpeedMbps.toFixed(1)} Мбит/с`;
+        if (totalEl) totalEl.innerText = `Сессия: ↓ ${formatTrafficSize(sessionRxMB)} • ↑ ${formatTrafficSize(sessionTxMB)}`;
+    }
 }
 
 let sidebarOpen = true;
@@ -8540,10 +8878,7 @@ function toggleSidebar() {
     sendCmd('playClick');
     sidebarOpen = !sidebarOpen;
     const sb = document.getElementById('sidebar');
-    sb.style.width = sidebarOpen ? '220px' : '0px';
-    sb.style.paddingLeft = sidebarOpen ? '10px' : '0px';
-    sb.style.paddingRight = sidebarOpen ? '10px' : '0px';
-    sb.style.borderRightWidth = sidebarOpen ? '1px' : '0px';
+    sb.classList.toggle('rail-mode', !sidebarOpen);
 }
 
 function switchTab(tabId, btn) {
@@ -8558,7 +8893,6 @@ function switchTab(tabId, btn) {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
-    // Фикс: проверяем !e.target.closest('button'), чтобы клик по иконке внутри кнопки не вызывал перетаскивание!
     document.getElementById('titlebar').addEventListener('mousedown', (e) => {
         if (!e.target.closest('button')) {
             sendCmd('windowDrag');
@@ -8574,6 +8908,258 @@ window.addEventListener('DOMContentLoaded', () => {
 
     runSplashSequence();
     sendCmd('init');
+});
+
+// =========================================================================
+// 7. ПАЛИТРА БЫСТРЫХ КОМАНД (CTRL + K) И DRAG & DROP ИМПОРТ ФАЙЛОВ
+// =========================================================================
+let cmdSelectedIndex = 0;
+let filteredCommands = [];
+
+function getAvailableCommands() {
+    const navBtns = document.querySelectorAll('.nav-btn');
+    const base = [
+        {
+            icon: '&#xE7E8;',
+            title: appState.isRunning ? 'Остановить службы обхода' : 'Запустить обход (Починить интернет)',
+            tag: 'Службы',
+            run: () => onMainToggleClick()
+        },
+        {
+            icon: '&#xE777;',
+            title: 'Перезапустить службы (winws + TgWsProxy)',
+            tag: 'Службы',
+            run: () => sendCmd('restartBypass')
+        },
+        {
+            icon: '&#xE721;',
+            title: 'Открыть выбор .bat конфига / Авто-подбор (Smart Scan)',
+            tag: 'Zapret',
+            run: () => openConfigModal()
+        },
+        {
+            icon: '&#xE7FC;',
+            title: 'Настроить Игровой фильтр (Game Filter TCP/UDP)',
+            tag: 'Игры',
+            run: () => openGameFilterModal()
+        },
+        {
+            icon: '&#xE9D9;',
+            title: 'Запустить полную диагностику сети и ТСПУ',
+            tag: 'Диагностика',
+            run: () => { switchTab('diag', navBtns[2]); runDiagnostics(); }
+        },
+        {
+            icon: '&#xE710;',
+            title: 'Создать новую модификацию (.bat или список доменов)',
+            tag: 'Моды',
+            run: () => { switchTab('mods', navBtns[1]); openCreateModModal(); }
+        },
+        {
+            icon: '&#xE945;',
+            title: 'Обновить системный файл Hosts (ChatGPT, AI, Spotify)',
+            tag: 'Сеть',
+            run: () => { switchTab('settings', navBtns[3]); updateSystemHosts(); }
+        },
+        {
+            icon: '&#xE149;',
+            title: 'Обновить базу подсетей IPSet из репозитория Flowseal',
+            tag: 'Сеть',
+            run: () => { switchTab('settings', navBtns[3]); updateIpSetFromWeb(); }
+        },
+        {
+            icon: '&#xE8B7;',
+            title: 'Открыть папку ядра ZapretFiles в Проводнике',
+            tag: 'Файлы',
+            run: () => sendCmd('openFolder', { folder: 'zapret' })
+        },
+        {
+            icon: '&#xE8B7;',
+            title: 'Открыть папку модификаций Mods в Проводнике',
+            tag: 'Файлы',
+            run: () => sendCmd('openFolder', { folder: 'mods' })
+        },
+        {
+            icon: '&#xE73F;',
+            title: 'Переключить Минималистичный режим окна (850×520)',
+            tag: 'Вид',
+            run: () => {
+                const chk = document.getElementById('set-compact-mode');
+                if (chk) {
+                    chk.checked = !chk.checked;
+                    onSettingsChanged();
+                }
+            }
+        },
+        {
+            icon: '&#xE945;',
+            title: 'Открыть Мастер развертывания (3D ASCII Голограмма)',
+            tag: 'Система',
+            run: () => openWizardModal()
+        }
+    ];
+
+    // Добавляем все доступные .bat профили в быстрый поиск
+    appState.configs.forEach(cfg => {
+        base.push({
+            icon: '&#xE756;',
+            title: `Активировать профиль: ${cfg.fileName}`,
+            tag: cfg.fileName.toLowerCase() === appState.selectedProfile.toLowerCase() ? 'Активен ✓' : 'Профиль .bat',
+            run: () => selectProfile(cfg.fileName)
+        });
+    });
+
+    return base;
+}
+
+function openCommandPalette() {
+    sendCmd('playClick');
+    const modal = document.getElementById('cmd-palette-modal');
+    const input = document.getElementById('cmd-palette-input');
+    if (!modal || !input) return;
+
+    input.value = '';
+    cmdSelectedIndex = 0;
+    modal.classList.add('open');
+    renderCommandPaletteList();
+    setTimeout(() => input.focus(), 50);
+}
+
+function closeCommandPalette() {
+    const modal = document.getElementById('cmd-palette-modal');
+    if (modal) modal.classList.remove('open');
+}
+
+function renderCommandPaletteList() {
+    const query = (document.getElementById('cmd-palette-input')?.value || '').trim().toLowerCase();
+    const all = getAvailableCommands();
+    filteredCommands = all.filter(c => !query || c.title.toLowerCase().includes(query) || c.tag.toLowerCase().includes(query));
+
+    if (cmdSelectedIndex >= filteredCommands.length) cmdSelectedIndex = 0;
+
+    const listEl = document.getElementById('cmd-palette-list');
+    if (!listEl) return;
+
+    if (filteredCommands.length === 0) {
+        listEl.innerHTML = `<div class="p-4 text-center text-xs text-[#666666] font-mono">Ничего не найдено по запросу «${query}»</div>`;
+        return;
+    }
+
+    listEl.innerHTML = filteredCommands.map((cmd, idx) => {
+        const active = idx === cmdSelectedIndex;
+        return `
+        <div onclick="executePaletteCommand(${idx})"
+             onmouseenter="cmdSelectedIndex=${idx}; renderCommandPaletteList()"
+             class="px-3 py-2 rounded-lg flex items-center justify-between cursor-pointer transition ${active ? 'bg-[#0F240F] border border-[#107C10] text-white' : 'border border-transparent text-[#CCCCCC]'}">
+            <div class="flex items-center gap-2.5 overflow-hidden">
+                <span class="mdl-icon text-xs ${active ? 'text-brand' : 'text-[#777777]'}">${cmd.icon}</span>
+                <span class="text-xs font-medium truncate">${cmd.title}</span>
+            </div>
+            <span class="text-[10px] font-mono px-1.5 py-0.5 rounded ${active ? 'bg-[#107C10]/30 text-brand' : 'bg-[#1C1C1C] text-[#777777]'} shrink-0 ml-2">${cmd.tag}</span>
+        </div>`;
+    }).join('');
+}
+
+function executePaletteCommand(idx) {
+    const cmd = filteredCommands[idx];
+    closeCommandPalette();
+    if (cmd && typeof cmd.run === 'function') {
+        sendCmd('playClick');
+        setTimeout(() => {
+            cmd.run();
+        }, 50);
+    }
+}
+
+function onCommandPaletteKeyDown(e) {
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (filteredCommands.length > 0) {
+            cmdSelectedIndex = (cmdSelectedIndex + 1) % filteredCommands.length;
+            renderCommandPaletteList();
+        }
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (filteredCommands.length > 0) {
+            cmdSelectedIndex = (cmdSelectedIndex - 1 + filteredCommands.length) % filteredCommands.length;
+            renderCommandPaletteList();
+        }
+    } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (filteredCommands.length > 0) {
+            executePaletteCommand(cmdSelectedIndex);
+        }
+    } else if (e.key === 'Escape') {
+        e.preventDefault();
+        closeCommandPalette();
+    }
+}
+
+// Глобальные горячие клавиши (Ctrl + K и Escape) + Drag & Drop файлов
+window.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        const modal = document.getElementById('cmd-palette-modal');
+        if (modal && modal.classList.contains('open')) closeCommandPalette();
+        else openCommandPalette();
+    } else if (e.key === 'Escape') {
+        closeCommandPalette();
+    }
+});
+
+let dragCounter = 0;
+window.addEventListener('dragenter', (e) => {
+    e.preventDefault();
+    dragCounter++;
+    const dz = document.getElementById('dropzone-overlay');
+    if (dz) {
+        dz.classList.remove('hidden');
+        dz.classList.add('flex');
+    }
+});
+
+window.addEventListener('dragover', (e) => {
+    e.preventDefault();
+});
+
+window.addEventListener('dragleave', (e) => {
+    e.preventDefault();
+    dragCounter--;
+    if (dragCounter <= 0) {
+        dragCounter = 0;
+        const dz = document.getElementById('dropzone-overlay');
+        if (dz) {
+            dz.classList.add('hidden');
+            dz.classList.remove('flex');
+        }
+    }
+});
+
+window.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dragCounter = 0;
+    const dz = document.getElementById('dropzone-overlay');
+    if (dz) {
+        dz.classList.add('hidden');
+        dz.classList.remove('flex');
+    }
+
+    const files = e.dataTransfer?.files;
+    if (!files || files.length === 0) return;
+
+    const file = files[0];
+    const ext = file.name.split('.').pop().toLowerCase();
+    if (!['zip', 'netfix-mod', 'bat', 'txt'].includes(ext)) {
+        showAlert('Неподдерживаемый файл', 'Перетащите архив мода (.zip / .netfix-mod), скрипт (.bat) или список доменов (.txt).', true);
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+        const base64 = reader.result.split(',')[1];
+        sendCmd('importDroppedFile', { fileName: file.name, base64 });
+    };
+    reader.readAsDataURL(file);
 });
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -8946,11 +9532,60 @@ function formatCleanRecommendation(rawText) {
     const iconColor = isOk ? 'text-brand' : (isWarn ? 'text-[#F44336]' : 'text-[#60A5FA]');
     const glyph = isOk ? '&#xE73E;' : (isWarn ? '&#xE7BA;' : '&#xE946;');
 
+    // Подбираем кнопку быстрого действия под конкретную проблему
+    let actionBtnHtml = '';
+    if (rawText.includes('SNI-БЛОКИРОВКА') || rawText.includes('DISCORD API: Недоступен') || rawText.includes('Звонки не работают без Zapret')) {
+        actionBtnHtml = !appState.isRunning
+            ? `<button onclick="diagQuickAction('startBypass')" class="px-3 py-1.5 rounded-lg btn-brand text-[11px] font-bold cursor-pointer shrink-0 flex items-center gap-1.5 shadow">
+                   <span class="mdl-icon text-[10px]">&#xE7E8;</span><span>Включить обход</span>
+               </button>`
+            : `<button onclick="diagQuickAction('scanConfigs')" class="px-3 py-1.5 rounded-lg bg-[#222222] hover:bg-[#2C2C2C] border border-[#3A3A3A] text-white text-[11px] font-semibold cursor-pointer shrink-0 flex items-center gap-1.5 transition">
+                   <span class="mdl-icon text-[10px] text-brand">&#xE721;</span><span>Подобрать .bat</span>
+               </button>`;
+    } else if (rawText.includes('ТСПУ-ЗАМЕДЛЕНИЕ МЕДИА')) {
+        actionBtnHtml = !appState.proxyRunning
+            ? `<button onclick="diagQuickAction('enableProxy')" class="px-3 py-1.5 rounded-lg btn-brand text-[11px] font-bold cursor-pointer shrink-0 flex items-center gap-1.5 shadow">
+                   <span class="mdl-icon text-[10px]">&#xE709;</span><span>Запустить с TgWsProxy</span>
+               </button>`
+            : `<button onclick="diagQuickAction('scanConfigs')" class="px-3 py-1.5 rounded-lg bg-[#222222] hover:bg-[#2C2C2C] border border-[#3A3A3A] text-white text-[11px] font-semibold cursor-pointer shrink-0 flex items-center gap-1.5 transition">
+                   <span class="mdl-icon text-[10px] text-brand">&#xE721;</span><span>Сменить профиль</span>
+               </button>`;
+    } else if (rawText.includes('DNS-СПУФИНГ')) {
+        actionBtnHtml = `<button onclick="diagQuickAction('applyHosts')" class="px-3 py-1.5 rounded-lg bg-[#222222] hover:bg-[#2C2C2C] border border-[#107C10] text-brand text-[11px] font-bold cursor-pointer shrink-0 flex items-center gap-1.5 transition">
+                             <span class="mdl-icon text-[10px]">&#xE945;</span><span>Применить обходной Hosts</span>
+                         </button>`;
+    }
+
     return `
-    <div class="flex items-start gap-3 p-3 rounded-lg border ${borderCls}">
-        <span class="mdl-icon text-sm ${iconColor} mt-0.5 shrink-0">${glyph}</span>
-        <span class="whitespace-pre-line leading-relaxed text-[#E0E0E0]">${clean}</span>
+    <div class="flex items-center justify-between gap-3 p-3 rounded-lg border ${borderCls}">
+        <div class="flex items-start gap-3">
+            <span class="mdl-icon text-sm ${iconColor} mt-0.5 shrink-0">${glyph}</span>
+            <span class="whitespace-pre-line leading-relaxed text-[#E0E0E0]">${clean}</span>
+        </div>
+        ${actionBtnHtml}
     </div>`;
+}
+
+function diagQuickAction(act) {
+    sendCmd('playClick');
+    const navBtns = document.querySelectorAll('.nav-btn');
+
+    if (act === 'startBypass') {
+        switchTab('home', navBtns[0]);
+        if (!appState.isRunning) onMainToggleClick();
+    } else if (act === 'scanConfigs') {
+        switchTab('home', navBtns[0]);
+        openConfigModal();
+    } else if (act === 'enableProxy') {
+        document.getElementById('chk-proxy').checked = true;
+        onModuleToggleChange();
+        switchTab('home', navBtns[0]);
+        if (!appState.isRunning) onMainToggleClick();
+        else sendCmd('restartBypass');
+    } else if (act === 'applyHosts') {
+        switchTab('settings', navBtns[3]);
+        updateSystemHosts();
+    }
 }
 
 async function copyDiagnosticsReport() {

@@ -708,6 +708,13 @@ function handleBackendEvent(type, data) {
         case 'alert':
             showAlert(data.title, data.message, data.isError);
             break;
+
+        case 'profileSelected':
+            appState.selectedProfile = data.profile;
+            document.getElementById('txt-main-profile').innerText = data.profile;
+            document.getElementById('modal-active-profile').innerText = data.profile;
+            renderConfigCards();
+            break;
     }
 }
 
@@ -1129,11 +1136,32 @@ function closeConfirmModal(accepted) {
 }
 
 // =========================================================================
-// 6. ДВУХКАНАЛЬНЫЙ ГРАФИК ТРАФИКА С ГРАДИЕНТОМ И ПИКОМ
+// 6. ИНТЕРАКТИВНЫЙ ГРАФИК ТРАФИКА С ПРИЦЕЛОМ И СЧЕТЧИКОМ СЕССИИ
 // =========================================================================
 const rxHistory = new Array(30).fill(0);
 const txHistory = new Array(30).fill(0);
 let peakSpeedMbps = 0;
+let sessionRxMB = 0;
+let sessionTxMB = 0;
+let chartHoverIdx = -1;
+
+function formatTrafficSize(mb) {
+    if (mb >= 1024) return `${(mb / 1024).toFixed(2)} ГБ`;
+    return `${mb.toFixed(0)} МБ`;
+}
+
+function onChartMouseMove(e) {
+    const canvas = e.currentTarget;
+    const rect = canvas.getBoundingClientRect();
+    const relX = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    chartHoverIdx = Math.round(relX * (rxHistory.length - 1));
+    drawTrafficChart();
+}
+
+function onChartMouseLeave() {
+    chartHoverIdx = -1;
+    drawTrafficChart();
+}
 
 function updateChart(rxValue, txValue = 0) {
     rxHistory.push(rxValue);
@@ -1142,9 +1170,22 @@ function updateChart(rxValue, txValue = 0) {
     txHistory.shift();
 
     peakSpeedMbps = Math.max(peakSpeedMbps, rxValue, txValue);
-    const peakEl = document.getElementById('stat-peak');
-    if (peakEl) peakEl.innerText = `Пик: ${peakSpeedMbps.toFixed(1)} Мбит/с`;
+    const intervalSec = Math.max(1, appState.settings.statsUpdateInterval || 1);
+    sessionRxMB += (rxValue / 8.0) * intervalSec;
+    sessionTxMB += (txValue / 8.0) * intervalSec;
 
+    const peakEl = document.getElementById('stat-peak');
+    const totalEl = document.getElementById('stat-session-total');
+
+    if (chartHoverIdx < 0) {
+        if (peakEl) peakEl.innerText = `Пик: ${peakSpeedMbps.toFixed(1)} Мбит/с`;
+        if (totalEl) totalEl.innerText = `Сессия: ↓ ${formatTrafficSize(sessionRxMB)} • ↑ ${formatTrafficSize(sessionTxMB)}`;
+    }
+
+    drawTrafficChart();
+}
+
+function drawTrafficChart() {
     const canvas = document.getElementById('traffic-chart');
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -1152,7 +1193,6 @@ function updateChart(rxValue, txValue = 0) {
     const h = canvas.height;
     ctx.clearRect(0, 0, w, h);
 
-    // Фоновая сетка
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
     ctx.lineWidth = 1;
     [0.33, 0.66].forEach(ratio => {
@@ -1166,7 +1206,6 @@ function updateChart(rxValue, txValue = 0) {
     const isCb = appState.settings.colorblindMode;
     const rxColor = isCb ? '#0078D7' : '#4CAF50';
 
-    // Заливка под кривой Download
     const grad = ctx.createLinearGradient(0, 0, 0, h);
     grad.addColorStop(0, isCb ? 'rgba(0, 120, 215, 0.35)' : 'rgba(76, 175, 80, 0.35)');
     grad.addColorStop(1, 'rgba(0, 0, 0, 0.0)');
@@ -1174,7 +1213,7 @@ function updateChart(rxValue, txValue = 0) {
     ctx.beginPath();
     rxHistory.forEach((val, idx) => {
         const x = (idx / (rxHistory.length - 1)) * w;
-        const y = h - (val / maxVal) * (h - 14) - 5;
+        const y = h - (val / maxVal) * (h - 16) - 4;
         if (idx === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
     });
@@ -1184,31 +1223,64 @@ function updateChart(rxValue, txValue = 0) {
     ctx.fillStyle = grad;
     ctx.fill();
 
-    // Линия Download
     ctx.beginPath();
     ctx.strokeStyle = rxColor;
     ctx.lineWidth = 2;
     rxHistory.forEach((val, idx) => {
         const x = (idx / (rxHistory.length - 1)) * w;
-        const y = h - (val / maxVal) * (h - 14) - 5;
+        const y = h - (val / maxVal) * (h - 16) - 4;
         if (idx === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
     });
     ctx.stroke();
 
-    // Пунктирная линия Upload
     ctx.beginPath();
     ctx.setLineDash([3, 3]);
     ctx.strokeStyle = '#60A5FA';
     ctx.lineWidth = 1.3;
     txHistory.forEach((val, idx) => {
         const x = (idx / (txHistory.length - 1)) * w;
-        const y = h - (val / maxVal) * (h - 14) - 5;
+        const y = h - (val / maxVal) * (h - 16) - 4;
         if (idx === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
     });
     ctx.stroke();
     ctx.setLineDash([]);
+
+    const peakEl = document.getElementById('stat-peak');
+    const totalEl = document.getElementById('stat-session-total');
+
+    if (chartHoverIdx >= 0 && chartHoverIdx < rxHistory.length) {
+        const hx = (chartHoverIdx / (rxHistory.length - 1)) * w;
+        const rxVal = rxHistory[chartHoverIdx];
+        const txVal = txHistory[chartHoverIdx];
+        const ry = h - (rxVal / maxVal) * (h - 16) - 4;
+        const ty = h - (txVal / maxVal) * (h - 16) - 4;
+
+        ctx.beginPath();
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+        ctx.lineWidth = 1;
+        ctx.moveTo(hx, 0);
+        ctx.lineTo(hx, h);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.fillStyle = rxColor;
+        ctx.arc(hx, ry, 3.2, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.fillStyle = '#60A5FA';
+        ctx.arc(hx, ty, 2.8, 0, Math.PI * 2);
+        ctx.fill();
+
+        const secAgo = (rxHistory.length - 1 - chartHoverIdx) * Math.max(1, appState.settings.statsUpdateInterval || 1);
+        if (totalEl) totalEl.innerText = secAgo === 0 ? 'Сейчас:' : `-${secAgo} сек назад:`;
+        if (peakEl) peakEl.innerText = `↓ ${rxVal.toFixed(1)} • ↑ ${txVal.toFixed(1)} Мбит/с`;
+    } else {
+        if (peakEl) peakEl.innerText = `Пик: ${peakSpeedMbps.toFixed(1)} Мбит/с`;
+        if (totalEl) totalEl.innerText = `Сессия: ↓ ${formatTrafficSize(sessionRxMB)} • ↑ ${formatTrafficSize(sessionTxMB)}`;
+    }
 }
 
 let sidebarOpen = true;
@@ -1216,10 +1288,7 @@ function toggleSidebar() {
     sendCmd('playClick');
     sidebarOpen = !sidebarOpen;
     const sb = document.getElementById('sidebar');
-    sb.style.width = sidebarOpen ? '220px' : '0px';
-    sb.style.paddingLeft = sidebarOpen ? '10px' : '0px';
-    sb.style.paddingRight = sidebarOpen ? '10px' : '0px';
-    sb.style.borderRightWidth = sidebarOpen ? '1px' : '0px';
+    sb.classList.toggle('rail-mode', !sidebarOpen);
 }
 
 function switchTab(tabId, btn) {
@@ -1234,7 +1303,6 @@ function switchTab(tabId, btn) {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
-    // Фикс: проверяем !e.target.closest('button'), чтобы клик по иконке внутри кнопки не вызывал перетаскивание!
     document.getElementById('titlebar').addEventListener('mousedown', (e) => {
         if (!e.target.closest('button')) {
             sendCmd('windowDrag');
@@ -1250,4 +1318,260 @@ window.addEventListener('DOMContentLoaded', () => {
 
     runSplashSequence();
     sendCmd('init');
+});
+
+// =========================================================================
+// 7. ПАЛИТРА БЫСТРЫХ КОМАНД (CTRL + K) И DRAG & DROP ИМПОРТ ФАЙЛОВ
+// =========================================================================
+let cmdSelectedIndex = 0;
+let filteredCommands = [];
+
+function getAvailableCommands() {
+    const navBtns = document.querySelectorAll('.nav-btn');
+    const base = [
+        {
+            icon: '&#xE7E8;',
+            title: appState.isRunning ? 'Остановить службы обхода' : 'Запустить обход (Починить интернет)',
+            tag: 'Службы',
+            run: () => onMainToggleClick()
+        },
+        {
+            icon: '&#xE777;',
+            title: 'Перезапустить службы (winws + TgWsProxy)',
+            tag: 'Службы',
+            run: () => sendCmd('restartBypass')
+        },
+        {
+            icon: '&#xE721;',
+            title: 'Открыть выбор .bat конфига / Авто-подбор (Smart Scan)',
+            tag: 'Zapret',
+            run: () => openConfigModal()
+        },
+        {
+            icon: '&#xE7FC;',
+            title: 'Настроить Игровой фильтр (Game Filter TCP/UDP)',
+            tag: 'Игры',
+            run: () => openGameFilterModal()
+        },
+        {
+            icon: '&#xE9D9;',
+            title: 'Запустить полную диагностику сети и ТСПУ',
+            tag: 'Диагностика',
+            run: () => { switchTab('diag', navBtns[2]); runDiagnostics(); }
+        },
+        {
+            icon: '&#xE710;',
+            title: 'Создать новую модификацию (.bat или список доменов)',
+            tag: 'Моды',
+            run: () => { switchTab('mods', navBtns[1]); openCreateModModal(); }
+        },
+        {
+            icon: '&#xE945;',
+            title: 'Обновить системный файл Hosts (ChatGPT, AI, Spotify)',
+            tag: 'Сеть',
+            run: () => { switchTab('settings', navBtns[3]); updateSystemHosts(); }
+        },
+        {
+            icon: '&#xE149;',
+            title: 'Обновить базу подсетей IPSet из репозитория Flowseal',
+            tag: 'Сеть',
+            run: () => { switchTab('settings', navBtns[3]); updateIpSetFromWeb(); }
+        },
+        {
+            icon: '&#xE8B7;',
+            title: 'Открыть папку ядра ZapretFiles в Проводнике',
+            tag: 'Файлы',
+            run: () => sendCmd('openFolder', { folder: 'zapret' })
+        },
+        {
+            icon: '&#xE8B7;',
+            title: 'Открыть папку модификаций Mods в Проводнике',
+            tag: 'Файлы',
+            run: () => sendCmd('openFolder', { folder: 'mods' })
+        },
+        {
+            icon: '&#xE73F;',
+            title: 'Переключить Минималистичный режим окна (850×520)',
+            tag: 'Вид',
+            run: () => {
+                const chk = document.getElementById('set-compact-mode');
+                if (chk) {
+                    chk.checked = !chk.checked;
+                    onSettingsChanged();
+                }
+            }
+        },
+        {
+            icon: '&#xE945;',
+            title: 'Открыть Мастер развертывания (3D ASCII Голограмма)',
+            tag: 'Система',
+            run: () => openWizardModal()
+        }
+    ];
+
+    // Добавляем все доступные .bat профили в быстрый поиск
+    appState.configs.forEach(cfg => {
+        base.push({
+            icon: '&#xE756;',
+            title: `Активировать профиль: ${cfg.fileName}`,
+            tag: cfg.fileName.toLowerCase() === appState.selectedProfile.toLowerCase() ? 'Активен ✓' : 'Профиль .bat',
+            run: () => selectProfile(cfg.fileName)
+        });
+    });
+
+    return base;
+}
+
+function openCommandPalette() {
+    sendCmd('playClick');
+    const modal = document.getElementById('cmd-palette-modal');
+    const input = document.getElementById('cmd-palette-input');
+    if (!modal || !input) return;
+
+    input.value = '';
+    cmdSelectedIndex = 0;
+    modal.classList.add('open');
+    renderCommandPaletteList();
+    setTimeout(() => input.focus(), 50);
+}
+
+function closeCommandPalette() {
+    const modal = document.getElementById('cmd-palette-modal');
+    if (modal) modal.classList.remove('open');
+}
+
+function renderCommandPaletteList() {
+    const query = (document.getElementById('cmd-palette-input')?.value || '').trim().toLowerCase();
+    const all = getAvailableCommands();
+    filteredCommands = all.filter(c => !query || c.title.toLowerCase().includes(query) || c.tag.toLowerCase().includes(query));
+
+    if (cmdSelectedIndex >= filteredCommands.length) cmdSelectedIndex = 0;
+
+    const listEl = document.getElementById('cmd-palette-list');
+    if (!listEl) return;
+
+    if (filteredCommands.length === 0) {
+        listEl.innerHTML = `<div class="p-4 text-center text-xs text-[#666666] font-mono">Ничего не найдено по запросу «${query}»</div>`;
+        return;
+    }
+
+    listEl.innerHTML = filteredCommands.map((cmd, idx) => {
+        const active = idx === cmdSelectedIndex;
+        return `
+        <div onclick="executePaletteCommand(${idx})"
+             onmouseenter="cmdSelectedIndex=${idx}; renderCommandPaletteList()"
+             class="px-3 py-2 rounded-lg flex items-center justify-between cursor-pointer transition ${active ? 'bg-[#0F240F] border border-[#107C10] text-white' : 'border border-transparent text-[#CCCCCC]'}">
+            <div class="flex items-center gap-2.5 overflow-hidden">
+                <span class="mdl-icon text-xs ${active ? 'text-brand' : 'text-[#777777]'}">${cmd.icon}</span>
+                <span class="text-xs font-medium truncate">${cmd.title}</span>
+            </div>
+            <span class="text-[10px] font-mono px-1.5 py-0.5 rounded ${active ? 'bg-[#107C10]/30 text-brand' : 'bg-[#1C1C1C] text-[#777777]'} shrink-0 ml-2">${cmd.tag}</span>
+        </div>`;
+    }).join('');
+}
+
+function executePaletteCommand(idx) {
+    const cmd = filteredCommands[idx];
+    closeCommandPalette();
+    if (cmd && typeof cmd.run === 'function') {
+        sendCmd('playClick');
+        setTimeout(() => {
+            cmd.run();
+        }, 50);
+    }
+}
+
+function onCommandPaletteKeyDown(e) {
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (filteredCommands.length > 0) {
+            cmdSelectedIndex = (cmdSelectedIndex + 1) % filteredCommands.length;
+            renderCommandPaletteList();
+        }
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (filteredCommands.length > 0) {
+            cmdSelectedIndex = (cmdSelectedIndex - 1 + filteredCommands.length) % filteredCommands.length;
+            renderCommandPaletteList();
+        }
+    } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (filteredCommands.length > 0) {
+            executePaletteCommand(cmdSelectedIndex);
+        }
+    } else if (e.key === 'Escape') {
+        e.preventDefault();
+        closeCommandPalette();
+    }
+}
+
+// Глобальный перехват Ctrl + K на уровне window с захватом события
+window.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        e.stopPropagation();
+        const modal = document.getElementById('cmd-palette-modal');
+        if (modal && modal.classList.contains('open')) {
+            closeCommandPalette();
+        } else {
+            openCommandPalette();
+        }
+    } else if (e.key === 'Escape') {
+        closeCommandPalette();
+    }
+}, true);
+
+let dragCounter = 0;
+window.addEventListener('dragenter', (e) => {
+    e.preventDefault();
+    dragCounter++;
+    const dz = document.getElementById('dropzone-overlay');
+    if (dz) {
+        dz.classList.remove('hidden');
+        dz.classList.add('flex');
+    }
+});
+
+window.addEventListener('dragover', (e) => {
+    e.preventDefault();
+});
+
+window.addEventListener('dragleave', (e) => {
+    e.preventDefault();
+    dragCounter--;
+    if (dragCounter <= 0) {
+        dragCounter = 0;
+        const dz = document.getElementById('dropzone-overlay');
+        if (dz) {
+            dz.classList.add('hidden');
+            dz.classList.remove('flex');
+        }
+    }
+});
+
+window.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dragCounter = 0;
+    const dz = document.getElementById('dropzone-overlay');
+    if (dz) {
+        dz.classList.add('hidden');
+        dz.classList.remove('flex');
+    }
+
+    const files = e.dataTransfer?.files;
+    if (!files || files.length === 0) return;
+
+    const file = files[0];
+    const ext = file.name.split('.').pop().toLowerCase();
+    if (!['zip', 'netfix-mod', 'bat', 'txt'].includes(ext)) {
+        showAlert('Неподдерживаемый файл', 'Перетащите архив мода (.zip / .netfix-mod), скрипт (.bat) или список доменов (.txt).', true);
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+        const base64 = reader.result.split(',')[1];
+        sendCmd('importDroppedFile', { fileName: file.name, base64 });
+    };
+    reader.readAsDataURL(file);
 });

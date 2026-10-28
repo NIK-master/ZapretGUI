@@ -287,8 +287,13 @@
 					</div>
 				</div>
 			</div>
-
-			<div class="flex items-center gap-1">
+			
+			<div class="flex items-center gap-1.5">
+				<button onclick="openCommandPalette()" class="px-2.5 h-[26px] mr-1 rounded-md bg-[#1A1A1A] hover:bg-[#242424] border border-[#2C2C2C] text-[11px] font-mono text-[#999999] hover:text-white transition flex items-center gap-2 cursor-pointer" title="Быстрая палитра команд (Ctrl + K)">
+					<span class="mdl-icon text-[10px] text-brand">&#xE721;</span>
+					<span>Команды</span>
+					<kbd class="px-1 py-0.2 rounded bg-[#111111] border border-[#333333] text-[9.5px] text-[#777777]">Ctrl+K</kbd>
+				</button>
 				<button onclick="sendCmd('windowMinimize')" class="w-[35px] h-[30px] rounded hover:bg-[#222222] text-white transition flex items-center justify-center cursor-pointer">—</button>
 				<button onclick="sendCmd('windowClose')" class="w-[35px] h-[30px] rounded hover:bg-[#222222] text-[#D13438] transition flex items-center justify-center cursor-pointer">✕</button>
 			</div>
@@ -297,28 +302,28 @@
 		<!-- ОСНОВНОЙ КОНТЕЙНЕР -->
 		<div class="flex flex-1 overflow-hidden relative">
 
-			<!-- БОКОВОЕ МЕНЮ (SIDEBAR — точные цвета #181818 и #2A2A2A из оригинала) -->
+			<!-- БОКОВОЕ МЕНЮ (SIDEBAR С РЕЖИМОМ ICON-RAIL 60PX) -->
 			<aside id="sidebar" class="w-[220px] bg-[#181818] border-r border-[#2A2A2A] px-2.5 pt-5 pb-3 flex flex-col justify-between shrink-0 transition-all duration-200 overflow-hidden">
 				<nav class="flex flex-col gap-2.5 w-[200px]">
-					<button onclick="switchTab('home', this)" class="nav-btn active flex items-center gap-3 px-4 h-[40px] rounded-md text-sm font-semibold bg-[#2A2A2A] text-white border-l-[3px] border-[#107C10] transition-all cursor-pointer">
+					<button onclick="switchTab('home', this)" title="Главная" class="nav-btn active flex items-center gap-3 px-4 h-[40px] rounded-md text-sm font-semibold bg-[#2A2A2A] text-white border-l-[3px] border-[#107C10] transition-all cursor-pointer">
 						<span class="mdl-icon text-sm text-[#CCCCCC]">&#xE80F;</span>
 						<span>Главная</span>
 					</button>
-					<button onclick="switchTab('mods', this)" class="nav-btn flex items-center gap-3 px-4 h-[40px] rounded-md text-sm font-medium text-[#CCCCCC] hover:bg-[#222222] hover:text-white transition-all cursor-pointer">
+					<button onclick="switchTab('mods', this)" title="Модификации" class="nav-btn flex items-center gap-3 px-4 h-[40px] rounded-md text-sm font-medium text-[#CCCCCC] hover:bg-[#222222] hover:text-white transition-all cursor-pointer">
 						<span class="mdl-icon text-sm text-[#888888]">&#xE74C;</span>
 						<span>Модификации</span>
 					</button>
-					<button onclick="switchTab('diag', this)" class="nav-btn flex items-center gap-3 px-4 h-[40px] rounded-md text-sm font-medium text-[#CCCCCC] hover:bg-[#222222] hover:text-white transition-all cursor-pointer">
+					<button onclick="switchTab('diag', this)" title="Диагностика" class="nav-btn flex items-center gap-3 px-4 h-[40px] rounded-md text-sm font-medium text-[#CCCCCC] hover:bg-[#222222] hover:text-white transition-all cursor-pointer">
 						<span class="mdl-icon text-sm text-[#888888]">&#xE9D9;</span>
 						<span>Диагностика</span>
 					</button>
-					<button onclick="switchTab('settings', this)" class="nav-btn flex items-center gap-3 px-4 h-[40px] rounded-md text-sm font-medium text-[#CCCCCC] hover:bg-[#222222] hover:text-white transition-all cursor-pointer">
+					<button onclick="switchTab('settings', this)" title="Настройки" class="nav-btn flex items-center gap-3 px-4 h-[40px] rounded-md text-sm font-medium text-[#CCCCCC] hover:bg-[#222222] hover:text-white transition-all cursor-pointer">
 						<span class="mdl-icon text-sm text-[#888888]">&#xE713;</span>
 						<span>Настройки</span>
 					</button>
 				</nav>
 
-				<div class="text-center text-[11px] text-[#555555] font-mono pb-1">
+				<div id="sidebar-footer" class="text-center text-[11px] text-[#555555] font-mono pb-1 whitespace-nowrap">
 					Zapret for ADHD <span id="app-version" class="app-ver-text">v4.0</span>
 				</div>
 			</aside>
@@ -386,10 +391,16 @@
 								</div>
 							</div>
 
-							<!-- График с легендой пиковой скорости -->
+							<!-- Интерактивный график с прицелом, пиковой скоростью и трафиком за сессию -->
 							<div class="relative">
-								<canvas id="traffic-chart" width="280" height="68" class="w-full h-[68px] rounded-lg bg-[#0A0A0A] border border-[#2A2A2A]"></canvas>
-								<div class="absolute top-1.5 right-2 flex items-center gap-2 pointer-events-none">
+								<canvas id="traffic-chart"
+										width="280"
+										height="68"
+										onmousemove="onChartMouseMove(event)"
+										onmouseleave="onChartMouseLeave()"
+										class="w-full h-[68px] rounded-lg bg-[#0A0A0A] border border-[#2A2A2A] cursor-crosshair"></canvas>
+								<div class="absolute top-1.5 inset-x-2 flex items-center justify-between pointer-events-none">
+									<span id="stat-session-total" class="text-[10px] font-mono text-[#666666]">Сессия: ↓ 0 МБ • ↑ 0 МБ</span>
 									<span id="stat-peak" class="text-[10px] font-mono text-[#666666]">Пик: 0.0 Мбит/с</span>
 								</div>
 							</div>
@@ -1505,6 +1516,36 @@
 						</button>
 					</div>
 				</div>
+			</div>
+
+			<!-- ОВЕРЛЕЙ 7: ПАЛИТРА БЫСТРЫХ КОМАНД (CTRL + K) -->
+			<div id="cmd-palette-modal" onclick="if(event.target===this) closeCommandPalette()" class="modal-overlay fixed inset-0 bg-black/75 backdrop-blur-sm z-[98] flex items-start justify-center pt-20 p-4">
+				<div class="modal-box bg-[#141414] border border-[#2E2E2E] rounded-xl w-[520px] shadow-2xl overflow-hidden flex flex-col" onmousedown="event.preventDefault()">
+					<div class="flex items-center px-3.5 py-2.5 border-b border-[#242424] bg-[#101010]">
+						<span class="mdl-icon text-sm text-brand mr-2.5">&#xE721;</span>
+						<input id="cmd-palette-input"
+							   type="text"
+							   oninput="renderCommandPaletteList()"
+							   onkeydown="onCommandPaletteKeyDown(event)"
+							   placeholder="Введите команду, вкладку или имя .bat профиля..."
+							   class="flex-1 bg-transparent text-xs text-white focus:outline-none select-text font-mono">
+							<kbd class="px-1.5 py-0.5 rounded bg-[#1C1C1C] border border-[#333333] text-[10px] font-mono text-[#777777]">ESC</kbd>
+						</div>
+					<div id="cmd-palette-list" class="max-h-[310px] overflow-y-auto p-1.5 space-y-1"></div>
+					<div class="px-3.5 py-1.5 bg-[#101010] border-t border-[#222222] flex items-center justify-between text-[10px] font-mono text-[#666666]">
+						<span>↑↓ Навигация • Enter / Клик — Выполнить</span>
+						<span>Zapret Command Center</span>
+					</div>
+				</div>
+			</div>
+
+			<!-- ОВЕРЛЕЙ 8: ЗОНА DRAG & DROP ИМПОРТА МОДОВ -->
+			<div id="dropzone-overlay" class="fixed inset-3 rounded-2xl bg-[#0A160A]/90 backdrop-blur-md border-2 border-dashed border-[#4CAF50] z-[99] hidden flex-col items-center justify-center pointer-events-none">
+				<div class="w-16 h-16 rounded-2xl bg-[#107C10]/25 border border-[#4CAF50] flex items-center justify-center text-brand mb-3 shadow-lg">
+					<span class="mdl-icon text-3xl">&#xE8B5;</span>
+				</div>
+				<div class="text-lg font-bold text-white">Отпустите файл для мгновенного импорта мода</div>
+				<div class="text-xs font-mono text-brand mt-1">Поддерживаются: .zip, .netfix-mod, .bat (стратегии) и .txt (списки доменов)</div>
 			</div>
 		</div>
 
