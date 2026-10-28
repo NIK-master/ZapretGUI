@@ -23,107 +23,235 @@
 			<pre id="splash-terminal" class="flex-1 overflow-y-auto font-mono text-[13px] text-[#39FF14] leading-[1.45] whitespace-pre-wrap my-4"></pre>
 		</div>
 
-		<!-- WIZARD WINDOW: МАСТЕР ПЕРВОНАЧАЛЬНОЙ НАСТРОЙКИ (5 ШАГОВ) -->
-		<div id="wizard-overlay" class="modal-overlay fixed inset-0 bg-black/85 backdrop-blur-md z-[90] flex items-center justify-center p-4">
-			<div class="modal-box bg-[#0A0A0A] border border-[#2A2A2A] rounded-2xl w-[640px] h-[510px] p-7 shadow-2xl flex flex-col justify-between">
-				<div>
-					<div class="text-lg font-bold text-white">Первоначальная настройка</div>
-					<div class="text-xs text-[#666666] font-mono mt-0.5">
-						Zapret for ADHD <span class="app-ver-text">v4.0</span>
+		<!-- WIZARD WINDOW: ПОЛНОЭКРАННЫЙ МАСТЕР ПЕРВОНАЧАЛЬНОЙ НАСТРОЙКИ 2.0 -->
+		<div id="wizard-overlay" class="modal-overlay fixed top-[45px] inset-x-0 bottom-0 bg-[#0A0A0A] z-[90] flex">
+			<div class="w-full h-full flex flex-col justify-between overflow-hidden">
+
+				<!-- ВЕРХНЯЯ ПАНЕЛЬ: ЗАГОЛОВОК И ШАГОВЫЙ ПАЙПЛАЙН -->
+				<div class="bg-[#121212] border-b border-[#242424] px-7 py-4 flex flex-wrap items-center justify-between gap-3 shrink-0">
+					<div class="flex items-center gap-3">
+						<div class="w-8 h-8 rounded-lg bg-[#107C10]/20 border border-[#107C10] flex items-center justify-center text-brand">
+							<span class="mdl-icon text-sm">&#xE945;</span>
+						</div>
+						<div>
+							<div class="text-base font-bold text-white leading-tight">Мастер развертывания системы</div>
+							<div class="text-xs text-[#777777] font-mono">Zapret for ADHD <span class="app-ver-text">v4.0</span> • Первоначальная настройка</div>
+						</div>
+					</div>
+
+					<!-- Кибер-степпер -->
+					<div class="flex items-center gap-1.5">
+						<div id="wstep-ind-0" class="wiz-stepper-item active">01. СТАРТ</div>
+						<div id="wstep-ind-1" class="wiz-stepper-item">02. ПРИВАТНОСТЬ</div>
+						<div id="wstep-ind-2" class="wiz-stepper-item">03. ЯДРА</div>
+						<div id="wstep-ind-3" class="wiz-stepper-item">04. ОПЦИИ</div>
+						<div id="wstep-ind-4" class="wiz-stepper-item">05. ДЕПЛОЙ</div>
 					</div>
 				</div>
 
-				<div class="flex-1 flex items-center justify-center overflow-hidden my-4">
-					<div id="wiz-step-0" class="wizard-step active flex-col items-center text-center max-w-md">
-						<div class="text-3xl font-bold text-white mb-3">Привет!</div>
-						<div class="text-base font-semibold text-brand mb-3">Для людей, у которых проблемы с интернетом...</div>
-						<p class="text-sm text-[#AAAAAA] leading-relaxed">
-							Этот мастер поможет установить необходимые компоненты обхода блокировок и настроить систему всего за пару кликов. Мы всё сделаем за вас.
-						</p>
+				<!-- ЦЕНТРАЛЬНАЯ ОБЛАСТЬ: ЛЕВАЯ КОЛОНКА (3D ASCII) + ПРАВАЯ КОЛОНКА (ШАГИ) -->
+				<div class="flex-1 grid grid-cols-12 overflow-hidden">
+
+					<!-- ЛЕВАЯ ПАНЕЛЬ: ИНТЕРАКТИВНЫЙ 3D ASCII РЕНДЕРЕР (DRAG TO ROTATE) -->
+					<div id="wiz-left-panel" class="col-span-5 bg-[#080808] border-r border-[#222222] p-5 flex flex-col justify-between relative overflow-hidden"
+						 onmousedown="onWizAsciiMouseDown(event)">
+						<div class="flex items-center justify-between text-xs font-mono text-[#666666] z-10 pointer-events-none">
+							<span id="wiz-ascii-model-name">MODEL: TORUS_CORE.3D</span>
+							<span class="text-brand">Зажмите ЛКМ для вращения ↻</span>
+						</div>
+
+						<!-- Холст для 3D ASCII анимации -->
+						<div class="flex-1 flex items-center justify-center overflow-hidden my-2 pointer-events-none">
+							<pre id="wiz-ascii-stage"></pre>
+						</div>
+
+						<!-- Живая сводка выбранных параметров + переключатель фигур -->
+						<div class="bg-[#111111] border border-[#222222] rounded-xl p-3.5 space-y-2 z-10" onmousedown="event.stopPropagation()">
+							<div class="flex items-center justify-between text-[11px] font-mono text-[#777777]">
+								<span>СВОДКА КОНФИГУРАЦИИ:</span>
+								<button onclick="cycleWizAsciiShape()" class="text-brand hover:underline cursor-pointer" title="Сменить 3D-модель">[Сменить 3D ↻]</button>
+							</div>
+							<div class="grid grid-cols-2 gap-1.5 text-xs font-mono">
+								<div class="text-[#999999]">Zapret: <b id="wiz-sum-zapret" class="text-brand">ВКЛ</b></div>
+								<div class="text-[#999999]">TgProxy: <b id="wiz-sum-proxy" class="text-brand">ВКЛ</b></div>
+								<div class="text-[#999999]">Автостарт: <b id="wiz-sum-auto" class="text-brand">ВКЛ</b></div>
+								<div class="text-[#999999]">Палитра: <b id="wiz-sum-theme" class="text-white">Стандарт</b></div>
+							</div>
+						</div>
 					</div>
 
-					<div id="wiz-step-1" class="wizard-step flex-col items-center text-center max-w-md">
-						<span class="mdl-icon text-5xl text-brand mb-4">&#xEA18;</span>
-						<div class="text-2xl font-bold text-white mb-2">Полная конфиденциальность</div>
-						<div class="text-sm font-semibold text-[#E0E0E0] mb-2">Программа НЕ СОБИРАЕТ ваши данные.</div>
-						<p class="text-xs text-[#888888] leading-relaxed">
-							Все процессы обхода и модификации трафика выполняются исключительно локально на вашем компьютере. Мы не отправляем телеметрию, историю браузера или статистику использования на сторонние серверы.
-						</p>
-					</div>
+					<!-- ПРАВАЯ ПАНЕЛЬ: КОНТЕНТ 5 ШАГОВ -->
+					<div class="col-span-7 p-8 flex flex-col justify-center overflow-y-auto bg-[#101010]">
 
-					<div id="wiz-step-2" class="wizard-step flex-col w-full max-w-lg space-y-3">
-						<div class="text-xl font-bold text-white text-center mb-2">Какие службы использовать?</div>
-
-						<div class="glass-card rounded-xl p-4 flex items-center justify-between gap-4">
-							<div>
-								<div class="text-sm font-bold text-white">Zapret (Обход блокировок)</div>
-								<div class="text-xs text-[#888888] mt-1">Основной модуль для починки YouTube, Discord и других сервисов. Рекомендуется оставить включенным.</div>
+						<!-- ШАГ 0: ПРИВЕТСТВИЕ -->
+						<div id="wiz-step-0" class="wizard-step active flex-col space-y-5 max-w-xl mx-auto w-full">
+							<div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#107C10]/15 border border-[#107C10]/40 text-brand text-xs font-mono font-semibold w-max">
+								<span>>_ ДОБРО ПОЖАЛОВАТЬ В СИСТЕМУ</span>
 							</div>
-							<input id="wiz-chk-zapret" type="checkbox" checked="" class="cyber-toggle">
-                    </div>
-
-						<div class="glass-card rounded-xl p-4 flex items-center justify-between gap-4">
-							<div>
-								<div class="text-sm font-bold text-white">TgWsProxy (Прокси для Telegram)</div>
-								<div class="text-xs text-[#888888] mt-1">Отдельный модуль для стабилизации работы десктопного клиента Telegram.</div>
-							</div>
-							<input id="wiz-chk-proxy" type="checkbox" checked="" class="cyber-toggle">
-                    </div>
-					</div>
-
-					<div id="wiz-step-3" class="wizard-step flex-col w-full max-w-lg space-y-2.5">
-						<div class="text-xl font-bold text-white text-center mb-2">Дополнительные настройки</div>
-
-						<div class="glass-card rounded-xl p-3.5 flex items-center justify-between gap-4">
-							<div>
-								<div class="text-sm font-semibold text-white">Автозагрузка Windows</div>
-								<div class="text-xs text-[#888888] mt-0.5">Запускать программу при включении компьютера, чтобы сразу чинить интернет.</div>
-							</div>
-							<input id="wiz-chk-autostart" type="checkbox" checked="" class="cyber-toggle">
-                    </div>
-
-						<div class="glass-card rounded-xl p-3.5 flex items-center justify-between gap-4">
-							<div>
-								<div class="text-sm font-semibold text-white">Режим фокусировки</div>
-								<div class="text-xs text-[#888888] mt-0.5">Отключить тряску интерфейса и глитчи при ошибках.</div>
-							</div>
-							<input id="wiz-chk-focus" type="checkbox" class="cyber-toggle">
-                    </div>
-
-						<div class="glass-card rounded-xl p-3.5 flex items-center justify-between gap-4">
-							<div>
-								<div class="text-sm font-semibold text-white">Режим цветовой слепоты</div>
-								<div class="text-xs text-[#888888] mt-0.5">Заменить красно-зеленые индикаторы на сине-оранжевые.</div>
-							</div>
-							<input id="wiz-chk-colorblind" type="checkbox" class="cyber-toggle">
-                    </div>
-					</div>
-
-					<div id="wiz-step-4" class="wizard-step flex-col w-full h-full justify-between">
-						<div class="text-center mb-3">
-							<div id="wiz-finish-status" class="text-xl font-bold text-white mb-2">Применение настроек...</div>
-							<div class="w-80 mx-auto h-1.5 bg-[#181818] rounded-full overflow-hidden">
-								<div id="wiz-finish-bar" class="h-full bg-[#107C10] transition-all duration-300" style="width: 35%"></div>
+							<h3 class="text-3xl font-bold text-white leading-tight">
+								Починим Discord, YouTube и Telegram за пару кликов
+							</h3>
+							<p class="text-sm text-[#AAAAAA] leading-relaxed">
+								Мастер первоначальной настройки автоматически скачает свежие релизы ядер обхода блокировок, создаст рабочие папки и подготовит профили под вашего провайдера.
+							</p>
+							<div class="grid grid-cols-2 gap-3.5 pt-2">
+								<div class="p-4 rounded-xl bg-[#161616] border border-[#262626]">
+									<div class="text-sm font-bold text-white flex items-center gap-2">
+										<span class="mdl-icon text-brand text-sm">&#xE945;</span>
+										<span>Умный DPI-обход</span>
+									</div>
+									<div class="text-xs text-[#888888] mt-1.5 leading-relaxed">Авто-подбор лучшей стратегии обхода ТСПУ в один клик.</div>
+								</div>
+								<div class="p-4 rounded-xl bg-[#161616] border border-[#262626]">
+									<div class="text-sm font-bold text-white flex items-center gap-2">
+										<span class="mdl-icon text-[#60A5FA] text-sm">&#xE74C;</span>
+										<span>Мастерская модов</span>
+									</div>
+									<div class="text-xs text-[#888888] mt-1.5 leading-relaxed">Встроенный редактор списков доменов и .bat скриптов.</div>
+								</div>
 							</div>
 						</div>
 
-						<div id="wiz-console-log" class="flex-1 bg-[#050505] border border-[#1A1A1A] rounded-xl p-3 font-mono text-xs text-[#4CAF50] overflow-y-auto space-y-1"></div>
+						<!-- ШАГ 1: КОНФИДЕНЦИАЛЬНОСТЬ -->
+						<div id="wiz-step-1" class="wizard-step flex-col space-y-4 max-w-xl mx-auto w-full">
+							<div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#1E293B] border border-[#3B82F6]/40 text-[#60A5FA] text-xs font-mono font-semibold w-max">
+								<span class="mdl-icon text-xs">&#xEA18;</span>
+								<span>ZERO TELEMETRY ARCHITECTURE</span>
+							</div>
+							<h3 class="text-2xl font-bold text-white">100% локальная работа без сбора данных</h3>
+							<p class="text-sm text-[#AAAAAA] leading-relaxed">
+								Программа работает исключительно на вашем компьютере и не перенаправляет трафик через сторонние серверы:
+							</p>
+							<div class="space-y-2.5 text-xs">
+								<div class="p-3.5 rounded-xl bg-[#161616] border border-[#262626] flex items-center gap-3.5">
+									<span class="mdl-icon text-brand text-lg">&#xE73E;</span>
+									<div>
+										<div class="text-sm font-bold text-white">Никакой телеметрии и аналитики</div>
+										<div class="text-xs text-[#888888] mt-0.5">Мы не собираем историю браузера, IP-адреса или статистику.</div>
+									</div>
+								</div>
+								<div class="p-3.5 rounded-xl bg-[#161616] border border-[#262626] flex items-center gap-3.5">
+									<span class="mdl-icon text-brand text-lg">&#xE73E;</span>
+									<div>
+										<div class="text-sm font-bold text-white">Прямые загрузки с GitHub</div>
+										<div class="text-xs text-[#888888] mt-0.5">Ядра winws.exe и TgWsProxy скачиваются напрямую из официальных репозиториев flowseal.</div>
+									</div>
+								</div>
+								<div class="p-3.5 rounded-xl bg-[#161616] border border-[#262626] flex items-center gap-3.5">
+									<span class="mdl-icon text-brand text-lg">&#xE73E;</span>
+									<div>
+										<div class="text-sm font-bold text-white">Никакой потери скорости и пинга</div>
+										<div class="text-xs text-[#888888] mt-0.5">В отличие от VPN, пакеты идут напрямую к игровым серверам.</div>
+									</div>
+								</div>
+							</div>
+						</div>
+
+						<!-- ШАГ 2: ВЫБОР МОДУЛЕЙ -->
+						<div id="wiz-step-2" class="wizard-step flex-col w-full space-y-4 max-w-xl mx-auto">
+							<div>
+								<h3 class="text-2xl font-bold text-white">Какие модули установить?</h3>
+								<p class="text-sm text-[#888888] mt-1">Выбранные ядра будут автоматически загружены с GitHub.</p>
+							</div>
+
+							<label class="wiz-option-card selected" id="wiz-card-zapret">
+								<div class="flex items-start gap-3.5">
+									<div class="w-10 h-10 rounded-xl bg-[#107C10]/20 border border-[#107C10] flex items-center justify-center text-brand shrink-0 mt-0.5">
+										<span class="mdl-icon text-base">&#xE72E;</span>
+									</div>
+									<div>
+										<div class="flex items-center gap-2">
+											<span class="text-base font-bold text-white">Ядро Zapret (winws)</span>
+											<span class="px-2 py-0.5 rounded bg-[#107C10]/30 text-brand font-mono text-[10px] font-semibold">Основной</span>
+										</div>
+										<div class="text-xs text-[#888888] mt-1 leading-relaxed">
+											Обход DPI-блокировок для Discord (включая звонки), YouTube и веб-сайтов.
+										</div>
+									</div>
+								</div>
+								<input id="wiz-chk-zapret" type="checkbox" checked="" onchange="onWizardOptionChange()" class="cyber-toggle">
+							</label>
+
+							<label class="wiz-option-card selected" id="wiz-card-proxy">
+								<div class="flex items-start gap-3.5">
+									<div class="w-10 h-10 rounded-xl bg-[#3B82F6]/20 border border-[#3B82F6] flex items-center justify-center text-[#60A5FA] shrink-0 mt-0.5">
+										<span class="mdl-icon text-base">&#xE709;</span>
+									</div>
+									<div>
+										<div class="text-base font-bold text-white">Ядро TgWsProxy</div>
+										<div class="text-xs text-[#888888] mt-1 leading-relaxed">
+											Локальный WebSocket-прокси для ускорения загрузки фото, кружочков и видео в Telegram Desktop.
+										</div>
+									</div>
+								</div>
+								<input id="wiz-chk-proxy" type="checkbox" checked="" onchange="onWizardOptionChange()" class="cyber-toggle">
+							</label>
+						</div>
+
+						<!-- ШАГ 3: ДОПОЛНИТЕЛЬНЫЕ НАСТРОЙКИ -->
+						<div id="wiz-step-3" class="wizard-step flex-col w-full space-y-3 max-w-xl mx-auto">
+							<div>
+								<h3 class="text-2xl font-bold text-white">Персонализация и поведение</h3>
+								<p class="text-sm text-[#888888] mt-1">Эти параметры можно в любой момент изменить в разделе «Настройки».</p>
+							</div>
+
+							<label class="wiz-option-card selected" id="wiz-card-autostart">
+								<div>
+									<div class="text-sm font-bold text-white">Запускать вместе с Windows</div>
+									<div class="text-xs text-[#888888] mt-0.5">Автоматически добавлять программу в автозагрузку системы</div>
+								</div>
+								<input id="wiz-chk-autostart" type="checkbox" checked="" onchange="onWizardOptionChange()" class="cyber-toggle">
+							</label>
+
+							<label class="wiz-option-card" id="wiz-card-focus">
+								<div>
+									<div class="text-sm font-bold text-white">Режим фокусировки (Без глитчей)</div>
+									<div class="text-xs text-[#888888] mt-0.5">Отключить тряску экрана при ошибках запуска служб</div>
+								</div>
+								<input id="wiz-chk-focus" type="checkbox" onchange="onWizardOptionChange()" class="cyber-toggle">
+							</label>
+
+							<label class="wiz-option-card" id="wiz-card-colorblind">
+								<div>
+									<div class="text-sm font-bold text-white">Режим цветовой слепоты</div>
+									<div class="text-xs text-[#888888] mt-0.5">Использовать сине-оранжевую палитру индикаторов вместо красно-зеленой</div>
+								</div>
+								<input id="wiz-chk-colorblind" type="checkbox" onchange="onWizardOptionChange()" class="cyber-toggle">
+							</label>
+						</div>
+
+						<!-- ШАГ 4: ТЕРМИНАЛ УСТАНОВКИ И ДЕПЛОЯ -->
+						<div id="wiz-step-4" class="wizard-step flex-col w-full h-full justify-between space-y-3 max-w-xl mx-auto">
+							<div>
+								<div class="flex items-center justify-between mb-2">
+									<span id="wiz-finish-status" class="text-lg font-bold text-white">Развертывание модулей...</span>
+									<span id="wiz-finish-pct" class="text-sm font-mono font-bold text-brand">35%</span>
+								</div>
+								<div class="w-full h-2.5 bg-[#161616] border border-[#262626] rounded-full overflow-hidden">
+									<div id="wiz-finish-bar" class="h-full bg-[#107C10] transition-all duration-300" style="width: 35%"></div>
+								</div>
+							</div>
+
+							<div id="wiz-console-log" class="flex-1 bg-[#050505] border border-[#1F1F1F] rounded-xl p-4 font-mono text-xs text-[#4CAF50] overflow-y-auto space-y-1.5 select-text"></div>
+						</div>
+
 					</div>
 				</div>
 
-				<div class="flex items-center justify-between pt-3 border-t border-[#2A2A2A]">
-					<button id="wiz-btn-skip" onclick="skipWizard()" class="px-4 py-2 rounded-lg bg-[#1A1A1A] border border-[#333333] text-xs text-white hover:bg-[#252525] transition cursor-pointer">
-						Пропустить
+				<!-- НИЖНЯЯ ПАНЕЛЬ НАВИГАЦИИ -->
+				<div class="bg-[#121212] border-t border-[#242424] px-7 py-4 flex items-center justify-between shrink-0">
+					<button id="wiz-btn-skip" onclick="skipWizard()" class="px-4 py-2 rounded-lg bg-[#1A1A1A] border border-[#2E2E2E] text-xs font-semibold text-[#999999] hover:text-white hover:bg-[#242424] transition cursor-pointer">
+						Пропустить мастер
 					</button>
 
-					<div id="wiz-dots" class="flex items-center gap-2"></div>
+					<div id="wiz-dots" class="flex items-center gap-2.5"></div>
 
-					<div class="flex items-center gap-2">
-						<button id="wiz-btn-back" onclick="wizardPrevStep()" class="px-4 py-2 rounded-lg bg-[#1A1A1A] border border-[#333333] text-xs text-white hover:bg-[#252525] transition cursor-pointer hidden">
-							Назад
+					<div class="flex items-center gap-2.5">
+						<button id="wiz-btn-back" onclick="wizardPrevStep()" class="px-4 py-2 rounded-lg bg-[#1A1A1A] border border-[#333333] text-xs font-semibold text-white hover:bg-[#252525] transition cursor-pointer hidden">
+							← Назад
 						</button>
-						<button id="wiz-btn-next" onclick="wizardNextStep()" class="px-5 py-2 rounded-lg btn-brand text-xs font-semibold cursor-pointer">
-							Начать настройку
+						<button id="wiz-btn-next" onclick="wizardNextStep()" class="px-6 py-2 rounded-lg btn-brand text-xs font-bold cursor-pointer shadow-lg">
+							Начать настройку →
 						</button>
 					</div>
 				</div>
@@ -1165,11 +1293,11 @@
 						<div>
 							<label class="text-xs text-[#A0A0A0] block mb-1">Диапазон TCP портов:</label>
 							<input id="gf-tcp-input" type="text" value="1024-65535" class="w-full bg-[#222222] border border-[#333333] rounded-lg px-3 py-1.5 text-xs font-mono text-white focus:outline-none focus:border-[#107C10] select-text">
-                    </div>
+						</div>
 						<div>
 							<label class="text-xs text-[#A0A0A0] block mb-1">Диапазон UDP портов:</label>
 							<input id="gf-udp-input" type="text" value="1024-65535" class="w-full bg-[#222222] border border-[#333333] rounded-lg px-3 py-1.5 text-xs font-mono text-white focus:outline-none focus:border-[#107C10] select-text">
-                    </div>
+						</div>
 					</div>
 
 					<div class="flex items-center justify-between pt-2">
@@ -1196,28 +1324,28 @@
 					<label class="text-xs text-[#A0A0A0] block mb-1">Отображаемое имя:</label>
 					<input id="new-mod-name" type="text" oninput="onNewModNameInput()" class="w-full bg-[#222222] border border-[#333333] rounded-lg px-3 py-1.5 text-xs text-white mb-2.5 focus:outline-none focus:border-[#107C10] select-text">
 
-						<div class="flex justify-between items-center mb-1">
-							<span class="text-xs text-[#A0A0A0]">Уникальный ID (папка, англ.):</span>
-							<span id="new-mod-id-status" class="text-[11px] font-mono text-brand">✓ ID свободен</span>
-						</div>
-						<div class="flex gap-2 mb-2.5">
-							<input id="new-mod-id" type="text" oninput="onNewModIdInput()" class="flex-1 bg-[#222222] border border-[#333333] rounded-lg px-3 py-1.5 text-xs font-mono text-white focus:outline-none focus:border-[#107C10] select-text">
-								<button onclick="regenerateModId()" class="editor-tool-btn px-3" title="Сгенерировать уникальный ID">
-									<span class="mdl-icon text-xs">&#xE149;</span>
-								</button>
-							</div>
+					<div class="flex justify-between items-center mb-1">
+						<span class="text-xs text-[#A0A0A0]">Уникальный ID (папка, англ.):</span>
+						<span id="new-mod-id-status" class="text-[11px] font-mono text-brand">✓ ID свободен</span>
+					</div>
+					<div class="flex gap-2 mb-2.5">
+						<input id="new-mod-id" type="text" oninput="onNewModIdInput()" class="flex-1 bg-[#222222] border border-[#333333] rounded-lg px-3 py-1.5 text-xs font-mono text-white focus:outline-none focus:border-[#107C10] select-text">
+						<button onclick="regenerateModId()" class="editor-tool-btn px-3" title="Сгенерировать уникальный ID">
+							<span class="mdl-icon text-xs">&#xE149;</span>
+						</button>
+					</div>
 
-						<label class="text-xs text-[#A0A0A0] block mb-1">Автор:</label>
-						<input id="new-mod-author" type="text" class="w-full bg-[#222222] border border-[#333333] rounded-lg px-3 py-1.5 text-xs text-white mb-2.5 focus:outline-none focus:border-[#107C10] select-text">
+					<label class="text-xs text-[#A0A0A0] block mb-1">Автор:</label>
+					<input id="new-mod-author" type="text" class="w-full bg-[#222222] border border-[#333333] rounded-lg px-3 py-1.5 text-xs text-white mb-2.5 focus:outline-none focus:border-[#107C10] select-text">
 
-							<label class="text-xs text-[#A0A0A0] block mb-1">Описание:</label>
-							<input id="new-mod-desc" type="text" class="w-full bg-[#222222] border border-[#333333] rounded-lg px-3 py-1.5 text-xs text-white mb-4 focus:outline-none focus:border-[#107C10] select-text">
+					<label class="text-xs text-[#A0A0A0] block mb-1">Описание:</label>
+					<input id="new-mod-desc" type="text" class="w-full bg-[#222222] border border-[#333333] rounded-lg px-3 py-1.5 text-xs text-white mb-4 focus:outline-none focus:border-[#107C10] select-text">
 
-								<div class="flex justify-end gap-2">
-									<button onclick="closeCreateModModal()" class="px-4 py-1.5 rounded-md border border-[#333333] text-xs text-[#A0A0A0] hover:bg-[#222222] transition cursor-pointer">Отмена</button>
-									<button id="btn-confirm-create-mod" onclick="confirmCreateMod()" class="px-4 py-1.5 rounded-md btn-brand text-xs font-semibold cursor-pointer">Создать</button>
-								</div>
-							</div>
+					<div class="flex justify-end gap-2">
+						<button onclick="closeCreateModModal()" class="px-4 py-1.5 rounded-md border border-[#333333] text-xs text-[#A0A0A0] hover:bg-[#222222] transition cursor-pointer">Отмена</button>
+						<button id="btn-confirm-create-mod" onclick="confirmCreateMod()" class="px-4 py-1.5 rounded-md btn-brand text-xs font-semibold cursor-pointer">Создать</button>
+					</div>
+				</div>
 			</div>
 
 			<!-- ОВЕРЛЕЙ 4: СТУДИЯ РЕДАКТИРОВАНИЯ МОДА (CODE STUDIO) -->
@@ -1244,20 +1372,20 @@
 							<div class="col-span-6">
 								<label class="text-[11px] text-[#A0A0A0] block mb-0.5">Название мода:</label>
 								<input id="edit-mod-name" type="text" class="w-full bg-[#222222] border border-[#333333] rounded px-2.5 py-1 text-xs text-white select-text">
-                        </div>
+							</div>
 							<div class="col-span-4">
 								<label class="text-[11px] text-[#A0A0A0] block mb-0.5">Автор:</label>
 								<input id="edit-mod-author" type="text" class="w-full bg-[#222222] border border-[#333333] rounded px-2.5 py-1 text-xs text-white select-text">
-                        </div>
+							</div>
 							<div class="col-span-2">
 								<label class="text-[11px] text-[#A0A0A0] block mb-0.5">Версия:</label>
 								<input id="edit-mod-version" type="text" class="w-full bg-[#222222] border border-[#333333] rounded px-2.5 py-1 text-xs font-mono text-white select-text">
-                        </div>
+							</div>
 						</div>
 						<div>
 							<label class="text-[11px] text-[#A0A0A0] block mb-0.5">Описание:</label>
 							<input id="edit-mod-desc" type="text" class="w-full bg-[#222222] border border-[#333333] rounded px-2.5 py-1 text-xs text-white select-text">
-                    </div>
+						</div>
 					</div>
 
 					<div class="bg-[#18181B] border border-[#27272A] rounded-lg p-1.5 mb-2 flex items-center justify-between shrink-0 flex-wrap gap-1">
@@ -1300,11 +1428,11 @@
 
 					<div id="editor-search-panel" class="bg-[#1C1C22] border border-[#3B82F6] rounded-lg p-2 mb-2 hidden items-center gap-2 shrink-0">
 						<input id="editor-find-input" type="text" placeholder="Найти текст..." class="flex-1 bg-[#222222] border border-[#333333] rounded px-2.5 py-1 text-xs font-mono text-white select-text">
-							<input id="editor-replace-input" type="text" placeholder="Заменить на..." class="flex-1 bg-[#222222] border border-[#333333] rounded px-2.5 py-1 text-xs font-mono text-white select-text">
-								<button onclick="editorFindNext()" class="editor-tool-btn">Найти далее</button>
-								<button onclick="editorReplaceAll()" class="editor-tool-btn">Заменить всё</button>
-								<button onclick="toggleEditorSearch()" class="editor-tool-btn">✕</button>
-							</div>
+						<input id="editor-replace-input" type="text" placeholder="Заменить на..." class="flex-1 bg-[#222222] border border-[#333333] rounded px-2.5 py-1 text-xs font-mono text-white select-text">
+						<button onclick="editorFindNext()" class="editor-tool-btn">Найти далее</button>
+						<button onclick="editorReplaceAll()" class="editor-tool-btn">Заменить всё</button>
+						<button onclick="toggleEditorSearch()" class="editor-tool-btn">✕</button>
+					</div>
 
 					<div id="editor-snippets-bar" class="flex items-center gap-1 overflow-x-auto pb-1 mb-1.5 shrink-0">
 						<span class="text-[11px] text-[#71717A] mr-1">Вставка:</span>

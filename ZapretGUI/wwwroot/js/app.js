@@ -63,23 +63,281 @@ function skipSplash() {
 }
 
 // =========================================================================
-// 2. WIZARD WINDOW (5-ШАГОВЫЙ МАСТЕР ПЕРВОЙ НАСТРОЙКИ)
+// 2. WIZARD WINDOW 2.0 + ПРОЦЕДУРНЫЙ 3D ASCII ДВИЖОК (TORUS, SHIELD, HELIX, CUBE)
 // =========================================================================
-let wizardStep = 0;
-let wizardFinished = false;
-let lastWizProgressEl = null;
+let wizAsciiTimer = null;
+let wizAsciiShape = 0; // 0: Torus, 1: Octahedron Shield, 2: DNA Network Helix, 3: Cyber Cube
+let wizPitch = 0.45;   // Наклон вверх-вниз (вокруг оси X)
+let wizYaw = 0.4;      // Поворот влево-вправо (вокруг оси Y)
+let wizVelPitch = 0;   // Инерция по вертикали
+let wizVelYaw = 0;     // Инерция по горизонтали
+let wizIsDragging = false;
+let wizLastMouseX = 0, wizLastMouseY = 0;
+let wizHyperSpeed = false;
+
+const ASCII_MODELS = [
+    'MODEL: TORUS_REACTOR.3D',
+    'MODEL: SHIELD_OCTA.3D',
+    'MODEL: NET_HELIX.3D',
+    'MODEL: HYPER_CUBE.3D'
+];
+
+function startWizAsciiEngine() {
+    if (wizAsciiTimer) return;
+    wizAsciiTimer = setInterval(renderWizAsciiFrame, 33); // ~30 FPS
+}
+
+function stopWizAsciiEngine() {
+    if (wizAsciiTimer) {
+        clearInterval(wizAsciiTimer);
+        wizAsciiTimer = null;
+    }
+}
+
+function cycleWizAsciiShape() {
+    sendCmd('playClick');
+    wizAsciiShape = (wizAsciiShape + 1) % 4;
+    const lbl = document.getElementById('wiz-ascii-model-name');
+    if (lbl) lbl.innerText = ASCII_MODELS[wizAsciiShape];
+}
+
+// Захват 3D-модели только при зажатии ЛКМ
+function onWizAsciiMouseDown(e) {
+    if (e.button !== 0) return;
+    wizIsDragging = true;
+    wizLastMouseX = e.clientX;
+    wizLastMouseY = e.clientY;
+    document.getElementById('wiz-left-panel')?.classList.add('is-dragging');
+}
+
+window.addEventListener('mousemove', (e) => {
+    if (!wizIsDragging) return;
+    const dx = e.clientX - wizLastMouseX;
+    const dy = e.clientY - wizLastMouseY;
+    wizLastMouseX = e.clientX;
+    wizLastMouseY = e.clientY;
+
+    // Крутим строго в сторону движения мыши:
+    // Мышь вправо (dx > 0) -> передняя грань идет вправо (Yaw+)
+    // Мышь вниз (dy > 0)   -> передняя грань идет вниз (Pitch+)
+    wizYaw += dx * 0.013;
+    wizPitch += dy * 0.013;
+
+    // Запоминаем скорость для плавной инерции после отпускания мыши
+    wizVelYaw = dx * 0.005;
+    wizVelPitch = dy * 0.005;
+});
+
+window.addEventListener('mouseup', () => {
+    if (wizIsDragging) {
+        wizIsDragging = false;
+        document.getElementById('wiz-left-panel')?.classList.remove('is-dragging');
+    }
+});
+
+function renderWizAsciiFrame() {
+    const stage = document.getElementById('wiz-ascii-stage');
+    if (!stage) return;
+
+    const W = 58, H = 30;
+    const output = new Array(W * H).fill(' ');
+    const zbuffer = new Array(W * H).fill(0);
+    const chars = '.,-~:;=!*#$@';
+
+    if (!wizIsDragging) {
+        const speedMult = wizHyperSpeed ? 2.8 : 1.0;
+        // Плавное авто-вращение + затухающая инерция после броска мышкой
+        wizYaw += (0.032 * speedMult) + wizVelYaw;
+        wizPitch += (0.014 * speedMult) + wizVelPitch;
+        wizVelYaw *= 0.90;
+        wizVelPitch *= 0.90;
+    }
+
+    const cosY = Math.cos(wizYaw), sinY = Math.sin(wizYaw);
+    const cosX = Math.cos(wizPitch), sinX = Math.sin(wizPitch);
+
+    function plotPoint(x, y, z, nx, ny, nz) {
+        // 1. Вращение вокруг вертикальной оси Y (Yaw — влево/вправо за мышкой)
+        const x1 = x * cosY - z * sinY;
+        const z1 = x * sinY + z * cosY;
+        const y1 = y;
+
+        // 2. Вращение вокруг горизонтальной оси X (Pitch — вверх/вниз за мышкой)
+        const y2 = y1 * cosX - z1 * sinX;
+        const z2 = y1 * sinX + z1 * cosX;
+        const x2 = x1;
+
+        const depth = z2 + 5.0;
+        if (depth <= 0.5) return;
+        const ooz = 1 / depth;
+
+        // Экранные координаты: X вправо, Y вверх (в консоль вниз)
+        const xp = Math.floor(W / 2 + 34 * ooz * x2);
+        const yp = Math.floor(H / 2 - 17 * ooz * y2);
+
+        if (xp < 0 || xp >= W || yp < 0 || yp >= H) return;
+        const idx = xp + W * yp;
+
+        if (ooz > zbuffer[idx]) {
+            zbuffer[idx] = ooz;
+
+            // Поворачиваем нормали для реалистичного блика света
+            const nx1 = nx * cosY - nz * sinY;
+            const nz1 = nx * sinY + nz * cosY;
+            const ny2 = ny * cosX - nz1 * sinX;
+            const nz2 = ny * sinX + nz1 * cosX;
+
+            const lum = (nx1 * 0.35 + ny2 * 0.45 - nz2 * 0.75 + 1) * 0.5;
+            const cIdx = Math.max(0, Math.min(chars.length - 1, Math.floor(lum * chars.length)));
+            output[idx] = chars[cIdx];
+        }
+    }
+
+    if (wizAsciiShape === 0) {
+        // 0. Классический 3D Тор (Donut Reactor)
+        const R1 = 0.85, R2 = 1.75;
+        for (let theta = 0; theta < 6.28; theta += 0.13) {
+            const cost = Math.cos(theta), sint = Math.sin(theta);
+            for (let phi = 0; phi < 6.28; phi += 0.055) {
+                const cosp = Math.cos(phi), sinp = Math.sin(phi);
+                const circleX = R2 + R1 * cost;
+                plotPoint(
+                    circleX * cosp,
+                    circleX * sinp,
+                    R1 * sint,
+                    cost * cosp,
+                    cost * sinp,
+                    sint
+                );
+            }
+        }
+    } else if (wizAsciiShape === 1) {
+        // 1. 3D Кристалл / Октаэдр защиты (Privacy Shield)
+        const S = 2.05;
+        const verts = [
+            [0, S, 0], [0, -S, 0], [S, 0, 0], [-S, 0, 0], [0, 0, S], [0, 0, -S]
+        ];
+        const faces = [
+            [0, 4, 2], [0, 2, 5], [0, 5, 3], [0, 3, 4],
+            [1, 2, 4], [1, 5, 2], [1, 3, 5], [1, 4, 3]
+        ];
+        faces.forEach(([i0, i1, i2]) => {
+            const v0 = verts[i0], v1 = verts[i1], v2 = verts[i2];
+            const nx = (v0[0] + v1[0] + v2[0]) / 3;
+            const ny = (v0[1] + v1[1] + v2[1]) / 3;
+            const nz = (v0[2] + v1[2] + v2[2]) / 3;
+            for (let u = 0; u <= 1; u += 0.07) {
+                for (let v = 0; u + v <= 1; v += 0.07) {
+                    const w = 1 - u - v;
+                    plotPoint(
+                        u * v0[0] + v * v1[0] + w * v2[0],
+                        u * v0[1] + v * v1[1] + w * v2[1],
+                        u * v0[2] + v * v1[2] + w * v2[2],
+                        nx, ny, nz
+                    );
+                }
+            }
+        });
+    } else if (wizAsciiShape === 2) {
+        // 2. Двойная сетевая спираль (Network DNA Helix)
+        for (let t = -2.2; t <= 2.2; t += 0.05) {
+            const angle = t * 2.2;
+            const r = 1.35;
+            const x1 = r * Math.cos(angle), z1 = r * Math.sin(angle);
+            const x2 = -x1, z2 = -z1;
+
+            for (let a = 0; a < 6.28; a += 0.7) {
+                const cr = 0.24;
+                plotPoint(x1 + cr * Math.cos(a), t, z1 + cr * Math.sin(a), Math.cos(a), 0, Math.sin(a));
+                plotPoint(x2 + cr * Math.cos(a), t, z2 + cr * Math.sin(a), -Math.cos(a), 0, -Math.sin(a));
+            }
+            if (Math.abs((t * 10) % 4) < 0.5) {
+                for (let s = -1; s <= 1; s += 0.11) {
+                    plotPoint(x1 * s, t, z1 * s, 0, 1, 0);
+                }
+            }
+        }
+    } else {
+        // 3. 3D Кибер-Куб (Hyper Cube)
+        const C = 1.4;
+        for (let u = -C; u <= C; u += 0.12) {
+            for (let v = -C; v <= C; v += 0.12) {
+                plotPoint(u, v, C, 0, 0, 1);
+                plotPoint(u, v, -C, 0, 0, -1);
+                plotPoint(u, C, v, 0, 1, 0);
+                plotPoint(u, -C, v, 0, -1, 0);
+                plotPoint(C, u, v, 1, 0, 0);
+                plotPoint(-C, u, v, -1, 0, 0);
+            }
+        }
+    }
+
+    let lines = '';
+    for (let r = 0; r < H; r++) {
+        lines += output.slice(r * W, (r + 1) * W).join('') + '\n';
+    }
+    stage.textContent = lines;
+}
+
+function onWizardOptionChange() {
+    sendCmd('playClick');
+    const zap = document.getElementById('wiz-chk-zapret').checked;
+    const prx = document.getElementById('wiz-chk-proxy').checked;
+    const aut = document.getElementById('wiz-chk-autostart').checked;
+    const foc = document.getElementById('wiz-chk-focus').checked;
+    const cb = document.getElementById('wiz-chk-colorblind').checked;
+
+    document.getElementById('wiz-card-zapret')?.classList.toggle('selected', zap);
+    document.getElementById('wiz-card-proxy')?.classList.toggle('selected', prx);
+    document.getElementById('wiz-card-autostart')?.classList.toggle('selected', aut);
+    document.getElementById('wiz-card-focus')?.classList.toggle('selected', foc);
+    document.getElementById('wiz-card-colorblind')?.classList.toggle('selected', cb);
+
+    // Живое превью цветовой слепоты прямо в мастере
+    document.body.classList.toggle('colorblind-mode', cb);
+
+    const sumZap = document.getElementById('wiz-sum-zapret');
+    const sumPrx = document.getElementById('wiz-sum-proxy');
+    const sumAut = document.getElementById('wiz-sum-auto');
+    const sumThm = document.getElementById('wiz-sum-theme');
+
+    if (sumZap) { sumZap.innerText = zap ? 'ВКЛ' : 'ВЫКЛ'; sumZap.className = zap ? 'text-brand' : 'text-[#777777]'; }
+    if (sumPrx) { sumPrx.innerText = prx ? 'ВКЛ' : 'ВЫКЛ'; sumPrx.className = prx ? 'text-brand' : 'text-[#777777]'; }
+    if (sumAut) { sumAut.innerText = aut ? 'ВКЛ' : 'ВЫКЛ'; sumAut.className = aut ? 'text-brand' : 'text-[#777777]'; }
+    if (sumThm) { sumThm.innerText = cb ? 'Сине-оранж.' : 'Стандарт'; }
+}
 
 function openWizardModal() {
     wizardStep = 0;
     wizardFinished = false;
+    wizHyperSpeed = false;
+    const btnNext = document.getElementById('wiz-btn-next');
+    if (btnNext) {
+        btnNext.disabled = false;
+        btnNext.style.opacity = '1';
+    }
+    onWizardOptionChange();
     updateWizardUI();
+    startWizAsciiEngine();
     document.getElementById('wizard-overlay').classList.add('open');
 }
 
 function updateWizardUI() {
     for (let i = 0; i < 5; i++) {
         document.getElementById('wiz-step-' + i).classList.toggle('active', i === wizardStep);
+        const stepInd = document.getElementById('wstep-ind-' + i);
+        if (stepInd) {
+            if (i < wizardStep) stepInd.className = 'wiz-stepper-item done';
+            else if (i === wizardStep) stepInd.className = 'wiz-stepper-item active';
+            else stepInd.className = 'wiz-stepper-item';
+        }
     }
+
+    // Автоматически меняем 3D ASCII-модель под тему текущего шага
+    wizAsciiShape = wizardStep < 4 ? wizardStep : 0;
+    wizHyperSpeed = (wizardStep === 4 && !wizardFinished);
+    const modelLbl = document.getElementById('wiz-ascii-model-name');
+    if (modelLbl) modelLbl.innerText = ASCII_MODELS[wizAsciiShape];
 
     const dots = document.getElementById('wiz-dots');
     dots.innerHTML = [0, 1, 2, 3, 4].map(i =>
@@ -91,19 +349,19 @@ function updateWizardUI() {
     const btnSkip = document.getElementById('wiz-btn-skip');
 
     if (wizardStep === 0) {
-        btnNext.innerText = 'Начать настройку';
+        btnNext.innerText = 'Начать настройку →';
         btnBack.classList.add('hidden');
         btnSkip.classList.remove('hidden');
     } else if (wizardStep === 3) {
-        btnNext.innerText = 'Применить и завершить';
+        btnNext.innerText = 'Установить и применить →';
         btnBack.classList.remove('hidden');
         btnSkip.classList.remove('hidden');
     } else if (wizardStep === 4) {
-        btnNext.innerText = 'Закрыть';
+        btnNext.innerText = 'Завершить';
         btnBack.classList.add('hidden');
         btnSkip.classList.add('hidden');
     } else {
-        btnNext.innerText = 'Далее';
+        btnNext.innerText = 'Далее →';
         btnBack.classList.remove('hidden');
         btnSkip.classList.remove('hidden');
     }
@@ -127,6 +385,9 @@ function wizardNextStep() {
         btnNext.disabled = true;
         btnNext.style.opacity = '0.5';
         document.getElementById('wiz-console-log').innerHTML = '';
+        document.getElementById('wiz-finish-bar').style.width = '30%';
+        const pct = document.getElementById('wiz-finish-pct');
+        if (pct) pct.innerText = '30%';
 
         sendCmd('runWizardSetup', {
             useZapret: document.getElementById('wiz-chk-zapret').checked,
@@ -137,6 +398,7 @@ function wizardNextStep() {
         });
     } else if (wizardStep === 4) {
         if (wizardFinished) {
+            stopWizAsciiEngine();
             document.getElementById('wizard-overlay').classList.remove('open');
         }
     } else if (wizardStep < 3) {
@@ -147,6 +409,7 @@ function wizardNextStep() {
 
 function skipWizard() {
     sendCmd('playClick');
+    stopWizAsciiEngine();
     sendCmd('skipWizard');
     document.getElementById('wizard-overlay').classList.remove('open');
 }
@@ -154,6 +417,14 @@ function skipWizard() {
 function appendWizardLog(time, message, isProgress) {
     const box = document.getElementById('wiz-console-log');
     const text = `[${time}] ${message}`;
+
+    const pctMatch = message.match(/(\d+(?:\.\d+)?)%/);
+    if (pctMatch) {
+        const val = Math.min(98, Math.max(30, Math.round(parseFloat(pctMatch[1]))));
+        document.getElementById('wiz-finish-bar').style.width = `${val}%`;
+        const pctEl = document.getElementById('wiz-finish-pct');
+        if (pctEl) pctEl.innerText = `${val}%`;
+    }
 
     if (isProgress && lastWizProgressEl) {
         lastWizProgressEl.innerText = text;
@@ -254,13 +525,16 @@ function handleBackendEvent(type, data) {
 
         case 'wizardCompleted':
             wizardFinished = true;
-            document.getElementById('wiz-finish-status').innerText = 'Всё готово!';
-            document.getElementById('wiz-finish-status').className = 'text-xl font-bold text-brand mb-2';
+            wizHyperSpeed = false;
+            document.getElementById('wiz-finish-status').innerText = 'Установка успешно завершена!';
+            document.getElementById('wiz-finish-status').className = 'text-base font-bold text-brand';
             document.getElementById('wiz-finish-bar').style.width = '100%';
+            const wizPct = document.getElementById('wiz-finish-pct');
+            if (wizPct) wizPct.innerText = '100%';
             const btnNext = document.getElementById('wiz-btn-next');
             btnNext.disabled = false;
             btnNext.style.opacity = '1';
-            btnNext.innerText = 'Закрыть';
+            btnNext.innerText = 'Запустить панель →';
             break;
 
         case 'askConfirm':

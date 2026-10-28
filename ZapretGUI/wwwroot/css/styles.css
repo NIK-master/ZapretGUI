@@ -655,3 +655,76 @@ body.compact-mode #settings-bento-top,
 body.compact-mode #settings-routing-grid {
     grid-template-columns: repeat(1, minmax(0, 1fr));
 }
+/* =========================================================
+   SETUP WIZARD 2.0 (3D ASCII HOLOGRAM & CYBER STEPPER)
+   ========================================================= */
+.wiz-stepper-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    border-radius: 8px;
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-size: 11px;
+    font-weight: 600;
+    color: #555555;
+    background: #111111;
+    border: 1px solid #222222;
+    transition: all 0.25s ease;
+}
+
+    .wiz-stepper-item.active {
+        color: #FFFFFF;
+        background: rgba(16, 124, 16, 0.18);
+        border-color: var(--accent-color);
+        box-shadow: 0 0 14px rgba(16, 124, 16, 0.25);
+    }
+
+    .wiz-stepper-item.done {
+        color: var(--accent-light);
+        background: #141E14;
+        border-color: #233823;
+    }
+
+.wiz-option-card {
+    background: #141414;
+    border: 1px solid #262626;
+    border-radius: 12px;
+    padding: 12px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+    .wiz-option-card:hover {
+        background: #1A1A1A;
+        border-color: #3A3A3A;
+    }
+
+    .wiz-option-card.selected {
+        background: linear-gradient(135deg, rgba(16, 124, 16, 0.12) 0%, #141814 100%);
+        border-color: var(--accent-color);
+    }
+
+#wiz-ascii-stage {
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 10.5px;
+    line-height: 10.5px;
+    letter-spacing: 0.6px;
+    color: var(--accent-light);
+    text-shadow: 0 0 10px var(--accent-glow);
+    white-space: pre;
+    text-align: center;
+    user-select: none;
+}
+
+#wiz-left-panel {
+    cursor: grab;
+}
+
+#wiz-left-panel.is-dragging {
+    cursor: grabbing;
+}
