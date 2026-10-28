@@ -2871,9 +2871,27 @@ namespace ZapretGUI.Core
                 });
             };
 
-            BypassController.Current.NetMonitor.StatusChanged += isOnline =>
+            BypassController.Current.NetMonitor.StatusChanged += async isOnline =>
             {
                 SendEvent("netStatus", new { isOnline });
+
+                if (isOnline && SettingsManager.Current.AutoRestartServices && BypassController.Current.IsRunning)
+                {
+                    SendEvent("log", new
+                    {
+                        message = "🔄 [AutoRestart] Сеть восстановлена. Перезапуск служб обхода...",
+                        time = DateTime.Now.ToString("HH:mm:ss"),
+                        isProgress = false
+                    });
+
+                    await BypassController.Current.RestartServicesAsync(SettingsManager.Current.SelectedProfileName);
+                    SendEvent("bypassState", new
+                    {
+                        isRunning = BypassController.Current.IsRunning,
+                        zapretRunning = BypassController.Current.Zapret.IsRunning,
+                        proxyRunning = BypassController.Current.TgProxy.IsRunning
+                    });
+                }
             };
 
             BypassController.Current.Scanner.ConfigTested += (file, ok, total) =>
@@ -3064,9 +3082,27 @@ namespace ZapretGUI.Core
 
                 case "selectProfile":
                     var prof = root.GetProperty("profile").GetString() ?? "general.bat";
+                    var prevChanged = !string.Equals(SettingsManager.Current.SelectedProfileName, prof, StringComparison.OrdinalIgnoreCase);
                     SettingsManager.Current.SelectedProfileName = prof;
                     SettingsManager.Save();
                     SendEvent("profileSelected", new { profile = prof });
+
+                    if (prevChanged && BypassController.Current.Zapret.IsRunning)
+                    {
+                        SendEvent("log", new
+                        {
+                            message = $"🔄 Переключение конфига на {prof}...",
+                            time = DateTime.Now.ToString("HH:mm:ss"),
+                            isProgress = false
+                        });
+                        await BypassController.Current.RestartServicesAsync(prof);
+                        SendEvent("bypassState", new
+                        {
+                            isRunning = BypassController.Current.IsRunning,
+                            zapretRunning = BypassController.Current.Zapret.IsRunning,
+                            proxyRunning = BypassController.Current.TgProxy.IsRunning
+                        });
+                    }
                     break;
 
                 case "ping":
@@ -5054,19 +5090,19 @@ namespace ZapretGUI.Views
 			<pre id="splash-terminal" class="flex-1 overflow-y-auto font-mono text-[13px] text-[#39FF14] leading-[1.45] whitespace-pre-wrap my-4"></pre>
 		</div>
 
-		<!-- WIZARD WINDOW: МАСТЕР ПЕРВОНАЧАЛЬНОЙ НАСТРОЙКИ 2.0 (С 3D ASCII ГОЛОГРАММОЙ) -->
-		<div id="wizard-overlay" class="modal-overlay fixed inset-0 bg-black/85 backdrop-blur-md z-[90] flex items-center justify-center p-4">
-			<div class="modal-box bg-[#0C0C0C] border border-[#2A2A2A] rounded-2xl w-[780px] h-[530px] shadow-2xl flex flex-col justify-between overflow-hidden">
+		<!-- WIZARD WINDOW: ПОЛНОЭКРАННЫЙ МАСТЕР ПЕРВОНАЧАЛЬНОЙ НАСТРОЙКИ 2.0 -->
+		<div id="wizard-overlay" class="modal-overlay fixed top-[45px] inset-x-0 bottom-0 bg-[#0A0A0A] z-[90] flex">
+			<div class="w-full h-full flex flex-col justify-between overflow-hidden">
 
 				<!-- ВЕРХНЯЯ ПАНЕЛЬ: ЗАГОЛОВОК И ШАГОВЫЙ ПАЙПЛАЙН -->
-				<div class="bg-[#121212] border-b border-[#242424] px-6 py-3.5 flex items-center justify-between shrink-0">
-					<div class="flex items-center gap-2.5">
-						<div class="w-7 h-7 rounded-lg bg-[#107C10]/20 border border-[#107C10] flex items-center justify-center text-brand">
-							<span class="mdl-icon text-xs">&#xE945;</span>
+				<div class="bg-[#121212] border-b border-[#242424] px-7 py-4 flex flex-wrap items-center justify-between gap-3 shrink-0">
+					<div class="flex items-center gap-3">
+						<div class="w-8 h-8 rounded-lg bg-[#107C10]/20 border border-[#107C10] flex items-center justify-center text-brand">
+							<span class="mdl-icon text-sm">&#xE945;</span>
 						</div>
 						<div>
-							<div class="text-sm font-bold text-white leading-tight">Мастер развертывания системы</div>
-							<div class="text-[10px] text-[#777777] font-mono">Zapret for ADHD <span class="app-ver-text">v4.0</span> • Setup Utility</div>
+							<div class="text-base font-bold text-white leading-tight">Мастер развертывания системы</div>
+							<div class="text-xs text-[#777777] font-mono">Zapret for ADHD <span class="app-ver-text">v4.0</span> • Первоначальная настройка</div>
 						</div>
 					</div>
 
@@ -5083,26 +5119,26 @@ namespace ZapretGUI.Views
 				<!-- ЦЕНТРАЛЬНАЯ ОБЛАСТЬ: ЛЕВАЯ КОЛОНКА (3D ASCII) + ПРАВАЯ КОЛОНКА (ШАГИ) -->
 				<div class="flex-1 grid grid-cols-12 overflow-hidden">
 
-					<!-- ЛЕВАЯ ПАНЕЛЬ: ИНТЕРАКТИВНЫЙ 3D ASCII РЕНДЕРЕР И СТАТУС КОНФИГА -->
-					<div id="wiz-left-panel" class="col-span-5 bg-[#080808] border-r border-[#222222] p-4 flex flex-col justify-between relative overflow-hidden"
-						 onmousemove="onWizAsciiMouseMove(event)" onmouseleave="onWizAsciiMouseLeave()">
-						<div class="flex items-center justify-between text-[10px] font-mono text-[#666666] z-10">
+					<!-- ЛЕВАЯ ПАНЕЛЬ: ИНТЕРАКТИВНЫЙ 3D ASCII РЕНДЕРЕР (DRAG TO ROTATE) -->
+					<div id="wiz-left-panel" class="col-span-5 bg-[#080808] border-r border-[#222222] p-5 flex flex-col justify-between relative overflow-hidden"
+						 onmousedown="onWizAsciiMouseDown(event)">
+						<div class="flex items-center justify-between text-xs font-mono text-[#666666] z-10 pointer-events-none">
 							<span id="wiz-ascii-model-name">MODEL: TORUS_CORE.3D</span>
-							<span class="text-brand">60 FPS • ASCII</span>
+							<span class="text-brand">Зажмите ЛКМ для вращения ↻</span>
 						</div>
 
 						<!-- Холст для 3D ASCII анимации -->
-						<div class="flex-1 flex items-center justify-center overflow-hidden my-1">
+						<div class="flex-1 flex items-center justify-center overflow-hidden my-2 pointer-events-none">
 							<pre id="wiz-ascii-stage"></pre>
 						</div>
 
 						<!-- Живая сводка выбранных параметров + переключатель фигур -->
-						<div class="bg-[#111111] border border-[#222222] rounded-xl p-2.5 space-y-1.5 z-10">
-							<div class="flex items-center justify-between text-[10px] font-mono text-[#777777]">
+						<div class="bg-[#111111] border border-[#222222] rounded-xl p-3.5 space-y-2 z-10" onmousedown="event.stopPropagation()">
+							<div class="flex items-center justify-between text-[11px] font-mono text-[#777777]">
 								<span>СВОДКА КОНФИГУРАЦИИ:</span>
 								<button onclick="cycleWizAsciiShape()" class="text-brand hover:underline cursor-pointer" title="Сменить 3D-модель">[Сменить 3D ↻]</button>
 							</div>
-							<div class="grid grid-cols-2 gap-1 text-[11px] font-mono">
+							<div class="grid grid-cols-2 gap-1.5 text-xs font-mono">
 								<div class="text-[#999999]">Zapret: <b id="wiz-sum-zapret" class="text-brand">ВКЛ</b></div>
 								<div class="text-[#999999]">TgProxy: <b id="wiz-sum-proxy" class="text-brand">ВКЛ</b></div>
 								<div class="text-[#999999]">Автостарт: <b id="wiz-sum-auto" class="text-brand">ВКЛ</b></div>
@@ -5112,88 +5148,88 @@ namespace ZapretGUI.Views
 					</div>
 
 					<!-- ПРАВАЯ ПАНЕЛЬ: КОНТЕНТ 5 ШАГОВ -->
-					<div class="col-span-7 p-6 flex flex-col justify-center overflow-y-auto bg-[#0E0E0E]">
+					<div class="col-span-7 p-8 flex flex-col justify-center overflow-y-auto bg-[#101010]">
 
 						<!-- ШАГ 0: ПРИВЕТСТВИЕ -->
-						<div id="wiz-step-0" class="wizard-step active flex-col space-y-4">
-							<div class="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-[#107C10]/15 border border-[#107C10]/40 text-brand text-xs font-mono font-semibold w-max">
+						<div id="wiz-step-0" class="wizard-step active flex-col space-y-5 max-w-xl mx-auto w-full">
+							<div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#107C10]/15 border border-[#107C10]/40 text-brand text-xs font-mono font-semibold w-max">
 								<span>>_ ДОБРО ПОЖАЛОВАТЬ В СИСТЕМУ</span>
 							</div>
-							<h3 class="text-2xl font-bold text-white leading-tight">
+							<h3 class="text-3xl font-bold text-white leading-tight">
 								Починим Discord, YouTube и Telegram за пару кликов
 							</h3>
-							<p class="text-xs text-[#AAAAAA] leading-relaxed">
+							<p class="text-sm text-[#AAAAAA] leading-relaxed">
 								Мастер первоначальной настройки автоматически скачает свежие релизы ядер обхода блокировок, создаст рабочие папки и подготовит профили под вашего провайдера.
 							</p>
-							<div class="grid grid-cols-2 gap-2.5 pt-1">
-								<div class="p-3 rounded-xl bg-[#141414] border border-[#242424]">
-									<div class="text-xs font-bold text-white flex items-center gap-1.5">
-										<span class="mdl-icon text-brand text-xs">&#xE945;</span>
+							<div class="grid grid-cols-2 gap-3.5 pt-2">
+								<div class="p-4 rounded-xl bg-[#161616] border border-[#262626]">
+									<div class="text-sm font-bold text-white flex items-center gap-2">
+										<span class="mdl-icon text-brand text-sm">&#xE945;</span>
 										<span>Умный DPI-обход</span>
 									</div>
-									<div class="text-[11px] text-[#777777] mt-1">Авто-подбор лучшей стратегии обхода ТСПУ.</div>
+									<div class="text-xs text-[#888888] mt-1.5 leading-relaxed">Авто-подбор лучшей стратегии обхода ТСПУ в один клик.</div>
 								</div>
-								<div class="p-3 rounded-xl bg-[#141414] border border-[#242424]">
-									<div class="text-xs font-bold text-white flex items-center gap-1.5">
-										<span class="mdl-icon text-[#60A5FA] text-xs">&#xE74C;</span>
+								<div class="p-4 rounded-xl bg-[#161616] border border-[#262626]">
+									<div class="text-sm font-bold text-white flex items-center gap-2">
+										<span class="mdl-icon text-[#60A5FA] text-sm">&#xE74C;</span>
 										<span>Мастерская модов</span>
 									</div>
-									<div class="text-[11px] text-[#777777] mt-1">Встроенный редактор списков доменов и .bat скриптов.</div>
+									<div class="text-xs text-[#888888] mt-1.5 leading-relaxed">Встроенный редактор списков доменов и .bat скриптов.</div>
 								</div>
 							</div>
 						</div>
 
 						<!-- ШАГ 1: КОНФИДЕНЦИАЛЬНОСТЬ -->
-						<div id="wiz-step-1" class="wizard-step flex-col space-y-3.5">
-							<div class="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-[#1E293B] border border-[#3B82F6]/40 text-[#60A5FA] text-xs font-mono font-semibold w-max">
+						<div id="wiz-step-1" class="wizard-step flex-col space-y-4 max-w-xl mx-auto w-full">
+							<div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#1E293B] border border-[#3B82F6]/40 text-[#60A5FA] text-xs font-mono font-semibold w-max">
 								<span class="mdl-icon text-xs">&#xEA18;</span>
 								<span>ZERO TELEMETRY ARCHITECTURE</span>
 							</div>
 							<h3 class="text-2xl font-bold text-white">100% локальная работа без сбора данных</h3>
-							<p class="text-xs text-[#AAAAAA] leading-relaxed">
+							<p class="text-sm text-[#AAAAAA] leading-relaxed">
 								Программа работает исключительно на вашем компьютере и не перенаправляет трафик через сторонние серверы:
 							</p>
-							<div class="space-y-2 text-xs">
-								<div class="p-2.5 rounded-xl bg-[#141414] border border-[#242424] flex items-center gap-3">
-									<span class="mdl-icon text-brand text-base">&#xE73E;</span>
+							<div class="space-y-2.5 text-xs">
+								<div class="p-3.5 rounded-xl bg-[#161616] border border-[#262626] flex items-center gap-3.5">
+									<span class="mdl-icon text-brand text-lg">&#xE73E;</span>
 									<div>
-										<div class="font-bold text-white">Никакой телеметрии и аналитики</div>
-										<div class="text-[11px] text-[#888888]">Мы не собираем историю браузера, IP-адреса или статистику.</div>
+										<div class="text-sm font-bold text-white">Никакой телеметрии и аналитики</div>
+										<div class="text-xs text-[#888888] mt-0.5">Мы не собираем историю браузера, IP-адреса или статистику.</div>
 									</div>
 								</div>
-								<div class="p-2.5 rounded-xl bg-[#141414] border border-[#242424] flex items-center gap-3">
-									<span class="mdl-icon text-brand text-base">&#xE73E;</span>
+								<div class="p-3.5 rounded-xl bg-[#161616] border border-[#262626] flex items-center gap-3.5">
+									<span class="mdl-icon text-brand text-lg">&#xE73E;</span>
 									<div>
-										<div class="font-bold text-white">Прямые загрузки с GitHub</div>
-										<div class="text-[11px] text-[#888888]">Ядра winws.exe и TgWsProxy скачиваются напрямую из официальных репозиториев flowseal.</div>
+										<div class="text-sm font-bold text-white">Прямые загрузки с GitHub</div>
+										<div class="text-xs text-[#888888] mt-0.5">Ядра winws.exe и TgWsProxy скачиваются напрямую из официальных репозиториев flowseal.</div>
 									</div>
 								</div>
-								<div class="p-2.5 rounded-xl bg-[#141414] border border-[#242424] flex items-center gap-3">
-									<span class="mdl-icon text-brand text-base">&#xE73E;</span>
+								<div class="p-3.5 rounded-xl bg-[#161616] border border-[#262626] flex items-center gap-3.5">
+									<span class="mdl-icon text-brand text-lg">&#xE73E;</span>
 									<div>
-										<div class="font-bold text-white">Никакой потери скорости и пинга</div>
-										<div class="text-[11px] text-[#888888]">В отличие от VPN, пакеты идут напрямую к игровым серверам.</div>
+										<div class="text-sm font-bold text-white">Никакой потери скорости и пинга</div>
+										<div class="text-xs text-[#888888] mt-0.5">В отличие от VPN, пакеты идут напрямую к игровым серверам.</div>
 									</div>
 								</div>
 							</div>
 						</div>
 
 						<!-- ШАГ 2: ВЫБОР МОДУЛЕЙ -->
-						<div id="wiz-step-2" class="wizard-step flex-col w-full space-y-3">
+						<div id="wiz-step-2" class="wizard-step flex-col w-full space-y-4 max-w-xl mx-auto">
 							<div>
-								<h3 class="text-xl font-bold text-white">Какие модули установить?</h3>
-								<p class="text-xs text-[#888888] mt-0.5">Выбранные ядра будут автоматически загружены с GitHub.</p>
+								<h3 class="text-2xl font-bold text-white">Какие модули установить?</h3>
+								<p class="text-sm text-[#888888] mt-1">Выбранные ядра будут автоматически загружены с GitHub.</p>
 							</div>
 
 							<label class="wiz-option-card selected" id="wiz-card-zapret">
-								<div class="flex items-start gap-3">
-									<div class="w-9 h-9 rounded-xl bg-[#107C10]/20 border border-[#107C10] flex items-center justify-center text-brand shrink-0 mt-0.5">
+								<div class="flex items-start gap-3.5">
+									<div class="w-10 h-10 rounded-xl bg-[#107C10]/20 border border-[#107C10] flex items-center justify-center text-brand shrink-0 mt-0.5">
 										<span class="mdl-icon text-base">&#xE72E;</span>
 									</div>
 									<div>
 										<div class="flex items-center gap-2">
-											<span class="text-sm font-bold text-white">Ядро Zapret (winws)</span>
-											<span class="px-1.5 py-0.2 rounded bg-[#107C10]/30 text-brand font-mono text-[10px] font-semibold">Основной</span>
+											<span class="text-base font-bold text-white">Ядро Zapret (winws)</span>
+											<span class="px-2 py-0.5 rounded bg-[#107C10]/30 text-brand font-mono text-[10px] font-semibold">Основной</span>
 										</div>
 										<div class="text-xs text-[#888888] mt-1 leading-relaxed">
 											Обход DPI-блокировок для Discord (включая звонки), YouTube и веб-сайтов.
@@ -5204,12 +5240,12 @@ namespace ZapretGUI.Views
 							</label>
 
 							<label class="wiz-option-card selected" id="wiz-card-proxy">
-								<div class="flex items-start gap-3">
-									<div class="w-9 h-9 rounded-xl bg-[#3B82F6]/20 border border-[#3B82F6] flex items-center justify-center text-[#60A5FA] shrink-0 mt-0.5">
+								<div class="flex items-start gap-3.5">
+									<div class="w-10 h-10 rounded-xl bg-[#3B82F6]/20 border border-[#3B82F6] flex items-center justify-center text-[#60A5FA] shrink-0 mt-0.5">
 										<span class="mdl-icon text-base">&#xE709;</span>
 									</div>
 									<div>
-										<div class="text-sm font-bold text-white">Ядро TgWsProxy</div>
+										<div class="text-base font-bold text-white">Ядро TgWsProxy</div>
 										<div class="text-xs text-[#888888] mt-1 leading-relaxed">
 											Локальный WebSocket-прокси для ускорения загрузки фото, кружочков и видео в Telegram Desktop.
 										</div>
@@ -5220,68 +5256,68 @@ namespace ZapretGUI.Views
 						</div>
 
 						<!-- ШАГ 3: ДОПОЛНИТЕЛЬНЫЕ НАСТРОЙКИ -->
-						<div id="wiz-step-3" class="wizard-step flex-col w-full space-y-2.5">
+						<div id="wiz-step-3" class="wizard-step flex-col w-full space-y-3 max-w-xl mx-auto">
 							<div>
-								<h3 class="text-xl font-bold text-white">Персонализация и поведение</h3>
-								<p class="text-xs text-[#888888] mt-0.5">Эти параметры можно в любой момент изменить в разделе «Настройки».</p>
+								<h3 class="text-2xl font-bold text-white">Персонализация и поведение</h3>
+								<p class="text-sm text-[#888888] mt-1">Эти параметры можно в любой момент изменить в разделе «Настройки».</p>
 							</div>
 
 							<label class="wiz-option-card selected" id="wiz-card-autostart">
 								<div>
-									<div class="text-xs font-bold text-white">Запускать вместе с Windows</div>
-									<div class="text-[11px] text-[#888888] mt-0.5">Автоматически добавлять программу в автозагрузку системы</div>
+									<div class="text-sm font-bold text-white">Запускать вместе с Windows</div>
+									<div class="text-xs text-[#888888] mt-0.5">Автоматически добавлять программу в автозагрузку системы</div>
 								</div>
 								<input id="wiz-chk-autostart" type="checkbox" checked="" onchange="onWizardOptionChange()" class="cyber-toggle">
 							</label>
 
 							<label class="wiz-option-card" id="wiz-card-focus">
 								<div>
-									<div class="text-xs font-bold text-white">Режим фокусировки (Без глитчей)</div>
-									<div class="text-[11px] text-[#888888] mt-0.5">Отключить тряску экрана при ошибках запуска служб</div>
+									<div class="text-sm font-bold text-white">Режим фокусировки (Без глитчей)</div>
+									<div class="text-xs text-[#888888] mt-0.5">Отключить тряску экрана при ошибках запуска служб</div>
 								</div>
 								<input id="wiz-chk-focus" type="checkbox" onchange="onWizardOptionChange()" class="cyber-toggle">
 							</label>
 
 							<label class="wiz-option-card" id="wiz-card-colorblind">
 								<div>
-									<div class="text-xs font-bold text-white">Режим цветовой слепоты</div>
-									<div class="text-[11px] text-[#888888] mt-0.5">Использовать сине-оранжевую палитру индикаторов вместо красно-зеленой</div>
+									<div class="text-sm font-bold text-white">Режим цветовой слепоты</div>
+									<div class="text-xs text-[#888888] mt-0.5">Использовать сине-оранжевую палитру индикаторов вместо красно-зеленой</div>
 								</div>
 								<input id="wiz-chk-colorblind" type="checkbox" onchange="onWizardOptionChange()" class="cyber-toggle">
 							</label>
 						</div>
 
 						<!-- ШАГ 4: ТЕРМИНАЛ УСТАНОВКИ И ДЕПЛОЯ -->
-						<div id="wiz-step-4" class="wizard-step flex-col w-full h-full justify-between space-y-3">
+						<div id="wiz-step-4" class="wizard-step flex-col w-full h-full justify-between space-y-3 max-w-xl mx-auto">
 							<div>
-								<div class="flex items-center justify-between mb-1.5">
-									<span id="wiz-finish-status" class="text-base font-bold text-white">Развертывание модулей...</span>
-									<span id="wiz-finish-pct" class="text-xs font-mono font-bold text-brand">35%</span>
+								<div class="flex items-center justify-between mb-2">
+									<span id="wiz-finish-status" class="text-lg font-bold text-white">Развертывание модулей...</span>
+									<span id="wiz-finish-pct" class="text-sm font-mono font-bold text-brand">35%</span>
 								</div>
-								<div class="w-full h-2 bg-[#161616] border border-[#262626] rounded-full overflow-hidden">
+								<div class="w-full h-2.5 bg-[#161616] border border-[#262626] rounded-full overflow-hidden">
 									<div id="wiz-finish-bar" class="h-full bg-[#107C10] transition-all duration-300" style="width: 35%"></div>
 								</div>
 							</div>
 
-							<div id="wiz-console-log" class="flex-1 bg-[#050505] border border-[#1F1F1F] rounded-xl p-3 font-mono text-[11.5px] text-[#4CAF50] overflow-y-auto space-y-1 select-text"></div>
+							<div id="wiz-console-log" class="flex-1 bg-[#050505] border border-[#1F1F1F] rounded-xl p-4 font-mono text-xs text-[#4CAF50] overflow-y-auto space-y-1.5 select-text"></div>
 						</div>
 
 					</div>
 				</div>
 
 				<!-- НИЖНЯЯ ПАНЕЛЬ НАВИГАЦИИ -->
-				<div class="bg-[#121212] border-t border-[#242424] px-6 py-3 flex items-center justify-between shrink-0">
-					<button id="wiz-btn-skip" onclick="skipWizard()" class="px-3.5 py-1.5 rounded-lg bg-[#1A1A1A] border border-[#2E2E2E] text-xs text-[#999999] hover:text-white hover:bg-[#242424] transition cursor-pointer">
+				<div class="bg-[#121212] border-t border-[#242424] px-7 py-4 flex items-center justify-between shrink-0">
+					<button id="wiz-btn-skip" onclick="skipWizard()" class="px-4 py-2 rounded-lg bg-[#1A1A1A] border border-[#2E2E2E] text-xs font-semibold text-[#999999] hover:text-white hover:bg-[#242424] transition cursor-pointer">
 						Пропустить мастер
 					</button>
 
-					<div id="wiz-dots" class="flex items-center gap-2"></div>
+					<div id="wiz-dots" class="flex items-center gap-2.5"></div>
 
-					<div class="flex items-center gap-2">
-						<button id="wiz-btn-back" onclick="wizardPrevStep()" class="px-4 py-1.5 rounded-lg bg-[#1A1A1A] border border-[#333333] text-xs font-semibold text-white hover:bg-[#252525] transition cursor-pointer hidden">
+					<div class="flex items-center gap-2.5">
+						<button id="wiz-btn-back" onclick="wizardPrevStep()" class="px-4 py-2 rounded-lg bg-[#1A1A1A] border border-[#333333] text-xs font-semibold text-white hover:bg-[#252525] transition cursor-pointer hidden">
 							← Назад
 						</button>
-						<button id="wiz-btn-next" onclick="wizardNextStep()" class="px-5 py-1.5 rounded-lg btn-brand text-xs font-bold cursor-pointer shadow-lg">
+						<button id="wiz-btn-next" onclick="wizardNextStep()" class="px-6 py-2 rounded-lg btn-brand text-xs font-bold cursor-pointer shadow-lg">
 							Начать настройку →
 						</button>
 					</div>
@@ -6241,31 +6277,31 @@ namespace ZapretGUI.Views
 				<div class="modal-box bg-[#141414] border border-[#2A2A2A] rounded-xl w-[550px] p-5 shadow-2xl flex flex-col max-h-[85vh]">
 					<div class="flex items-center justify-between mb-4">
 						<div class="flex items-center gap-3">
-							<div class="w-8 h-8 rounded-lg bg-[#1E3A8A] flex items-center justify-center text-[#60A5FA]">
+							<div class="w-8 h-8 rounded-lg bg-[#107C10]/20 border border-[#107C10] flex items-center justify-center text-brand">
 								<span class="mdl-icon text-sm">&#xE713;</span>
 							</div>
 							<div>
-								<div class="text-xs text-[#888888]">Zapret</div>
-								<div class="text-base font-bold text-white">Настройка конфига</div>
+								<div class="text-xs text-[#888888]">Стратегии обхода DPI</div>
+								<div class="text-base font-bold text-white">Выбор и тестирование конфига</div>
 							</div>
 						</div>
 						<button onclick="closeConfigModal()" class="text-[#888888] hover:text-white text-lg px-2 cursor-pointer">✕</button>
 					</div>
 
-					<div class="mb-4 text-sm font-bold">
-						<span class="text-white">Активный конфиг: </span>
-						<span id="modal-active-profile" class="font-mono text-brand">general.bat</span>
+					<div class="mb-4 px-3 py-2 rounded-lg bg-[#1A1A1A] border border-[#262626] flex items-center justify-between text-xs">
+						<span class="text-[#AAAAAA]">Активный профиль:</span>
+						<span id="modal-active-profile" class="font-mono font-bold text-brand">general.bat</span>
 					</div>
 
 					<div class="flex items-center justify-between mb-2.5">
-						<span class="text-xs font-semibold text-[#AAAAAA]">Доступные конфиги</span>
-						<span id="modal-configs-count" class="text-xs font-mono font-semibold bg-[#1E293B] text-[#60A5FA] px-2.5 py-1 rounded-md">0 конфигов</span>
+						<span class="text-xs font-semibold text-[#AAAAAA]">Доступные профили (.bat)</span>
+						<span id="modal-configs-count" class="text-xs font-mono font-semibold bg-[#0F240F] border border-[#107C10]/60 text-brand px-2.5 py-0.5 rounded-md">0 конфигов</span>
 					</div>
 
 					<div id="profile-cards-list" class="flex-1 overflow-y-auto space-y-2 pr-1 max-h-[290px] mb-4"></div>
 
-					<button id="btn-start-scan" onclick="toggleSmartScan()" class="w-full py-3.5 rounded-lg bg-[#27272A] hover:bg-[#3F3F46] text-sm font-semibold text-white transition flex items-center justify-center gap-2 cursor-pointer">
-						<span id="scan-btn-icon" class="mdl-icon text-sm text-[#A1A1AA]">&#xE721;</span>
+					<button id="btn-start-scan" onclick="toggleSmartScan()" class="w-full py-3 rounded-lg bg-[#1E1E1E] hover:bg-[#262626] border border-[#333333] hover:border-[#107C10] text-xs font-bold text-white transition flex items-center justify-center gap-2 cursor-pointer">
+						<span id="scan-btn-icon" class="mdl-icon text-sm text-brand">&#xE721;</span>
 						<span id="scan-btn-text">Запустить авто-подбор (Smart DPI Scan)</span>
 					</button>
 				</div>
@@ -6276,7 +6312,7 @@ namespace ZapretGUI.Views
 				<div class="modal-box bg-[#141414] border border-[#2A2A2A] rounded-xl w-[490px] p-5 shadow-2xl flex flex-col">
 					<div class="flex items-center justify-between mb-4">
 						<div class="flex items-center gap-3">
-							<div class="w-8 h-8 rounded-lg bg-[#1E3A8A] flex items-center justify-center text-[#60A5FA]">
+							<div class="w-8 h-8 rounded-lg bg-[#107C10]/20 border border-[#107C10] flex items-center justify-center text-brand">
 								<span class="mdl-icon text-sm">&#xE7FC;</span>
 							</div>
 							<div>
@@ -6290,33 +6326,33 @@ namespace ZapretGUI.Views
 					<div class="text-xs font-semibold text-[#CCCCCC] mb-2">Режим перехвата трафика игр:</div>
 
 					<div id="gf-modes-list" class="space-y-2 mb-4">
-						<div onclick="selectGfMode('disabled')" data-mode="disabled" class="gf-mode-card p-3 rounded-lg border border-[#27272A] bg-[#18181B] hover:bg-[#27272A] cursor-pointer flex items-center justify-between transition">
+						<div onclick="selectGfMode('disabled')" data-mode="disabled" class="gf-mode-card p-3 rounded-lg border border-[#262626] bg-[#181818] hover:bg-[#222222] cursor-pointer flex items-center justify-between transition">
 							<div>
 								<div class="text-xs font-bold text-white">Отключен</div>
-								<div class="text-[11px] text-[#71717A]">По умолчанию — фильтрация игровых портов выключена (порт 12)</div>
+								<div class="text-[11px] text-[#888888]">По умолчанию — фильтрация игровых портов выключена (порт 12)</div>
 							</div>
-							<span class="gf-check text-sm font-bold text-[#3F3F46]">→</span>
+							<span class="gf-check text-sm font-bold text-[#555555]">→</span>
 						</div>
-						<div onclick="selectGfMode('all')" data-mode="all" class="gf-mode-card p-3 rounded-lg border border-[#27272A] bg-[#18181B] hover:bg-[#27272A] cursor-pointer flex items-center justify-between transition">
+						<div onclick="selectGfMode('all')" data-mode="all" class="gf-mode-card p-3 rounded-lg border border-[#262626] bg-[#181818] hover:bg-[#222222] cursor-pointer flex items-center justify-between transition">
 							<div>
 								<div class="text-xs font-bold text-brand">TCP и UDP (Рекомендуется)</div>
-								<div class="text-[11px] text-[#71717A]">Полный обход для большинства онлайн-игр и игровых лаунчеров</div>
+								<div class="text-[11px] text-[#888888]">Полный обход для большинства онлайн-игр и игровых лаунчеров</div>
 							</div>
-							<span class="gf-check text-sm font-bold text-[#3F3F46]">→</span>
+							<span class="gf-check text-sm font-bold text-[#555555]">→</span>
 						</div>
-						<div onclick="selectGfMode('tcp')" data-mode="tcp" class="gf-mode-card p-3 rounded-lg border border-[#27272A] bg-[#18181B] hover:bg-[#27272A] cursor-pointer flex items-center justify-between transition">
+						<div onclick="selectGfMode('tcp')" data-mode="tcp" class="gf-mode-card p-3 rounded-lg border border-[#262626] bg-[#181818] hover:bg-[#222222] cursor-pointer flex items-center justify-between transition">
 							<div>
 								<div class="text-xs font-bold text-white">Только TCP</div>
-								<div class="text-[11px] text-[#71717A]">Перехват только TCP-соединений игровых серверов</div>
+								<div class="text-[11px] text-[#888888]">Перехват только TCP-соединений игровых серверов</div>
 							</div>
-							<span class="gf-check text-sm font-bold text-[#3F3F46]">→</span>
+							<span class="gf-check text-sm font-bold text-[#555555]">→</span>
 						</div>
-						<div onclick="selectGfMode('udp')" data-mode="udp" class="gf-mode-card p-3 rounded-lg border border-[#27272A] bg-[#18181B] hover:bg-[#27272A] cursor-pointer flex items-center justify-between transition">
+						<div onclick="selectGfMode('udp')" data-mode="udp" class="gf-mode-card p-3 rounded-lg border border-[#262626] bg-[#181818] hover:bg-[#222222] cursor-pointer flex items-center justify-between transition">
 							<div>
 								<div class="text-xs font-bold text-white">Только UDP</div>
-								<div class="text-[11px] text-[#71717A]">Перехват только UDP-трафика (голосовые чаты и динамичные шутеры)</div>
+								<div class="text-[11px] text-[#888888]">Перехват только UDP-трафика (голосовые чаты и динамичные шутеры)</div>
 							</div>
-							<span class="gf-check text-sm font-bold text-[#3F3F46]">→</span>
+							<span class="gf-check text-sm font-bold text-[#555555]">→</span>
 						</div>
 					</div>
 
@@ -6384,7 +6420,7 @@ namespace ZapretGUI.Views
 				<div class="modal-box bg-[#141414] border border-[#2A2A2A] rounded-xl w-full max-w-[840px] h-[640px] p-4 shadow-2xl flex flex-col">
 					<div class="flex items-center justify-between mb-2.5 shrink-0">
 						<div class="flex items-center gap-2.5">
-							<div class="w-7 h-7 rounded-md bg-[#1E3A8A] flex items-center justify-center text-[#60A5FA]">
+							<div class="w-7 h-7 rounded-md bg-[#107C10]/20 border border-[#107C10] flex items-center justify-center text-brand">
 								<span class="mdl-icon text-xs">&#xE70F;</span>
 							</div>
 							<div>
@@ -6398,7 +6434,7 @@ namespace ZapretGUI.Views
 						</button>
 					</div>
 
-					<div id="editor-meta-panel" class="bg-[#1A1A1E] border border-[#2A2A32] rounded-lg p-2.5 mb-2 shrink-0">
+					<div id="editor-meta-panel" class="bg-[#181818] border border-[#282828] rounded-lg p-2.5 mb-2 shrink-0">
 						<div class="grid grid-cols-12 gap-2.5 mb-2">
 							<div class="col-span-6">
 								<label class="text-[11px] text-[#A0A0A0] block mb-0.5">Название мода:</label>
@@ -6437,14 +6473,14 @@ namespace ZapretGUI.Views
 
 							<div id="editor-bat-tools" class="flex items-center gap-1">
 								<button onclick="commentCurrentLine()" class="editor-tool-btn font-mono">:: Коммент</button>
-								<button onclick="validateCurrentBat()" class="editor-tool-btn text-[#4ADE80]">
+								<button onclick="validateCurrentBat()" class="editor-tool-btn text-brand">
 									<span class="mdl-icon text-[11px]">&#xE73E;</span>
 									<span>Проверить синтаксис</span>
 								</button>
 							</div>
 
 							<div id="editor-list-tools" class="hidden items-center gap-1">
-								<button onclick="cleanDomainsList()" class="editor-tool-btn text-[#60A5FA]">
+								<button onclick="cleanDomainsList()" class="editor-tool-btn text-brand">
 									<span class="mdl-icon text-[11px]">&#xE894;</span>
 									<span>Очистить дубли и URL (A-Z)</span>
 								</button>
@@ -6457,7 +6493,7 @@ namespace ZapretGUI.Views
 						</div>
 					</div>
 
-					<div id="editor-search-panel" class="bg-[#1C1C22] border border-[#3B82F6] rounded-lg p-2 mb-2 hidden items-center gap-2 shrink-0">
+					<div id="editor-search-panel" class="bg-[#162216] border border-[#107C10] rounded-lg p-2 mb-2 hidden items-center gap-2 shrink-0">
 						<input id="editor-find-input" type="text" placeholder="Найти текст..." class="flex-1 bg-[#222222] border border-[#333333] rounded px-2.5 py-1 text-xs font-mono text-white select-text">
 						<input id="editor-replace-input" type="text" placeholder="Заменить на..." class="flex-1 bg-[#222222] border border-[#333333] rounded px-2.5 py-1 text-xs font-mono text-white select-text">
 						<button onclick="editorFindNext()" class="editor-tool-btn">Найти далее</button>
@@ -6508,7 +6544,7 @@ namespace ZapretGUI.Views
 				<div class="modal-box bg-[#141414] border border-[#2A2A2A] rounded-xl w-[480px] p-5 shadow-2xl">
 					<div class="flex items-center justify-between mb-4">
 						<div class="flex items-center gap-3">
-							<div class="w-8 h-8 rounded-lg bg-[#1E3A8A] flex items-center justify-center text-[#60A5FA]">
+							<div class="w-8 h-8 rounded-lg bg-[#107C10]/20 border border-[#107C10] flex items-center justify-center text-brand">
 								<span class="mdl-icon text-sm">&#xE713;</span>
 							</div>
 							<div>
@@ -6537,7 +6573,6 @@ namespace ZapretGUI.Views
 					</div>
 				</div>
 			</div>
-
 		</div>
 
 		<!-- ПОДКЛЮЧЕНИЕ МОДУЛЬНЫХ СКРИПТОВ -->
@@ -7265,14 +7300,22 @@ body.compact-mode #settings-routing-grid {
 
 #wiz-ascii-stage {
     font-family: 'Consolas', 'Courier New', monospace;
-    font-size: 8.5px;
-    line-height: 8.5px;
-    letter-spacing: 0.5px;
+    font-size: 10.5px;
+    line-height: 10.5px;
+    letter-spacing: 0.6px;
     color: var(--accent-light);
-    text-shadow: 0 0 8px var(--accent-glow);
+    text-shadow: 0 0 10px var(--accent-glow);
     white-space: pre;
     text-align: center;
     user-select: none;
+}
+
+#wiz-left-panel {
+    cursor: grab;
+}
+
+#wiz-left-panel.is-dragging {
+    cursor: grabbing;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -7346,14 +7389,14 @@ function skipSplash() {
 // =========================================================================
 // 2. WIZARD WINDOW 2.0 + ПРОЦЕДУРНЫЙ 3D ASCII ДВИЖОК (TORUS, SHIELD, HELIX, CUBE)
 // =========================================================================
-let wizardStep = 0;
-let wizardFinished = false;
-let lastWizProgressEl = null;
-
 let wizAsciiTimer = null;
 let wizAsciiShape = 0; // 0: Torus, 1: Octahedron Shield, 2: DNA Network Helix, 3: Cyber Cube
-let wizAngleA = 0, wizAngleB = 0;
-let wizMouseOffsetX = 0, wizMouseOffsetY = 0;
+let wizPitch = 0.45;   // Наклон вверх-вниз (вокруг оси X)
+let wizYaw = 0.4;      // Поворот влево-вправо (вокруг оси Y)
+let wizVelPitch = 0;   // Инерция по вертикали
+let wizVelYaw = 0;     // Инерция по горизонтали
+let wizIsDragging = false;
+let wizLastMouseX = 0, wizLastMouseY = 0;
 let wizHyperSpeed = false;
 
 const ASCII_MODELS = [
@@ -7382,59 +7425,93 @@ function cycleWizAsciiShape() {
     if (lbl) lbl.innerText = ASCII_MODELS[wizAsciiShape];
 }
 
-function onWizAsciiMouseMove(e) {
-    const rect = e.currentTarget.getBoundingClientRect();
-    wizMouseOffsetX = ((e.clientX - rect.left) / rect.width - 0.5) * 1.4;
-    wizMouseOffsetY = ((e.clientY - rect.top) / rect.height - 0.5) * 1.4;
+// Захват 3D-модели только при зажатии ЛКМ
+function onWizAsciiMouseDown(e) {
+    if (e.button !== 0) return;
+    wizIsDragging = true;
+    wizLastMouseX = e.clientX;
+    wizLastMouseY = e.clientY;
+    document.getElementById('wiz-left-panel')?.classList.add('is-dragging');
 }
 
-function onWizAsciiMouseLeave() {
-    wizMouseOffsetX = 0;
-    wizMouseOffsetY = 0;
-}
+window.addEventListener('mousemove', (e) => {
+    if (!wizIsDragging) return;
+    const dx = e.clientX - wizLastMouseX;
+    const dy = e.clientY - wizLastMouseY;
+    wizLastMouseX = e.clientX;
+    wizLastMouseY = e.clientY;
+
+    // Крутим строго в сторону движения мыши:
+    // Мышь вправо (dx > 0) -> передняя грань идет вправо (Yaw+)
+    // Мышь вниз (dy > 0)   -> передняя грань идет вниз (Pitch+)
+    wizYaw += dx * 0.013;
+    wizPitch += dy * 0.013;
+
+    // Запоминаем скорость для плавной инерции после отпускания мыши
+    wizVelYaw = dx * 0.005;
+    wizVelPitch = dy * 0.005;
+});
+
+window.addEventListener('mouseup', () => {
+    if (wizIsDragging) {
+        wizIsDragging = false;
+        document.getElementById('wiz-left-panel')?.classList.remove('is-dragging');
+    }
+});
 
 function renderWizAsciiFrame() {
     const stage = document.getElementById('wiz-ascii-stage');
     if (!stage) return;
 
-    const W = 44, H = 24;
+    const W = 58, H = 30;
     const output = new Array(W * H).fill(' ');
     const zbuffer = new Array(W * H).fill(0);
     const chars = '.,-~:;=!*#$@';
 
-    const speedMult = wizHyperSpeed ? 2.6 : 1.0;
-    wizAngleA += 0.055 * speedMult;
-    wizAngleB += 0.035 * speedMult;
+    if (!wizIsDragging) {
+        const speedMult = wizHyperSpeed ? 2.8 : 1.0;
+        // Плавное авто-вращение + затухающая инерция после броска мышкой
+        wizYaw += (0.032 * speedMult) + wizVelYaw;
+        wizPitch += (0.014 * speedMult) + wizVelPitch;
+        wizVelYaw *= 0.90;
+        wizVelPitch *= 0.90;
+    }
 
-    const A = wizAngleA + wizMouseOffsetY;
-    const B = wizAngleB + wizMouseOffsetX;
-    const cosA = Math.cos(A), sinA = Math.sin(A);
-    const cosB = Math.cos(B), sinB = Math.sin(B);
+    const cosY = Math.cos(wizYaw), sinY = Math.sin(wizYaw);
+    const cosX = Math.cos(wizPitch), sinX = Math.sin(wizPitch);
 
     function plotPoint(x, y, z, nx, ny, nz) {
-        // Вращение по X (угол A) и по Z/Y (угол B)
-        const y1 = y * cosA - z * sinA;
-        const z1 = y * sinA + z * cosA;
-        const x2 = x * cosB - y1 * sinB;
-        const y2 = x * sinB + y1 * cosB;
-        const z2 = z1 + 5.2;
+        // 1. Вращение вокруг вертикальной оси Y (Yaw — влево/вправо за мышкой)
+        const x1 = x * cosY - z * sinY;
+        const z1 = x * sinY + z * cosY;
+        const y1 = y;
 
-        if (z2 <= 0.5) return;
-        const ooz = 1 / z2;
-        const xp = Math.floor(W / 2 + 26 * ooz * x2);
-        const yp = Math.floor(H / 2 - 13 * ooz * y2);
+        // 2. Вращение вокруг горизонтальной оси X (Pitch — вверх/вниз за мышкой)
+        const y2 = y1 * cosX - z1 * sinX;
+        const z2 = y1 * sinX + z1 * cosX;
+        const x2 = x1;
+
+        const depth = z2 + 5.0;
+        if (depth <= 0.5) return;
+        const ooz = 1 / depth;
+
+        // Экранные координаты: X вправо, Y вверх (в консоль вниз)
+        const xp = Math.floor(W / 2 + 34 * ooz * x2);
+        const yp = Math.floor(H / 2 - 17 * ooz * y2);
 
         if (xp < 0 || xp >= W || yp < 0 || yp >= H) return;
         const idx = xp + W * yp;
 
         if (ooz > zbuffer[idx]) {
             zbuffer[idx] = ooz;
-            const ny1 = ny * cosA - nz * sinA;
-            const nz1 = ny * sinA + nz * cosA;
-            const nx2 = nx * cosB - ny1 * sinB;
-            const ny2 = nx * sinB + ny1 * cosB;
 
-            const lum = (ny2 * 0.4 - nz1 * 0.75 + nx2 * 0.3 + 1) * 0.5;
+            // Поворачиваем нормали для реалистичного блика света
+            const nx1 = nx * cosY - nz * sinY;
+            const nz1 = nx * sinY + nz * cosY;
+            const ny2 = ny * cosX - nz1 * sinX;
+            const nz2 = ny * sinX + nz1 * cosX;
+
+            const lum = (nx1 * 0.35 + ny2 * 0.45 - nz2 * 0.75 + 1) * 0.5;
             const cIdx = Math.max(0, Math.min(chars.length - 1, Math.floor(lum * chars.length)));
             output[idx] = chars[cIdx];
         }
@@ -7443,9 +7520,9 @@ function renderWizAsciiFrame() {
     if (wizAsciiShape === 0) {
         // 0. Классический 3D Тор (Donut Reactor)
         const R1 = 0.85, R2 = 1.75;
-        for (let theta = 0; theta < 6.28; theta += 0.14) {
+        for (let theta = 0; theta < 6.28; theta += 0.13) {
             const cost = Math.cos(theta), sint = Math.sin(theta);
-            for (let phi = 0; phi < 6.28; phi += 0.06) {
+            for (let phi = 0; phi < 6.28; phi += 0.055) {
                 const cosp = Math.cos(phi), sinp = Math.sin(phi);
                 const circleX = R2 + R1 * cost;
                 plotPoint(
@@ -7460,7 +7537,7 @@ function renderWizAsciiFrame() {
         }
     } else if (wizAsciiShape === 1) {
         // 1. 3D Кристалл / Октаэдр защиты (Privacy Shield)
-        const S = 1.95;
+        const S = 2.05;
         const verts = [
             [0, S, 0], [0, -S, 0], [S, 0, 0], [-S, 0, 0], [0, 0, S], [0, 0, -S]
         ];
@@ -7473,8 +7550,8 @@ function renderWizAsciiFrame() {
             const nx = (v0[0] + v1[0] + v2[0]) / 3;
             const ny = (v0[1] + v1[1] + v2[1]) / 3;
             const nz = (v0[2] + v1[2] + v2[2]) / 3;
-            for (let u = 0; u <= 1; u += 0.08) {
-                for (let v = 0; u + v <= 1; v += 0.08) {
+            for (let u = 0; u <= 1; u += 0.07) {
+                for (let v = 0; u + v <= 1; v += 0.07) {
                     const w = 1 - u - v;
                     plotPoint(
                         u * v0[0] + v * v1[0] + w * v2[0],
@@ -7493,23 +7570,22 @@ function renderWizAsciiFrame() {
             const x1 = r * Math.cos(angle), z1 = r * Math.sin(angle);
             const x2 = -x1, z2 = -z1;
 
-            for (let a = 0; a < 6.28; a += 0.8) {
-                const cr = 0.22;
+            for (let a = 0; a < 6.28; a += 0.7) {
+                const cr = 0.24;
                 plotPoint(x1 + cr * Math.cos(a), t, z1 + cr * Math.sin(a), Math.cos(a), 0, Math.sin(a));
                 plotPoint(x2 + cr * Math.cos(a), t, z2 + cr * Math.sin(a), -Math.cos(a), 0, -Math.sin(a));
             }
-            // Перемычки пакетов
             if (Math.abs((t * 10) % 4) < 0.5) {
-                for (let s = -1; s <= 1; s += 0.12) {
+                for (let s = -1; s <= 1; s += 0.11) {
                     plotPoint(x1 * s, t, z1 * s, 0, 1, 0);
                 }
             }
         }
     } else {
         // 3. 3D Кибер-Куб (Hyper Cube)
-        const C = 1.35;
-        for (let u = -C; u <= C; u += 0.13) {
-            for (let v = -C; v <= C; v += 0.13) {
+        const C = 1.4;
+        for (let u = -C; u <= C; u += 0.12) {
+            for (let v = -C; v <= C; v += 0.12) {
                 plotPoint(u, v, C, 0, 0, 1);
                 plotPoint(u, v, -C, 0, 0, -1);
                 plotPoint(u, C, v, 0, 1, 0);
@@ -8100,13 +8176,6 @@ function updateRunningUI(zapretRunning, proxyRunning) {
         proxyLbl.className = `text-xs mt-0.5 ${proxyRunning ? 'text-brand font-medium' : 'text-[#A0A0A0]'}`;
     }
 
-    const cfgBtn = document.getElementById('btn-open-config');
-    const gfBtn = document.getElementById('btn-open-gf');
-    cfgBtn.style.opacity = appState.isRunning ? '0.5' : '1';
-    cfgBtn.style.pointerEvents = appState.isRunning ? 'none' : 'auto';
-    gfBtn.style.opacity = appState.isRunning ? '0.5' : '1';
-    gfBtn.style.pointerEvents = appState.isRunning ? 'none' : 'auto';
-
     document.getElementById('dot-zapret').className = `w-2 h-2 rounded-full ${zapretRunning ? 'dot-online' : 'dot-offline'}`;
     document.getElementById('dot-proxy').className = `w-2 h-2 rounded-full ${proxyRunning ? 'dot-online' : 'dot-offline'}`;
 }
@@ -8150,21 +8219,23 @@ function renderConfigCards() {
 
     list.innerHTML = appState.configs.map(cfg => {
         const isActive = cfg.fileName.toLowerCase() === appState.selectedProfile.toLowerCase();
+        const isMod = cfg.fileName.toLowerCase().startsWith('mod_');
         const pingStr = cfg.pingMs < 999999 ? `${cfg.pingMs}` : '—';
         const testStr = cfg.testsTotal > 0 ? `${cfg.testsOk}/${cfg.testsTotal}` : 'не проводились';
         const metaInfo = `Пинг: ${pingStr} мс • Тесты: ${testStr}`;
 
         return `
         <div onclick="selectProfile('${cfg.fileName}')"
-             class="p-3.5 rounded-xl border cursor-pointer transition flex items-center justify-between ${isActive ? 'bg-[#172554] border-blue-600' : 'bg-[#18181B] border-zinc-800 hover:bg-zinc-800/80'}">
+             class="p-3.5 rounded-xl border cursor-pointer transition flex items-center justify-between ${isActive ? 'bg-[#0F240F] border-[#107C10]' : 'bg-[#181818] border-[#262626] hover:bg-[#222222]'}">
             <div>
-                <div class="flex items-center gap-2.5 mb-1">
-                    <span class="font-mono text-sm font-semibold text-brand">${cfg.fileName}</span>
-                    ${isActive ? '<span class="px-1.5 py-0.5 text-[10px] font-semibold bg-blue-900 text-blue-300 rounded">активный</span>' : ''}
+                <div class="flex items-center gap-2 mb-1">
+                    <span class="font-mono text-sm font-semibold ${isActive ? 'text-brand' : 'text-white'}">${cfg.fileName}</span>
+                    ${isMod ? '<span class="px-1.5 py-0.5 text-[10px] font-mono bg-[#222222] border border-[#333333] text-[#AAAAAA] rounded">MOD</span>' : ''}
+                    ${isActive ? '<span class="px-1.5 py-0.5 text-[10px] font-semibold bg-[#107C10]/30 text-brand border border-[#107C10]/50 rounded">активный</span>' : ''}
                 </div>
-                <div class="text-xs text-zinc-400">${metaInfo}</div>
+                <div class="text-xs text-[#888888]">${metaInfo}</div>
             </div>
-            <span class="text-base font-bold ${isActive ? 'text-blue-400' : 'text-zinc-600'}">${isActive ? '✓' : '→'}</span>
+            <span class="text-base font-bold ${isActive ? 'text-brand' : 'text-[#555555]'}">${isActive ? '✓' : '→'}</span>
         </div>`;
     }).join('');
 }
@@ -8231,10 +8302,10 @@ function selectGfMode(mode) {
     appState.gameFilter.mode = mode;
     document.querySelectorAll('.gf-mode-card').forEach(card => {
         const isSelected = card.getAttribute('data-mode') === mode;
-        card.className = `gf-mode-card p-3 rounded-lg border cursor-pointer flex items-center justify-between transition ${isSelected ? 'bg-[#172554] border-blue-600' : 'bg-[#18181B] border-[#27272A] hover:bg-[#27272A]'}`;
+        card.className = `gf-mode-card p-3 rounded-lg border cursor-pointer flex items-center justify-between transition ${isSelected ? 'bg-[#0F240F] border-[#107C10]' : 'bg-[#181818] border-[#262626] hover:bg-[#222222]'}`;
         const check = card.querySelector('.gf-check');
         check.innerText = isSelected ? '✓' : '→';
-        check.className = `gf-check text-sm font-bold ${isSelected ? 'text-blue-400' : 'text-[#3F3F46]'}`;
+        check.className = `gf-check text-sm font-bold ${isSelected ? 'text-brand' : 'text-[#555555]'}`;
     });
 }
 

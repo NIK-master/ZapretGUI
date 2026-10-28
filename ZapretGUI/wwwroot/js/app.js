@@ -852,13 +852,6 @@ function updateRunningUI(zapretRunning, proxyRunning) {
         proxyLbl.className = `text-xs mt-0.5 ${proxyRunning ? 'text-brand font-medium' : 'text-[#A0A0A0]'}`;
     }
 
-    const cfgBtn = document.getElementById('btn-open-config');
-    const gfBtn = document.getElementById('btn-open-gf');
-    cfgBtn.style.opacity = appState.isRunning ? '0.5' : '1';
-    cfgBtn.style.pointerEvents = appState.isRunning ? 'none' : 'auto';
-    gfBtn.style.opacity = appState.isRunning ? '0.5' : '1';
-    gfBtn.style.pointerEvents = appState.isRunning ? 'none' : 'auto';
-
     document.getElementById('dot-zapret').className = `w-2 h-2 rounded-full ${zapretRunning ? 'dot-online' : 'dot-offline'}`;
     document.getElementById('dot-proxy').className = `w-2 h-2 rounded-full ${proxyRunning ? 'dot-online' : 'dot-offline'}`;
 }
@@ -902,21 +895,23 @@ function renderConfigCards() {
 
     list.innerHTML = appState.configs.map(cfg => {
         const isActive = cfg.fileName.toLowerCase() === appState.selectedProfile.toLowerCase();
+        const isMod = cfg.fileName.toLowerCase().startsWith('mod_');
         const pingStr = cfg.pingMs < 999999 ? `${cfg.pingMs}` : '—';
         const testStr = cfg.testsTotal > 0 ? `${cfg.testsOk}/${cfg.testsTotal}` : 'не проводились';
         const metaInfo = `Пинг: ${pingStr} мс • Тесты: ${testStr}`;
 
         return `
         <div onclick="selectProfile('${cfg.fileName}')"
-             class="p-3.5 rounded-xl border cursor-pointer transition flex items-center justify-between ${isActive ? 'bg-[#172554] border-blue-600' : 'bg-[#18181B] border-zinc-800 hover:bg-zinc-800/80'}">
+             class="p-3.5 rounded-xl border cursor-pointer transition flex items-center justify-between ${isActive ? 'bg-[#0F240F] border-[#107C10]' : 'bg-[#181818] border-[#262626] hover:bg-[#222222]'}">
             <div>
-                <div class="flex items-center gap-2.5 mb-1">
-                    <span class="font-mono text-sm font-semibold text-brand">${cfg.fileName}</span>
-                    ${isActive ? '<span class="px-1.5 py-0.5 text-[10px] font-semibold bg-blue-900 text-blue-300 rounded">активный</span>' : ''}
+                <div class="flex items-center gap-2 mb-1">
+                    <span class="font-mono text-sm font-semibold ${isActive ? 'text-brand' : 'text-white'}">${cfg.fileName}</span>
+                    ${isMod ? '<span class="px-1.5 py-0.5 text-[10px] font-mono bg-[#222222] border border-[#333333] text-[#AAAAAA] rounded">MOD</span>' : ''}
+                    ${isActive ? '<span class="px-1.5 py-0.5 text-[10px] font-semibold bg-[#107C10]/30 text-brand border border-[#107C10]/50 rounded">активный</span>' : ''}
                 </div>
-                <div class="text-xs text-zinc-400">${metaInfo}</div>
+                <div class="text-xs text-[#888888]">${metaInfo}</div>
             </div>
-            <span class="text-base font-bold ${isActive ? 'text-blue-400' : 'text-zinc-600'}">${isActive ? '✓' : '→'}</span>
+            <span class="text-base font-bold ${isActive ? 'text-brand' : 'text-[#555555]'}">${isActive ? '✓' : '→'}</span>
         </div>`;
     }).join('');
 }
@@ -983,10 +978,10 @@ function selectGfMode(mode) {
     appState.gameFilter.mode = mode;
     document.querySelectorAll('.gf-mode-card').forEach(card => {
         const isSelected = card.getAttribute('data-mode') === mode;
-        card.className = `gf-mode-card p-3 rounded-lg border cursor-pointer flex items-center justify-between transition ${isSelected ? 'bg-[#172554] border-blue-600' : 'bg-[#18181B] border-[#27272A] hover:bg-[#27272A]'}`;
+        card.className = `gf-mode-card p-3 rounded-lg border cursor-pointer flex items-center justify-between transition ${isSelected ? 'bg-[#0F240F] border-[#107C10]' : 'bg-[#181818] border-[#262626] hover:bg-[#222222]'}`;
         const check = card.querySelector('.gf-check');
         check.innerText = isSelected ? '✓' : '→';
-        check.className = `gf-check text-sm font-bold ${isSelected ? 'text-blue-400' : 'text-[#3F3F46]'}`;
+        check.className = `gf-check text-sm font-bold ${isSelected ? 'text-brand' : 'text-[#555555]'}`;
     });
 }
 

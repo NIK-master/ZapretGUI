@@ -78,9 +78,27 @@ namespace ZapretGUI.Core
                 });
             };
 
-            BypassController.Current.NetMonitor.StatusChanged += isOnline =>
+            BypassController.Current.NetMonitor.StatusChanged += async isOnline =>
             {
                 SendEvent("netStatus", new { isOnline });
+
+                if (isOnline && SettingsManager.Current.AutoRestartServices && BypassController.Current.IsRunning)
+                {
+                    SendEvent("log", new
+                    {
+                        message = "🔄 [AutoRestart] Сеть восстановлена. Перезапуск служб обхода...",
+                        time = DateTime.Now.ToString("HH:mm:ss"),
+                        isProgress = false
+                    });
+
+                    await BypassController.Current.RestartServicesAsync(SettingsManager.Current.SelectedProfileName);
+                    SendEvent("bypassState", new
+                    {
+                        isRunning = BypassController.Current.IsRunning,
+                        zapretRunning = BypassController.Current.Zapret.IsRunning,
+                        proxyRunning = BypassController.Current.TgProxy.IsRunning
+                    });
+                }
             };
 
             BypassController.Current.Scanner.ConfigTested += (file, ok, total) =>
@@ -271,9 +289,27 @@ namespace ZapretGUI.Core
 
                 case "selectProfile":
                     var prof = root.GetProperty("profile").GetString() ?? "general.bat";
+                    var prevChanged = !string.Equals(SettingsManager.Current.SelectedProfileName, prof, StringComparison.OrdinalIgnoreCase);
                     SettingsManager.Current.SelectedProfileName = prof;
                     SettingsManager.Save();
                     SendEvent("profileSelected", new { profile = prof });
+
+                    if (prevChanged && BypassController.Current.Zapret.IsRunning)
+                    {
+                        SendEvent("log", new
+                        {
+                            message = $"🔄 Переключение конфига на {prof}...",
+                            time = DateTime.Now.ToString("HH:mm:ss"),
+                            isProgress = false
+                        });
+                        await BypassController.Current.RestartServicesAsync(prof);
+                        SendEvent("bypassState", new
+                        {
+                            isRunning = BypassController.Current.IsRunning,
+                            zapretRunning = BypassController.Current.Zapret.IsRunning,
+                            proxyRunning = BypassController.Current.TgProxy.IsRunning
+                        });
+                    }
                     break;
 
                 case "ping":
