@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using ZapretGUI.Core;
 
 namespace ZapretGUI.Views
@@ -14,6 +15,32 @@ namespace ZapretGUI.Views
         {
             InitializeComponent();
             TxtTrayVersion.Text = AppConstants.AppVersion;
+
+            // Подписываемся на живое обновление скорости сети, пока открыто меню трея
+            BypassController.Current.NetMonitor.StatsUpdated += OnNetStatsUpdated;
+        }
+
+        private void OnNetStatsUpdated(double rxMbps, double txMbps)
+        {
+            if (!IsVisible) return;
+
+            Dispatcher.InvokeAsync(() =>
+            {
+                TxtDownloadSpeed.Text = $"{rxMbps:0.0} Мбит/с";
+                TxtUploadSpeed.Text = $"{txMbps:0.0} Мбит/с";
+                SyncStatus();
+            });
+        }
+
+        public void PlayPopupAnimation()
+        {
+            var duration = new Duration(TimeSpan.FromMilliseconds(220));
+            var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+
+            MainBorder.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0.0, 1.0, duration) { EasingFunction = ease });
+            MenuScale.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(0.88, 1.0, duration) { EasingFunction = ease });
+            MenuScale.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(0.95, 1.0, duration) { EasingFunction = ease });
+            MenuTranslate.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(12.0, 0.0, duration) { EasingFunction = ease });
         }
 
         public void RefreshState()
@@ -29,8 +56,8 @@ namespace ZapretGUI.Views
 
         private async void CheckPingAsync()
         {
-            PingText.Text = "измерение...";
-            PingText.Foreground = new SolidColorBrush(System.Windows.Media.Colors.Gray);
+            PingText.Text = "...";
+            PingText.Foreground = UIHelper.GetBrushFromHex("#888888");
 
             try
             {
@@ -43,39 +70,89 @@ namespace ZapretGUI.Views
                     if (pingMs < 80)
                         PingText.Foreground = UIHelper.GetSuccessBrush();
                     else if (pingMs < 150)
-                        PingText.Foreground = new SolidColorBrush(System.Windows.Media.Colors.Orange);
+                        PingText.Foreground = UIHelper.GetBrushFromHex("#FF8C00");
                     else
                         PingText.Foreground = UIHelper.GetErrorBrush();
                 }
                 else
                 {
-                    PingText.Text = "ошибка";
+                    PingText.Text = "недоступен";
                     PingText.Foreground = UIHelper.GetErrorBrush();
                 }
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"Ошибка проверки пинга из трея: {ex.Message}");
-                PingText.Text = "нет сети";
+                PingText.Text = "ошибка";
                 PingText.Foreground = UIHelper.GetErrorBrush();
             }
         }
 
         private void SyncStatus()
         {
-            if (System.Windows.Application.Current.MainWindow is MainWindow mainWindow)
-                _isRunning = mainWindow.IsBypassRunning();
+            bool zapretRun = BypassController.Current.Zapret.IsRunning;
+            bool proxyRun = BypassController.Current.TgProxy.IsRunning;
+            _isRunning = zapretRun || proxyRun;
+
+            var onlineBrush = UIHelper.GetSuccessBrush();
+            var offlineBrush = UIHelper.GetErrorBrush();
+
+            DotZapret.Fill = zapretRun ? onlineBrush : offlineBrush;
+            DotProxy.Fill = proxyRun ? onlineBrush : offlineBrush;
+
+            TxtActiveProfile.Text = string.IsNullOrWhiteSpace(SettingsManager.Current.SelectedProfileName)
+                ? "general.bat"
+                : SettingsManager.Current.SelectedProfileName;
+
+            if (zapretRun && proxyRun)
+                TxtSubStatus.Text = "Zapret + TgWsProxy активны";
+            else if (zapretRun)
+                TxtSubStatus.Text = "Обход Zapret активен";
+            else if (proxyRun)
+                TxtSubStatus.Text = "Прокси Telegram активен";
+            else
+                TxtSubStatus.Text = "Службы остановлены";
+
+            TxtSubStatus.Foreground = _isRunning
+                ? UIHelper.GetBrushFromHex("#4CAF50")
+                : UIHelper.GetBrushFromHex("#888888");
 
             UpdateToggleButtonVisuals();
         }
 
         private void BtnTogglePower_Click(object sender, RoutedEventArgs e)
         {
+            AudioHelper.PlayClick();
             _isRunning = !_isRunning;
             UpdateToggleButtonVisuals();
 
             if (System.Windows.Application.Current.MainWindow is MainWindow mainWindow)
                 mainWindow.ToggleBypass();
+
+            Dispatcher.InvokeAsync(async () =>
+            {
+                await System.Threading.Tasks.Task.Delay(450);
+                SyncStatus();
+            });
+        }
+
+        private void BtnRefreshPing_Click(object sender, RoutedEventArgs e)
+        {
+            AudioHelper.PlayClick();
+            CheckPingAsync();
+        }
+
+        private async void BtnRestartBypass_Click(object sender, RoutedEventArgs e)
+        {
+            AudioHelper.PlayClick();
+            TxtSubStatus.Text = "Перезапуск служб...";
+            TxtSubStatus.Foreground = UIHelper.GetBrushFromHex("#FF8C00");
+
+            if (System.Windows.Application.Current.MainWindow is MainWindow mainWindow)
+            {
+                await mainWindow.RestartBypassAsync();
+            }
+            SyncStatus();
         }
 
         private void UpdateToggleButtonVisuals()
@@ -87,8 +164,8 @@ namespace ZapretGUI.Views
 
             if (_isRunning)
             {
-                BtnTogglePower.Background = UIHelper.GetBrushFromHex("#331A1A");
-                BtnTogglePower.BorderBrush = UIHelper.GetBrushFromHex("#5C2E2E");
+                BtnTogglePower.Background = UIHelper.GetBrushFromHex("#2A1215");
+                BtnTogglePower.BorderBrush = UIHelper.GetBrushFromHex("#D13438");
 
                 if (powerIcon != null)
                 {
@@ -100,8 +177,8 @@ namespace ZapretGUI.Views
             }
             else
             {
-                BtnTogglePower.Background = UIHelper.GetBrushFromHex("#1B3320");
-                BtnTogglePower.BorderBrush = UIHelper.GetBrushFromHex("#2E5C37");
+                BtnTogglePower.Background = UIHelper.GetBrushFromHex("#132615");
+                BtnTogglePower.BorderBrush = UIHelper.GetBrushFromHex("#107C10");
 
                 if (powerIcon != null)
                 {
@@ -115,6 +192,7 @@ namespace ZapretGUI.Views
 
         private void BtnOpenApp_Click(object sender, RoutedEventArgs e)
         {
+            AudioHelper.PlayClick();
             if (System.Windows.Application.Current.MainWindow != null)
             {
                 System.Windows.Application.Current.MainWindow.Show();
@@ -126,6 +204,8 @@ namespace ZapretGUI.Views
 
         private void BtnExit_Click(object sender, RoutedEventArgs e)
         {
+            AudioHelper.PlayClick();
+            BypassController.Current.NetMonitor.StatsUpdated -= OnNetStatsUpdated;
             System.Windows.Application.Current.Shutdown();
         }
     }

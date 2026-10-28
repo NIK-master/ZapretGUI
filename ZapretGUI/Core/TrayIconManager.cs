@@ -61,6 +61,7 @@ namespace ZapretGUI.Core
                 if (e.Button != System.Windows.Forms.MouseButtons.Left && e.Button != System.Windows.Forms.MouseButtons.Right)
                     return;
 
+                _trayMenu.RefreshState();
                 _trayMenu.Show();
                 _trayMenu.UpdateLayout();
 
@@ -74,11 +75,18 @@ namespace ZapretGUI.Core
                     dpiY = source.CompositionTarget.TransformFromDevice.M22;
                 }
 
-                _trayMenu.Left = (mousePos.X * dpiX) - _trayMenu.ActualWidth;
-                _trayMenu.Top = (mousePos.Y * dpiY) - _trayMenu.ActualHeight - 20;
+                var workArea = SystemParameters.WorkArea;
+                var targetLeft = (mousePos.X * dpiX) - (_trayMenu.ActualWidth / 2);
+                var targetTop = (mousePos.Y * dpiY) - _trayMenu.ActualHeight - 10;
+
+                targetLeft = Math.Max(workArea.Left + 8, Math.Min(targetLeft, workArea.Right - _trayMenu.ActualWidth - 8));
+                targetTop = Math.Max(workArea.Top + 8, Math.Min(targetTop, workArea.Bottom - _trayMenu.ActualHeight - 8));
+
+                _trayMenu.Left = targetLeft;
+                _trayMenu.Top = targetTop;
 
                 _trayMenu.Activate();
-                _trayMenu.RefreshState();
+                _trayMenu.PlayPopupAnimation();
             };
         }
 
