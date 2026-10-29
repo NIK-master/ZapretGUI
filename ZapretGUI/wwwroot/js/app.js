@@ -799,6 +799,14 @@ function onMainToggleClick() {
                 () => {
                     openConfigModal();
                     toggleSmartScan();
+                },
+                false,
+                () => {
+                    sendCmd('toggleBypass', {
+                        profile: appState.selectedProfile,
+                        useZapret,
+                        useProxy
+                    });
                 }
             );
             return;
@@ -1113,14 +1121,27 @@ function showAlert(title, message, isError = false) {
     document.getElementById('confirm-modal').classList.add('open');
 }
 
-function showConfirm(title, message, confirmText, onConfirm, isDanger = false) {
+let cancelCallback = null;
+
+function showConfirm(title, message, okText = 'Да', onConfirm = null, isDanger = false, onCancel = null) {
+    if (isBackendConfirm && onConfirm !== null) {
+        sendCmd('confirmResponse', { accepted: false });
+        isBackendConfirm = false;
+    }
+
     confirmCallback = onConfirm;
+    cancelCallback = onCancel;
     document.getElementById('confirm-title').innerText = title;
+    document.getElementById('confirm-title').className = `text-base font-bold mb-2 ${isDanger ? 'text-[#F44336]' : 'text-white'}`;
     document.getElementById('confirm-msg').innerText = message;
-    document.getElementById('confirm-cancel-btn').style.display = 'inline-block';
+
+    const cancelBtn = document.getElementById('confirm-cancel-btn');
+    cancelBtn.classList.remove('hidden');
+
     const okBtn = document.getElementById('confirm-ok-btn');
-    okBtn.innerText = confirmText;
-    okBtn.className = `px-4 py-1.5 rounded-md text-xs font-semibold text-white transition cursor-pointer ${isDanger ? 'bg-[#D13438] hover:opacity-90' : 'btn-brand'}`;
+    okBtn.innerText = okText;
+    okBtn.className = `px-4 py-1.5 rounded-md text-xs font-semibold text-white cursor-pointer ${isDanger ? 'bg-[#D13438] hover:opacity-90' : 'btn-brand'}`;
+
     document.getElementById('confirm-modal').classList.add('open');
 }
 
@@ -1134,10 +1155,15 @@ function closeConfirmModal(accepted) {
         return;
     }
 
-    if (accepted && confirmCallback) {
-        const cb = confirmCallback;
-        confirmCallback = null;
-        cb();
+    const cbOk = confirmCallback;
+    const cbCancel = cancelCallback;
+    confirmCallback = null;
+    cancelCallback = null;
+
+    if (accepted && typeof cbOk === 'function') {
+        cbOk();
+    } else if (!accepted && typeof cbCancel === 'function') {
+        cbCancel();
     }
 }
 

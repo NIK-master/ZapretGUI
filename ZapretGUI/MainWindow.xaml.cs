@@ -210,6 +210,7 @@ namespace ZapretGUI
         protected override void OnClosed(EventArgs e)
         {
             BypassController.Current.NetMonitor.Stop();
+            _webBridge?.Dispose();
             _trayIconManager.Dispose();
             base.OnClosed(e);
         }

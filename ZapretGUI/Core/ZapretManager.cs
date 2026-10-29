@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -10,15 +11,39 @@ namespace ZapretGUI.Core
 {
     public class ZapretManager : IBypassService
     {
+        private static readonly Regex _winwsCmdRegex = new($@"{AppConstants.ZapretProcessName}(?:\.exe)?[""']?\s*(.*)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex _standardBatCmdRegex = new(@"^(@?echo|chcp|cd|pushd|popd|set|title|cls|color|mode|goto|call|if|for|pause|timeout|:)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex _tokenSplitRegex = new(@"[\""].+?[\""]|[^ ]+", RegexOptions.Compiled);
+        private static readonly Regex _fileParamRegex = new(@"^--(hostlist|hostlist-exclude|ipset|ipset-exclude|dpi-desync-fake-tls|dpi-desync-fake-quic|dpi-desync-fake-unknown-udp|dpi-desync-split-seqovl-pattern)=(.+)$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex _unexpandedVarRegex = new(@"%[a-zA-Z0-9_]+%", RegexOptions.Compiled);
+
         private readonly string _basePath;
         private Process? _process;
+        private DateTime _lastCheckTime = DateTime.MinValue;
+        private bool _cachedRunning = false;
 
         public event Action<string>? LogMessage;
-
 
         public ZapretManager()
         {
             _basePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.CoreFilesDirectory);
+        }
+
+        public List<string> GetAvailableProfiles()
+        {
+            if (!Directory.Exists(_basePath))
+                return new List<string> { "general.bat" };
+
+            var list = Directory.GetFiles(_basePath, "*.bat")
+                .Select(Path.GetFileName)
+                .Where(name => !string.IsNullOrEmpty(name) &&
+                              (name.StartsWith("general", StringComparison.OrdinalIgnoreCase) ||
+                               name.StartsWith("mod_", StringComparison.OrdinalIgnoreCase)))
+                .Cast<string>()
+                .OrderBy(n => n)
+                .ToList();
+
+            return list.Count > 0 ? list : new List<string> { "general.bat" };
         }
 
         private string GetSourceDisplayName(string profileName)
@@ -74,13 +99,12 @@ namespace ZapretGUI.Core
                         winwsFound = true;
                         winwsStartLine = lineNum;
 
-                        var match = Regex.Match(trimmed, $@"{AppConstants.ZapretProcessName}(?:\.exe)?[""']?\s*(.*)", RegexOptions.IgnoreCase);
+                        var match = _winwsCmdRegex.Match(trimmed);
                         trimmed = match.Success ? match.Groups[1].Value.Trim() : "";
                     }
                     else
                     {
-                        var isStandardBatCmd = Regex.IsMatch(trimmed, @"^(@?echo|chcp|cd|pushd|popd|set|title|cls|color|mode|goto|call|if|for|pause|timeout|:)\b", RegexOptions.IgnoreCase);
-                        if (!isStandardBatCmd)
+                        if (!_standardBatCmdRegex.IsMatch(trimmed))
                             throw new Exception($"Синтаксическая ошибка в {sourceName} [Строка {lineNum}]:\nНеизвестная команда «{trimmed}».\nОжидался вызов {AppConstants.ZapretProcessName}.exe или стандартная инструкция Batch.");
                         continue;
                     }
@@ -97,7 +121,7 @@ namespace ZapretGUI.Core
 
                     if (!string.IsNullOrWhiteSpace(cleanLine))
                     {
-                        var tokens = Regex.Matches(cleanLine, @"[\""].+?[\""]|[^ ]+")
+                        var tokens = _tokenSplitRegex.Matches(cleanLine)
                                           .Select(m => m.Value.Trim())
                                           .ToList();
 
@@ -111,7 +135,7 @@ namespace ZapretGUI.Core
 
                             if (checkReferencedFiles && Directory.Exists(zapretBasePath))
                             {
-                                var fileMatch = Regex.Match(token, @"^--(hostlist|hostlist-exclude|ipset|ipset-exclude|dpi-desync-fake-tls|dpi-desync-fake-quic|dpi-desync-fake-unknown-udp|dpi-desync-split-seqovl-pattern)=(.+)$", RegexOptions.IgnoreCase);
+                                var fileMatch = _fileParamRegex.Match(token);
                                 if (fileMatch.Success)
                                 {
                                     var paramName = fileMatch.Groups[1].Value;
@@ -160,7 +184,7 @@ namespace ZapretGUI.Core
             if (string.IsNullOrEmpty(arguments))
                 throw new Exception($"Ошибка в {sourceName} [Строка {winwsStartLine}]:\nКоманда «{AppConstants.ZapretProcessName}» вызвана без параметров фильтрации.");
 
-            var unexpandedVar = Regex.Match(arguments, @"%[a-zA-Z0-9_]+%");
+            var unexpandedVar = _unexpandedVarRegex.Match(arguments);
             if (unexpandedVar.Success)
                 throw new Exception($"Ошибка в {sourceName}:\nОбнаружена неизвестная переменная «{unexpandedVar.Value}», которая не поддерживается в прямом запуске Zapret.");
 
@@ -202,11 +226,11 @@ namespace ZapretGUI.Core
 
             _process = new Process { StartInfo = startInfo };
 
-            var errorOutputs = new List<string>();
+            var errorOutputs = new ConcurrentQueue<string>();
 
             _process.OutputDataReceived += (s, e) =>
             {
-                if (string.IsNullOrEmpty(e.Data)) 
+                if (string.IsNullOrEmpty(e.Data))
                     return;
 
                 var line = e.Data;
@@ -226,7 +250,7 @@ namespace ZapretGUI.Core
             {
                 if (!string.IsNullOrEmpty(e.Data))
                 {
-                    errorOutputs.Add(e.Data);
+                    errorOutputs.Enqueue(e.Data);
                     LogMessage?.Invoke($"[Zapret ERR] {e.Data}");
                 }
             };
@@ -237,21 +261,26 @@ namespace ZapretGUI.Core
 
             if (_process.WaitForExit(350))
             {
-                var errDetails = errorOutputs.Count > 0
+                var errDetails = !errorOutputs.IsEmpty
                     ? string.Join(" | ", errorOutputs)
                     : $"Код завершения: {_process.ExitCode}";
 
+                _cachedRunning = false;
                 throw new Exception($"Ядро Zapret отвергло конфигурацию в {sourceName}!\nПричина от движка winws: {errDetails}");
             }
+
+            _cachedRunning = true;
+            _lastCheckTime = DateTime.UtcNow;
         }
 
         public void Stop()
         {
             try
             {
-                if (_process != null && !_process.HasExited)
+                if (_process != null)
                 {
-                    _process.Kill();
+                    if (!_process.HasExited)
+                        _process.Kill(entireProcessTree: true);
                     _process.Dispose();
                     _process = null;
                 }
@@ -262,9 +291,28 @@ namespace ZapretGUI.Core
             }
 
             ProcessHelper.KillProcessesByName(AppConstants.ZapretProcessName);
+            _cachedRunning = false;
+            _lastCheckTime = DateTime.UtcNow;
         }
 
-        public bool IsRunning 
-            => Process.GetProcessesByName(AppConstants.ZapretProcessName).Length > 0;
+        public bool IsRunning
+        {
+            get
+            {
+                try
+                {
+                    if (_process != null && !_process.HasExited)
+                        return true;
+                }
+                catch { }
+
+                if ((DateTime.UtcNow - _lastCheckTime).TotalSeconds < 2.5)
+                    return _cachedRunning;
+
+                _cachedRunning = ProcessHelper.IsProcessRunning(AppConstants.ZapretProcessName);
+                _lastCheckTime = DateTime.UtcNow;
+                return _cachedRunning;
+            }
+        }
     }
 }

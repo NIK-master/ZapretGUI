@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Diagnostics;
+using System.IO;
 using System.Media;
 using System.Threading.Tasks;
 
@@ -7,18 +8,28 @@ namespace ZapretGUI.Core
 {
     public static class AudioHelper
     {
-        private static SoundPlayer? _clickPlayer;
-        private static SoundPlayer? _successPlayer;
+        private static readonly SoundPlayer? _clickPlayer;
+        private static readonly SoundPlayer? _successPlayer;
 
         static AudioHelper()
         {
             try
             {
-                _clickPlayer = new SoundPlayer("Assets/Sounds/click.wav");
-                _successPlayer = new SoundPlayer("Assets/Sounds/success.wav");
+                var baseDir = AppDomain.CurrentDomain.BaseDirectory;
+                var clickPath = Path.Combine(baseDir, "Assets", "Sounds", "click.wav");
+                var successPath = Path.Combine(baseDir, "Assets", "Sounds", "success.wav");
 
-                _clickPlayer.LoadAsync();
-                _successPlayer.LoadAsync();
+                if (File.Exists(clickPath))
+                {
+                    _clickPlayer = new SoundPlayer(clickPath);
+                    _clickPlayer.LoadAsync();
+                }
+
+                if (File.Exists(successPath))
+                {
+                    _successPlayer = new SoundPlayer(successPath);
+                    _successPlayer.LoadAsync();
+                }
             }
             catch (Exception ex)
             {

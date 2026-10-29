@@ -220,18 +220,7 @@ namespace ZapretGUI.Views
         private async System.Threading.Tasks.Task CycleProfileAsync(int dir)
         {
             AudioHelper.PlayClick();
-            var folderPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.CoreFilesDirectory);
-            if (!System.IO.Directory.Exists(folderPath)) return;
-
-            var profiles = System.IO.Directory.GetFiles(folderPath, "*.bat")
-                .Select(System.IO.Path.GetFileName)
-                .Where(name => !string.IsNullOrEmpty(name) &&
-                              (name.StartsWith("general", StringComparison.OrdinalIgnoreCase) ||
-                               name.StartsWith("mod_", StringComparison.OrdinalIgnoreCase)))
-                .Cast<string>()
-                .OrderBy(n => n)
-                .ToList();
-
+            var profiles = BypassController.Current.Zapret.GetAvailableProfiles();
             if (profiles.Count == 0) return;
 
             var current = SettingsManager.Current.SelectedProfileName ?? "general.bat";

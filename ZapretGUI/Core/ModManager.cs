@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -11,6 +12,13 @@ namespace ZapretGUI.Core
 {
     public class ModManager
     {
+        private static readonly Regex _sanitizeIdRegex = new(@"[^a-z0-9_\-]", RegexOptions.Compiled);
+        private static readonly JsonSerializerOptions _jsonOptions = new()
+        {
+            PropertyNameCaseInsensitive = true,
+            WriteIndented = true
+        };
+
         private readonly string _modsBasePath;
         private readonly string _strategiesPath;
         private readonly string _listsPath;
@@ -26,14 +34,9 @@ namespace ZapretGUI.Core
 
         public void InitializeFolders()
         {
-            if (!Directory.Exists(_modsBasePath)) 
-                Directory.CreateDirectory(_modsBasePath);
-
-            if (!Directory.Exists(_strategiesPath)) 
-                Directory.CreateDirectory(_strategiesPath);
-
-            if (!Directory.Exists(_listsPath)) 
-                Directory.CreateDirectory(_listsPath);
+            Directory.CreateDirectory(_modsBasePath);
+            Directory.CreateDirectory(_strategiesPath);
+            Directory.CreateDirectory(_listsPath);
         }
 
         public bool IsModIdTaken(string id)
@@ -55,7 +58,7 @@ namespace ZapretGUI.Core
                 {
                     try
                     {
-                        var meta = JsonSerializer.Deserialize<ModMetaData>(File.ReadAllText(jsonPath), new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                        var meta = JsonSerializer.Deserialize<ModMetaData>(File.ReadAllText(jsonPath), _jsonOptions);
                         if (meta != null && string.Equals(meta.UniqueId, normId, StringComparison.OrdinalIgnoreCase))
                             return true;
                     }
@@ -68,21 +71,21 @@ namespace ZapretGUI.Core
 
         public static string SanitizeModId(string raw)
         {
-            if (string.IsNullOrWhiteSpace(raw)) 
+            if (string.IsNullOrWhiteSpace(raw))
                 return "";
 
             var clean = raw.Trim().ToLowerInvariant().Replace(" ", "_");
-            clean = Regex.Replace(clean, @"[^a-z0-9_\-]", "");
+            clean = _sanitizeIdRegex.Replace(clean, "");
             return clean.Trim('_');
         }
 
         public string GenerateUniqueModId(string baseName = "mod")
         {
             var prefix = SanitizeModId(baseName);
-            if (string.IsNullOrEmpty(prefix)) 
+            if (string.IsNullOrEmpty(prefix))
                 prefix = "mod";
 
-            if (prefix.Length > 18) 
+            if (prefix.Length > 18)
                 prefix = prefix.Substring(0, 18).TrimEnd('_');
 
             while (true)
@@ -91,6 +94,69 @@ namespace ZapretGUI.Core
                 var candidate = $"{prefix}_{shortHash}";
                 if (!IsModIdTaken(candidate))
                     return candidate;
+            }
+        }
+
+        public async Task<ModMetaData> ImportModFromArchiveAsync(string archiveFilePath, string? fallbackName = null)
+        {
+            InitializeFolders();
+            var tempDir = Path.Combine(Path.GetTempPath(), "ZapretGUI_Mod_" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                Directory.CreateDirectory(tempDir);
+                await Task.Run(() => ZipFile.ExtractToDirectory(archiveFilePath, tempDir));
+
+                var jsonFiles = Directory.GetFiles(tempDir, "mod.json", SearchOption.AllDirectories);
+                if (jsonFiles.Length == 0)
+                    throw new Exception("В архиве не найден файл mod.json. Убедитесь, что это корректный мод.");
+
+                var jsonPath = jsonFiles[0];
+                var modRootPath = Path.GetDirectoryName(jsonPath)!;
+
+                var meta = JsonSerializer.Deserialize<ModMetaData>(await File.ReadAllTextAsync(jsonPath), _jsonOptions)
+                           ?? throw new Exception("Файл mod.json поврежден.");
+
+                var baseCandidate = !string.IsNullOrWhiteSpace(meta.UniqueId)
+                    ? SanitizeModId(meta.UniqueId)
+                    : SanitizeModId(meta.Name);
+
+                if (string.IsNullOrEmpty(baseCandidate))
+                    baseCandidate = SanitizeModId(fallbackName ?? Path.GetFileNameWithoutExtension(archiveFilePath));
+
+                var finalUniqueId = IsModIdTaken(baseCandidate)
+                    ? GenerateUniqueModId(baseCandidate)
+                    : baseCandidate;
+
+                meta.UniqueId = finalUniqueId;
+                await File.WriteAllTextAsync(jsonPath, JsonSerializer.Serialize(meta, _jsonOptions));
+
+                var folderType = meta.IsBatStrategy ? "strategies" : "lists";
+                var destPath = Path.GetFullPath(Path.Combine(_modsBasePath, folderType, finalUniqueId));
+                var destRootWithSep = destPath + Path.DirectorySeparatorChar;
+                Directory.CreateDirectory(destPath);
+
+                await Task.Run(() =>
+                {
+                    foreach (var file in Directory.GetFiles(modRootPath, "*.*", SearchOption.AllDirectories))
+                    {
+                        var relativePath = Path.GetRelativePath(modRootPath, file);
+                        var targetPath = Path.GetFullPath(Path.Combine(destPath, relativePath));
+
+                        // Защита от Zip-Slip
+                        if (!targetPath.StartsWith(destRootWithSep, StringComparison.OrdinalIgnoreCase))
+                            continue;
+
+                        Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
+                        File.Copy(file, targetPath, true);
+                    }
+                });
+
+                return meta;
+            }
+            finally
+            {
+                if (Directory.Exists(tempDir))
+                    try { Directory.Delete(tempDir, true); } catch { }
             }
         }
 
@@ -116,7 +182,7 @@ namespace ZapretGUI.Core
                     try
                     {
                         var json = await File.ReadAllTextAsync(jsonPath);
-                        var meta = JsonSerializer.Deserialize<ModMetaData>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                        var meta = JsonSerializer.Deserialize<ModMetaData>(json, _jsonOptions);
 
                         if (meta != null)
                         {

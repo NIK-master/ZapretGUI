@@ -364,6 +364,7 @@ namespace ZapretGUI.Core
                     if (hasFilesAtRoot)
                         rootDirToStrip = null;
 
+                    var fullExtractRoot = Path.GetFullPath(extractPath + Path.DirectorySeparatorChar);
                     foreach (var entry in archive.Entries)
                     {
                         var entryName = entry.FullName;
@@ -374,6 +375,9 @@ namespace ZapretGUI.Core
                             continue;
 
                         var destinationPath = Path.GetFullPath(Path.Combine(extractPath, entryName));
+                        if (!destinationPath.StartsWith(fullExtractRoot, StringComparison.OrdinalIgnoreCase))
+                            continue;
+
                         Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
 
                         entry.ExtractToFile(destinationPath, overwrite: true);

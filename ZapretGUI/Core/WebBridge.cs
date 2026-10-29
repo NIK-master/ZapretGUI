@@ -15,7 +15,7 @@ using Microsoft.Web.WebView2.Wpf;
 
 namespace ZapretGUI.Core
 {
-    public class WebBridge
+    public class WebBridge : IDisposable
     {
         [DllImport("user32.dll")]
         private static extern bool ReleaseCapture();
@@ -55,7 +55,8 @@ namespace ZapretGUI.Core
 
             UIHelper.WebConfirmHandler = (title, message, confirmText, isDanger) =>
             {
-                _pendingConfirmTcs = new TaskCompletionSource<bool>();
+                _pendingConfirmTcs?.TrySetResult(false);
+                _pendingConfirmTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
                 SendEvent("askConfirm", new { title, message, confirmText, isDanger });
                 return _pendingConfirmTcs.Task;
             };
@@ -965,61 +966,12 @@ namespace ZapretGUI.Core
 
             if (string.IsNullOrEmpty(selectedFile)) return;
 
-            var tempDir = Path.Combine(Path.GetTempPath(), "ZapretGUI_Mod_" + Guid.NewGuid().ToString("N"));
             try
             {
                 _isInternalFileOp = true;
-                Directory.CreateDirectory(tempDir);
-                await Task.Run(() => ZipFile.ExtractToDirectory(selectedFile, tempDir));
-
-                var jsonFiles = Directory.GetFiles(tempDir, "mod.json", SearchOption.AllDirectories);
-                if (jsonFiles.Length == 0)
-                {
-                    SendEvent("alert", new { title = "Ошибка импорта", message = "В архиве не найден файл mod.json. Убедитесь, что это корректный мод.", isError = true });
-                    return;
-                }
-
-                var jsonPath = jsonFiles[0];
-                var modRootPath = Path.GetDirectoryName(jsonPath)!;
-
-                var meta = JsonSerializer.Deserialize<ModMetaData>(await File.ReadAllTextAsync(jsonPath), _jsonOptions);
-                if (meta == null)
-                {
-                    SendEvent("alert", new { title = "Ошибка импорта", message = "Файл mod.json поврежден.", isError = true });
-                    return;
-                }
-
-                var baseCandidate = !string.IsNullOrWhiteSpace(meta.UniqueId)
-                    ? ModManager.SanitizeModId(meta.UniqueId)
-                    : ModManager.SanitizeModId(meta.Name);
-
-                if (string.IsNullOrEmpty(baseCandidate))
-                    baseCandidate = ModManager.SanitizeModId(Path.GetFileNameWithoutExtension(selectedFile));
-
-                var finalUniqueId = _modManager.IsModIdTaken(baseCandidate)
-                    ? _modManager.GenerateUniqueModId(baseCandidate)
-                    : baseCandidate;
-
-                meta.UniqueId = finalUniqueId;
-                await File.WriteAllTextAsync(jsonPath, JsonSerializer.Serialize(meta, new JsonSerializerOptions { WriteIndented = true }));
-
-                var folderType = meta.IsBatStrategy ? "strategies" : "lists";
-                var destPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, folderType, finalUniqueId);
-                Directory.CreateDirectory(destPath);
-
-                await Task.Run(() =>
-                {
-                    foreach (var file in Directory.GetFiles(modRootPath, "*.*", SearchOption.AllDirectories))
-                    {
-                        var relativePath = file.Substring(modRootPath.Length + 1);
-                        var targetPath = Path.Combine(destPath, relativePath);
-                        Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
-                        File.Copy(file, targetPath, true);
-                    }
-                });
-
+                var meta = await _modManager.ImportModFromArchiveAsync(selectedFile);
                 await BroadcastModsAndProfilesAsync();
-                SendEvent("alert", new { title = "Импорт завершен", message = $"Мод «{meta.Name}» (ID: {finalUniqueId}) успешно импортирован!", isError = false });
+                SendEvent("alert", new { title = "Импорт завершен", message = $"Мод «{meta.Name}» (ID: {meta.UniqueId}) успешно импортирован!", isError = false });
             }
             catch (Exception ex)
             {
@@ -1028,8 +980,6 @@ namespace ZapretGUI.Core
             finally
             {
                 _isInternalFileOp = false;
-                if (Directory.Exists(tempDir))
-                    try { Directory.Delete(tempDir, true); } catch { }
             }
         }
 
@@ -1045,54 +995,15 @@ namespace ZapretGUI.Core
             if (ext == ".zip" || ext == ".netfix-mod")
             {
                 var tempZip = Path.Combine(Path.GetTempPath(), "ZapretDrop_" + Guid.NewGuid().ToString("N") + ext);
-                var tempDir = Path.Combine(Path.GetTempPath(), "ZapretGUI_Drop_" + Guid.NewGuid().ToString("N"));
                 try
                 {
                     _isInternalFileOp = true;
                     await File.WriteAllBytesAsync(tempZip, bytes);
-                    Directory.CreateDirectory(tempDir);
-                    await Task.Run(() => ZipFile.ExtractToDirectory(tempZip, tempDir));
-
-                    var jsonFiles = Directory.GetFiles(tempDir, "mod.json", SearchOption.AllDirectories);
-                    if (jsonFiles.Length == 0)
-                    {
-                        SendEvent("alert", new { title = "Ошибка Drag & Drop", message = "В архиве не найден файл mod.json!", isError = true });
-                        return;
-                    }
-
-                    var jsonPath = jsonFiles[0];
-                    var modRootPath = Path.GetDirectoryName(jsonPath)!;
-                    var meta = JsonSerializer.Deserialize<ModMetaData>(await File.ReadAllTextAsync(jsonPath), _jsonOptions);
-                    if (meta == null) return;
-
-                    var baseCandidate = !string.IsNullOrWhiteSpace(meta.UniqueId)
-                        ? ModManager.SanitizeModId(meta.UniqueId)
-                        : ModManager.SanitizeModId(meta.Name);
-                    if (string.IsNullOrEmpty(baseCandidate))
-                        baseCandidate = ModManager.SanitizeModId(Path.GetFileNameWithoutExtension(fileName));
-
-                    var finalId = _modManager.IsModIdTaken(baseCandidate)
-                        ? _modManager.GenerateUniqueModId(baseCandidate)
-                        : baseCandidate;
-
-                    meta.UniqueId = finalId;
-                    await File.WriteAllTextAsync(jsonPath, JsonSerializer.Serialize(meta, new JsonSerializerOptions { WriteIndented = true }));
-
-                    var folderType = meta.IsBatStrategy ? "strategies" : "lists";
-                    var destPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, folderType, finalId);
-                    Directory.CreateDirectory(destPath);
-
-                    foreach (var file in Directory.GetFiles(modRootPath, "*.*", SearchOption.AllDirectories))
-                    {
-                        var rel = file.Substring(modRootPath.Length + 1);
-                        var target = Path.Combine(destPath, rel);
-                        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-                        File.Copy(file, target, true);
-                    }
+                    var meta = await _modManager.ImportModFromArchiveAsync(tempZip, Path.GetFileNameWithoutExtension(fileName));
 
                     await BroadcastModsAndProfilesAsync();
                     AudioHelper.PlaySuccess();
-                    SendEvent("alert", new { title = "Мод импортирован", message = $"Архив «{meta.Name}» (ID: {finalId}) успешно установлен через Drag & Drop!", isError = false });
+                    SendEvent("alert", new { title = "Мод импортирован", message = $"Архив «{meta.Name}» (ID: {meta.UniqueId}) успешно установлен через Drag & Drop!", isError = false });
                 }
                 catch (Exception ex)
                 {
@@ -1102,7 +1013,6 @@ namespace ZapretGUI.Core
                 {
                     _isInternalFileOp = false;
                     try { if (File.Exists(tempZip)) File.Delete(tempZip); } catch { }
-                    try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true); } catch { }
                 }
             }
             else if (ext == ".bat" || ext == ".txt")
@@ -1214,20 +1124,7 @@ namespace ZapretGUI.Core
             SendEvent("pingResult", new { ping = pingMs });
         }
 
-        private List<string> GetBatProfiles()
-        {
-            var folderPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.CoreFilesDirectory);
-            if (!Directory.Exists(folderPath)) return new List<string> { "general.bat" };
-
-            return Directory.GetFiles(folderPath, "*.bat")
-                .Select(Path.GetFileName)
-                .Where(name => !string.IsNullOrEmpty(name) &&
-                              (name.StartsWith("general", StringComparison.OrdinalIgnoreCase) ||
-                               name.StartsWith("mod_", StringComparison.OrdinalIgnoreCase)))
-                .Cast<string>()
-                .OrderBy(n => n)
-                .ToList();
-        }
+        private List<string> GetBatProfiles() => BypassController.Current.Zapret.GetAvailableProfiles();
 
         private async Task HandleToggleBypassAsync(JsonElement root)
         {
@@ -1428,6 +1325,13 @@ namespace ZapretGUI.Core
                 cur.HostsSourceIndex = Math.Clamp(hsi.GetInt32(), 0, 3);
 
             SettingsManager.Save();
+        }
+        public void Dispose()
+        {
+            _watcherDebounceCts?.Cancel();
+            _watcherDebounceCts?.Dispose();
+            _modsWatcher?.Dispose();
+            _pendingConfirmTcs?.TrySetResult(false);
         }
     }
 }
