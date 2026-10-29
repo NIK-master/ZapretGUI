@@ -41,6 +41,9 @@ function setSettingsCat(cat, btnEl) {
     if (btnEl) btnEl.classList.add('active');
 
     filterSettingsView();
+    if (typeof updateSegmentedPill === 'function') {
+        updateSegmentedPill('settings-seg-track', 'settings-seg-pill');
+    }
 }
 
 function filterSettingsView() {

@@ -57,6 +57,9 @@ function switchModsSubTab(subTab) {
         }
         renderModsView();
     }
+    if (typeof updateSegmentedPill === 'function') {
+        updateSegmentedPill('mods-seg-track', 'mods-seg-pill');
+    }
 }
 
 function updateModsCounters() {
@@ -310,28 +313,119 @@ function openModEditor(id, isBat) {
     sendCmd('getModContent', { id, isBat });
 }
 
+function escapeSyntaxHtml(str) {
+    return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+
+function highlightSingleBatLine(rawLine) {
+    const trimmed = rawLine.trimStart();
+    if (trimmed.startsWith('::') || /^rem(\s|$)/i.test(trimmed)) {
+        return `<span class="syn-comment">${escapeSyntaxHtml(rawLine)}</span>`;
+    }
+
+    const tokenRegex = /("(?:[^"\\]|\\.)*"|%[a-zA-Z0-9_~]+%|--new\b|--[a-zA-Z0-9-]+|-[a-zA-Z0-9-]+|\bwinws(?:\.exe)?\b|\^(?=\s*$)|\b(?:@?echo|chcp|cd|pushd|popd|set|title|cls|color|mode|goto|call|if|for|pause|timeout)\b|\b\d+(?:-\d+)?(?:,\d+(?:-\d+)?)*\b)/gi;
+
+    let result = '';
+    let lastIndex = 0;
+    let match;
+
+    while ((match = tokenRegex.exec(rawLine)) !== null) {
+        if (match.index > lastIndex) {
+            result += escapeSyntaxHtml(rawLine.slice(lastIndex, match.index));
+        }
+        const token = match[0];
+        const lower = token.toLowerCase();
+        let cls = '';
+
+        if (token.startsWith('"')) {
+            // Внутри кавычек тоже подсветим переменные %BIN% и %LISTS%
+            const inner = escapeSyntaxHtml(token).replace(/(%[a-zA-Z0-9_~]+%)/g, '<span class="syn-var">$1</span>');
+            result += `<span class="syn-string">${inner}</span>`;
+            lastIndex = tokenRegex.lastIndex;
+            continue;
+        } else if (token.startsWith('%')) {
+            cls = 'syn-var';
+        } else if (lower === '--new') {
+            cls = 'syn-new';
+        } else if (token.startsWith('-')) {
+            cls = 'syn-flag';
+        } else if (lower.startsWith('winws')) {
+            cls = 'syn-exe';
+        } else if (token === '^') {
+            cls = 'syn-caret';
+        } else if (/^\d/.test(token)) {
+            cls = 'syn-num';
+        } else {
+            cls = 'syn-cmd';
+        }
+
+        result += `<span class="${cls}">${escapeSyntaxHtml(token)}</span>`;
+        lastIndex = tokenRegex.lastIndex;
+    }
+
+    if (lastIndex < rawLine.length) {
+        result += escapeSyntaxHtml(rawLine.slice(lastIndex));
+    }
+    return result;
+}
+
+function highlightSingleListLine(rawLine) {
+    const trimmed = rawLine.trim();
+    if (!trimmed) return escapeSyntaxHtml(rawLine);
+    if (trimmed.startsWith('#')) {
+        return `<span class="syn-comment">${escapeSyntaxHtml(rawLine)}</span>`;
+    }
+    if (/^https?:\/\//i.test(trimmed) || trimmed.includes('/')) {
+        // Если это IP/подсеть CIDR (например 203.0.113.113/32)
+        if (/^\d{1,3}(\.\d{1,3}){3}(\/\d{1,2})?$/.test(trimmed)) {
+            return `<span class="syn-ip">${escapeSyntaxHtml(rawLine)}</span>`;
+        }
+        // Если вставили грязный URL с https:// или путями — подсветим волнистой линией
+        return `<span class="syn-warn" title="Нажмите «Очистить дубли и URL», чтобы оставить чистый домен">${escapeSyntaxHtml(rawLine)}</span>`;
+    }
+    if (/^\d{1,3}(\.\d{1,3}){3}$/.test(trimmed)) {
+        return `<span class="syn-ip">${escapeSyntaxHtml(rawLine)}</span>`;
+    }
+    return `<span class="syn-domain">${escapeSyntaxHtml(rawLine)}</span>`;
+}
+
+function updateEditorSyntaxHighlight() {
+    const ta = document.getElementById('editor-textarea');
+    const hl = document.getElementById('editor-highlight-layer');
+    if (!ta || !hl) return;
+
+    const text = ta.value || '';
+    const lines = text.split('\n');
+    const isBat = appState.editingMod.isBat;
+
+    const htmlLines = lines.map(line => isBat ? highlightSingleBatLine(line) : highlightSingleListLine(line));
+    // Добавляем пробел в конец, чтобы при пустой последней строке после \n высота pre совпадала с textarea
+    hl.innerHTML = htmlLines.join('\n') + '\n ';
+}
+
 function openEditorWithData(data) {
     appState.editingMod.id = data.id;
     appState.editingMod.isBat = data.isBat;
 
     document.getElementById('editor-title').innerText = `Редактор: ${data.meta.name}`;
-    document.getElementById('editor-subtitle').innerText = `Уникальный ID: ${data.id} • Файл: ${data.fileName}`;
+    document.getElementById('editor-subtitle').innerText = `ID: ${data.id} • Файл: ${data.fileName}`;
 
     document.getElementById('edit-mod-name').value = data.meta.name || '';
     document.getElementById('edit-mod-author').value = data.meta.author || '';
     document.getElementById('edit-mod-version').value = data.meta.version || '1.0';
     document.getElementById('edit-mod-desc').value = data.meta.description || '';
 
-    document.getElementById('editor-bat-tools').style.display = data.isBat ? 'flex' : 'none';
-    document.getElementById('editor-snippets-bar').style.display = data.isBat ? 'flex' : 'none';
-    document.getElementById('editor-list-tools').style.display = data.isBat ? 'none' : 'flex';
+    document.getElementById('editor-bat-tools').className = data.isBat ? 'flex items-center gap-1' : 'hidden';
+    document.getElementById('editor-snippets-bar').className = data.isBat ? 'flex items-center gap-1 overflow-x-auto pb-1 mb-1.5 shrink-0' : 'hidden';
+    document.getElementById('editor-list-tools').className = data.isBat ? 'hidden' : 'flex items-center gap-1';
 
     const ta = document.getElementById('editor-textarea');
     ta.value = data.content || '';
-    setEditorStatus('', '');
     onEditorTextInput();
-    updateEditorCursorPos();
-
+    setEditorStatus('Готов к работе', 'text-[#4ADE80]');
     document.getElementById('editor-modal').classList.add('open');
 }
 
@@ -361,41 +455,60 @@ function toggleEditorSearch() {
 }
 
 function toggleEditorWordWrap() {
+    sendCmd('playClick');
     appState.editingMod.wordWrap = !appState.editingMod.wordWrap;
     const ta = document.getElementById('editor-textarea');
-    ta.style.whiteSpace = appState.editingMod.wordWrap ? 'pre-wrap' : 'pre';
+    const hl = document.getElementById('editor-highlight-layer');
+    const ws = appState.editingMod.wordWrap ? 'pre-wrap' : 'pre';
+    ta.style.whiteSpace = ws;
+    if (hl) hl.style.whiteSpace = ws;
     document.getElementById('btn-word-wrap').innerText = `Перенос: ${appState.editingMod.wordWrap ? 'Вкл' : 'Выкл'}`;
+    syncEditorScroll();
 }
 
 function changeEditorFontSize(delta) {
-    const next = appState.editingMod.fontSize + delta;
-    if (next >= 10 && next <= 24) {
-        appState.editingMod.fontSize = next;
-        document.getElementById('editor-textarea').style.fontSize = `${next}px`;
-        document.getElementById('editor-line-numbers').style.fontSize = `${next}px`;
-    }
+    sendCmd('playClick');
+    appState.editingMod.fontSize = Math.min(22, Math.max(10, appState.editingMod.fontSize + delta));
+    const sizePx = `${appState.editingMod.fontSize}px`;
+    document.getElementById('editor-textarea').style.fontSize = sizePx;
+    document.getElementById('editor-line-numbers').style.fontSize = sizePx;
+    const hl = document.getElementById('editor-highlight-layer');
+    if (hl) hl.style.fontSize = sizePx;
+    syncEditorScroll();
 }
 
 function onEditorTextInput() {
     const ta = document.getElementById('editor-textarea');
     const lines = ta.value.split('\n');
-    const count = Math.max(1, lines.length);
+    const lineNums = document.getElementById('editor-line-numbers');
 
     let nums = '';
-    for (let i = 1; i <= count; i++) nums += i + '\n';
-    document.getElementById('editor-line-numbers').innerText = nums;
-
-    if (!appState.editingMod.isBat) {
-        const nonEmpty = lines.filter(l => l.trim().length > 0).length;
-        document.getElementById('editor-stats-info').innerText = `Строк: ${count} (Доменов: ${nonEmpty})`;
-    } else {
-        document.getElementById('editor-stats-info').innerText = `Строк: ${count} • Символов: ${ta.value.length}`;
+    for (let i = 1; i <= Math.max(1, lines.length); i++) {
+        nums += i + '\n';
     }
+    lineNums.innerText = nums;
+
+    updateEditorSyntaxHighlight();
+    syncEditorScroll();
+
+    if (appState.editingMod.isBat) {
+        document.getElementById('editor-stats-info').innerText = `Строк: ${lines.length} | Символов: ${ta.value.length}`;
+    } else {
+        const validDomains = lines.filter(l => l.trim().length > 0 && !l.trim().startsWith('#')).length;
+        document.getElementById('editor-stats-info').innerText = `Доменов: ${validDomains} | Строк: ${lines.length}`;
+    }
+    updateEditorCursorPos();
 }
 
 function syncEditorScroll() {
     const ta = document.getElementById('editor-textarea');
-    document.getElementById('editor-line-numbers').scrollTop = ta.scrollTop;
+    const hl = document.getElementById('editor-highlight-layer');
+    const ln = document.getElementById('editor-line-numbers');
+    if (ln) ln.scrollTop = ta.scrollTop;
+    if (hl) {
+        hl.scrollTop = ta.scrollTop;
+        hl.scrollLeft = ta.scrollLeft;
+    }
 }
 
 function updateEditorCursorPos() {

@@ -407,10 +407,7 @@ body {
     background: rgba(255, 255, 255, 0.03);
 }
 .mods-seg-btn.active {
-    background: #242424;
     color: #FFFFFF;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
-    border: 1px solid #333333;
 }
 
 /* Адаптация под минималистичный (компактный) режим 850x520 */
@@ -747,4 +744,129 @@ body.compact-mode #settings-routing-grid {
 #sidebar.rail-mode .nav-btn span:not(.mdl-icon),
 #sidebar.rail-mode #sidebar-footer {
     display: none;
+}
+/* =========================================================
+   СКОЛЬЗЯЩИЕ ИНДИКАТОРЫ (SLIDING PILLS — SIDEBAR & TABS)
+   ========================================================= */
+.sidebar-sliding-pill {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 40px;
+    background: linear-gradient(90deg, rgba(16, 124, 16, 0.18) 0%, #262626 100%);
+    border: 1px solid #333333;
+    border-left: 3px solid var(--accent-light);
+    border-radius: 6px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+    transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1), height 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+    pointer-events: none;
+    z-index: 1;
+}
+
+.seg-sliding-pill {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    background: #252525;
+    border: 1px solid #363636;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+    transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1), width 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+    pointer-events: none;
+    z-index: 1;
+}
+
+/* =========================================================
+   ПОДСВЕТКА СИНТАКСИСА В CODE STUDIO (.BAT & LISTS)
+   ========================================================= */
+.editor-code-layer {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    padding: 10px;
+    margin: 0;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace;
+    font-size: 13px;
+    line-height: 1.45;
+    tab-size: 4;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow: auto;
+    border: none;
+}
+
+#editor-highlight-layer {
+    color: #E4E4E7;
+    z-index: 1;
+}
+
+.editor-textarea-input {
+    color: transparent !important;
+    background: transparent !important;
+    caret-color: #FFFFFF;
+    z-index: 2;
+}
+
+    .editor-textarea-input::selection {
+        background: rgba(76, 175, 80, 0.28);
+        color: transparent;
+    }
+
+/* Токены синтаксиса */
+.syn-comment {
+    color: #6B7280;
+    font-style: italic;
+}
+
+.syn-exe {
+    color: #4ADE80;
+    font-weight: 700;
+}
+
+.syn-flag {
+    color: #60A5FA;
+}
+
+.syn-new {
+    color: #C084FC;
+    font-weight: 700;
+}
+
+.syn-var {
+    color: #FBBF24;
+    font-weight: 600;
+}
+
+.syn-string {
+    color: #86EFAC;
+}
+
+.syn-num {
+    color: #2DD4BF;
+}
+
+.syn-caret {
+    color: #F472B6;
+    font-weight: 700;
+}
+
+.syn-cmd {
+    color: #38BDF8;
+    font-weight: 600;
+}
+
+.syn-domain {
+    color: #A7F3D0;
+}
+
+.syn-ip {
+    color: #60A5FA;
+}
+
+.syn-warn {
+    color: #F59E0B;
+    text-decoration: underline wavy #F59E0B;
 }

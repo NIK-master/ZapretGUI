@@ -1292,9 +1292,28 @@ function drawTrafficChart() {
 let sidebarOpen = true;
 function toggleSidebar() {
     sendCmd('playClick');
-    sidebarOpen = !sidebarOpen;
     const sb = document.getElementById('sidebar');
-    sb.classList.toggle('rail-mode', !sidebarOpen);
+    sb.classList.toggle('rail-mode');
+    setTimeout(updateSidebarPill, 210);
+}
+
+function updateSidebarPill() {
+    const activeBtn = document.querySelector('#sidebar-nav .nav-btn.active');
+    const pill = document.getElementById('sidebar-active-pill');
+    if (!activeBtn || !pill) return;
+    pill.style.transform = `translateY(${activeBtn.offsetTop}px)`;
+    pill.style.height = `${activeBtn.offsetHeight}px`;
+}
+
+function updateSegmentedPill(trackId, pillId) {
+    const track = document.getElementById(trackId);
+    const pill = document.getElementById(pillId);
+    if (!track || !pill) return;
+    const activeBtn = track.querySelector('.mods-seg-btn.active');
+    if (!activeBtn) return;
+
+    pill.style.width = `${activeBtn.offsetWidth}px`;
+    pill.style.transform = `translateX(${activeBtn.offsetLeft}px)`;
 }
 
 function switchTab(tabId, btn) {
@@ -1302,13 +1321,36 @@ function switchTab(tabId, btn) {
     document.querySelectorAll('.tab-view').forEach(el => el.classList.remove('active'));
     document.getElementById('tab-' + tabId).classList.add('active');
 
-    document.querySelectorAll('.nav-btn').forEach(b => {
-        b.className = 'nav-btn flex items-center gap-3 px-4 h-[40px] rounded-md text-sm font-medium text-[#CCCCCC] hover:bg-[#222222] hover:text-white transition-all cursor-pointer';
+    document.querySelectorAll('#sidebar-nav .nav-btn').forEach(el => {
+        el.className = 'nav-btn relative z-10 flex items-center gap-3 px-4 h-[40px] rounded-md text-sm font-medium text-[#CCCCCC] hover:text-white transition-colors cursor-pointer';
+        const icon = el.querySelector('.mdl-icon');
+        if (icon) icon.className = 'mdl-icon text-sm text-[#888888] transition-colors';
     });
-    btn.className = 'nav-btn active flex items-center gap-3 px-4 h-[40px] rounded-md text-sm font-semibold bg-[#2A2A2A] text-white border-l-[3px] border-[#107C10] transition-all cursor-pointer';
+
+    btn.className = 'nav-btn active relative z-10 flex items-center gap-3 px-4 h-[40px] rounded-md text-sm font-semibold text-white transition-colors cursor-pointer';
+    const activeIcon = btn.querySelector('.mdl-icon');
+    if (activeIcon) activeIcon.className = 'mdl-icon text-sm text-[#4CAF50] transition-colors';
+
+    updateSidebarPill();
+
+    setTimeout(() => {
+        if (tabId === 'mods') updateSegmentedPill('mods-seg-track', 'mods-seg-pill');
+        if (tabId === 'settings') updateSegmentedPill('settings-seg-track', 'settings-seg-pill');
+    }, 20);
 }
 
+window.addEventListener('resize', () => {
+    updateSidebarPill();
+    updateSegmentedPill('mods-seg-track', 'mods-seg-pill');
+    updateSegmentedPill('settings-seg-track', 'settings-seg-pill');
+});
+
 window.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => {
+        updateSidebarPill();
+        updateSegmentedPill('mods-seg-track', 'mods-seg-pill');
+        updateSegmentedPill('settings-seg-track', 'settings-seg-pill');
+    }, 60);
     ['titlebar', 'wizard-titlebar'].forEach(id => {
         document.getElementById(id)?.addEventListener('mousedown', (e) => {
             if (!e.target.closest('button')) {

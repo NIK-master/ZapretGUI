@@ -311,23 +311,26 @@
 		<!-- ОСНОВНОЙ КОНТЕЙНЕР -->
 		<div class="flex flex-1 overflow-hidden relative">
 
-			<!-- БОКОВОЕ МЕНЮ (SIDEBAR С РЕЖИМОМ ICON-RAIL 60PX) -->
+			<!-- БОКОВОЕ МЕНЮ (SIDEBAR С РЕЖИМОМ ICON-RAIL 60PX И СКОЛЬЗЯЩИМ ИНДИКАТОРОМ) -->
 			<aside id="sidebar" class="w-[220px] bg-[#181818] border-r border-[#2A2A2A] px-2.5 pt-5 pb-3 flex flex-col justify-between shrink-0 transition-all duration-200 overflow-hidden">
-				<nav class="flex flex-col gap-2.5 w-[200px]">
-					<button onclick="switchTab('home', this)" title="Главная" class="nav-btn active flex items-center gap-3 px-4 h-[40px] rounded-md text-sm font-semibold bg-[#2A2A2A] text-white border-l-[3px] border-[#107C10] transition-all cursor-pointer">
-						<span class="mdl-icon text-sm text-[#CCCCCC]">&#xE80F;</span>
+				<nav id="sidebar-nav" class="relative flex flex-col gap-2.5 w-[200px]">
+					<!-- Скользящая подложка активной вкладки -->
+					<div id="sidebar-active-pill" class="sidebar-sliding-pill"></div>
+
+					<button onclick="switchTab('home', this)" title="Главная" class="nav-btn active relative z-10 flex items-center gap-3 px-4 h-[40px] rounded-md text-sm font-semibold text-white transition-colors cursor-pointer">
+						<span class="mdl-icon text-sm text-[#4CAF50] transition-colors">&#xE80F;</span>
 						<span>Главная</span>
 					</button>
-					<button onclick="switchTab('mods', this)" title="Модификации" class="nav-btn flex items-center gap-3 px-4 h-[40px] rounded-md text-sm font-medium text-[#CCCCCC] hover:bg-[#222222] hover:text-white transition-all cursor-pointer">
-						<span class="mdl-icon text-sm text-[#888888]">&#xE74C;</span>
+					<button onclick="switchTab('mods', this)" title="Модификации" class="nav-btn relative z-10 flex items-center gap-3 px-4 h-[40px] rounded-md text-sm font-medium text-[#CCCCCC] hover:text-white transition-colors cursor-pointer">
+						<span class="mdl-icon text-sm text-[#888888] transition-colors">&#xE74C;</span>
 						<span>Модификации</span>
 					</button>
-					<button onclick="switchTab('diag', this)" title="Диагностика" class="nav-btn flex items-center gap-3 px-4 h-[40px] rounded-md text-sm font-medium text-[#CCCCCC] hover:bg-[#222222] hover:text-white transition-all cursor-pointer">
-						<span class="mdl-icon text-sm text-[#888888]">&#xE9D9;</span>
+					<button onclick="switchTab('diag', this)" title="Диагностика" class="nav-btn relative z-10 flex items-center gap-3 px-4 h-[40px] rounded-md text-sm font-medium text-[#CCCCCC] hover:text-white transition-colors cursor-pointer">
+						<span class="mdl-icon text-sm text-[#888888] transition-colors">&#xE9D9;</span>
 						<span>Диагностика</span>
 					</button>
-					<button onclick="switchTab('settings', this)" title="Настройки" class="nav-btn flex items-center gap-3 px-4 h-[40px] rounded-md text-sm font-medium text-[#CCCCCC] hover:bg-[#222222] hover:text-white transition-all cursor-pointer">
-						<span class="mdl-icon text-sm text-[#888888]">&#xE713;</span>
+					<button onclick="switchTab('settings', this)" title="Настройки" class="nav-btn relative z-10 flex items-center gap-3 px-4 h-[40px] rounded-md text-sm font-medium text-[#CCCCCC] hover:text-white transition-colors cursor-pointer">
+						<span class="mdl-icon text-sm text-[#888888] transition-colors">&#xE713;</span>
 						<span>Настройки</span>
 					</button>
 				</nav>
@@ -551,21 +554,23 @@
 
 					<!-- ПАНЕЛЬ НАВИГАЦИИ: SEGMENTED CONTROL + ПОИСК -->
 					<div class="flex flex-wrap items-center justify-between gap-2 bg-[#161616] border border-[#262626] rounded-xl p-1.5 shrink-0">
-						<!-- Переключатель вкладок -->
-						<div class="flex items-center gap-1 overflow-x-auto">
-							<button id="mod-tab-bat" onclick="switchModsSubTab('bat')" class="mods-seg-btn active">
+						<!-- Переключатель вкладок со скользящей капсулой -->
+						<div id="mods-seg-track" class="relative flex items-center gap-1 overflow-x-auto">
+							<div id="mods-seg-pill" class="seg-sliding-pill"></div>
+
+							<button id="mod-tab-bat" onclick="switchModsSubTab('bat')" class="mods-seg-btn active relative z-10">
 								<span class="mdl-icon text-xs">&#xE756;</span>
 								<span>.bat Стратегии</span>
 								<span id="badge-count-bat" class="px-1.5 py-0.2 rounded bg-[#121212] text-[10px] font-mono text-[#AAAAAA]">0</span>
 							</button>
 
-							<button id="mod-tab-list" onclick="switchModsSubTab('list')" class="mods-seg-btn">
+							<button id="mod-tab-list" onclick="switchModsSubTab('list')" class="mods-seg-btn relative z-10">
 								<span class="mdl-icon text-xs">&#xE774;</span>
 								<span>Листы доменов</span>
 								<span id="badge-count-list" class="px-1.5 py-0.2 rounded bg-[#121212] text-[10px] font-mono text-[#888888]">0</span>
 							</button>
 
-							<button id="mod-tab-guide" onclick="switchModsSubTab('guide')" class="mods-seg-btn">
+							<button id="mod-tab-guide" onclick="switchModsSubTab('guide')" class="mods-seg-btn relative z-10">
 								<span class="mdl-icon text-xs">&#xE9CE;</span>
 								<span>Руководство</span>
 							</button>
@@ -920,21 +925,23 @@
 						</div>
 					</div>
 
-					<!-- БЫСТРЫЙ ФИЛЬТР КАТЕГОРИЙ НАСТРОЕК -->
-					<div class="flex items-center gap-1 bg-[#161616] border border-[#262626] rounded-xl p-1 shrink-0 overflow-x-auto">
-						<button onclick="setSettingsCat('all', this)" class="set-cat-btn mods-seg-btn active">
+					<!-- БЫСТРЫЙ ФИЛЬТР КАТЕГОРИЙ НАСТРОЕК СО СКОЛЬЗЯЩЕЙ КАПСУЛОЙ -->
+					<div id="settings-seg-track" class="relative flex items-center gap-1 bg-[#161616] border border-[#262626] rounded-xl p-1 shrink-0 overflow-x-auto">
+						<div id="settings-seg-pill" class="seg-sliding-pill"></div>
+
+						<button onclick="setSettingsCat('all', this)" class="set-cat-btn mods-seg-btn active relative z-10">
 							<span class="mdl-icon text-xs">&#xF0E2;</span>
 							<span>Все разделы</span>
 						</button>
-						<button onclick="setSettingsCat('sys', this)" class="set-cat-btn mods-seg-btn">
+						<button onclick="setSettingsCat('sys', this)" class="set-cat-btn mods-seg-btn relative z-10">
 							<span class="mdl-icon text-xs">&#xE713;</span>
 							<span>Система и Вид</span>
 						</button>
-						<button onclick="setSettingsCat('net', this)" class="set-cat-btn mods-seg-btn">
+						<button onclick="setSettingsCat('net', this)" class="set-cat-btn mods-seg-btn relative z-10">
 							<span class="mdl-icon text-xs">&#xE774;</span>
 							<span>Сеть и Маршруты</span>
 						</button>
-						<button onclick="setSettingsCat('core', this)" class="set-cat-btn mods-seg-btn">
+						<button onclick="setSettingsCat('core', this)" class="set-cat-btn mods-seg-btn relative z-10">
 							<span class="mdl-icon text-xs">&#xE895;</span>
 							<span>Ядра и Сброс</span>
 						</button>
@@ -1467,15 +1474,18 @@
 					</div>
 
 					<div class="flex-1 bg-[#0C0C0C] border border-[#2A2A2A] rounded-lg overflow-hidden flex relative">
-						<div id="editor-line-numbers" class="w-11 bg-[#121216] border-r border-[#222226] py-2.5 px-2 text-right font-mono text-[13px] text-[#52525B] overflow-hidden select-none leading-[1.45]">1</div>
-						<textarea id="editor-textarea"
-								  oninput="onEditorTextInput()"
-								  onscroll="syncEditorScroll()"
-								  onclick="updateEditorCursorPos()"
-								  onkeyup="updateEditorCursorPos()"
-								  onkeydown="onEditorKeyDown(event)"
-								  spellcheck="false"
-								  class="flex-1 bg-transparent text-[#4ADE80] font-mono text-[13px] p-2.5 focus:outline-none resize-none leading-[1.45] select-text overflow-auto"></textarea>
+						<div id="editor-line-numbers" class="w-11 bg-[#121216] border-r border-[#222226] py-2.5 px-2 text-right font-mono text-[13px] text-[#52525B] overflow-hidden select-none leading-[1.45] shrink-0">1</div>
+						<div class="flex-1 relative overflow-hidden">
+							<pre id="editor-highlight-layer" aria-hidden="true" class="editor-code-layer pointer-events-none select-none m-0"></pre>
+							<textarea id="editor-textarea"
+									  oninput="onEditorTextInput()"
+									  onscroll="syncEditorScroll()"
+									  onclick="updateEditorCursorPos()"
+									  onkeyup="updateEditorCursorPos()"
+									  onkeydown="onEditorKeyDown(event)"
+									  spellcheck="false"
+									  class="editor-code-layer editor-textarea-input focus:outline-none resize-none select-text"></textarea>
+						</div>
 					</div>
 
 					<div class="flex items-center justify-between mt-2.5 pt-1 shrink-0">
