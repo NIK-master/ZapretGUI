@@ -39,6 +39,16 @@ namespace ZapretGUI
 
             _trayIconManager = new TrayIconManager(this);
 
+            this.PreviewKeyDown += (s, e) =>
+            {
+                if (e.Key == System.Windows.Input.Key.K &&
+                    (System.Windows.Input.Keyboard.Modifiers & System.Windows.Input.ModifierKeys.Control) == System.Windows.Input.ModifierKeys.Control)
+                {
+                    e.Handled = true;
+                    _webBridge?.SendEvent("toggleCommandPalette", new { });
+                }
+            };
+
             _ = InitializeAppAsync();
         }
 

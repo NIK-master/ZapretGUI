@@ -715,6 +715,12 @@ function handleBackendEvent(type, data) {
             document.getElementById('modal-active-profile').innerText = data.profile;
             renderConfigCards();
             break;
+
+        case 'toggleCommandPalette':
+            const cmdModal = document.getElementById('cmd-palette-modal');
+            if (cmdModal && cmdModal.classList.contains('open')) closeCommandPalette();
+            else openCommandPalette();
+            break;
     }
 }
 
@@ -1303,10 +1309,12 @@ function switchTab(tabId, btn) {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('titlebar').addEventListener('mousedown', (e) => {
-        if (!e.target.closest('button')) {
-            sendCmd('windowDrag');
-        }
+    ['titlebar', 'wizard-titlebar'].forEach(id => {
+        document.getElementById(id)?.addEventListener('mousedown', (e) => {
+            if (!e.target.closest('button')) {
+                sendCmd('windowDrag');
+            }
+        });
     });
 
     if (window.chrome && window.chrome.webview) {
@@ -1423,6 +1431,7 @@ function getAvailableCommands() {
 }
 
 function openCommandPalette() {
+    if (document.getElementById('wizard-overlay')?.classList.contains('open')) return;
     sendCmd('playClick');
     const modal = document.getElementById('cmd-palette-modal');
     const input = document.getElementById('cmd-palette-input');
@@ -1458,16 +1467,30 @@ function renderCommandPaletteList() {
     listEl.innerHTML = filteredCommands.map((cmd, idx) => {
         const active = idx === cmdSelectedIndex;
         return `
-        <div onclick="executePaletteCommand(${idx})"
-             onmouseenter="cmdSelectedIndex=${idx}; renderCommandPaletteList()"
-             class="px-3 py-2 rounded-lg flex items-center justify-between cursor-pointer transition ${active ? 'bg-[#0F240F] border border-[#107C10] text-white' : 'border border-transparent text-[#CCCCCC]'}">
-            <div class="flex items-center gap-2.5 overflow-hidden">
-                <span class="mdl-icon text-xs ${active ? 'text-brand' : 'text-[#777777]'}">${cmd.icon}</span>
+        <div onmousedown="event.preventDefault(); executePaletteCommand(${idx})"
+             onmouseenter="updatePaletteHover(${idx})"
+             data-cmd-idx="${idx}"
+             class="cmd-item px-3 py-2 rounded-lg flex items-center justify-between cursor-pointer transition ${active ? 'bg-[#0F240F] border border-[#107C10] text-white' : 'border border-transparent text-[#CCCCCC] hover:bg-[#1E1E1E]'}">
+            <div class="flex items-center gap-2.5 overflow-hidden pointer-events-none">
+                <span class="cmd-icon mdl-icon text-xs ${active ? 'text-brand' : 'text-[#777777]'}">${cmd.icon}</span>
                 <span class="text-xs font-medium truncate">${cmd.title}</span>
             </div>
-            <span class="text-[10px] font-mono px-1.5 py-0.5 rounded ${active ? 'bg-[#107C10]/30 text-brand' : 'bg-[#1C1C1C] text-[#777777]'} shrink-0 ml-2">${cmd.tag}</span>
+            <span class="cmd-tag text-[10px] font-mono px-1.5 py-0.5 rounded ${active ? 'bg-[#107C10]/30 text-brand' : 'bg-[#1C1C1C] text-[#777777]'} shrink-0 ml-2 pointer-events-none">${cmd.tag}</span>
         </div>`;
     }).join('');
+}
+
+function updatePaletteHover(idx) {
+    cmdSelectedIndex = idx;
+    const items = document.querySelectorAll('#cmd-palette-list .cmd-item');
+    items.forEach((el, i) => {
+        const active = i === idx;
+        el.className = `cmd-item px-3 py-2 rounded-lg flex items-center justify-between cursor-pointer transition ${active ? 'bg-[#0F240F] border border-[#107C10] text-white' : 'border border-transparent text-[#CCCCCC] hover:bg-[#1E1E1E]'}`;
+        const icon = el.querySelector('.cmd-icon');
+        const tag = el.querySelector('.cmd-tag');
+        if (icon) icon.className = `cmd-icon mdl-icon text-xs ${active ? 'text-brand' : 'text-[#777777]'}`;
+        if (tag) tag.className = `cmd-tag text-[10px] font-mono px-1.5 py-0.5 rounded ${active ? 'bg-[#107C10]/30 text-brand' : 'bg-[#1C1C1C] text-[#777777]'} shrink-0 ml-2 pointer-events-none`;
+    });
 }
 
 function executePaletteCommand(idx) {
@@ -1475,39 +1498,42 @@ function executePaletteCommand(idx) {
     closeCommandPalette();
     if (cmd && typeof cmd.run === 'function') {
         sendCmd('playClick');
-        setTimeout(() => {
-            cmd.run();
-        }, 50);
+        setTimeout(() => cmd.run(), 30);
     }
 }
 
 function onCommandPaletteKeyDown(e) {
     if (e.key === 'ArrowDown') {
         e.preventDefault();
+        e.stopPropagation();
         if (filteredCommands.length > 0) {
-            cmdSelectedIndex = (cmdSelectedIndex + 1) % filteredCommands.length;
-            renderCommandPaletteList();
+            updatePaletteHover((cmdSelectedIndex + 1) % filteredCommands.length);
+            document.querySelector(`#cmd-palette-list [data-cmd-idx="${cmdSelectedIndex}"]`)?.scrollIntoView({ block: 'nearest' });
         }
     } else if (e.key === 'ArrowUp') {
         e.preventDefault();
+        e.stopPropagation();
         if (filteredCommands.length > 0) {
-            cmdSelectedIndex = (cmdSelectedIndex - 1 + filteredCommands.length) % filteredCommands.length;
-            renderCommandPaletteList();
+            updatePaletteHover((cmdSelectedIndex - 1 + filteredCommands.length) % filteredCommands.length);
+            document.querySelector(`#cmd-palette-list [data-cmd-idx="${cmdSelectedIndex}"]`)?.scrollIntoView({ block: 'nearest' });
         }
     } else if (e.key === 'Enter') {
         e.preventDefault();
+        e.stopPropagation();
         if (filteredCommands.length > 0) {
             executePaletteCommand(cmdSelectedIndex);
         }
     } else if (e.key === 'Escape') {
         e.preventDefault();
+        e.stopPropagation();
         closeCommandPalette();
     }
 }
 
 // Глобальный перехват Ctrl + K на уровне window с захватом события
 window.addEventListener('keydown', (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+    const isK = e.code === 'KeyK' || e.key?.toLowerCase() === 'k' || e.key?.toLowerCase() === 'л';
+    if ((e.ctrlKey || e.metaKey) && isK) {
         e.preventDefault();
         e.stopPropagation();
         const modal = document.getElementById('cmd-palette-modal');
@@ -1517,7 +1543,11 @@ window.addEventListener('keydown', (e) => {
             openCommandPalette();
         }
     } else if (e.key === 'Escape') {
-        closeCommandPalette();
+        const modal = document.getElementById('cmd-palette-modal');
+        if (modal && modal.classList.contains('open')) {
+            e.preventDefault();
+            closeCommandPalette();
+        }
     }
 }, true);
 

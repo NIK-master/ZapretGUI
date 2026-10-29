@@ -24,12 +24,12 @@
 		</div>
 
 		<!-- WIZARD WINDOW: ПОЛНОЭКРАННЫЙ МАСТЕР ПЕРВОНАЧАЛЬНОЙ НАСТРОЙКИ 2.0 -->
-		<div id="wizard-overlay" class="modal-overlay fixed top-[45px] inset-x-0 bottom-0 bg-[#0A0A0A] z-[90] flex">
+		<div id="wizard-overlay" class="modal-overlay fixed inset-0 bg-[#0A0A0A] z-[90] flex">
 			<div class="w-full h-full flex flex-col justify-between overflow-hidden">
 
-				<!-- ВЕРХНЯЯ ПАНЕЛЬ: ЗАГОЛОВОК И ШАГОВЫЙ ПАЙПЛАЙН -->
-				<div class="bg-[#121212] border-b border-[#242424] px-7 py-4 flex flex-wrap items-center justify-between gap-3 shrink-0">
-					<div class="flex items-center gap-3">
+				<!-- ВЕРХНЯЯ ПАНЕЛЬ: ЗАГОЛОВОК, ШАГОВЫЙ ПАЙПЛАЙН И УПРАВЛЕНИЕ ОКНОМ -->
+				<div id="wizard-titlebar" class="bg-[#121212] border-b border-[#242424] px-6 py-3.5 flex flex-wrap items-center justify-between gap-3 shrink-0 cursor-move">
+					<div class="flex items-center gap-3 pointer-events-none">
 						<div class="w-8 h-8 rounded-lg bg-[#107C10]/20 border border-[#107C10] flex items-center justify-center text-brand">
 							<span class="mdl-icon text-sm">&#xE945;</span>
 						</div>
@@ -39,13 +39,22 @@
 						</div>
 					</div>
 
-					<!-- Кибер-степпер -->
-					<div class="flex items-center gap-1.5">
-						<div id="wstep-ind-0" class="wiz-stepper-item active">01. СТАРТ</div>
-						<div id="wstep-ind-1" class="wiz-stepper-item">02. ПРИВАТНОСТЬ</div>
-						<div id="wstep-ind-2" class="wiz-stepper-item">03. ЯДРА</div>
-						<div id="wstep-ind-3" class="wiz-stepper-item">04. ОПЦИИ</div>
-						<div id="wstep-ind-4" class="wiz-stepper-item">05. ДЕПЛОЙ</div>
+					<!-- Кибер-степпер + Кнопки окна -->
+					<div class="flex items-center gap-3">
+						<div class="flex items-center gap-1.5 pointer-events-none">
+							<div id="wstep-ind-0" class="wiz-stepper-item active">01. СТАРТ</div>
+							<div id="wstep-ind-1" class="wiz-stepper-item">02. ПРИВАТНОСТЬ</div>
+							<div id="wstep-ind-2" class="wiz-stepper-item">03. ЯДРА</div>
+							<div id="wstep-ind-3" class="wiz-stepper-item">04. ОПЦИИ</div>
+							<div id="wstep-ind-4" class="wiz-stepper-item">05. ДЕПЛОЙ</div>
+						</div>
+
+						<div class="h-4 w-[1px] bg-[#262626]"></div>
+
+						<div class="flex items-center gap-1">
+							<button onclick="sendCmd('windowMinimize')" class="w-[32px] h-[28px] rounded hover:bg-[#222222] text-[#999999] hover:text-white transition flex items-center justify-center cursor-pointer" title="Свернуть">—</button>
+							<button onclick="sendCmd('windowClose')" class="w-[32px] h-[28px] rounded hover:bg-[#222222] text-[#D13438] transition flex items-center justify-center cursor-pointer" title="Закрыть">✕</button>
+						</div>
 					</div>
 				</div>
 
@@ -287,7 +296,7 @@
 					</div>
 				</div>
 			</div>
-			
+
 			<div class="flex items-center gap-1.5">
 				<button onclick="openCommandPalette()" class="px-2.5 h-[26px] mr-1 rounded-md bg-[#1A1A1A] hover:bg-[#242424] border border-[#2C2C2C] text-[11px] font-mono text-[#999999] hover:text-white transition flex items-center gap-2 cursor-pointer" title="Быстрая палитра команд (Ctrl + K)">
 					<span class="mdl-icon text-[10px] text-brand">&#xE721;</span>
@@ -1520,7 +1529,7 @@
 
 			<!-- ОВЕРЛЕЙ 7: ПАЛИТРА БЫСТРЫХ КОМАНД (CTRL + K) -->
 			<div id="cmd-palette-modal" onclick="if(event.target===this) closeCommandPalette()" class="modal-overlay fixed inset-0 bg-black/75 backdrop-blur-sm z-[98] flex items-start justify-center pt-20 p-4">
-				<div class="modal-box bg-[#141414] border border-[#2E2E2E] rounded-xl w-[520px] shadow-2xl overflow-hidden flex flex-col" onmousedown="event.preventDefault()">
+				<div class="modal-box bg-[#141414] border border-[#2E2E2E] rounded-xl w-[520px] shadow-2xl overflow-hidden flex flex-col">
 					<div class="flex items-center px-3.5 py-2.5 border-b border-[#242424] bg-[#101010]">
 						<span class="mdl-icon text-sm text-brand mr-2.5">&#xE721;</span>
 						<input id="cmd-palette-input"
@@ -1529,8 +1538,8 @@
 							   onkeydown="onCommandPaletteKeyDown(event)"
 							   placeholder="Введите команду, вкладку или имя .bat профиля..."
 							   class="flex-1 bg-transparent text-xs text-white focus:outline-none select-text font-mono">
-							<kbd class="px-1.5 py-0.5 rounded bg-[#1C1C1C] border border-[#333333] text-[10px] font-mono text-[#777777]">ESC</kbd>
-						</div>
+						<kbd onclick="closeCommandPalette()" class="px-1.5 py-0.5 rounded bg-[#1C1C1C] hover:bg-[#2A2A2A] border border-[#333333] text-[10px] font-mono text-[#777777] cursor-pointer">ESC</kbd>
+					</div>
 					<div id="cmd-palette-list" class="max-h-[310px] overflow-y-auto p-1.5 space-y-1"></div>
 					<div class="px-3.5 py-1.5 bg-[#101010] border-t border-[#222222] flex items-center justify-between text-[10px] font-mono text-[#666666]">
 						<span>↑↓ Навигация • Enter / Клик — Выполнить</span>
