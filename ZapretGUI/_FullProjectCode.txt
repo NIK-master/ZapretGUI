@@ -73,7 +73,6 @@ using System.Windows;
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
         Title="Zapret for ADHD" Height="760" Width="1100"
-        Icon="Assets/freepik__толстая,_сплошная,_монолитная_буква_z_белого.png"
         WindowStyle="None" AllowsTransparency="True" Background="#09090B"
         WindowStartupLocation="CenterScreen"
         Closing="Window_Closing">
@@ -86,15 +85,16 @@ using System.Windows;
 // ФАЙЛ: MainWindow.xaml.cs
 ////////////////////////////////////////////////////////////////////////////////
 
+using Microsoft.Web.WebView2.Core;
 using System;
 using System.IO;
+using System.IO.Compression;
 using System.Threading.Tasks;
 using System.Windows;
-using Microsoft.Web.WebView2.Core;
-using ZapretGUI.Core;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using ZapretGUI.Core;
 
 namespace ZapretGUI
 {
@@ -171,13 +171,12 @@ namespace ZapretGUI
             };
 
             var baseDir = AppDomain.CurrentDomain.BaseDirectory;
-            var htmlPath = Path.Combine(baseDir, "wwwroot", "index.html");
+            var webRootDir = ExtractEmbeddedWebUI();
+            var htmlPath = Path.Combine(webRootDir, "index.html");
 
-            if (!File.Exists(htmlPath))
+            if (File.Exists(htmlPath))
             {
-                var projectRootHtml = Path.GetFullPath(Path.Combine(baseDir, @"..\..\..\wwwroot\index.html"));
-                if (File.Exists(projectRootHtml))
-                    htmlPath = projectRootHtml;
+                MainWebView.CoreWebView2.Navigate(new Uri(htmlPath).AbsoluteUri);
             }
 
             if (!File.Exists(htmlPath))
@@ -298,8 +297,24 @@ namespace ZapretGUI
         protected override void OnClosed(EventArgs e)
         {
             BypassController.Current.NetMonitor.Stop();
+            _webBridge?.Dispose();
             _trayIconManager.Dispose();
             base.OnClosed(e);
+        }
+        private string ExtractEmbeddedWebUI()
+        {
+            var tempDir = Path.Combine(Path.GetTempPath(), "ZapretGUI_UI_" + AppConstants.AppVersion);
+            if (!Directory.Exists(tempDir))
+            {
+                Directory.CreateDirectory(tempDir);
+                using var stream = System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream("wwwroot.zip");
+                if (stream != null)
+                {
+                    using var archive = new System.IO.Compression.ZipArchive(stream);
+                    archive.ExtractToDirectory(tempDir);
+                }
+            }
+            return tempDir;
         }
     }
 }
@@ -345,6 +360,7 @@ namespace ZapretGUI.Core
 
 using System;
 using System.Diagnostics;
+using System.IO;
 using System.Media;
 using System.Threading.Tasks;
 
@@ -359,11 +375,27 @@ namespace ZapretGUI.Core
         {
             try
             {
-                _clickPlayer = new SoundPlayer("Assets/Sounds/click.wav");
-                _successPlayer = new SoundPlayer("Assets/Sounds/success.wav");
+                // Загружаем звук клика прямо из памяти .exe
+                var clickStreamInfo = System.Windows.Application.GetResourceStream(new Uri("pack://application:,,,/Assets/Sounds/click.wav"));
+                if (clickStreamInfo != null)
+                {
+                    var ms = new MemoryStream();
+                    clickStreamInfo.Stream.CopyTo(ms);
+                    ms.Position = 0;
+                    _clickPlayer = new SoundPlayer(ms);
+                    _clickPlayer.LoadAsync();
+                }
 
-                _clickPlayer.LoadAsync();
-                _successPlayer.LoadAsync();
+                // Загружаем звук успеха прямо из памяти .exe
+                var successStreamInfo = System.Windows.Application.GetResourceStream(new Uri("pack://application:,,,/Assets/Sounds/success.wav"));
+                if (successStreamInfo != null)
+                {
+                    var ms = new MemoryStream();
+                    successStreamInfo.Stream.CopyTo(ms);
+                    ms.Position = 0;
+                    _successPlayer = new SoundPlayer(ms);
+                    _successPlayer.LoadAsync();
+                }
             }
             catch (Exception ex)
             {
@@ -371,21 +403,8 @@ namespace ZapretGUI.Core
             }
         }
 
-        public static void PlayClick()
-        {
-            Task.Run(() =>
-            {
-                try { _clickPlayer?.Play(); } catch { }
-            });
-        }
-
-        public static void PlaySuccess()
-        {
-            Task.Run(() =>
-            {
-                try { _successPlayer?.Play(); } catch { }
-            });
-        }
+        public static void PlayClick() => Task.Run(() => { try { _clickPlayer?.Play(); } catch { } });
+        public static void PlaySuccess() => Task.Run(() => { try { _successPlayer?.Play(); } catch { } });
     }
 }
 
@@ -1115,6 +1134,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -1124,6 +1144,13 @@ namespace ZapretGUI.Core
 {
     public class ModManager
     {
+        private static readonly Regex _sanitizeIdRegex = new(@"[^a-z0-9_\-]", RegexOptions.Compiled);
+        private static readonly JsonSerializerOptions _jsonOptions = new()
+        {
+            PropertyNameCaseInsensitive = true,
+            WriteIndented = true
+        };
+
         private readonly string _modsBasePath;
         private readonly string _strategiesPath;
         private readonly string _listsPath;
@@ -1139,14 +1166,9 @@ namespace ZapretGUI.Core
 
         public void InitializeFolders()
         {
-            if (!Directory.Exists(_modsBasePath)) 
-                Directory.CreateDirectory(_modsBasePath);
-
-            if (!Directory.Exists(_strategiesPath)) 
-                Directory.CreateDirectory(_strategiesPath);
-
-            if (!Directory.Exists(_listsPath)) 
-                Directory.CreateDirectory(_listsPath);
+            Directory.CreateDirectory(_modsBasePath);
+            Directory.CreateDirectory(_strategiesPath);
+            Directory.CreateDirectory(_listsPath);
         }
 
         public bool IsModIdTaken(string id)
@@ -1168,7 +1190,7 @@ namespace ZapretGUI.Core
                 {
                     try
                     {
-                        var meta = JsonSerializer.Deserialize<ModMetaData>(File.ReadAllText(jsonPath), new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                        var meta = JsonSerializer.Deserialize<ModMetaData>(File.ReadAllText(jsonPath), _jsonOptions);
                         if (meta != null && string.Equals(meta.UniqueId, normId, StringComparison.OrdinalIgnoreCase))
                             return true;
                     }
@@ -1181,21 +1203,21 @@ namespace ZapretGUI.Core
 
         public static string SanitizeModId(string raw)
         {
-            if (string.IsNullOrWhiteSpace(raw)) 
+            if (string.IsNullOrWhiteSpace(raw))
                 return "";
 
             var clean = raw.Trim().ToLowerInvariant().Replace(" ", "_");
-            clean = Regex.Replace(clean, @"[^a-z0-9_\-]", "");
+            clean = _sanitizeIdRegex.Replace(clean, "");
             return clean.Trim('_');
         }
 
         public string GenerateUniqueModId(string baseName = "mod")
         {
             var prefix = SanitizeModId(baseName);
-            if (string.IsNullOrEmpty(prefix)) 
+            if (string.IsNullOrEmpty(prefix))
                 prefix = "mod";
 
-            if (prefix.Length > 18) 
+            if (prefix.Length > 18)
                 prefix = prefix.Substring(0, 18).TrimEnd('_');
 
             while (true)
@@ -1204,6 +1226,69 @@ namespace ZapretGUI.Core
                 var candidate = $"{prefix}_{shortHash}";
                 if (!IsModIdTaken(candidate))
                     return candidate;
+            }
+        }
+
+        public async Task<ModMetaData> ImportModFromArchiveAsync(string archiveFilePath, string? fallbackName = null)
+        {
+            InitializeFolders();
+            var tempDir = Path.Combine(Path.GetTempPath(), "ZapretGUI_Mod_" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                Directory.CreateDirectory(tempDir);
+                await Task.Run(() => ZipFile.ExtractToDirectory(archiveFilePath, tempDir));
+
+                var jsonFiles = Directory.GetFiles(tempDir, "mod.json", SearchOption.AllDirectories);
+                if (jsonFiles.Length == 0)
+                    throw new Exception("В архиве не найден файл mod.json. Убедитесь, что это корректный мод.");
+
+                var jsonPath = jsonFiles[0];
+                var modRootPath = Path.GetDirectoryName(jsonPath)!;
+
+                var meta = JsonSerializer.Deserialize<ModMetaData>(await File.ReadAllTextAsync(jsonPath), _jsonOptions)
+                           ?? throw new Exception("Файл mod.json поврежден.");
+
+                var baseCandidate = !string.IsNullOrWhiteSpace(meta.UniqueId)
+                    ? SanitizeModId(meta.UniqueId)
+                    : SanitizeModId(meta.Name);
+
+                if (string.IsNullOrEmpty(baseCandidate))
+                    baseCandidate = SanitizeModId(fallbackName ?? Path.GetFileNameWithoutExtension(archiveFilePath));
+
+                var finalUniqueId = IsModIdTaken(baseCandidate)
+                    ? GenerateUniqueModId(baseCandidate)
+                    : baseCandidate;
+
+                meta.UniqueId = finalUniqueId;
+                await File.WriteAllTextAsync(jsonPath, JsonSerializer.Serialize(meta, _jsonOptions));
+
+                var folderType = meta.IsBatStrategy ? "strategies" : "lists";
+                var destPath = Path.GetFullPath(Path.Combine(_modsBasePath, folderType, finalUniqueId));
+                var destRootWithSep = destPath + Path.DirectorySeparatorChar;
+                Directory.CreateDirectory(destPath);
+
+                await Task.Run(() =>
+                {
+                    foreach (var file in Directory.GetFiles(modRootPath, "*.*", SearchOption.AllDirectories))
+                    {
+                        var relativePath = Path.GetRelativePath(modRootPath, file);
+                        var targetPath = Path.GetFullPath(Path.Combine(destPath, relativePath));
+
+                        // Защита от Zip-Slip
+                        if (!targetPath.StartsWith(destRootWithSep, StringComparison.OrdinalIgnoreCase))
+                            continue;
+
+                        Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
+                        File.Copy(file, targetPath, true);
+                    }
+                });
+
+                return meta;
+            }
+            finally
+            {
+                if (Directory.Exists(tempDir))
+                    try { Directory.Delete(tempDir, true); } catch { }
             }
         }
 
@@ -1229,7 +1314,7 @@ namespace ZapretGUI.Core
                     try
                     {
                         var json = await File.ReadAllTextAsync(jsonPath);
-                        var meta = JsonSerializer.Deserialize<ModMetaData>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                        var meta = JsonSerializer.Deserialize<ModMetaData>(json, _jsonOptions);
 
                         if (meta != null)
                         {
@@ -1549,14 +1634,32 @@ namespace ZapretGUI.Core
             {
                 try
                 {
-                    process.Kill();
-                    process.WaitForExit();
+                    if (!process.HasExited)
+                    {
+                        process.Kill(entireProcessTree: true);
+                        process.WaitForExit(1500);
+                    }
                 }
                 catch (Exception ex)
                 {
                     Debug.WriteLine($"Ошибка при завершении процесса {processName}: {ex.Message}");
                 }
+                finally
+                {
+                    process.Dispose();
+                }
             }
+        }
+
+        public static bool IsProcessRunning(string processName)
+        {
+            var processes = Process.GetProcessesByName(processName);
+            bool running = processes.Length > 0;
+            foreach (var p in processes)
+            {
+                p.Dispose();
+            }
+            return running;
         }
     }
 }
@@ -2070,6 +2173,8 @@ namespace ZapretGUI.Core
     {
         private readonly string _proxyPath;
         private Process? _process;
+        private DateTime _lastCheckTime = DateTime.MinValue;
+        private bool _cachedRunning = false;
 
         public event Action<string>? LogMessage;
 
@@ -2103,15 +2208,19 @@ namespace ZapretGUI.Core
             _process.Start();
             _process.BeginOutputReadLine();
             _process.BeginErrorReadLine();
+
+            _cachedRunning = true;
+            _lastCheckTime = DateTime.UtcNow;
         }
 
         public void Stop()
         {
             try
             {
-                if (_process != null && !_process.HasExited)
+                if (_process != null)
                 {
-                    _process.Kill();
+                    if (!_process.HasExited)
+                        _process.Kill(entireProcessTree: true);
                     _process.Dispose();
                     _process = null;
                 }
@@ -2120,10 +2229,31 @@ namespace ZapretGUI.Core
             {
                 Debug.WriteLine($"Ошибка остановки процесса TgProxy: {ex.Message}");
             }
+
             ProcessHelper.KillProcessesByName(AppConstants.TgProxyProcessName);
+            _cachedRunning = false;
+            _lastCheckTime = DateTime.UtcNow;
         }
 
-        public bool IsRunning => Process.GetProcessesByName(AppConstants.TgProxyProcessName).Length > 0;
+        public bool IsRunning
+        {
+            get
+            {
+                try
+                {
+                    if (_process != null && !_process.HasExited)
+                        return true;
+                }
+                catch { }
+
+                if ((DateTime.UtcNow - _lastCheckTime).TotalSeconds < 2.5)
+                    return _cachedRunning;
+
+                _cachedRunning = ProcessHelper.IsProcessRunning(AppConstants.TgProxyProcessName);
+                _lastCheckTime = DateTime.UtcNow;
+                return _cachedRunning;
+            }
+        }
     }
 }
 
@@ -2161,24 +2291,7 @@ namespace ZapretGUI.Core
             _trayMenu.WindowStartupLocation = WindowStartupLocation.Manual;
 
             _notifyIcon = new System.Windows.Forms.NotifyIcon();
-            try
-            {
-                var iconUri = new Uri("pack://application:,,,/Assets/freepik__толстая,_сплошная,_монолитная_буква_z_белого.png");
-                var resourceInfo = System.Windows.Application.GetResourceStream(iconUri);
-                if (resourceInfo != null)
-                {
-                    using var stream = resourceInfo.Stream;
-                    using var bitmap = new System.Drawing.Bitmap(stream);
-                    _hIcon = bitmap.GetHicon();
-                    _notifyIcon.Icon = System.Drawing.Icon.FromHandle(_hIcon);
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Ошибка загрузки иконки в трей: {ex.Message}");
-                _notifyIcon.Icon = System.Drawing.SystemIcons.Shield;
-            }
-
+            _notifyIcon.Icon = System.Drawing.SystemIcons.Shield;
             _notifyIcon.Text = "Zapret for ADHD";
             _notifyIcon.Visible = true;
 
@@ -2670,6 +2783,7 @@ namespace ZapretGUI.Core
                     if (hasFilesAtRoot)
                         rootDirToStrip = null;
 
+                    var fullExtractRoot = Path.GetFullPath(extractPath + Path.DirectorySeparatorChar);
                     foreach (var entry in archive.Entries)
                     {
                         var entryName = entry.FullName;
@@ -2680,6 +2794,9 @@ namespace ZapretGUI.Core
                             continue;
 
                         var destinationPath = Path.GetFullPath(Path.Combine(extractPath, entryName));
+                        if (!destinationPath.StartsWith(fullExtractRoot, StringComparison.OrdinalIgnoreCase))
+                            continue;
+
                         Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
 
                         entry.ExtractToFile(destinationPath, overwrite: true);
@@ -2832,7 +2949,7 @@ using Microsoft.Web.WebView2.Wpf;
 
 namespace ZapretGUI.Core
 {
-    public class WebBridge
+    public class WebBridge : IDisposable
     {
         [DllImport("user32.dll")]
         private static extern bool ReleaseCapture();
@@ -2872,7 +2989,8 @@ namespace ZapretGUI.Core
 
             UIHelper.WebConfirmHandler = (title, message, confirmText, isDanger) =>
             {
-                _pendingConfirmTcs = new TaskCompletionSource<bool>();
+                _pendingConfirmTcs?.TrySetResult(false);
+                _pendingConfirmTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
                 SendEvent("askConfirm", new { title, message, confirmText, isDanger });
                 return _pendingConfirmTcs.Task;
             };
@@ -3782,61 +3900,12 @@ namespace ZapretGUI.Core
 
             if (string.IsNullOrEmpty(selectedFile)) return;
 
-            var tempDir = Path.Combine(Path.GetTempPath(), "ZapretGUI_Mod_" + Guid.NewGuid().ToString("N"));
             try
             {
                 _isInternalFileOp = true;
-                Directory.CreateDirectory(tempDir);
-                await Task.Run(() => ZipFile.ExtractToDirectory(selectedFile, tempDir));
-
-                var jsonFiles = Directory.GetFiles(tempDir, "mod.json", SearchOption.AllDirectories);
-                if (jsonFiles.Length == 0)
-                {
-                    SendEvent("alert", new { title = "Ошибка импорта", message = "В архиве не найден файл mod.json. Убедитесь, что это корректный мод.", isError = true });
-                    return;
-                }
-
-                var jsonPath = jsonFiles[0];
-                var modRootPath = Path.GetDirectoryName(jsonPath)!;
-
-                var meta = JsonSerializer.Deserialize<ModMetaData>(await File.ReadAllTextAsync(jsonPath), _jsonOptions);
-                if (meta == null)
-                {
-                    SendEvent("alert", new { title = "Ошибка импорта", message = "Файл mod.json поврежден.", isError = true });
-                    return;
-                }
-
-                var baseCandidate = !string.IsNullOrWhiteSpace(meta.UniqueId)
-                    ? ModManager.SanitizeModId(meta.UniqueId)
-                    : ModManager.SanitizeModId(meta.Name);
-
-                if (string.IsNullOrEmpty(baseCandidate))
-                    baseCandidate = ModManager.SanitizeModId(Path.GetFileNameWithoutExtension(selectedFile));
-
-                var finalUniqueId = _modManager.IsModIdTaken(baseCandidate)
-                    ? _modManager.GenerateUniqueModId(baseCandidate)
-                    : baseCandidate;
-
-                meta.UniqueId = finalUniqueId;
-                await File.WriteAllTextAsync(jsonPath, JsonSerializer.Serialize(meta, new JsonSerializerOptions { WriteIndented = true }));
-
-                var folderType = meta.IsBatStrategy ? "strategies" : "lists";
-                var destPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, folderType, finalUniqueId);
-                Directory.CreateDirectory(destPath);
-
-                await Task.Run(() =>
-                {
-                    foreach (var file in Directory.GetFiles(modRootPath, "*.*", SearchOption.AllDirectories))
-                    {
-                        var relativePath = file.Substring(modRootPath.Length + 1);
-                        var targetPath = Path.Combine(destPath, relativePath);
-                        Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
-                        File.Copy(file, targetPath, true);
-                    }
-                });
-
+                var meta = await _modManager.ImportModFromArchiveAsync(selectedFile);
                 await BroadcastModsAndProfilesAsync();
-                SendEvent("alert", new { title = "Импорт завершен", message = $"Мод «{meta.Name}» (ID: {finalUniqueId}) успешно импортирован!", isError = false });
+                SendEvent("alert", new { title = "Импорт завершен", message = $"Мод «{meta.Name}» (ID: {meta.UniqueId}) успешно импортирован!", isError = false });
             }
             catch (Exception ex)
             {
@@ -3845,8 +3914,6 @@ namespace ZapretGUI.Core
             finally
             {
                 _isInternalFileOp = false;
-                if (Directory.Exists(tempDir))
-                    try { Directory.Delete(tempDir, true); } catch { }
             }
         }
 
@@ -3862,54 +3929,15 @@ namespace ZapretGUI.Core
             if (ext == ".zip" || ext == ".netfix-mod")
             {
                 var tempZip = Path.Combine(Path.GetTempPath(), "ZapretDrop_" + Guid.NewGuid().ToString("N") + ext);
-                var tempDir = Path.Combine(Path.GetTempPath(), "ZapretGUI_Drop_" + Guid.NewGuid().ToString("N"));
                 try
                 {
                     _isInternalFileOp = true;
                     await File.WriteAllBytesAsync(tempZip, bytes);
-                    Directory.CreateDirectory(tempDir);
-                    await Task.Run(() => ZipFile.ExtractToDirectory(tempZip, tempDir));
-
-                    var jsonFiles = Directory.GetFiles(tempDir, "mod.json", SearchOption.AllDirectories);
-                    if (jsonFiles.Length == 0)
-                    {
-                        SendEvent("alert", new { title = "Ошибка Drag & Drop", message = "В архиве не найден файл mod.json!", isError = true });
-                        return;
-                    }
-
-                    var jsonPath = jsonFiles[0];
-                    var modRootPath = Path.GetDirectoryName(jsonPath)!;
-                    var meta = JsonSerializer.Deserialize<ModMetaData>(await File.ReadAllTextAsync(jsonPath), _jsonOptions);
-                    if (meta == null) return;
-
-                    var baseCandidate = !string.IsNullOrWhiteSpace(meta.UniqueId)
-                        ? ModManager.SanitizeModId(meta.UniqueId)
-                        : ModManager.SanitizeModId(meta.Name);
-                    if (string.IsNullOrEmpty(baseCandidate))
-                        baseCandidate = ModManager.SanitizeModId(Path.GetFileNameWithoutExtension(fileName));
-
-                    var finalId = _modManager.IsModIdTaken(baseCandidate)
-                        ? _modManager.GenerateUniqueModId(baseCandidate)
-                        : baseCandidate;
-
-                    meta.UniqueId = finalId;
-                    await File.WriteAllTextAsync(jsonPath, JsonSerializer.Serialize(meta, new JsonSerializerOptions { WriteIndented = true }));
-
-                    var folderType = meta.IsBatStrategy ? "strategies" : "lists";
-                    var destPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, folderType, finalId);
-                    Directory.CreateDirectory(destPath);
-
-                    foreach (var file in Directory.GetFiles(modRootPath, "*.*", SearchOption.AllDirectories))
-                    {
-                        var rel = file.Substring(modRootPath.Length + 1);
-                        var target = Path.Combine(destPath, rel);
-                        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-                        File.Copy(file, target, true);
-                    }
+                    var meta = await _modManager.ImportModFromArchiveAsync(tempZip, Path.GetFileNameWithoutExtension(fileName));
 
                     await BroadcastModsAndProfilesAsync();
                     AudioHelper.PlaySuccess();
-                    SendEvent("alert", new { title = "Мод импортирован", message = $"Архив «{meta.Name}» (ID: {finalId}) успешно установлен через Drag & Drop!", isError = false });
+                    SendEvent("alert", new { title = "Мод импортирован", message = $"Архив «{meta.Name}» (ID: {meta.UniqueId}) успешно установлен через Drag & Drop!", isError = false });
                 }
                 catch (Exception ex)
                 {
@@ -3919,7 +3947,6 @@ namespace ZapretGUI.Core
                 {
                     _isInternalFileOp = false;
                     try { if (File.Exists(tempZip)) File.Delete(tempZip); } catch { }
-                    try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true); } catch { }
                 }
             }
             else if (ext == ".bat" || ext == ".txt")
@@ -4031,20 +4058,7 @@ namespace ZapretGUI.Core
             SendEvent("pingResult", new { ping = pingMs });
         }
 
-        private List<string> GetBatProfiles()
-        {
-            var folderPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.CoreFilesDirectory);
-            if (!Directory.Exists(folderPath)) return new List<string> { "general.bat" };
-
-            return Directory.GetFiles(folderPath, "*.bat")
-                .Select(Path.GetFileName)
-                .Where(name => !string.IsNullOrEmpty(name) &&
-                              (name.StartsWith("general", StringComparison.OrdinalIgnoreCase) ||
-                               name.StartsWith("mod_", StringComparison.OrdinalIgnoreCase)))
-                .Cast<string>()
-                .OrderBy(n => n)
-                .ToList();
-        }
+        private List<string> GetBatProfiles() => BypassController.Current.Zapret.GetAvailableProfiles();
 
         private async Task HandleToggleBypassAsync(JsonElement root)
         {
@@ -4246,6 +4260,13 @@ namespace ZapretGUI.Core
 
             SettingsManager.Save();
         }
+        public void Dispose()
+        {
+            _watcherDebounceCts?.Cancel();
+            _watcherDebounceCts?.Dispose();
+            _modsWatcher?.Dispose();
+            _pendingConfirmTcs?.TrySetResult(false);
+        }
     }
 }
 
@@ -4254,6 +4275,7 @@ namespace ZapretGUI.Core
 ////////////////////////////////////////////////////////////////////////////////
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -4265,15 +4287,39 @@ namespace ZapretGUI.Core
 {
     public class ZapretManager : IBypassService
     {
+        private static readonly Regex _winwsCmdRegex = new($@"{AppConstants.ZapretProcessName}(?:\.exe)?[""']?\s*(.*)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex _standardBatCmdRegex = new(@"^(@?echo|chcp|cd|pushd|popd|set|title|cls|color|mode|goto|call|if|for|pause|timeout|:)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex _tokenSplitRegex = new(@"[\""].+?[\""]|[^ ]+", RegexOptions.Compiled);
+        private static readonly Regex _fileParamRegex = new(@"^--(hostlist|hostlist-exclude|ipset|ipset-exclude|dpi-desync-fake-tls|dpi-desync-fake-quic|dpi-desync-fake-unknown-udp|dpi-desync-split-seqovl-pattern)=(.+)$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex _unexpandedVarRegex = new(@"%[a-zA-Z0-9_]+%", RegexOptions.Compiled);
+
         private readonly string _basePath;
         private Process? _process;
+        private DateTime _lastCheckTime = DateTime.MinValue;
+        private bool _cachedRunning = false;
 
         public event Action<string>? LogMessage;
-
 
         public ZapretManager()
         {
             _basePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.CoreFilesDirectory);
+        }
+
+        public List<string> GetAvailableProfiles()
+        {
+            if (!Directory.Exists(_basePath))
+                return new List<string> { "general.bat" };
+
+            var list = Directory.GetFiles(_basePath, "*.bat")
+                .Select(Path.GetFileName)
+                .Where(name => !string.IsNullOrEmpty(name) &&
+                              (name.StartsWith("general", StringComparison.OrdinalIgnoreCase) ||
+                               name.StartsWith("mod_", StringComparison.OrdinalIgnoreCase)))
+                .Cast<string>()
+                .OrderBy(n => n)
+                .ToList();
+
+            return list.Count > 0 ? list : new List<string> { "general.bat" };
         }
 
         private string GetSourceDisplayName(string profileName)
@@ -4329,13 +4375,12 @@ namespace ZapretGUI.Core
                         winwsFound = true;
                         winwsStartLine = lineNum;
 
-                        var match = Regex.Match(trimmed, $@"{AppConstants.ZapretProcessName}(?:\.exe)?[""']?\s*(.*)", RegexOptions.IgnoreCase);
+                        var match = _winwsCmdRegex.Match(trimmed);
                         trimmed = match.Success ? match.Groups[1].Value.Trim() : "";
                     }
                     else
                     {
-                        var isStandardBatCmd = Regex.IsMatch(trimmed, @"^(@?echo|chcp|cd|pushd|popd|set|title|cls|color|mode|goto|call|if|for|pause|timeout|:)\b", RegexOptions.IgnoreCase);
-                        if (!isStandardBatCmd)
+                        if (!_standardBatCmdRegex.IsMatch(trimmed))
                             throw new Exception($"Синтаксическая ошибка в {sourceName} [Строка {lineNum}]:\nНеизвестная команда «{trimmed}».\nОжидался вызов {AppConstants.ZapretProcessName}.exe или стандартная инструкция Batch.");
                         continue;
                     }
@@ -4352,7 +4397,7 @@ namespace ZapretGUI.Core
 
                     if (!string.IsNullOrWhiteSpace(cleanLine))
                     {
-                        var tokens = Regex.Matches(cleanLine, @"[\""].+?[\""]|[^ ]+")
+                        var tokens = _tokenSplitRegex.Matches(cleanLine)
                                           .Select(m => m.Value.Trim())
                                           .ToList();
 
@@ -4366,7 +4411,7 @@ namespace ZapretGUI.Core
 
                             if (checkReferencedFiles && Directory.Exists(zapretBasePath))
                             {
-                                var fileMatch = Regex.Match(token, @"^--(hostlist|hostlist-exclude|ipset|ipset-exclude|dpi-desync-fake-tls|dpi-desync-fake-quic|dpi-desync-fake-unknown-udp|dpi-desync-split-seqovl-pattern)=(.+)$", RegexOptions.IgnoreCase);
+                                var fileMatch = _fileParamRegex.Match(token);
                                 if (fileMatch.Success)
                                 {
                                     var paramName = fileMatch.Groups[1].Value;
@@ -4415,7 +4460,7 @@ namespace ZapretGUI.Core
             if (string.IsNullOrEmpty(arguments))
                 throw new Exception($"Ошибка в {sourceName} [Строка {winwsStartLine}]:\nКоманда «{AppConstants.ZapretProcessName}» вызвана без параметров фильтрации.");
 
-            var unexpandedVar = Regex.Match(arguments, @"%[a-zA-Z0-9_]+%");
+            var unexpandedVar = _unexpandedVarRegex.Match(arguments);
             if (unexpandedVar.Success)
                 throw new Exception($"Ошибка в {sourceName}:\nОбнаружена неизвестная переменная «{unexpandedVar.Value}», которая не поддерживается в прямом запуске Zapret.");
 
@@ -4457,11 +4502,11 @@ namespace ZapretGUI.Core
 
             _process = new Process { StartInfo = startInfo };
 
-            var errorOutputs = new List<string>();
+            var errorOutputs = new ConcurrentQueue<string>();
 
             _process.OutputDataReceived += (s, e) =>
             {
-                if (string.IsNullOrEmpty(e.Data)) 
+                if (string.IsNullOrEmpty(e.Data))
                     return;
 
                 var line = e.Data;
@@ -4481,7 +4526,7 @@ namespace ZapretGUI.Core
             {
                 if (!string.IsNullOrEmpty(e.Data))
                 {
-                    errorOutputs.Add(e.Data);
+                    errorOutputs.Enqueue(e.Data);
                     LogMessage?.Invoke($"[Zapret ERR] {e.Data}");
                 }
             };
@@ -4492,21 +4537,26 @@ namespace ZapretGUI.Core
 
             if (_process.WaitForExit(350))
             {
-                var errDetails = errorOutputs.Count > 0
+                var errDetails = !errorOutputs.IsEmpty
                     ? string.Join(" | ", errorOutputs)
                     : $"Код завершения: {_process.ExitCode}";
 
+                _cachedRunning = false;
                 throw new Exception($"Ядро Zapret отвергло конфигурацию в {sourceName}!\nПричина от движка winws: {errDetails}");
             }
+
+            _cachedRunning = true;
+            _lastCheckTime = DateTime.UtcNow;
         }
 
         public void Stop()
         {
             try
             {
-                if (_process != null && !_process.HasExited)
+                if (_process != null)
                 {
-                    _process.Kill();
+                    if (!_process.HasExited)
+                        _process.Kill(entireProcessTree: true);
                     _process.Dispose();
                     _process = null;
                 }
@@ -4517,10 +4567,29 @@ namespace ZapretGUI.Core
             }
 
             ProcessHelper.KillProcessesByName(AppConstants.ZapretProcessName);
+            _cachedRunning = false;
+            _lastCheckTime = DateTime.UtcNow;
         }
 
-        public bool IsRunning 
-            => Process.GetProcessesByName(AppConstants.ZapretProcessName).Length > 0;
+        public bool IsRunning
+        {
+            get
+            {
+                try
+                {
+                    if (_process != null && !_process.HasExited)
+                        return true;
+                }
+                catch { }
+
+                if ((DateTime.UtcNow - _lastCheckTime).TotalSeconds < 2.5)
+                    return _cachedRunning;
+
+                _cachedRunning = ProcessHelper.IsProcessRunning(AppConstants.ZapretProcessName);
+                _lastCheckTime = DateTime.UtcNow;
+                return _cachedRunning;
+            }
+        }
     }
 }
 
@@ -5241,18 +5310,7 @@ namespace ZapretGUI.Views
         private async System.Threading.Tasks.Task CycleProfileAsync(int dir)
         {
             AudioHelper.PlayClick();
-            var folderPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.CoreFilesDirectory);
-            if (!System.IO.Directory.Exists(folderPath)) return;
-
-            var profiles = System.IO.Directory.GetFiles(folderPath, "*.bat")
-                .Select(System.IO.Path.GetFileName)
-                .Where(name => !string.IsNullOrEmpty(name) &&
-                              (name.StartsWith("general", StringComparison.OrdinalIgnoreCase) ||
-                               name.StartsWith("mod_", StringComparison.OrdinalIgnoreCase)))
-                .Cast<string>()
-                .OrderBy(n => n)
-                .ToList();
-
+            var profiles = BypassController.Current.Zapret.GetAvailableProfiles();
             if (profiles.Count == 0) return;
 
             var current = SettingsManager.Current.SelectedProfileName ?? "general.bat";
@@ -8540,6 +8598,14 @@ function onMainToggleClick() {
                 () => {
                     openConfigModal();
                     toggleSmartScan();
+                },
+                false,
+                () => {
+                    sendCmd('toggleBypass', {
+                        profile: appState.selectedProfile,
+                        useZapret,
+                        useProxy
+                    });
                 }
             );
             return;
@@ -8854,14 +8920,27 @@ function showAlert(title, message, isError = false) {
     document.getElementById('confirm-modal').classList.add('open');
 }
 
-function showConfirm(title, message, confirmText, onConfirm, isDanger = false) {
+let cancelCallback = null;
+
+function showConfirm(title, message, okText = 'Да', onConfirm = null, isDanger = false, onCancel = null) {
+    if (isBackendConfirm && onConfirm !== null) {
+        sendCmd('confirmResponse', { accepted: false });
+        isBackendConfirm = false;
+    }
+
     confirmCallback = onConfirm;
+    cancelCallback = onCancel;
     document.getElementById('confirm-title').innerText = title;
+    document.getElementById('confirm-title').className = `text-base font-bold mb-2 ${isDanger ? 'text-[#F44336]' : 'text-white'}`;
     document.getElementById('confirm-msg').innerText = message;
-    document.getElementById('confirm-cancel-btn').style.display = 'inline-block';
+
+    const cancelBtn = document.getElementById('confirm-cancel-btn');
+    cancelBtn.classList.remove('hidden');
+
     const okBtn = document.getElementById('confirm-ok-btn');
-    okBtn.innerText = confirmText;
-    okBtn.className = `px-4 py-1.5 rounded-md text-xs font-semibold text-white transition cursor-pointer ${isDanger ? 'bg-[#D13438] hover:opacity-90' : 'btn-brand'}`;
+    okBtn.innerText = okText;
+    okBtn.className = `px-4 py-1.5 rounded-md text-xs font-semibold text-white cursor-pointer ${isDanger ? 'bg-[#D13438] hover:opacity-90' : 'btn-brand'}`;
+
     document.getElementById('confirm-modal').classList.add('open');
 }
 
@@ -8875,10 +8954,15 @@ function closeConfirmModal(accepted) {
         return;
     }
 
-    if (accepted && confirmCallback) {
-        const cb = confirmCallback;
-        confirmCallback = null;
-        cb();
+    const cbOk = confirmCallback;
+    const cbCancel = cancelCallback;
+    confirmCallback = null;
+    cancelCallback = null;
+
+    if (accepted && typeof cbOk === 'function') {
+        cbOk();
+    } else if (!accepted && typeof cbCancel === 'function') {
+        cbCancel();
     }
 }
 

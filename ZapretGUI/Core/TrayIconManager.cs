@@ -28,24 +28,7 @@ namespace ZapretGUI.Core
             _trayMenu.WindowStartupLocation = WindowStartupLocation.Manual;
 
             _notifyIcon = new System.Windows.Forms.NotifyIcon();
-            try
-            {
-                var iconUri = new Uri("pack://application:,,,/Assets/freepik__толстая,_сплошная,_монолитная_буква_z_белого.png");
-                var resourceInfo = System.Windows.Application.GetResourceStream(iconUri);
-                if (resourceInfo != null)
-                {
-                    using var stream = resourceInfo.Stream;
-                    using var bitmap = new System.Drawing.Bitmap(stream);
-                    _hIcon = bitmap.GetHicon();
-                    _notifyIcon.Icon = System.Drawing.Icon.FromHandle(_hIcon);
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Ошибка загрузки иконки в трей: {ex.Message}");
-                _notifyIcon.Icon = System.Drawing.SystemIcons.Shield;
-            }
-
+            _notifyIcon.Icon = System.Drawing.SystemIcons.Shield;
             _notifyIcon.Text = "Zapret for ADHD";
             _notifyIcon.Visible = true;
 

@@ -1,192 +1,57 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <UseWPF>true</UseWPF>
-	<UseWindowsForms>true</UseWindowsForms>
-    <ApplicationManifest>app.manifest</ApplicationManifest>
-  </PropertyGroup>
+	<PropertyGroup>
+		<OutputType>WinExe</OutputType>
+		<TargetFramework>net8.0-windows</TargetFramework>
+		<UseWPF>true</UseWPF>
+		<UseWindowsForms>true</UseWindowsForms>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
 
-  <ItemGroup>
-    <None Remove="Assets\freepik__толстая,_сплошная,_монолитная_буква_z_белого.png" />
-  </ItemGroup>
+		<!-- Настройки сборки в ОДИН чистый .exe -->
+		<PublishSingleFile>true</PublishSingleFile>
+		<SelfContained>false</SelfContained>
+		<IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+		<PublishTrimmed>false</PublishTrimmed>
 
-  <ItemGroup>
-    <Content Include="freepik__толстая,_сплошная,_монолитная_буква_z_белого.ico" />
-  </ItemGroup>
+		<!-- Отключаем генерацию лишних файлов (.pdb, .xml) в релизе -->
+		<DebugType Condition="'$(Configuration)' == 'Release'">none</DebugType>
+		<DebugSymbols Condition="'$(Configuration)' == 'Release'">false</DebugSymbols>
+		<GenerateDocumentationFile>false</GenerateDocumentationFile>
 
-  <ItemGroup>
-    <Folder Include="ZapretFiles\" />
-  </ItemGroup>
+		<!-- Упаковываем нативный WebView2Loader.dll внутрь сборки -->
+		<WebView2LoaderPreference>Static</WebView2LoaderPreference>
+	</PropertyGroup>
 
-  <ItemGroup>
-    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4258.31" />
-    <PackageReference Include="WPF-UI" Version="4.3.0" />
-  </ItemGroup>
+	<!-- WebView2 зависимость -->
+	<ItemGroup>
+		<PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2903.40" />
+	</ItemGroup>
 
-  <ItemGroup>
-	<Content Include="wwwroot\**\*">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-	</Content>
-  </ItemGroup>
+	<!-- Звуки встраиваем как Embedded Resource напрямую внутрь .exe -->
+	<ItemGroup>
+		<Resource Include="Assets\Sounds\click.wav" Condition="Exists('Assets\Sounds\click.wav')" />
+		<Resource Include="Assets\Sounds\success.wav" Condition="Exists('Assets\Sounds\success.wav')" />
+	</ItemGroup>
 
-  <ItemGroup>
-    <Resource Include="Assets\freepik__толстая,_сплошная,_монолитная_буква_z_белого.png">
-      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
-    </Resource>
-  </ItemGroup>
+	<!-- АВТОМАТИЧЕСКАЯ АРХИВАЦИЯ ИНТЕРФЕЙСА ПЕРЕД СБОРКОЙ -->
+	<Target Name="ZipWebUI" BeforeTargets="BeforeBuild">
+		<ZipDirectory SourceDirectory="$(MSBuildProjectDirectory)\wwwroot" DestinationFile="$(IntermediateOutputPath)wwwroot.zip" Overwrite="true" />
+		<ItemGroup>
+			<EmbeddedResource Include="$(IntermediateOutputPath)wwwroot.zip" LogicalName="wwwroot.zip" />
+		</ItemGroup>
+	</Target>
 
-  <ItemGroup>
-    <None Update="wwwroot\index.html">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="ZapretFiles\bin\cygwin1.dll">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="ZapretFiles\bin\quic_initial_dbankcloud_ru.bin">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="ZapretFiles\bin\quic_initial_www_google_com.bin">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="ZapretFiles\bin\stun.bin">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="ZapretFiles\bin\tls_clienthello_4pda_to.bin">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="ZapretFiles\bin\tls_clienthello_max_ru.bin">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="ZapretFiles\bin\tls_clienthello_www_google_com.bin">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="ZapretFiles\bin\WinDivert.dll">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="ZapretFiles\bin\WinDivert64.sys">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="ZapretFiles\bin\winws.exe">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="ZapretFiles\general %28ALT%29.bat">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="ZapretFiles\general %28ALT10%29.bat">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="ZapretFiles\general %28ALT11%29.bat">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="ZapretFiles\general %28ALT12%29.bat">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="ZapretFiles\general %28ALT2%29.bat">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="ZapretFiles\general %28ALT3%29.bat">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="ZapretFiles\general %28ALT4%29.bat">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="ZapretFiles\general %28ALT5%29.bat">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="ZapretFiles\general %28ALT6%29.bat">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="ZapretFiles\general %28ALT7%29.bat">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="ZapretFiles\general %28ALT8%29.bat">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="ZapretFiles\general %28ALT9%29.bat">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="ZapretFiles\general %28FAKE TLS AUTO ALT%29.bat">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="ZapretFiles\general %28FAKE TLS AUTO ALT2%29.bat">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="ZapretFiles\general %28FAKE TLS AUTO ALT3%29.bat">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="ZapretFiles\general %28FAKE TLS AUTO%29.bat">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="ZapretFiles\general %28SIMPLE FAKE ALT%29.bat">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="ZapretFiles\general %28SIMPLE FAKE ALT2%29.bat">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="ZapretFiles\general %28SIMPLE FAKE%29.bat">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="ZapretFiles\general.bat">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="ZapretFiles\LICENSE.txt">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="ZapretFiles\lists\ipset-all.txt">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="ZapretFiles\lists\ipset-all.txt.backup">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="ZapretFiles\lists\ipset-exclude-user.txt">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="ZapretFiles\lists\ipset-exclude.txt">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="ZapretFiles\lists\list-exclude-user.txt">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="ZapretFiles\lists\list-exclude.txt">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="ZapretFiles\lists\list-general-user.txt">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="ZapretFiles\lists\list-general.txt">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="ZapretFiles\lists\list-google.txt">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="ZapretFiles\README.md">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="ZapretFiles\service.bat">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="ZapretFiles\SHA256SUMS.txt">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="ZapretFiles\TgWsProxy_windows.exe">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="ZapretFiles\utils\check_updates.enabled">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="ZapretFiles\utils\game_filter.enabled">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="ZapretFiles\utils\targets.txt">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="ZapretFiles\utils\test zapret.ps1">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-  </ItemGroup>
+	<!-- Копируем в Publish директорию ТОЛЬКО ядро (ZapretFiles) и README -->
+	<ItemGroup>
+		<None Include="ZapretFiles\**\*.*">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+			<CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+		</None>
+		<None Include="README.md" Condition="Exists('README.md')">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+			<CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+		</None>
+	</ItemGroup>
 
 </Project>

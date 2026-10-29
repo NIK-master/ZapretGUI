@@ -1,12 +1,13 @@
-﻿using System;
+﻿using Microsoft.Web.WebView2.Core;
+using System;
 using System.IO;
+using System.IO.Compression;
 using System.Threading.Tasks;
 using System.Windows;
-using Microsoft.Web.WebView2.Core;
-using ZapretGUI.Core;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using ZapretGUI.Core;
 
 namespace ZapretGUI
 {
@@ -83,13 +84,12 @@ namespace ZapretGUI
             };
 
             var baseDir = AppDomain.CurrentDomain.BaseDirectory;
-            var htmlPath = Path.Combine(baseDir, "wwwroot", "index.html");
+            var webRootDir = ExtractEmbeddedWebUI();
+            var htmlPath = Path.Combine(webRootDir, "index.html");
 
-            if (!File.Exists(htmlPath))
+            if (File.Exists(htmlPath))
             {
-                var projectRootHtml = Path.GetFullPath(Path.Combine(baseDir, @"..\..\..\wwwroot\index.html"));
-                if (File.Exists(projectRootHtml))
-                    htmlPath = projectRootHtml;
+                MainWebView.CoreWebView2.Navigate(new Uri(htmlPath).AbsoluteUri);
             }
 
             if (!File.Exists(htmlPath))
@@ -213,6 +213,21 @@ namespace ZapretGUI
             _webBridge?.Dispose();
             _trayIconManager.Dispose();
             base.OnClosed(e);
+        }
+        private string ExtractEmbeddedWebUI()
+        {
+            var tempDir = Path.Combine(Path.GetTempPath(), "ZapretGUI_UI_" + AppConstants.AppVersion);
+            if (!Directory.Exists(tempDir))
+            {
+                Directory.CreateDirectory(tempDir);
+                using var stream = System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream("wwwroot.zip");
+                if (stream != null)
+                {
+                    using var archive = new System.IO.Compression.ZipArchive(stream);
+                    archive.ExtractToDirectory(tempDir);
+                }
+            }
+            return tempDir;
         }
     }
 }

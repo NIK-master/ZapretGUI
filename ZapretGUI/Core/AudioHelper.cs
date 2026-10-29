@@ -8,26 +8,32 @@ namespace ZapretGUI.Core
 {
     public static class AudioHelper
     {
-        private static readonly SoundPlayer? _clickPlayer;
-        private static readonly SoundPlayer? _successPlayer;
+        private static SoundPlayer? _clickPlayer;
+        private static SoundPlayer? _successPlayer;
 
         static AudioHelper()
         {
             try
             {
-                var baseDir = AppDomain.CurrentDomain.BaseDirectory;
-                var clickPath = Path.Combine(baseDir, "Assets", "Sounds", "click.wav");
-                var successPath = Path.Combine(baseDir, "Assets", "Sounds", "success.wav");
-
-                if (File.Exists(clickPath))
+                // Загружаем звук клика прямо из памяти .exe
+                var clickStreamInfo = System.Windows.Application.GetResourceStream(new Uri("pack://application:,,,/Assets/Sounds/click.wav"));
+                if (clickStreamInfo != null)
                 {
-                    _clickPlayer = new SoundPlayer(clickPath);
+                    var ms = new MemoryStream();
+                    clickStreamInfo.Stream.CopyTo(ms);
+                    ms.Position = 0;
+                    _clickPlayer = new SoundPlayer(ms);
                     _clickPlayer.LoadAsync();
                 }
 
-                if (File.Exists(successPath))
+                // Загружаем звук успеха прямо из памяти .exe
+                var successStreamInfo = System.Windows.Application.GetResourceStream(new Uri("pack://application:,,,/Assets/Sounds/success.wav"));
+                if (successStreamInfo != null)
                 {
-                    _successPlayer = new SoundPlayer(successPath);
+                    var ms = new MemoryStream();
+                    successStreamInfo.Stream.CopyTo(ms);
+                    ms.Position = 0;
+                    _successPlayer = new SoundPlayer(ms);
                     _successPlayer.LoadAsync();
                 }
             }
@@ -37,20 +43,7 @@ namespace ZapretGUI.Core
             }
         }
 
-        public static void PlayClick()
-        {
-            Task.Run(() =>
-            {
-                try { _clickPlayer?.Play(); } catch { }
-            });
-        }
-
-        public static void PlaySuccess()
-        {
-            Task.Run(() =>
-            {
-                try { _successPlayer?.Play(); } catch { }
-            });
-        }
+        public static void PlayClick() => Task.Run(() => { try { _clickPlayer?.Play(); } catch { } });
+        public static void PlaySuccess() => Task.Run(() => { try { _successPlayer?.Play(); } catch { } });
     }
 }
