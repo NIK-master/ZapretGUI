@@ -93,11 +93,23 @@ namespace ZapretGUI.Views
             bool proxyRun = BypassController.Current.TgProxy.IsRunning;
             _isRunning = zapretRun || proxyRun;
 
-            var onlineBrush = UIHelper.GetSuccessBrush();
+            var accentBrush = UIHelper.GetSuccessBrush();
+            var accentLightBrush = UIHelper.GetSuccessLightBrush();
+            var accentBgBrush = UIHelper.GetBrushFromHex(UIHelper.GetAccentDarkBgHex());
             var offlineBrush = UIHelper.GetErrorBrush();
 
-            DotZapret.Fill = zapretRun ? onlineBrush : offlineBrush;
-            DotProxy.Fill = proxyRun ? onlineBrush : offlineBrush;
+            if (TrayLogoBorder != null)
+            {
+                TrayLogoBorder.Background = accentBgBrush;
+                TrayLogoBorder.BorderBrush = accentBrush;
+            }
+            if (TrayLogoIcon != null)
+                TrayLogoIcon.Foreground = accentLightBrush;
+            if (TrayProfileIcon != null)
+                TrayProfileIcon.Foreground = accentLightBrush;
+
+            DotZapret.Fill = zapretRun ? accentLightBrush : offlineBrush;
+            DotProxy.Fill = proxyRun ? accentLightBrush : offlineBrush;
 
             TxtActiveProfile.Text = string.IsNullOrWhiteSpace(SettingsManager.Current.SelectedProfileName)
                 ? "general.bat"
@@ -113,7 +125,7 @@ namespace ZapretGUI.Views
                 TxtSubStatus.Text = "Службы остановлены";
 
             TxtSubStatus.Foreground = _isRunning
-                ? UIHelper.GetBrushFromHex("#4CAF50")
+                ? accentLightBrush
                 : UIHelper.GetBrushFromHex("#888888");
 
             UpdateToggleButtonVisuals();
@@ -176,12 +188,12 @@ namespace ZapretGUI.Views
             }
             else
             {
-                BtnTogglePower.Background = UIHelper.GetBrushFromHex("#132615");
-                BtnTogglePower.BorderBrush = UIHelper.GetBrushFromHex("#107C10");
+                BtnTogglePower.Background = UIHelper.GetBrushFromHex(UIHelper.GetAccentDarkBgHex());
+                BtnTogglePower.BorderBrush = UIHelper.GetSuccessBrush();
 
                 if (powerIcon != null)
                 {
-                    powerIcon.Foreground = UIHelper.GetBrushFromHex("#4CAF50");
+                    powerIcon.Foreground = UIHelper.GetSuccessLightBrush();
                     powerIcon.Text = "\xE7E8";
                 }
                 if (powerText != null)

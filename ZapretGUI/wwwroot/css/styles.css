@@ -10,14 +10,6 @@
     --border-color: #2A2A2A;
 }
 
-body.colorblind-mode {
-    --accent-color: #0078D7;
-    --accent-light: #60A5FA;
-    --accent-glow: rgba(0, 120, 215, 0.55);
-    --danger-color: #FF8C00;
-    --warning-color: #FFB900;
-}
-
 * {
     user-select: none;
     box-sizing: border-box;
@@ -871,36 +863,94 @@ body.compact-mode #settings-routing-grid {
     text-decoration: underline wavy #F59E0B;
 }
 /* =========================================================
-   АКЦЕНТНЫЕ ТЕМЫ ОБНОВЛЕНИЯ v4.1 И СВОТЧИ ПАЛИТРЫ
+   АКЦЕНТНЫЕ ТЕМЫ ОБНОВЛЕНИЯ v4.1 И ГЛОБАЛЬНОЕ ПЕРЕКРАШИВАНИЕ
    ========================================================= */
+:root,
 body[data-accent="green"] {
     --accent-color: #107C10;
     --accent-light: #4CAF50;
     --accent-glow: rgba(16, 124, 16, 0.55);
+    --accent-soft: rgba(16, 124, 16, 0.16);
 }
 
 body[data-accent="blue"] {
     --accent-color: #0078D7;
     --accent-light: #60A5FA;
     --accent-glow: rgba(0, 120, 215, 0.55);
+    --accent-soft: rgba(0, 120, 215, 0.16);
 }
 
 body[data-accent="purple"] {
     --accent-color: #7C3AED;
     --accent-light: #A78BFA;
     --accent-glow: rgba(124, 58, 237, 0.55);
+    --accent-soft: rgba(124, 58, 237, 0.16);
 }
 
 body[data-accent="amber"] {
     --accent-color: #D97706;
     --accent-light: #FBBF24;
     --accent-glow: rgba(217, 119, 6, 0.55);
+    --accent-soft: rgba(217, 119, 6, 0.16);
 }
 
 body[data-accent="crimson"] {
     --accent-color: #E11D48;
     --accent-light: #FB7185;
     --accent-glow: rgba(225, 29, 72, 0.55);
+    --accent-soft: rgba(225, 29, 72, 0.16);
+}
+
+/* Автоматическая привязка всех акцентных элементов UI к выбранной теме */
+.nav-btn.active .mdl-icon {
+    color: var(--accent-light) !important;
+}
+
+.sidebar-sliding-pill {
+    background: linear-gradient(90deg, var(--accent-soft) 0%, #262626 100%) !important;
+    border-left-color: var(--accent-light) !important;
+}
+
+.mod-workshop-card.is-active,
+.wiz-option-card.selected,
+.diag-step-pill.active,
+.wiz-stepper-item.active {
+    background: linear-gradient(135deg, var(--accent-soft) 0%, #151815 100%) !important;
+    border-color: var(--accent-color) !important;
+    box-shadow: 0 0 20px var(--accent-soft) !important;
+}
+
+.power-btn.active {
+    box-shadow: 0 0 40px var(--accent-glow), inset 0 0 18px var(--accent-soft) !important;
+}
+
+/* Перехват жестко прописанных зеленых классов Tailwind в разметке */
+.bg-\[\#107C10\] {
+    background-color: var(--accent-color) !important;
+}
+
+.bg-\[\#107C10\]\/15,
+.bg-\[\#107C10\]\/20,
+.bg-\[\#107C10\]\/25,
+.bg-\[\#107C10\]\/30,
+.bg-\[\#0F240F\],
+.bg-\[\#0F200F\],
+.bg-\[\#162216\] {
+    background-color: var(--accent-soft) !important;
+}
+
+.border-\[\#107C10\],
+.border-\[\#107C10\]\/40,
+.border-\[\#107C10\]\/50,
+.border-\[\#107C10\]\/60,
+.focus\:border-\[\#107C10\]:focus,
+.hover\:border-\[\#107C10\]:hover {
+    border-color: var(--accent-color) !important;
+}
+
+.text-\[\#4CAF50\],
+.text-\[\#4ADE80\] {
+    color: var(--accent-light) !important;
 }
 
 .accent-swatch {

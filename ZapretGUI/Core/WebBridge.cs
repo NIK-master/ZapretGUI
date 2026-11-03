@@ -488,7 +488,7 @@ namespace ZapretGUI.Core
             var useTgProxy = root.TryGetProperty("useTgProxy", out var ut) ? ut.GetBoolean() : true;
             var autoStart = root.TryGetProperty("autoStart", out var aus) ? aus.GetBoolean() : true;
             var focusMode = root.TryGetProperty("focusMode", out var fm) ? fm.GetBoolean() : false;
-            var colorblind = root.TryGetProperty("colorblind", out var cb) ? cb.GetBoolean() : false;
+            var accentTheme = root.TryGetProperty("accentTheme", out var act) ? act.GetString() ?? "green" : "green";
 
             void WizLog(string msg) => SendEvent("wizardLog", new
             {
@@ -503,7 +503,10 @@ namespace ZapretGUI.Core
             SettingsManager.Current.ZapretEnabled = useZapret;
             SettingsManager.Current.TgProxyEnabled = useTgProxy;
             SettingsManager.Current.FocusMode = focusMode;
-            SettingsManager.Current.ColorblindMode = colorblind;
+            SettingsManager.Current.AccentTheme = accentTheme;
+            UIHelper.ApplyThemeColors();
+            if (_mainWindow is MainWindow mwWiz)
+                mwWiz.RefreshAppIcon();
 
             WizLog("[Config] Сохранение пользовательских настроек UI...");
             SettingsManager.Save();
@@ -1345,16 +1348,6 @@ namespace ZapretGUI.Core
                     {
                         RenderOptions.ProcessRenderMode = useGpu ? RenderMode.Default : RenderMode.SoftwareOnly;
                     });
-                }
-            }
-
-            if (s.TryGetProperty("colorblindMode", out var cb))
-            {
-                bool newCb = cb.GetBoolean();
-                if (cur.ColorblindMode != newCb)
-                {
-                    cur.ColorblindMode = newCb;
-                    themeChanged = true;
                 }
             }
 

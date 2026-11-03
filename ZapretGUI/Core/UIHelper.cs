@@ -26,9 +26,6 @@ namespace ZapretGUI.Core
 
         public static string GetAccentHex(bool light = false)
         {
-            if (SettingsManager.Current.ColorblindMode)
-                return light ? "#60A5FA" : "#0078D7";
-
             return (SettingsManager.Current.AccentTheme ?? "green") switch
             {
                 "blue" => light ? "#60A5FA" : "#0078D7",
@@ -39,11 +36,26 @@ namespace ZapretGUI.Core
             };
         }
 
+        public static string GetAccentDarkBgHex()
+        {
+            return (SettingsManager.Current.AccentTheme ?? "green") switch
+            {
+                "blue" => "#102033",
+                "purple" => "#1E1433",
+                "amber" => "#2B1D0E",
+                "crimson" => "#2D121B",
+                _ => "#142616"
+            };
+        }
+
         public static SolidColorBrush GetSuccessBrush()
             => GetBrushFromHex(GetAccentHex(light: false));
 
+        public static SolidColorBrush GetSuccessLightBrush()
+            => GetBrushFromHex(GetAccentHex(light: true));
+
         public static SolidColorBrush GetErrorBrush()
-            => GetBrushFromHex(SettingsManager.Current.ColorblindMode ? "#FF8C00" : "#D13438");
+            => GetBrushFromHex("#D13438");
 
         public static void ApplyThemeColors()
         {
@@ -55,10 +67,6 @@ namespace ZapretGUI.Core
             res["BrandErrorBrush"] = GetErrorBrush();
         }
 
-        /// <summary>
-        /// Программно рисует фирменную иконку "Z" в памяти без внешних файлов.
-        /// Возвращает HICON (для NotifyIcon в трее) и ImageSource (для MainWindow в панели задач).
-        /// </summary>
         public static (IntPtr hIcon, ImageSource wpfIcon) CreateDynamicAppIcon(bool isRunning)
         {
             const int size = 64;
@@ -71,7 +79,7 @@ namespace ZapretGUI.Core
 
                 var accentColor = ColorTranslator.FromHtml(GetAccentHex(light: true));
                 var borderColor = isRunning ? accentColor : ColorTranslator.FromHtml("#3A3A3A");
-                var bgTop = isRunning ? ColorTranslator.FromHtml("#142416") : ColorTranslator.FromHtml("#18181B");
+                var bgTop = isRunning ? ColorTranslator.FromHtml(GetAccentDarkBgHex()) : ColorTranslator.FromHtml("#18181B");
                 var bgBottom = ColorTranslator.FromHtml("#0A0A0C");
 
                 using var path = CreateRoundedRectPath(new Rectangle(4, 4, size - 8, size - 8), 14);
@@ -85,7 +93,6 @@ namespace ZapretGUI.Core
                     g.DrawPath(pen, path);
                 }
 
-                // Рисуем монолитную букву "Z" по центру
                 using var font = new Font("Segoe UI", 28f, System.Drawing.FontStyle.Bold, GraphicsUnit.Pixel);
                 var textBrush = isRunning ? new SolidBrush(accentColor) : new SolidBrush(System.Drawing.Color.White);
                 using (textBrush)
@@ -98,10 +105,9 @@ namespace ZapretGUI.Core
                     g.DrawString("Z", font, textBrush, new RectangleF(0, 1, size, size), sf);
                 }
 
-                // Статусный индикатор в правом нижнем углу
                 var dotColor = isRunning
                     ? accentColor
-                    : ColorTranslator.FromHtml(SettingsManager.Current.ColorblindMode ? "#FF8C00" : "#D13438");
+                    : ColorTranslator.FromHtml("#D13438");
 
                 using var dotBgBrush = new SolidBrush(ColorTranslator.FromHtml("#0A0A0C"));
                 using var dotBrush = new SolidBrush(dotColor);

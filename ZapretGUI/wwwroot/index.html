@@ -220,13 +220,19 @@
 								<input id="wiz-chk-focus" type="checkbox" onchange="onWizardOptionChange()" class="cyber-toggle">
 							</label>
 
-							<label class="wiz-option-card" id="wiz-card-colorblind">
+							<div class="wiz-option-card" id="wiz-card-theme">
 								<div>
-									<div class="text-sm font-bold text-white">Режим цветовой слепоты</div>
-									<div class="text-xs text-[#888888] mt-0.5">Использовать сине-оранжевую палитру индикаторов вместо красно-зеленой</div>
+									<div class="text-sm font-bold text-white">Акцентная тема интерфейса</div>
+									<div class="text-xs text-[#888888] mt-0.5">Выберите цвет подсветки панели управления и иконки</div>
 								</div>
-								<input id="wiz-chk-colorblind" type="checkbox" onchange="onWizardOptionChange()" class="cyber-toggle">
-							</label>
+								<div class="flex items-center gap-2 shrink-0">
+									<button type="button" onclick="selectAccentTheme('green')" data-accent-btn="green" class="accent-swatch active" style="background:#107C10" title="Неоновый Зеленый"></button>
+									<button type="button" onclick="selectAccentTheme('blue')" data-accent-btn="blue" class="accent-swatch" style="background:#0078D7" title="Кибер-Синий"></button>
+									<button type="button" onclick="selectAccentTheme('purple')" data-accent-btn="purple" class="accent-swatch" style="background:#7C3AED" title="Аметист"></button>
+									<button type="button" onclick="selectAccentTheme('amber')" data-accent-btn="amber" class="accent-swatch" style="background:#D97706" title="Янтарь"></button>
+									<button type="button" onclick="selectAccentTheme('crimson')" data-accent-btn="crimson" class="accent-swatch" style="background:#E11D48" title="Малиновый"></button>
+								</div>
+							</div>
 						</div>
 
 						<!-- ШАГ 4: ТЕРМИНАЛ УСТАНОВКИ И ДЕПЛОЯ -->
@@ -1042,7 +1048,7 @@
 						<div class="glass-card rounded-xl p-4 flex flex-col gap-2">
 							<div class="flex items-center justify-between mb-1">
 								<div class="flex items-center gap-2 text-sm font-bold text-white">
-									<span class="mdl-icon text-sm text-[#60A5FA]">&#xE890;</span>
+									<span class="mdl-icon text-sm text-brand">&#xE890;</span>
 									<span>Интерфейс, звук и тема</span>
 								</div>
 								<span class="text-[10px] font-mono text-[#666666] uppercase">Внешний вид</span>
@@ -1108,17 +1114,6 @@
 									</div>
 								</div>
 								<input id="set-focus-mode" type="checkbox" onchange="onSettingsChanged()" class="cyber-toggle">
-							</label>
-
-							<label class="setting-item-row" data-search="режим цветовой слепоты дальтонизм синий оранжевый">
-								<div class="flex items-center gap-3 overflow-hidden">
-									<div class="setting-icon-box"><span class="mdl-icon text-sm">&#xE790;</span></div>
-									<div>
-										<div class="text-xs font-bold text-white">Режим цветовой слепоты</div>
-										<div class="text-[11px] text-[#888888]">Контрастная сине-оранжевая палитра индикаторов</div>
-									</div>
-								</div>
-								<input id="set-colorblind" type="checkbox" onchange="onSettingsChanged()" class="cyber-toggle">
 							</label>
 
 							<label class="setting-item-row" data-search="аппаратное ускорение gpu видеокарта рендер">
@@ -1239,7 +1234,7 @@
 					<div data-set-group="net" class="glass-card rounded-xl p-4 space-y-2.5">
 						<div class="flex items-center justify-between">
 							<div class="flex items-center gap-2 text-sm font-bold text-white">
-								<span class="mdl-icon text-sm text-[#F59E0B]">&#xE774;</span>
+								<span class="mdl-icon text-sm text-brand">&#xE774;</span>
 								<span>Мониторинг сети и проверка пинга</span>
 							</div>
 							<span class="text-[10px] font-mono text-[#666666] uppercase">Телеметрия</span>

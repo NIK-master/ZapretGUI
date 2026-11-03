@@ -18,12 +18,11 @@ namespace ZapretGUI.Core
         public bool FocusMode { get; set; } = false;
         public bool CompactMode { get; set; } = false;
         public bool HardwareAcceleration { get; set; } = true;
-        public bool ColorblindMode { get; set; } = false;
         public string PingUrl { get; set; } = "https://dynamodb.eu-central-1.amazonaws.com";
         public bool AutoRestartServices { get; set; } = false;
         public int StatsUpdateInterval { get; set; } = 1;
 
-        // Новые настройки v4.1
+        // Настройки v4.1
         public bool AutoStartBypass { get; set; } = false;
         public bool StopServicesOnExit { get; set; } = true;
         public bool SoundEffectsEnabled { get; set; } = true;

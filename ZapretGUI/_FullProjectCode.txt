@@ -227,6 +227,11 @@ namespace ZapretGUI
             });
         }
 
+        public void RefreshAppIcon()
+        {
+            _trayIconManager.UpdateDynamicIcon(BypassController.Current.IsRunning);
+        }
+
         public void UpdateNetworkIndicator(bool isOnline)
         {
             _webBridge?.SendEvent("netStatus", new { isOnline });
@@ -2100,12 +2105,11 @@ namespace ZapretGUI.Core
         public bool FocusMode { get; set; } = false;
         public bool CompactMode { get; set; } = false;
         public bool HardwareAcceleration { get; set; } = true;
-        public bool ColorblindMode { get; set; } = false;
         public string PingUrl { get; set; } = "https://dynamodb.eu-central-1.amazonaws.com";
         public bool AutoRestartServices { get; set; } = false;
         public int StatsUpdateInterval { get; set; } = 1;
 
-        // Новые настройки v4.1
+        // Настройки v4.1
         public bool AutoStartBypass { get; set; } = false;
         public bool StopServicesOnExit { get; set; } = true;
         public bool SoundEffectsEnabled { get; set; } = true;
@@ -2488,9 +2492,6 @@ namespace ZapretGUI.Core
 
         public static string GetAccentHex(bool light = false)
         {
-            if (SettingsManager.Current.ColorblindMode)
-                return light ? "#60A5FA" : "#0078D7";
-
             return (SettingsManager.Current.AccentTheme ?? "green") switch
             {
                 "blue" => light ? "#60A5FA" : "#0078D7",
@@ -2501,11 +2502,26 @@ namespace ZapretGUI.Core
             };
         }
 
+        public static string GetAccentDarkBgHex()
+        {
+            return (SettingsManager.Current.AccentTheme ?? "green") switch
+            {
+                "blue" => "#102033",
+                "purple" => "#1E1433",
+                "amber" => "#2B1D0E",
+                "crimson" => "#2D121B",
+                _ => "#142616"
+            };
+        }
+
         public static SolidColorBrush GetSuccessBrush()
             => GetBrushFromHex(GetAccentHex(light: false));
 
+        public static SolidColorBrush GetSuccessLightBrush()
+            => GetBrushFromHex(GetAccentHex(light: true));
+
         public static SolidColorBrush GetErrorBrush()
-            => GetBrushFromHex(SettingsManager.Current.ColorblindMode ? "#FF8C00" : "#D13438");
+            => GetBrushFromHex("#D13438");
 
         public static void ApplyThemeColors()
         {
@@ -2517,10 +2533,6 @@ namespace ZapretGUI.Core
             res["BrandErrorBrush"] = GetErrorBrush();
         }
 
-        /// <summary>
-        /// Программно рисует фирменную иконку "Z" в памяти без внешних файлов.
-        /// Возвращает HICON (для NotifyIcon в трее) и ImageSource (для MainWindow в панели задач).
-        /// </summary>
         public static (IntPtr hIcon, ImageSource wpfIcon) CreateDynamicAppIcon(bool isRunning)
         {
             const int size = 64;
@@ -2533,7 +2545,7 @@ namespace ZapretGUI.Core
 
                 var accentColor = ColorTranslator.FromHtml(GetAccentHex(light: true));
                 var borderColor = isRunning ? accentColor : ColorTranslator.FromHtml("#3A3A3A");
-                var bgTop = isRunning ? ColorTranslator.FromHtml("#142416") : ColorTranslator.FromHtml("#18181B");
+                var bgTop = isRunning ? ColorTranslator.FromHtml(GetAccentDarkBgHex()) : ColorTranslator.FromHtml("#18181B");
                 var bgBottom = ColorTranslator.FromHtml("#0A0A0C");
 
                 using var path = CreateRoundedRectPath(new Rectangle(4, 4, size - 8, size - 8), 14);
@@ -2547,7 +2559,6 @@ namespace ZapretGUI.Core
                     g.DrawPath(pen, path);
                 }
 
-                // Рисуем монолитную букву "Z" по центру
                 using var font = new Font("Segoe UI", 28f, System.Drawing.FontStyle.Bold, GraphicsUnit.Pixel);
                 var textBrush = isRunning ? new SolidBrush(accentColor) : new SolidBrush(System.Drawing.Color.White);
                 using (textBrush)
@@ -2560,10 +2571,9 @@ namespace ZapretGUI.Core
                     g.DrawString("Z", font, textBrush, new RectangleF(0, 1, size, size), sf);
                 }
 
-                // Статусный индикатор в правом нижнем углу
                 var dotColor = isRunning
                     ? accentColor
-                    : ColorTranslator.FromHtml(SettingsManager.Current.ColorblindMode ? "#FF8C00" : "#D13438");
+                    : ColorTranslator.FromHtml("#D13438");
 
                 using var dotBgBrush = new SolidBrush(ColorTranslator.FromHtml("#0A0A0C"));
                 using var dotBrush = new SolidBrush(dotColor);
@@ -2604,10 +2614,6 @@ namespace ZapretGUI.Core
                 return WebConfirmHandler.Invoke(title, message, confirmText, isDanger);
 
             return Task.FromResult(false);
-        }
-        public void RefreshAppIcon()
-        {
-            _trayIconManager.UpdateDynamicIcon(BypassController.Current.IsRunning);
         }
     }
 }
@@ -3621,7 +3627,7 @@ namespace ZapretGUI.Core
             var useTgProxy = root.TryGetProperty("useTgProxy", out var ut) ? ut.GetBoolean() : true;
             var autoStart = root.TryGetProperty("autoStart", out var aus) ? aus.GetBoolean() : true;
             var focusMode = root.TryGetProperty("focusMode", out var fm) ? fm.GetBoolean() : false;
-            var colorblind = root.TryGetProperty("colorblind", out var cb) ? cb.GetBoolean() : false;
+            var accentTheme = root.TryGetProperty("accentTheme", out var act) ? act.GetString() ?? "green" : "green";
 
             void WizLog(string msg) => SendEvent("wizardLog", new
             {
@@ -3636,7 +3642,10 @@ namespace ZapretGUI.Core
             SettingsManager.Current.ZapretEnabled = useZapret;
             SettingsManager.Current.TgProxyEnabled = useTgProxy;
             SettingsManager.Current.FocusMode = focusMode;
-            SettingsManager.Current.ColorblindMode = colorblind;
+            SettingsManager.Current.AccentTheme = accentTheme;
+            UIHelper.ApplyThemeColors();
+            if (_mainWindow is MainWindow mwWiz)
+                mwWiz.RefreshAppIcon();
 
             WizLog("[Config] Сохранение пользовательских настроек UI...");
             SettingsManager.Save();
@@ -4481,16 +4490,6 @@ namespace ZapretGUI.Core
                 }
             }
 
-            if (s.TryGetProperty("colorblindMode", out var cb))
-            {
-                bool newCb = cb.GetBoolean();
-                if (cur.ColorblindMode != newCb)
-                {
-                    cur.ColorblindMode = newCb;
-                    themeChanged = true;
-                }
-            }
-
             if (themeChanged)
             {
                 UIHelper.ApplyThemeColors();
@@ -5204,8 +5203,8 @@ namespace ZapretGUI.Core
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <Border Grid.Column="0" Width="28" Height="28" CornerRadius="7" Background="#1A2E1A" BorderBrush="#107C10" BorderThickness="1" Margin="0,0,9,0">
-                    <TextBlock Text="&#xE945;" FontFamily="Segoe MDL2 Assets" Foreground="#4CAF50" FontSize="13" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                <Border x:Name="TrayLogoBorder" Grid.Column="0" Width="28" Height="28" CornerRadius="7" Background="#1A2E1A" BorderBrush="#107C10" BorderThickness="1" Margin="0,0,9,0">
+                    <TextBlock x:Name="TrayLogoIcon" Text="&#xE945;" FontFamily="Segoe MDL2 Assets" Foreground="#4CAF50" FontSize="13" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                 </Border>
 
                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
@@ -5262,7 +5261,7 @@ namespace ZapretGUI.Core
                         </Button>
 
                         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="2,0">
-                            <TextBlock Text="&#xE756;" FontFamily="Segoe MDL2 Assets" Foreground="#4CAF50" FontSize="9.5" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="TrayProfileIcon" Text="&#xE756;" FontFamily="Segoe MDL2 Assets" Foreground="#4CAF50" FontSize="9.5" Margin="0,0,4,0" VerticalAlignment="Center"/>
                             <TextBlock x:Name="TxtActiveProfile" Text="general.bat" Foreground="White" FontFamily="Consolas" FontSize="10.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" MaxWidth="92" ToolTip="Активный профиль обхода"/>
                         </StackPanel>
 
@@ -5512,11 +5511,23 @@ namespace ZapretGUI.Views
             bool proxyRun = BypassController.Current.TgProxy.IsRunning;
             _isRunning = zapretRun || proxyRun;
 
-            var onlineBrush = UIHelper.GetSuccessBrush();
+            var accentBrush = UIHelper.GetSuccessBrush();
+            var accentLightBrush = UIHelper.GetSuccessLightBrush();
+            var accentBgBrush = UIHelper.GetBrushFromHex(UIHelper.GetAccentDarkBgHex());
             var offlineBrush = UIHelper.GetErrorBrush();
 
-            DotZapret.Fill = zapretRun ? onlineBrush : offlineBrush;
-            DotProxy.Fill = proxyRun ? onlineBrush : offlineBrush;
+            if (TrayLogoBorder != null)
+            {
+                TrayLogoBorder.Background = accentBgBrush;
+                TrayLogoBorder.BorderBrush = accentBrush;
+            }
+            if (TrayLogoIcon != null)
+                TrayLogoIcon.Foreground = accentLightBrush;
+            if (TrayProfileIcon != null)
+                TrayProfileIcon.Foreground = accentLightBrush;
+
+            DotZapret.Fill = zapretRun ? accentLightBrush : offlineBrush;
+            DotProxy.Fill = proxyRun ? accentLightBrush : offlineBrush;
 
             TxtActiveProfile.Text = string.IsNullOrWhiteSpace(SettingsManager.Current.SelectedProfileName)
                 ? "general.bat"
@@ -5532,7 +5543,7 @@ namespace ZapretGUI.Views
                 TxtSubStatus.Text = "Службы остановлены";
 
             TxtSubStatus.Foreground = _isRunning
-                ? UIHelper.GetBrushFromHex("#4CAF50")
+                ? accentLightBrush
                 : UIHelper.GetBrushFromHex("#888888");
 
             UpdateToggleButtonVisuals();
@@ -5595,12 +5606,12 @@ namespace ZapretGUI.Views
             }
             else
             {
-                BtnTogglePower.Background = UIHelper.GetBrushFromHex("#132615");
-                BtnTogglePower.BorderBrush = UIHelper.GetBrushFromHex("#107C10");
+                BtnTogglePower.Background = UIHelper.GetBrushFromHex(UIHelper.GetAccentDarkBgHex());
+                BtnTogglePower.BorderBrush = UIHelper.GetSuccessBrush();
 
                 if (powerIcon != null)
                 {
-                    powerIcon.Foreground = UIHelper.GetBrushFromHex("#4CAF50");
+                    powerIcon.Foreground = UIHelper.GetSuccessLightBrush();
                     powerIcon.Text = "\xE7E8";
                 }
                 if (powerText != null)
@@ -5889,13 +5900,19 @@ namespace ZapretGUI.Views
 								<input id="wiz-chk-focus" type="checkbox" onchange="onWizardOptionChange()" class="cyber-toggle">
 							</label>
 
-							<label class="wiz-option-card" id="wiz-card-colorblind">
+							<div class="wiz-option-card" id="wiz-card-theme">
 								<div>
-									<div class="text-sm font-bold text-white">Режим цветовой слепоты</div>
-									<div class="text-xs text-[#888888] mt-0.5">Использовать сине-оранжевую палитру индикаторов вместо красно-зеленой</div>
+									<div class="text-sm font-bold text-white">Акцентная тема интерфейса</div>
+									<div class="text-xs text-[#888888] mt-0.5">Выберите цвет подсветки панели управления и иконки</div>
 								</div>
-								<input id="wiz-chk-colorblind" type="checkbox" onchange="onWizardOptionChange()" class="cyber-toggle">
-							</label>
+								<div class="flex items-center gap-2 shrink-0">
+									<button type="button" onclick="selectAccentTheme('green')" data-accent-btn="green" class="accent-swatch active" style="background:#107C10" title="Неоновый Зеленый"></button>
+									<button type="button" onclick="selectAccentTheme('blue')" data-accent-btn="blue" class="accent-swatch" style="background:#0078D7" title="Кибер-Синий"></button>
+									<button type="button" onclick="selectAccentTheme('purple')" data-accent-btn="purple" class="accent-swatch" style="background:#7C3AED" title="Аметист"></button>
+									<button type="button" onclick="selectAccentTheme('amber')" data-accent-btn="amber" class="accent-swatch" style="background:#D97706" title="Янтарь"></button>
+									<button type="button" onclick="selectAccentTheme('crimson')" data-accent-btn="crimson" class="accent-swatch" style="background:#E11D48" title="Малиновый"></button>
+								</div>
+							</div>
 						</div>
 
 						<!-- ШАГ 4: ТЕРМИНАЛ УСТАНОВКИ И ДЕПЛОЯ -->
@@ -6711,7 +6728,7 @@ namespace ZapretGUI.Views
 						<div class="glass-card rounded-xl p-4 flex flex-col gap-2">
 							<div class="flex items-center justify-between mb-1">
 								<div class="flex items-center gap-2 text-sm font-bold text-white">
-									<span class="mdl-icon text-sm text-[#60A5FA]">&#xE890;</span>
+									<span class="mdl-icon text-sm text-brand">&#xE890;</span>
 									<span>Интерфейс, звук и тема</span>
 								</div>
 								<span class="text-[10px] font-mono text-[#666666] uppercase">Внешний вид</span>
@@ -6777,17 +6794,6 @@ namespace ZapretGUI.Views
 									</div>
 								</div>
 								<input id="set-focus-mode" type="checkbox" onchange="onSettingsChanged()" class="cyber-toggle">
-							</label>
-
-							<label class="setting-item-row" data-search="режим цветовой слепоты дальтонизм синий оранжевый">
-								<div class="flex items-center gap-3 overflow-hidden">
-									<div class="setting-icon-box"><span class="mdl-icon text-sm">&#xE790;</span></div>
-									<div>
-										<div class="text-xs font-bold text-white">Режим цветовой слепоты</div>
-										<div class="text-[11px] text-[#888888]">Контрастная сине-оранжевая палитра индикаторов</div>
-									</div>
-								</div>
-								<input id="set-colorblind" type="checkbox" onchange="onSettingsChanged()" class="cyber-toggle">
 							</label>
 
 							<label class="setting-item-row" data-search="аппаратное ускорение gpu видеокарта рендер">
@@ -6908,7 +6914,7 @@ namespace ZapretGUI.Views
 					<div data-set-group="net" class="glass-card rounded-xl p-4 space-y-2.5">
 						<div class="flex items-center justify-between">
 							<div class="flex items-center gap-2 text-sm font-bold text-white">
-								<span class="mdl-icon text-sm text-[#F59E0B]">&#xE774;</span>
+								<span class="mdl-icon text-sm text-brand">&#xE774;</span>
 								<span>Мониторинг сети и проверка пинга</span>
 							</div>
 							<span class="text-[10px] font-mono text-[#666666] uppercase">Телеметрия</span>
@@ -7381,14 +7387,6 @@ namespace ZapretGUI.Views
     --bg-content: #121212;
     --card-bg: #181818;
     --border-color: #2A2A2A;
-}
-
-body.colorblind-mode {
-    --accent-color: #0078D7;
-    --accent-light: #60A5FA;
-    --accent-glow: rgba(0, 120, 215, 0.55);
-    --danger-color: #FF8C00;
-    --warning-color: #FFB900;
 }
 
 * {
@@ -8244,36 +8242,94 @@ body.compact-mode #settings-routing-grid {
     text-decoration: underline wavy #F59E0B;
 }
 /* =========================================================
-   АКЦЕНТНЫЕ ТЕМЫ ОБНОВЛЕНИЯ v4.1 И СВОТЧИ ПАЛИТРЫ
+   АКЦЕНТНЫЕ ТЕМЫ ОБНОВЛЕНИЯ v4.1 И ГЛОБАЛЬНОЕ ПЕРЕКРАШИВАНИЕ
    ========================================================= */
+:root,
 body[data-accent="green"] {
     --accent-color: #107C10;
     --accent-light: #4CAF50;
     --accent-glow: rgba(16, 124, 16, 0.55);
+    --accent-soft: rgba(16, 124, 16, 0.16);
 }
 
 body[data-accent="blue"] {
     --accent-color: #0078D7;
     --accent-light: #60A5FA;
     --accent-glow: rgba(0, 120, 215, 0.55);
+    --accent-soft: rgba(0, 120, 215, 0.16);
 }
 
 body[data-accent="purple"] {
     --accent-color: #7C3AED;
     --accent-light: #A78BFA;
     --accent-glow: rgba(124, 58, 237, 0.55);
+    --accent-soft: rgba(124, 58, 237, 0.16);
 }
 
 body[data-accent="amber"] {
     --accent-color: #D97706;
     --accent-light: #FBBF24;
     --accent-glow: rgba(217, 119, 6, 0.55);
+    --accent-soft: rgba(217, 119, 6, 0.16);
 }
 
 body[data-accent="crimson"] {
     --accent-color: #E11D48;
     --accent-light: #FB7185;
     --accent-glow: rgba(225, 29, 72, 0.55);
+    --accent-soft: rgba(225, 29, 72, 0.16);
+}
+
+/* Автоматическая привязка всех акцентных элементов UI к выбранной теме */
+.nav-btn.active .mdl-icon {
+    color: var(--accent-light) !important;
+}
+
+.sidebar-sliding-pill {
+    background: linear-gradient(90deg, var(--accent-soft) 0%, #262626 100%) !important;
+    border-left-color: var(--accent-light) !important;
+}
+
+.mod-workshop-card.is-active,
+.wiz-option-card.selected,
+.diag-step-pill.active,
+.wiz-stepper-item.active {
+    background: linear-gradient(135deg, var(--accent-soft) 0%, #151815 100%) !important;
+    border-color: var(--accent-color) !important;
+    box-shadow: 0 0 20px var(--accent-soft) !important;
+}
+
+.power-btn.active {
+    box-shadow: 0 0 40px var(--accent-glow), inset 0 0 18px var(--accent-soft) !important;
+}
+
+/* Перехват жестко прописанных зеленых классов Tailwind в разметке */
+.bg-\[\#107C10\] {
+    background-color: var(--accent-color) !important;
+}
+
+.bg-\[\#107C10\]\/15,
+.bg-\[\#107C10\]\/20,
+.bg-\[\#107C10\]\/25,
+.bg-\[\#107C10\]\/30,
+.bg-\[\#0F240F\],
+.bg-\[\#0F200F\],
+.bg-\[\#162216\] {
+    background-color: var(--accent-soft) !important;
+}
+
+.border-\[\#107C10\],
+.border-\[\#107C10\]\/40,
+.border-\[\#107C10\]\/50,
+.border-\[\#107C10\]\/60,
+.focus\:border-\[\#107C10\]:focus,
+.hover\:border-\[\#107C10\]:hover {
+    border-color: var(--accent-color) !important;
+}
+
+.text-\[\#4CAF50\],
+.text-\[\#4ADE80\] {
+    color: var(--accent-light) !important;
 }
 
 .accent-swatch {

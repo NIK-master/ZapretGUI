@@ -92,8 +92,8 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <Border Grid.Column="0" Width="28" Height="28" CornerRadius="7" Background="#1A2E1A" BorderBrush="#107C10" BorderThickness="1" Margin="0,0,9,0">
-                    <TextBlock Text="&#xE945;" FontFamily="Segoe MDL2 Assets" Foreground="#4CAF50" FontSize="13" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                <Border x:Name="TrayLogoBorder" Grid.Column="0" Width="28" Height="28" CornerRadius="7" Background="#1A2E1A" BorderBrush="#107C10" BorderThickness="1" Margin="0,0,9,0">
+                    <TextBlock x:Name="TrayLogoIcon" Text="&#xE945;" FontFamily="Segoe MDL2 Assets" Foreground="#4CAF50" FontSize="13" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                 </Border>
 
                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
@@ -150,7 +150,7 @@
                         </Button>
 
                         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="2,0">
-                            <TextBlock Text="&#xE756;" FontFamily="Segoe MDL2 Assets" Foreground="#4CAF50" FontSize="9.5" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="TrayProfileIcon" Text="&#xE756;" FontFamily="Segoe MDL2 Assets" Foreground="#4CAF50" FontSize="9.5" Margin="0,0,4,0" VerticalAlignment="Center"/>
                             <TextBlock x:Name="TxtActiveProfile" Text="general.bat" Foreground="White" FontFamily="Consolas" FontSize="10.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" MaxWidth="92" ToolTip="Активный профиль обхода"/>
                         </StackPanel>
 
