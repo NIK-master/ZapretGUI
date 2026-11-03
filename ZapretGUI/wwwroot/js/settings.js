@@ -23,11 +23,11 @@ const IPSET_MODE_NAMES = {
 };
 
 const ACCENT_THEME_NAMES = {
-    'green': 'Зеленая',
-    'blue': 'Синяя',
+    'green': 'Изумруд',
+    'blue': 'Сапфир',
     'purple': 'Аметист',
-    'amber': 'Янтарь',
-    'crimson': 'Малиновая'
+    'amber': 'Топаз',
+    'cyan': 'Аквамарин'
 };
 
 let currentSettingsCat = 'all';
@@ -357,4 +357,182 @@ function promptResetSettings() {
         () => sendCmd('resetSettings'),
         true
     );
+}
+
+// Цветовые грани для каждого 3D-камешка (основной тон, светлая грань, тень и свечение)
+const GEM_PALETTES = {
+    green:  { main: [16, 185, 129], light: [74, 222, 128], dark: [6, 78, 59],   glow: '#4CAF50' },
+    blue:   { main: [37, 99, 235],  light: [96, 165, 250], dark: [30, 58, 138], glow: '#60A5FA' },
+    purple: { main: [124, 58, 237], light: [192, 132, 252], dark: [76, 29, 149], glow: '#A78BFA' },
+    amber:  { main: [217, 119, 6],  light: [251, 191, 36], dark: [120, 53, 15], glow: '#FBBF24' },
+    cyan:   { main: [8, 145, 178],  light: [34, 211, 238], dark: [22, 78, 99],  glow: '#22D3EE' }
+};
+
+let gemAnimStarted = false;
+
+function startGemSwatchesEngine() {
+    if (gemAnimStarted) return;
+    gemAnimStarted = true;
+
+    // Строим геометрию граненого самоцвета (верхушка, 2 пояса граней со смещением и нижнее острие)
+    const ringSides = 6;
+    const baseVerts = [
+        { x: 0, y: -13.5, z: 0 }, // 0: Верхняя вершина
+        { x: 0, y:  13.5, z: 0 }  // 1: Нижнее острие
+    ];
+
+    // Верхняя корона (индексы 2..7) и нижний пояс (8..13)
+    for (let i = 0; i < ringSides; i++) {
+        const a = (i * Math.PI * 2) / ringSides;
+        baseVerts.push({ x: Math.cos(a) * 9.5, y: -4.2, z: Math.sin(a) * 9.5 });
+    }
+    for (let i = 0; i < ringSides; i++) {
+        const a = ((i + 0.5) * Math.PI * 2) / ringSides;
+        baseVerts.push({ x: Math.cos(a) * 8.2, y: 4.5, z: Math.sin(a) * 8.2 });
+    }
+
+    const faces = [];
+    for (let i = 0; i < ringSides; i++) {
+        const next = (i + 1) % ringSides;
+        const u0 = 2 + i, u1 = 2 + next;
+        const l0 = 8 + i, l1 = 8 + next;
+
+        faces.push([0, u1, u0]);  // Верхние треугольные грани короны
+        faces.push([u0, u1, l0]); // Боковые грани пояса A
+        faces.push([u1, l1, l0]); // Боковые грани пояса B
+        faces.push([1, l0, l1]);  // Нижние грани павильона
+    }
+
+    let angle = 0;
+
+    function renderGemsFrame() {
+        angle += 0.028;
+        const canvases = document.querySelectorAll('canvas.gem-canvas');
+
+        canvases.forEach((canvas, idx) => {
+            const ctx = canvas.getContext('2d');
+            const w = canvas.width, h = canvas.height;
+            ctx.clearRect(0, 0, w, h);
+
+            const gemKey = canvas.getAttribute('data-gem') || 'green';
+            const pal = GEM_PALETTES[gemKey] || GEM_PALETTES.green;
+            const isSelected = canvas.parentElement?.classList.contains('active');
+            const isHovered = canvas.parentElement?.matches(':hover');
+
+            // Выбранный или наведенный камешек крутится быстрее и плавно левитирует
+            const localYaw = angle * (isSelected ? 1.85 : isHovered ? 1.4 : 0.85) + idx * 0.9;
+            const localPitch = 0.32 + Math.sin(angle * 1.5 + idx) * 0.14;
+            const floatY = isSelected ? Math.sin(angle * 2.4) * 1.4 : 0;
+
+            const cosY = Math.cos(localYaw), sinY = Math.sin(localYaw);
+            const cosX = Math.cos(localPitch), sinX = Math.sin(localPitch);
+
+            const tVerts = baseVerts.map(v => {
+                const x1 = v.x * cosY - v.z * sinY;
+                const z1 = v.x * sinY + v.z * cosY;
+                const y2 = v.y * cosX - z1 * sinX;
+                const z2 = v.y * sinX + z1 * cosX;
+
+                const scale = 42 / (42 + z2);
+                return {
+                    x: w / 2 + x1 * scale,
+                    y: h / 2 + y2 * scale + floatY,
+                    z: z2,
+                    rawX: x1, rawY: y2, rawZ: z2
+                };
+            });
+
+            // Сортируем 2D-грани по глубине Z и отсекаем невидимые задние грани
+            const drawList = [];
+            for (const [i0, i1, i2] of faces) {
+                const v0 = tVerts[i0], v1 = tVerts[i1], v2 = tVerts[i2];
+
+                const crossZ = (v1.x - v0.x) * (v2.y - v0.y) - (v1.y - v0.y) * (v2.x - v0.x);
+                if (crossZ <= 0) continue;
+
+                // Вычисляем 3D-нормаль грани для реалистичного блика при повороте
+                const ax = v1.rawX - v0.rawX, ay = v1.rawY - v0.rawY, az = v1.rawZ - v0.rawZ;
+                const bx = v2.rawX - v0.rawX, by = v2.rawY - v0.rawY, bz = v2.rawZ - v0.rawZ;
+                let nx = ay * bz - az * by;
+                let ny = az * bx - ax * bz;
+                let nz = ax * by - ay * bx;
+                const len = Math.hypot(nx, ny, nz) || 1;
+                nx /= len; ny /= len; nz /= len;
+
+                const lightDot = Math.max(0, Math.min(1, (nx * -0.45 + ny * -0.55 + nz * -0.7 + 1) * 0.55));
+                const avgZ = (v0.z + v1.z + v2.z) / 3;
+
+                drawList.push({ v0, v1, v2, lightDot, avgZ });
+            }
+
+            drawList.sort((a, b) => b.avgZ - a.avgZ);
+
+            // Мягкий ореол позади выбранного камешка
+            if (isSelected) {
+                const rad = ctx.createRadialGradient(w / 2, h / 2, 2, w / 2, h / 2, 16);
+                rad.addColorStop(0, pal.glow + '66');
+                rad.addColorStop(1, pal.glow + '00');
+                ctx.fillStyle = rad;
+                ctx.beginPath();
+                ctx.arc(w / 2, h / 2, 16, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // Рендерим плоские 2D-грани с живым освещением
+            for (const f of drawList) {
+                const t = f.lightDot;
+                let r, g, b;
+                if (t > 0.62) {
+                    const k = (t - 0.62) / 0.38;
+                    r = Math.round(pal.light[0] + (255 - pal.light[0]) * k * 0.7);
+                    g = Math.round(pal.light[1] + (255 - pal.light[1]) * k * 0.7);
+                    b = Math.round(pal.light[2] + (255 - pal.light[2]) * k * 0.7);
+                } else {
+                    const k = t / 0.62;
+                    r = Math.round(pal.dark[0] + (pal.main[0] - pal.dark[0]) * k);
+                    g = Math.round(pal.dark[1] + (pal.main[1] - pal.dark[1]) * k);
+                    b = Math.round(pal.dark[2] + (pal.main[2] - pal.dark[2]) * k);
+                }
+
+                ctx.beginPath();
+                ctx.moveTo(f.v0.x, f.v0.y);
+                ctx.lineTo(f.v1.x, f.v1.y);
+                ctx.lineTo(f.v2.x, f.v2.y);
+                ctx.closePath();
+
+                ctx.fillStyle = `rgb(${r},${g},${b})`;
+                ctx.fill();
+
+                ctx.strokeStyle = isSelected ? 'rgba(255,255,255,0.42)' : 'rgba(255,255,255,0.18)';
+                ctx.lineWidth = 0.65;
+                ctx.stroke();
+            }
+        });
+
+        requestAnimationFrame(renderGemsFrame);
+    }
+
+    requestAnimationFrame(renderGemsFrame);
+}
+
+function applyAccentThemeToDom(theme) {
+    // Автоматически мигрируем старый crimson на бирюзовый cyan
+    const clean = (!theme || theme === 'crimson') ? (theme === 'crimson' ? 'cyan' : 'green') : theme;
+    appState.settings.accentTheme = clean;
+
+    document.body.setAttribute('data-accent', clean);
+    document.querySelectorAll('[data-accent-btn]').forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('data-accent-btn') === clean);
+    });
+
+    const wizThemeLbl = document.getElementById('wiz-sum-theme');
+    if (wizThemeLbl) {
+        wizThemeLbl.innerText = ACCENT_THEME_NAMES[clean] || 'Изумруд';
+    }
+
+    startGemSwatchesEngine();
+
+    if (typeof drawChart === 'function') {
+        drawChart();
+    }
 }

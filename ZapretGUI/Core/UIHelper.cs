@@ -31,7 +31,7 @@ namespace ZapretGUI.Core
                 "blue" => light ? "#60A5FA" : "#0078D7",
                 "purple" => light ? "#A78BFA" : "#7C3AED",
                 "amber" => light ? "#FBBF24" : "#D97706",
-                "crimson" => light ? "#FB7185" : "#E11D48",
+                "cyan" or "crimson" => light ? "#22D3EE" : "#0891B2",
                 _ => light ? "#4CAF50" : "#107C10"
             };
         }
@@ -43,7 +43,7 @@ namespace ZapretGUI.Core
                 "blue" => "#102033",
                 "purple" => "#1E1433",
                 "amber" => "#2B1D0E",
-                "crimson" => "#2D121B",
+                "cyan" or "crimson" => "#0D262B",
                 _ => "#142616"
             };
         }
