@@ -51,6 +51,8 @@ namespace ZapretGUI
             };
 
             _ = InitializeAppAsync();
+
+            this.Topmost = SettingsManager.Current.AlwaysOnTop;
         }
 
         private async Task InitializeAppAsync()
@@ -66,6 +68,19 @@ namespace ZapretGUI
 
             if (!_isFirstRun)
                 _ = CheckUpdatesOnStartupAsync();
+
+            if (!_isFirstRun && SettingsManager.Current.AutoStartBypass && !BypassController.Current.IsRunning)
+            {
+                try
+                {
+                    await BypassController.Current.StartServicesAsync(
+                        SettingsManager.Current.SelectedProfileName,
+                        SettingsManager.Current.ZapretEnabled,
+                        SettingsManager.Current.TgProxyEnabled);
+                    UpdateIndicators(BypassController.Current.Zapret.IsRunning, BypassController.Current.TgProxy.IsRunning);
+                }
+                catch { }
+            }
         }
 
         private async Task InitializeWebViewAsync()
@@ -115,12 +130,19 @@ namespace ZapretGUI
 
         public void UpdateIndicators(bool isZapretRunning, bool isProxyRunning)
         {
+            var anyRunning = isZapretRunning || isProxyRunning;
+            _trayIconManager.UpdateDynamicIcon(anyRunning);
             _webBridge?.SendEvent("bypassState", new
             {
-                isRunning = isZapretRunning || isProxyRunning,
+                isRunning = anyRunning,
                 zapretRunning = isZapretRunning,
                 proxyRunning = isProxyRunning
             });
+        }
+
+        public void RefreshAppIcon()
+        {
+            _trayIconManager.UpdateDynamicIcon(BypassController.Current.IsRunning);
         }
 
         public void UpdateNetworkIndicator(bool isOnline)
@@ -210,6 +232,9 @@ namespace ZapretGUI
         protected override void OnClosed(EventArgs e)
         {
             BypassController.Current.NetMonitor.Stop();
+            if (SettingsManager.Current.StopServicesOnExit)
+                BypassController.Current.StopServices();
+
             _webBridge?.Dispose();
             _trayIconManager.Dispose();
             base.OnClosed(e);

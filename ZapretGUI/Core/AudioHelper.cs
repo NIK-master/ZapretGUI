@@ -43,7 +43,15 @@ namespace ZapretGUI.Core
             }
         }
 
-        public static void PlayClick() => Task.Run(() => { try { _clickPlayer?.Play(); } catch { } });
-        public static void PlaySuccess() => Task.Run(() => { try { _successPlayer?.Play(); } catch { } });
+        public static void PlayClick()
+        {
+            if (!SettingsManager.Current.SoundEffectsEnabled) return;
+            Task.Run(() => { try { _clickPlayer?.Play(); } catch { } });
+        }
+        public static void PlaySuccess()
+        {
+            if (!SettingsManager.Current.SoundEffectsEnabled) return;
+            Task.Run(() => { try { _successPlayer?.Play(); } catch { } });
+        }
     }
 }

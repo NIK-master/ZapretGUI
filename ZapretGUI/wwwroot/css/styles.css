@@ -870,3 +870,55 @@ body.compact-mode #settings-routing-grid {
     color: #F59E0B;
     text-decoration: underline wavy #F59E0B;
 }
+/* =========================================================
+   АКЦЕНТНЫЕ ТЕМЫ ОБНОВЛЕНИЯ v4.1 И СВОТЧИ ПАЛИТРЫ
+   ========================================================= */
+body[data-accent="green"] {
+    --accent-color: #107C10;
+    --accent-light: #4CAF50;
+    --accent-glow: rgba(16, 124, 16, 0.55);
+}
+
+body[data-accent="blue"] {
+    --accent-color: #0078D7;
+    --accent-light: #60A5FA;
+    --accent-glow: rgba(0, 120, 215, 0.55);
+}
+
+body[data-accent="purple"] {
+    --accent-color: #7C3AED;
+    --accent-light: #A78BFA;
+    --accent-glow: rgba(124, 58, 237, 0.55);
+}
+
+body[data-accent="amber"] {
+    --accent-color: #D97706;
+    --accent-light: #FBBF24;
+    --accent-glow: rgba(217, 119, 6, 0.55);
+}
+
+body[data-accent="crimson"] {
+    --accent-color: #E11D48;
+    --accent-light: #FB7185;
+    --accent-glow: rgba(225, 29, 72, 0.55);
+}
+
+.accent-swatch {
+    width: 24px;
+    height: 24px;
+    border-radius: 9999px;
+    border: 2px solid #2A2A2A;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    position: relative;
+}
+
+    .accent-swatch:hover {
+        transform: scale(1.14);
+    }
+
+    .accent-swatch.active {
+        border-color: #FFFFFF;
+        transform: scale(1.18);
+        box-shadow: 0 0 12px var(--accent-glow);
+    }

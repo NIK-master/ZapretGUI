@@ -1,6 +1,5 @@
 ﻿using System;
-using System.Diagnostics;
-using System.Runtime.InteropServices;
+using System.Drawing;
 using System.Windows;
 using ZapretGUI.Views;
 
@@ -8,9 +7,6 @@ namespace ZapretGUI.Core
 {
     public class TrayIconManager : IDisposable
     {
-        [DllImport("user32.dll", CharSet = CharSet.Auto)]
-        private static extern bool DestroyIcon(IntPtr handle);
-
         private System.Windows.Forms.NotifyIcon? _notifyIcon;
         private TrayMenuWindow? _trayMenu;
         private readonly Window _mainWindow;
@@ -27,10 +23,13 @@ namespace ZapretGUI.Core
             _trayMenu = new TrayMenuWindow();
             _trayMenu.WindowStartupLocation = WindowStartupLocation.Manual;
 
-            _notifyIcon = new System.Windows.Forms.NotifyIcon();
-            _notifyIcon.Icon = System.Drawing.SystemIcons.Shield;
-            _notifyIcon.Text = "Zapret for ADHD";
-            _notifyIcon.Visible = true;
+            _notifyIcon = new System.Windows.Forms.NotifyIcon
+            {
+                Text = $"Zapret for ADHD {AppConstants.AppVersion}",
+                Visible = true
+            };
+
+            UpdateDynamicIcon(BypassController.Current.IsRunning);
 
             _notifyIcon.DoubleClick += (s, e) =>
             {
@@ -73,6 +72,33 @@ namespace ZapretGUI.Core
             };
         }
 
+        public void UpdateDynamicIcon(bool isRunning)
+        {
+            _mainWindow.Dispatcher.InvokeAsync(() =>
+            {
+                try
+                {
+                    var oldHIcon = _hIcon;
+                    var (newHIcon, wpfIcon) = UIHelper.CreateDynamicAppIcon(isRunning);
+                    _hIcon = newHIcon;
+
+                    if (_notifyIcon != null)
+                    {
+                        _notifyIcon.Icon = Icon.FromHandle(_hIcon);
+                        _notifyIcon.Text = isRunning
+                            ? $"Zapret for ADHD ({SettingsManager.Current.SelectedProfileName} — Активен)"
+                            : $"Zapret for ADHD {AppConstants.AppVersion} (Остановлен)";
+                    }
+
+                    _mainWindow.Icon = wpfIcon;
+
+                    if (oldHIcon != IntPtr.Zero)
+                        UIHelper.DestroyIcon(oldHIcon);
+                }
+                catch { }
+            });
+        }
+
         public void ShowNotification(string title, string message, System.Windows.Forms.ToolTipIcon icon = System.Windows.Forms.ToolTipIcon.Info)
         {
             if (SettingsManager.Current.NotificationsEnabled && _notifyIcon != null && _notifyIcon.Visible)
@@ -90,7 +116,7 @@ namespace ZapretGUI.Core
 
             if (_hIcon != IntPtr.Zero)
             {
-                DestroyIcon(_hIcon);
+                UIHelper.DestroyIcon(_hIcon);
                 _hIcon = IntPtr.Zero;
             }
 

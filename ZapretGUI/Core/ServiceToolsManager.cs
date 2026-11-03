@@ -344,5 +344,36 @@ namespace ZapretGUI.Core
             }
             catch { }
         }
+        public static string UnloadWinDivertDriver()
+        {
+            BypassController.Current.StopServices();
+            string[] driverNames = ["WinDivert", "WinDivert14", "WinDivert64", "Monkey"];
+            int stopped = 0;
+
+            foreach (var name in driverNames)
+            {
+                try
+                {
+                    using var p = Process.Start(new ProcessStartInfo
+                    {
+                        FileName = "sc.exe",
+                        Arguments = $"stop {name}",
+                        CreateNoWindow = true,
+                        UseShellExecute = false,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true
+                    });
+                    p?.WaitForExit(2500);
+                    if (p != null && p.ExitCode == 0)
+                        stopped++;
+                }
+                catch { }
+            }
+
+            FlushDnsCache();
+            return stopped > 0
+                ? $"Драйвер WinDivert успешно остановлен и выгружен из ядра (служб остановлено: {stopped}), DNS-кэш очищен."
+                : "Все процессы обхода остановлены, активных служб WinDivert в памяти не обнаружено. DNS-кэш очищен.";
+        }
     }
 }

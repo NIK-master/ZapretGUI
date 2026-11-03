@@ -124,6 +124,32 @@ function initSettingsFromBackend(data) {
 
     if (data.routingStatus) updateRoutingStatusUI(data.routingStatus);
 
+    const s = data.settings || {};
+    appState.settings.accentTheme = s.accentTheme || 'green';
+    applyAccentThemeToDom(appState.settings.accentTheme);
+
+    const elAutoBypass = document.getElementById('set-autostart-bypass');
+    if (elAutoBypass) elAutoBypass.checked = !!s.autoStartBypass;
+
+    const elStopExit = document.getElementById('set-stop-on-exit');
+    if (elStopExit) elStopExit.checked = s.stopServicesOnExit !== false;
+
+    const elSound = document.getElementById('set-sound-effects');
+    if (elSound) elSound.checked = s.soundEffectsEnabled !== false;
+
+    const elSkipSplash = document.getElementById('set-skip-splash');
+    if (elSkipSplash) elSkipSplash.checked = !!s.skipSplashScreen;
+
+    const elTopmost = document.getElementById('set-always-on-top');
+    if (elTopmost) elTopmost.checked = !!s.alwaysOnTop;
+
+    const elWatchdog = document.getElementById('set-watchdog-ping');
+    if (elWatchdog) elWatchdog.checked = !!s.watchdogPingAutoRestart;
+
+    if (s.skipSplashScreen && typeof skipSplash === 'function') {
+        skipSplash();
+    }
+
     applyVisualSettingsLive();
 }
 
@@ -150,7 +176,14 @@ function onSettingsChanged() {
             pingUrl: document.getElementById('set-ping-url').value,
             statsUpdateInterval: appState.settings.statsUpdateInterval,
             autoRestartServices: document.getElementById('set-autorestart').checked,
-            hostsSourceIndex: appState.settings.hostsSourceIndex
+            hostsSourceIndex: appState.settings.hostsSourceIndex,
+            autoStartBypass: document.getElementById('set-autostart-bypass')?.checked ?? false,
+            stopServicesOnExit: document.getElementById('set-stop-on-exit')?.checked ?? true,
+            soundEffectsEnabled: document.getElementById('set-sound-effects')?.checked ?? true,
+            skipSplashScreen: document.getElementById('set-skip-splash')?.checked ?? false,
+            alwaysOnTop: document.getElementById('set-always-on-top')?.checked ?? false,
+            accentTheme: appState.settings.accentTheme || 'green',
+            watchdogPingAutoRestart: document.getElementById('set-watchdog-ping')?.checked ?? false,
         }
     });
 }
@@ -302,4 +335,17 @@ function promptResetSettings() {
         () => sendCmd('resetSettings'),
         true
     );
+}
+function applyAccentThemeToDom(theme) {
+    const clean = theme || 'green';
+    document.body.setAttribute('data-accent', clean);
+    document.querySelectorAll('[data-accent-btn]').forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('data-accent-btn') === clean);
+    });
+}
+
+function selectAccentTheme(theme) {
+    appState.settings.accentTheme = theme;
+    applyAccentThemeToDom(theme);
+    onSettingsChanged();
 }

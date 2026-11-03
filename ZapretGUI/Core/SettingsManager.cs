@@ -23,6 +23,15 @@ namespace ZapretGUI.Core
         public bool AutoRestartServices { get; set; } = false;
         public int StatsUpdateInterval { get; set; } = 1;
 
+        // Новые настройки v4.1
+        public bool AutoStartBypass { get; set; } = false;
+        public bool StopServicesOnExit { get; set; } = true;
+        public bool SoundEffectsEnabled { get; set; } = true;
+        public bool SkipSplashScreen { get; set; } = false;
+        public bool AlwaysOnTop { get; set; } = false;
+        public string AccentTheme { get; set; } = "green"; // green, blue, purple, amber, crimson
+        public bool WatchdogPingAutoRestart { get; set; } = false;
+
         public string ZapretCoreVersion { get; set; } = "0.0.0";
         public string TgProxyCoreVersion { get; set; } = "0.0.0";
 

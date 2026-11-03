@@ -452,7 +452,33 @@ namespace ZapretGUI.Core
                     Process.Start("explorer.exe", targetPath);
                     break;
 
+                case "unloadWinDivert":
+                    var msgUnload = ServiceToolsManager.UnloadWinDivertDriver();
+                    if (_mainWindow is MainWindow mwUnload)
+                        mwUnload.UpdateIndicators(false, false);
+                    SendEvent("log", new { message = $"🛡 [System] {msgUnload}", time = DateTime.Now.ToString("HH:mm:ss") });
+                    SendEvent("alert", new { title = "Выгрузка драйвера WinDivert", message = msgUnload, isError = false });
+                    break;
 
+                case "connectTelegramProxy":
+                    try
+                    {
+                        Process.Start(new ProcessStartInfo("tg://socks?server=127.0.0.1&port=1080") { UseShellExecute = true });
+                        SendEvent("log", new { message = "✈️ Запрос на подключение локального SOCKS5 прокси (127.0.0.1:1080) отправлен в Telegram Desktop.", time = DateTime.Now.ToString("HH:mm:ss") });
+                    }
+                    catch (Exception ex)
+                    {
+                        SendEvent("alert", new { title = "Ошибка открытия Telegram", message = $"Не удалось открыть ссылку tg://socks:\n{ex.Message}", isError = true });
+                    }
+                    break;
+
+                case "exportConfigBackup":
+                    HandleExportConfigBackup();
+                    break;
+
+                case "importConfigBackup":
+                    await HandleImportConfigBackupAsync();
+                    break;
             }
         }
 
@@ -1274,6 +1300,29 @@ namespace ZapretGUI.Core
             if (s.TryGetProperty("minimizeOnClose", out var moc)) cur.MinimizeOnClose = moc.GetBoolean();
             if (s.TryGetProperty("notificationsEnabled", out var ne)) cur.NotificationsEnabled = ne.GetBoolean();
             if (s.TryGetProperty("focusMode", out var fm)) cur.FocusMode = fm.GetBoolean();
+            if (s.TryGetProperty("autoStartBypass", out var asb)) cur.AutoStartBypass = asb.GetBoolean();
+            if (s.TryGetProperty("stopServicesOnExit", out var ssoe)) cur.StopServicesOnExit = ssoe.GetBoolean();
+            if (s.TryGetProperty("soundEffectsEnabled", out var see)) cur.SoundEffectsEnabled = see.GetBoolean();
+            if (s.TryGetProperty("skipSplashScreen", out var sss)) cur.SkipSplashScreen = sss.GetBoolean();
+            if (s.TryGetProperty("watchdogPingAutoRestart", out var wpar)) cur.WatchdogPingAutoRestart = wpar.GetBoolean();
+
+            if (s.TryGetProperty("alwaysOnTop", out var aot))
+            {
+                bool top = aot.GetBoolean();
+                cur.AlwaysOnTop = top;
+                _mainWindow.Dispatcher.Invoke(() => _mainWindow.Topmost = top);
+            }
+
+            bool themeChanged = false;
+            if (s.TryGetProperty("accentTheme", out var at))
+            {
+                var themeStr = at.GetString() ?? "green";
+                if (cur.AccentTheme != themeStr)
+                {
+                    cur.AccentTheme = themeStr;
+                    themeChanged = true;
+                }
+            }
 
             if (s.TryGetProperty("compactMode", out var cm))
             {
@@ -1305,8 +1354,15 @@ namespace ZapretGUI.Core
                 if (cur.ColorblindMode != newCb)
                 {
                     cur.ColorblindMode = newCb;
-                    UIHelper.ApplyThemeColors();
+                    themeChanged = true;
                 }
+            }
+
+            if (themeChanged)
+            {
+                UIHelper.ApplyThemeColors();
+                if (_mainWindow is MainWindow mwIcon)
+                    mwIcon.RefreshAppIcon();
             }
 
             if (s.TryGetProperty("pingUrl", out var pu))
@@ -1326,6 +1382,79 @@ namespace ZapretGUI.Core
 
             SettingsManager.Save();
         }
+        private void HandleExportConfigBackup()
+        {
+            _mainWindow.Dispatcher.Invoke(() =>
+            {
+                var sfd = new Microsoft.Win32.SaveFileDialog
+                {
+                    Filter = "Конфигурация Zapret (*.json)|*.json",
+                    Title = "Экспорт резервной копии настроек",
+                    FileName = $"ZapretForADHD_Config_{DateTime.Now:yyyyMMdd}.json"
+                };
+
+                if (sfd.ShowDialog() == true)
+                {
+                    try
+                    {
+                        var json = JsonSerializer.Serialize(SettingsManager.Current, new JsonSerializerOptions { WriteIndented = true });
+                        File.WriteAllText(sfd.FileName, json);
+                        SendEvent("alert", new { title = "Бэкап сохранен", message = "Ваша конфигурация успешно экспортирована в файл!", isError = false });
+                    }
+                    catch (Exception ex)
+                    {
+                        SendEvent("alert", new { title = "Ошибка экспорта", message = ex.Message, isError = true });
+                    }
+                }
+            });
+        }
+
+        private async Task HandleImportConfigBackupAsync()
+        {
+            string? selectedFile = null;
+            _mainWindow.Dispatcher.Invoke(() =>
+            {
+                var ofd = new Microsoft.Win32.OpenFileDialog
+                {
+                    Filter = "Конфигурация Zapret (*.json)|*.json",
+                    Title = "Импорт резервной копии настроек"
+                };
+                if (ofd.ShowDialog() == true)
+                    selectedFile = ofd.FileName;
+            });
+
+            if (string.IsNullOrEmpty(selectedFile)) return;
+
+            try
+            {
+                var json = await File.ReadAllTextAsync(selectedFile);
+                var loaded = JsonSerializer.Deserialize<AppSettings>(json);
+                if (loaded == null)
+                    throw new Exception("Не удалось распознать структуру файла настроек.");
+
+                SettingsManager.Current = loaded;
+                SettingsManager.Save();
+                UIHelper.ApplyThemeColors();
+
+                _mainWindow.Dispatcher.Invoke(() =>
+                {
+                    _mainWindow.Topmost = SettingsManager.Current.AlwaysOnTop;
+                    if (_mainWindow is MainWindow mw)
+                    {
+                        mw.AnimateWindowSize(SettingsManager.Current.CompactMode);
+                        mw.RefreshAppIcon();
+                    }
+                });
+
+                await SendInitialStateAsync();
+                AudioHelper.PlaySuccess();
+                SendEvent("alert", new { title = "Настройки восстановлены", message = "Конфигурация успешно импортирована и применена!", isError = false });
+            }
+            catch (Exception ex)
+            {
+                SendEvent("alert", new { title = "Ошибка импорта", message = $"Не удалось загрузить файл настроек:\n{ex.Message}", isError = true });
+            }
+        }
         public void Dispose()
         {
             _watcherDebounceCts?.Cancel();
@@ -1333,5 +1462,6 @@ namespace ZapretGUI.Core
             _modsWatcher?.Dispose();
             _pendingConfirmTcs?.TrySetResult(false);
         }
+
     }
 }
