@@ -972,3 +972,11 @@ body[data-accent="crimson"] {
         transform: scale(1.18);
         box-shadow: 0 0 12px var(--accent-glow);
     }
+.setting-icon-box .mdl-icon {
+    color: #999999 !important;
+    transition: color 0.2s ease;
+}
+
+.setting-item-row:hover .setting-icon-box .mdl-icon {
+    color: #FFFFFF !important;
+}

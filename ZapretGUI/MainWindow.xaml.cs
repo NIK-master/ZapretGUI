@@ -99,19 +99,25 @@ namespace ZapretGUI
             };
 
             var baseDir = AppDomain.CurrentDomain.BaseDirectory;
-            var webRootDir = ExtractEmbeddedWebUI();
-            var htmlPath = Path.Combine(webRootDir, "index.html");
 
-            if (File.Exists(htmlPath))
+            // 1. В режиме разработки (Visual Studio) сначала ищем живую папку wwwroot в корне проекта
+            var devWebRoot = Path.GetFullPath(Path.Combine(baseDir, @"..\..\..\wwwroot\index.html"));
+            var localWebRoot = Path.Combine(baseDir, "wwwroot", "index.html");
+
+            string htmlPath;
+            if (File.Exists(devWebRoot))
             {
-                MainWebView.CoreWebView2.Navigate(new Uri(htmlPath).AbsoluteUri);
+                htmlPath = devWebRoot;
             }
-
-            if (!File.Exists(htmlPath))
+            else if (File.Exists(localWebRoot))
             {
-                var rootFallback = Path.GetFullPath(Path.Combine(baseDir, @"..\..\..\index.html"));
-                if (File.Exists(rootFallback))
-                    htmlPath = rootFallback;
+                htmlPath = localWebRoot;
+            }
+            else
+            {
+                // 2. В собранном single-file .exe распаковываем встроенный wwwroot.zip с перезаписью
+                var webRootDir = ExtractEmbeddedWebUI();
+                htmlPath = Path.Combine(webRootDir, "index.html");
             }
 
             if (File.Exists(htmlPath))
@@ -242,16 +248,17 @@ namespace ZapretGUI
         private string ExtractEmbeddedWebUI()
         {
             var tempDir = Path.Combine(Path.GetTempPath(), "ZapretGUI_UI_" + AppConstants.AppVersion);
-            if (!Directory.Exists(tempDir))
+            try
             {
                 Directory.CreateDirectory(tempDir);
                 using var stream = System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream("wwwroot.zip");
                 if (stream != null)
                 {
                     using var archive = new System.IO.Compression.ZipArchive(stream);
-                    archive.ExtractToDirectory(tempDir);
+                    archive.ExtractToDirectory(tempDir, overwriteFiles: true);
                 }
             }
+            catch { }
             return tempDir;
         }
     }

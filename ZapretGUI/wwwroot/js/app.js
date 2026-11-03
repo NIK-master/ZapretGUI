@@ -57,6 +57,7 @@ async function runSplashSequence() {
 function skipSplash() {
     splashSkipped = true;
     const el = document.getElementById('splash-overlay');
+    if (!el) return;
     el.style.opacity = '0';
     el.style.pointerEvents = 'none';
     setTimeout(() => el.style.display = 'none', 450);
@@ -65,12 +66,16 @@ function skipSplash() {
 // =========================================================================
 // 2. WIZARD WINDOW 2.0 + ПРОЦЕДУРНЫЙ 3D ASCII ДВИЖОК (TORUS, SHIELD, HELIX, CUBE)
 // =========================================================================
+let wizardStep = 0;
+let wizardFinished = false;
+let lastWizProgressEl = null;
+
 let wizAsciiTimer = null;
 let wizAsciiShape = 0; // 0: Torus, 1: Octahedron Shield, 2: DNA Network Helix, 3: Cyber Cube
-let wizPitch = 0.45;   // Наклон вверх-вниз (вокруг оси X)
-let wizYaw = 0.4;      // Поворот влево-вправо (вокруг оси Y)
-let wizVelPitch = 0;   // Инерция по вертикали
-let wizVelYaw = 0;     // Инерция по горизонтали
+let wizPitch = 0.45;
+let wizYaw = 0.4;
+let wizVelPitch = 0;
+let wizVelYaw = 0;
 let wizIsDragging = false;
 let wizLastMouseX = 0, wizLastMouseY = 0;
 let wizHyperSpeed = false;
@@ -84,7 +89,7 @@ const ASCII_MODELS = [
 
 function startWizAsciiEngine() {
     if (wizAsciiTimer) return;
-    wizAsciiTimer = setInterval(renderWizAsciiFrame, 33); // ~30 FPS
+    wizAsciiTimer = setInterval(renderWizAsciiFrame, 33);
 }
 
 function stopWizAsciiEngine() {
@@ -101,7 +106,6 @@ function cycleWizAsciiShape() {
     if (lbl) lbl.innerText = ASCII_MODELS[wizAsciiShape];
 }
 
-// Захват 3D-модели только при зажатии ЛКМ
 function onWizAsciiMouseDown(e) {
     if (e.button !== 0) return;
     wizIsDragging = true;
@@ -117,13 +121,8 @@ window.addEventListener('mousemove', (e) => {
     wizLastMouseX = e.clientX;
     wizLastMouseY = e.clientY;
 
-    // Крутим строго в сторону движения мыши:
-    // Мышь вправо (dx > 0) -> передняя грань идет вправо (Yaw+)
-    // Мышь вниз (dy > 0)   -> передняя грань идет вниз (Pitch+)
     wizYaw += dx * 0.013;
     wizPitch += dy * 0.013;
-
-    // Запоминаем скорость для плавной инерции после отпускания мыши
     wizVelYaw = dx * 0.005;
     wizVelPitch = dy * 0.005;
 });
@@ -146,7 +145,6 @@ function renderWizAsciiFrame() {
 
     if (!wizIsDragging) {
         const speedMult = wizHyperSpeed ? 2.8 : 1.0;
-        // Плавное авто-вращение + затухающая инерция после броска мышкой
         wizYaw += (0.032 * speedMult) + wizVelYaw;
         wizPitch += (0.014 * speedMult) + wizVelPitch;
         wizVelYaw *= 0.90;
@@ -157,12 +155,10 @@ function renderWizAsciiFrame() {
     const cosX = Math.cos(wizPitch), sinX = Math.sin(wizPitch);
 
     function plotPoint(x, y, z, nx, ny, nz) {
-        // 1. Вращение вокруг вертикальной оси Y (Yaw — влево/вправо за мышкой)
         const x1 = x * cosY - z * sinY;
         const z1 = x * sinY + z * cosY;
         const y1 = y;
 
-        // 2. Вращение вокруг горизонтальной оси X (Pitch — вверх/вниз за мышкой)
         const y2 = y1 * cosX - z1 * sinX;
         const z2 = y1 * sinX + z1 * cosX;
         const x2 = x1;
@@ -171,7 +167,6 @@ function renderWizAsciiFrame() {
         if (depth <= 0.5) return;
         const ooz = 1 / depth;
 
-        // Экранные координаты: X вправо, Y вверх (в консоль вниз)
         const xp = Math.floor(W / 2 + 34 * ooz * x2);
         const yp = Math.floor(H / 2 - 17 * ooz * y2);
 
@@ -181,7 +176,6 @@ function renderWizAsciiFrame() {
         if (ooz > zbuffer[idx]) {
             zbuffer[idx] = ooz;
 
-            // Поворачиваем нормали для реалистичного блика света
             const nx1 = nx * cosY - nz * sinY;
             const nz1 = nx * sinY + nz * cosY;
             const ny2 = ny * cosX - nz1 * sinX;
@@ -194,7 +188,6 @@ function renderWizAsciiFrame() {
     }
 
     if (wizAsciiShape === 0) {
-        // 0. Классический 3D Тор (Donut Reactor)
         const R1 = 0.85, R2 = 1.75;
         for (let theta = 0; theta < 6.28; theta += 0.13) {
             const cost = Math.cos(theta), sint = Math.sin(theta);
@@ -212,7 +205,6 @@ function renderWizAsciiFrame() {
             }
         }
     } else if (wizAsciiShape === 1) {
-        // 1. 3D Кристалл / Октаэдр защиты (Privacy Shield)
         const S = 2.05;
         const verts = [
             [0, S, 0], [0, -S, 0], [S, 0, 0], [-S, 0, 0], [0, 0, S], [0, 0, -S]
@@ -239,7 +231,6 @@ function renderWizAsciiFrame() {
             }
         });
     } else if (wizAsciiShape === 2) {
-        // 2. Двойная сетевая спираль (Network DNA Helix)
         for (let t = -2.2; t <= 2.2; t += 0.05) {
             const angle = t * 2.2;
             const r = 1.35;
@@ -258,7 +249,6 @@ function renderWizAsciiFrame() {
             }
         }
     } else {
-        // 3. 3D Кибер-Куб (Hyper Cube)
         const C = 1.4;
         for (let u = -C; u <= C; u += 0.12) {
             for (let v = -C; v <= C; v += 0.12) {
@@ -285,26 +275,19 @@ function onWizardOptionChange() {
     const prx = document.getElementById('wiz-chk-proxy').checked;
     const aut = document.getElementById('wiz-chk-autostart').checked;
     const foc = document.getElementById('wiz-chk-focus').checked;
-    const cb = document.getElementById('wiz-chk-colorblind').checked;
 
     document.getElementById('wiz-card-zapret')?.classList.toggle('selected', zap);
     document.getElementById('wiz-card-proxy')?.classList.toggle('selected', prx);
     document.getElementById('wiz-card-autostart')?.classList.toggle('selected', aut);
     document.getElementById('wiz-card-focus')?.classList.toggle('selected', foc);
-    document.getElementById('wiz-card-colorblind')?.classList.toggle('selected', cb);
-
-    // Живое превью цветовой слепоты прямо в мастере
-    document.body.classList.toggle('colorblind-mode', cb);
 
     const sumZap = document.getElementById('wiz-sum-zapret');
     const sumPrx = document.getElementById('wiz-sum-proxy');
     const sumAut = document.getElementById('wiz-sum-auto');
-    const sumThm = document.getElementById('wiz-sum-theme');
 
     if (sumZap) { sumZap.innerText = zap ? 'ВКЛ' : 'ВЫКЛ'; sumZap.className = zap ? 'text-brand' : 'text-[#777777]'; }
     if (sumPrx) { sumPrx.innerText = prx ? 'ВКЛ' : 'ВЫКЛ'; sumPrx.className = prx ? 'text-brand' : 'text-[#777777]'; }
     if (sumAut) { sumAut.innerText = aut ? 'ВКЛ' : 'ВЫКЛ'; sumAut.className = aut ? 'text-brand' : 'text-[#777777]'; }
-    if (sumThm) { sumThm.innerText = cb ? 'Сине-оранж.' : 'Стандарт'; }
 }
 
 function openWizardModal() {
@@ -333,7 +316,6 @@ function updateWizardUI() {
         }
     }
 
-    // Автоматически меняем 3D ASCII-модель под тему текущего шага
     wizAsciiShape = wizardStep < 4 ? wizardStep : 0;
     wizHyperSpeed = (wizardStep === 4 && !wizardFinished);
     const modelLbl = document.getElementById('wiz-ascii-model-name');
@@ -394,7 +376,7 @@ function wizardNextStep() {
             useTgProxy: document.getElementById('wiz-chk-proxy').checked,
             autoStart: document.getElementById('wiz-chk-autostart').checked,
             focusMode: document.getElementById('wiz-chk-focus').checked,
-            colorblind: document.getElementById('wiz-chk-colorblind').checked
+            accentTheme: appState.settings.accentTheme || 'green'
         });
     } else if (wizardStep === 4) {
         if (wizardFinished) {
@@ -458,21 +440,24 @@ let appState = {
     settings: {
         focusMode: false,
         compactMode: false,
-        colorblindMode: false,
+        accentTheme: 'green',
         statsUpdateInterval: 1,
         hostsSourceIndex: 2,
-        ipSetMode: 'loaded'
+        ipSetMode: 'loaded',
+        watchdogPingAutoRestart: false
     }
 };
 
 let lastProgressLogEl = null;
 let confirmCallback = null;
+let cancelConfirmCallback = null;
 let isBackendConfirm = false;
 let selectionCallback = null;
 
-// Таймер активной сессии обхода
+// Таймер активной сессии обхода и Ping-Watchdog
 let sessionStartTime = null;
 let sessionTimerId = null;
+let watchdogFailCount = 0;
 
 // Фильтр логов
 let currentLogFilter = 'all';
@@ -544,14 +529,14 @@ function handleBackendEvent(type, data) {
 
         case 'routingStatusUpdated':
             updateRoutingStatusUI(data);
-            document.getElementById('btn-update-ipset').innerHTML = '<span class="mdl-icon text-xs">&#xE149;</span><span>Обновить базу IP</span>';
+            document.getElementById('btn-update-ipset').innerHTML = '<span class="mdl-icon text-xs text-brand">&#xE149;</span><span>Обновить базу</span>';
             document.getElementById('btn-update-ipset').disabled = false;
             document.getElementById('btn-update-hosts').innerHTML = '<span class="mdl-icon text-xs">&#xE945;</span><span>Обновить</span>';
             document.getElementById('btn-update-hosts').disabled = false;
             break;
 
         case 'updatesCheckFinished':
-            document.getElementById('btn-check-updates').innerText = 'Проверить обновления';
+            document.getElementById('btn-check-updates').innerHTML = '<span class="mdl-icon text-xs">&#xE149;</span><span>Проверить обновления</span>';
             document.getElementById('btn-check-updates').disabled = false;
             break;
 
@@ -581,7 +566,7 @@ function handleBackendEvent(type, data) {
 
         case 'batValidationResult':
             if (data.isValid) {
-                setEditorStatus('✓ Синтаксис корректен!', 'text-[#4ADE80]');
+                setEditorStatus('✓ Синтаксис корректен!', 'text-brand');
             } else {
                 setEditorStatus('⚠ Ошибка в скрипте', 'text-[#F44336]');
                 showAlert('Проверка синтаксиса Zapret', data.errorMessage, true);
@@ -644,6 +629,20 @@ function handleBackendEvent(type, data) {
             document.getElementById('dot-net').className = `w-2 h-2 rounded-full ${data.ping >= 0 ? 'dot-online' : 'dot-offline'}`;
             appState.configs.forEach(c => c.pingMs = data.ping > 0 ? data.ping : 999999);
             renderConfigCards();
+
+            // Проверка Ping-Watchdog
+            if (appState.isRunning && appState.settings.watchdogPingAutoRestart) {
+                if (data.ping < 0) {
+                    watchdogFailCount++;
+                    if (watchdogFailCount >= 3) {
+                        watchdogFailCount = 0;
+                        appendLog(new Date().toLocaleTimeString(), '🐕 [Ping-Watchdog] Обнаружена потеря пинга. Автоматический перезапуск служб...');
+                        sendCmd('restartBypass');
+                    }
+                } else {
+                    watchdogFailCount = 0;
+                }
+            }
             break;
 
         case 'bypassState':
@@ -679,6 +678,12 @@ function handleBackendEvent(type, data) {
             } else {
                 appendLog(new Date().toLocaleTimeString(), '⚠ Сканирование завершено, но ни одна стратегия не сработала.');
             }
+            break;
+
+        case 'scanFailed':
+            appState.isScanning = false;
+            updateScanButtonUI();
+            appendLog(new Date().toLocaleTimeString(), `❌ Ошибка сканера: ${data.error}`);
             break;
 
         case 'gameFilterSaved':
@@ -730,11 +735,10 @@ function handleBackendEvent(type, data) {
 function updatePingDisplay(pingMs) {
     const pingEl = document.getElementById('stat-ping');
     const badgeEl = document.getElementById('ping-quality-badge');
-    const isCb = appState.settings.colorblindMode;
 
     if (pingMs < 0) {
         pingEl.innerText = '—';
-        pingEl.style.color = isCb ? '#FF8C00' : '#D13438';
+        pingEl.style.color = '#D13438';
         badgeEl.innerText = 'Недоступен';
         badgeEl.className = 'px-1.5 py-0.2 rounded text-[9px] font-mono font-semibold bg-[#2A1215] text-[#F44336]';
         return;
@@ -742,15 +746,15 @@ function updatePingDisplay(pingMs) {
 
     pingEl.innerText = pingMs;
     if (pingMs < 80) {
-        pingEl.style.color = isCb ? '#60A5FA' : '#4CAF50';
+        pingEl.style.color = 'var(--accent-light)';
         badgeEl.innerText = 'Отлично';
-        badgeEl.className = 'px-1.5 py-0.2 rounded text-[9px] font-mono font-semibold bg-[#1A2E1A] text-[#4ADE80]';
+        badgeEl.className = 'px-1.5 py-0.2 rounded text-[9px] font-mono font-semibold bg-[#0F240F] text-brand';
     } else if (pingMs < 150) {
         pingEl.style.color = '#FF8C00';
         badgeEl.innerText = 'Норма';
         badgeEl.className = 'px-1.5 py-0.2 rounded text-[9px] font-mono font-semibold bg-[#2E2210] text-[#F59E0B]';
     } else {
-        pingEl.style.color = isCb ? '#FF8C00' : '#D13438';
+        pingEl.style.color = '#D13438';
         badgeEl.innerText = 'Высокий';
         badgeEl.className = 'px-1.5 py-0.2 rounded text-[9px] font-mono font-semibold bg-[#2A1215] text-[#F44336]';
     }
@@ -774,6 +778,11 @@ function updateSessionBadgeTick() {
         badge.className = 'mt-2.5 px-3 py-1 rounded-full bg-[#0F240F] border border-[#107C10] flex items-center gap-2 text-[11px] font-mono text-white transition-all';
         dot.className = 'w-1.5 h-1.5 rounded-full dot-online';
         txt.innerText = `АКТИВЕН • ${formatUptime(elapsed)}`;
+
+        // Раз в 25 секунд проверяем пинг для Ping-Watchdog, если он включен
+        if (appState.settings.watchdogPingAutoRestart && Math.floor(elapsed / 1000) % 25 === 0) {
+            sendCmd('ping');
+        }
     } else {
         badge.className = 'mt-2.5 px-3 py-1 rounded-full bg-[#181818] border border-[#2A2A2A] flex items-center gap-2 text-[11px] font-mono text-[#888888] transition-all';
         dot.className = 'w-1.5 h-1.5 rounded-full bg-[#555555]';
@@ -845,6 +854,7 @@ function updateRunningUI(zapretRunning, proxyRunning) {
 
     if (appState.isRunning && !wasRunning) {
         sessionStartTime = Date.now();
+        watchdogFailCount = 0;
         if (!sessionTimerId) sessionTimerId = setInterval(updateSessionBadgeTick, 1000);
     } else if (!appState.isRunning) {
         sessionStartTime = null;
@@ -877,6 +887,9 @@ function updateRunningUI(zapretRunning, proxyRunning) {
     document.getElementById('dot-proxy').className = `w-2 h-2 rounded-full ${proxyRunning ? 'dot-online' : 'dot-offline'}`;
 }
 
+// =========================================================================
+// 5. ВЫБОР КОНФИГОВ ZAPRET (.BAT) И ИГРОВОГО ФИЛЬТРА
+// =========================================================================
 function initConfigsList(fileNames) {
     const existingMap = {};
     appState.configs.forEach(c => existingMap[c.fileName.toLowerCase()] = c);
@@ -886,64 +899,63 @@ function initConfigsList(fileNames) {
         topRank: 999999,
         pingMs: appState.currentPing > 0 ? appState.currentPing : 999999,
         testsOk: -1,
-        testsTotal: -1
+        testsTotal: 0
     }));
-
-    if (!fileNames.some(f => f.toLowerCase() === appState.selectedProfile.toLowerCase()) && fileNames.length > 0) {
-        appState.selectedProfile = fileNames[0];
-    }
 
     document.getElementById('txt-main-profile').innerText = appState.selectedProfile;
     document.getElementById('modal-active-profile').innerText = appState.selectedProfile;
-    renderConfigCards();
-}
+    document.getElementById('modal-configs-count').innerText = `${appState.configs.length} конфигов`;
 
-function sortConfigs() {
-    appState.configs.sort((a, b) => {
-        if (a.topRank !== b.topRank) return a.topRank - b.topRank;
-        const rateA = a.testsTotal > 0 ? a.testsOk / a.testsTotal : -1;
-        const rateB = b.testsTotal > 0 ? b.testsOk / b.testsTotal : -1;
-        if (rateA !== rateB) return rateB - rateA;
-        if (a.pingMs !== b.pingMs) return a.pingMs - b.pingMs;
-        return a.fileName.localeCompare(b.fileName);
-    });
+    renderConfigCards();
 }
 
 function renderConfigCards() {
-    sortConfigs();
     const list = document.getElementById('profile-cards-list');
-    document.getElementById('modal-configs-count').innerText = `${appState.configs.length} конфигов`;
+    if (!list) return;
 
-    list.innerHTML = appState.configs.map(cfg => {
-        const isActive = cfg.fileName.toLowerCase() === appState.selectedProfile.toLowerCase();
+    const sorted = [...appState.configs].sort((a, b) => {
+        if (a.topRank !== b.topRank) return a.topRank - b.topRank;
+        if (b.testsOk !== a.testsOk) return b.testsOk - a.testsOk;
+        return a.fileName.localeCompare(b.fileName);
+    });
+
+    list.innerHTML = sorted.map(cfg => {
+        const isSelected = cfg.fileName.toLowerCase() === appState.selectedProfile.toLowerCase();
         const isMod = cfg.fileName.toLowerCase().startsWith('mod_');
-        const pingStr = cfg.pingMs < 999999 ? `${cfg.pingMs}` : '—';
-        const testStr = cfg.testsTotal > 0 ? `${cfg.testsOk}/${cfg.testsTotal}` : 'не проводились';
-        const metaInfo = `Пинг: ${pingStr} мс • Тесты: ${testStr}`;
+
+        let badgeHtml = '';
+        if (cfg.topRank === 0) {
+            badgeHtml = `<span class="px-2 py-0.5 rounded bg-[#0F240F] border border-[#107C10] text-brand font-mono text-[10px] font-bold">★ ЛУЧШИЙ</span>`;
+        } else if (cfg.testsOk >= 0) {
+            const allOk = cfg.testsOk === cfg.testsTotal && cfg.testsTotal > 0;
+            badgeHtml = `<span class="px-2 py-0.5 rounded ${allOk ? 'bg-[#0F240F] text-brand' : 'bg-[#2E2210] text-[#F59E0B]'} font-mono text-[10px] font-semibold">OK: ${cfg.testsOk}/${cfg.testsTotal}</span>`;
+        } else if (isMod) {
+            badgeHtml = `<span class="px-2 py-0.5 rounded bg-[#1E1E24] border border-[#333333] text-[#CCCCCC] font-mono text-[10px]">MOD</span>`;
+        }
 
         return `
-        <div onclick="selectProfile('${cfg.fileName}')"
-             class="p-3.5 rounded-xl border cursor-pointer transition flex items-center justify-between ${isActive ? 'bg-[#0F240F] border-[#107C10]' : 'bg-[#181818] border-[#262626] hover:bg-[#222222]'}">
-            <div>
-                <div class="flex items-center gap-2 mb-1">
-                    <span class="font-mono text-sm font-semibold ${isActive ? 'text-brand' : 'text-white'}">${cfg.fileName}</span>
-                    ${isMod ? '<span class="px-1.5 py-0.5 text-[10px] font-mono bg-[#222222] border border-[#333333] text-[#AAAAAA] rounded">MOD</span>' : ''}
-                    ${isActive ? '<span class="px-1.5 py-0.5 text-[10px] font-semibold bg-[#107C10]/30 text-brand border border-[#107C10]/50 rounded">активный</span>' : ''}
+            <div onclick="selectProfile('${cfg.fileName.replace(/'/g, "\\'")}')"
+                 class="p-3 rounded-lg border transition cursor-pointer flex items-center justify-between ${isSelected ? 'bg-[#0F240F] border-[#107C10]' : 'bg-[#181818] border-[#262626] hover:border-[#3E3E3E]'}">
+                <div class="flex items-center gap-2.5 overflow-hidden">
+                    <span class="mdl-icon text-sm ${isSelected ? 'text-brand' : 'text-[#777777]'}">&#xE756;</span>
+                    <span class="font-mono text-xs font-semibold text-white truncate">${cfg.fileName}</span>
                 </div>
-                <div class="text-xs text-[#888888]">${metaInfo}</div>
+                <div class="flex items-center gap-2 shrink-0">
+                    ${badgeHtml}
+                    ${isSelected ? '<span class="text-xs font-bold text-brand">✓ Выбран</span>' : '<span class="text-xs text-[#666666]">Выбрать</span>'}
+                </div>
             </div>
-            <span class="text-base font-bold ${isActive ? 'text-brand' : 'text-[#555555]'}">${isActive ? '✓' : '→'}</span>
-        </div>`;
+        `;
     }).join('');
 }
 
-function selectProfile(fileName) {
+function selectProfile(profileName) {
     sendCmd('playClick');
-    appState.selectedProfile = fileName;
-    document.getElementById('txt-main-profile').innerText = fileName;
-    document.getElementById('modal-active-profile').innerText = fileName;
-    sendCmd('selectProfile', { profile: fileName });
+    appState.selectedProfile = profileName;
+    document.getElementById('txt-main-profile').innerText = profileName;
+    document.getElementById('modal-active-profile').innerText = profileName;
     renderConfigCards();
+    sendCmd('selectProfile', { profile: profileName });
 }
 
 function openConfigModal() {
@@ -963,30 +975,31 @@ function toggleSmartScan() {
 }
 
 function updateScanButtonUI() {
+    const txt = document.getElementById('scan-btn-text');
     const icon = document.getElementById('scan-btn-icon');
-    const text = document.getElementById('scan-btn-text');
+    if (!txt || !icon) return;
+
     if (appState.isScanning) {
-        icon.innerHTML = '&#xE71A;';
-        icon.className = 'mdl-icon text-sm text-[#F44336]';
-        text.innerText = 'Остановить тесты';
+        txt.innerText = 'Остановить сканирование...';
+        icon.classList.add('spin-anim');
     } else {
-        icon.innerHTML = '&#xE721;';
-        icon.className = 'mdl-icon text-sm text-[#A1A1AA]';
-        text.innerText = 'Запустить авто-подбор (Smart DPI Scan)';
+        txt.innerText = 'Запустить авто-подбор (Smart DPI Scan)';
+        icon.classList.remove('spin-anim');
     }
 }
 
 function updateGameFilterBadge(statusText, isEnabled) {
     const el = document.getElementById('txt-gf-status');
-    el.innerText = statusText;
+    if (!el) return;
+    el.innerText = statusText || 'Отключен';
     el.className = `text-xs font-mono font-semibold truncate ${isEnabled ? 'text-brand' : 'text-[#A0A0A0]'}`;
 }
 
 function openGameFilterModal() {
     sendCmd('playClick');
-    selectGfMode(appState.gameFilter.mode);
-    document.getElementById('gf-tcp-input').value = appState.gameFilter.tcp;
-    document.getElementById('gf-udp-input').value = appState.gameFilter.udp;
+    selectGfMode(appState.gameFilter.mode || 'disabled', true);
+    document.getElementById('gf-tcp-input').value = appState.gameFilter.tcp || '1024-65535';
+    document.getElementById('gf-udp-input').value = appState.gameFilter.udp || '1024-65535';
     document.getElementById('gf-modal').classList.add('open');
 }
 
@@ -995,14 +1008,18 @@ function closeGameFilterModal() {
     document.getElementById('gf-modal').classList.remove('open');
 }
 
-function selectGfMode(mode) {
+function selectGfMode(mode, silent = false) {
+    if (!silent) sendCmd('playClick');
     appState.gameFilter.mode = mode;
+
     document.querySelectorAll('.gf-mode-card').forEach(card => {
-        const isSelected = card.getAttribute('data-mode') === mode;
-        card.className = `gf-mode-card p-3 rounded-lg border cursor-pointer flex items-center justify-between transition ${isSelected ? 'bg-[#0F240F] border-[#107C10]' : 'bg-[#181818] border-[#262626] hover:bg-[#222222]'}`;
-        const check = card.querySelector('.gf-check');
-        check.innerText = isSelected ? '✓' : '→';
-        check.className = `gf-check text-sm font-bold ${isSelected ? 'text-brand' : 'text-[#555555]'}`;
+        const isCurrent = card.getAttribute('data-mode') === mode;
+        card.className = `gf-mode-card p-3 rounded-lg border cursor-pointer flex items-center justify-between transition ${isCurrent ? 'bg-[#0F240F] border-[#107C10]' : 'border-[#262626] bg-[#181818] hover:bg-[#222222]'}`;
+        const chk = card.querySelector('.gf-check');
+        if (chk) {
+            chk.innerText = isCurrent ? '✓' : '→';
+            chk.className = `gf-check text-sm font-bold ${isCurrent ? 'text-brand' : 'text-[#555555]'}`;
+        }
     });
 }
 
@@ -1016,131 +1033,296 @@ function saveGameFilter() {
     sendCmd('playClick');
     sendCmd('saveGameFilter', {
         mode: appState.gameFilter.mode,
-        tcp: document.getElementById('gf-tcp-input').value,
-        udp: document.getElementById('gf-udp-input').value,
+        tcp: document.getElementById('gf-tcp-input').value.trim(),
+        udp: document.getElementById('gf-udp-input').value.trim(),
         restartIfRunning: false
     });
 }
 
 // =========================================================================
-// 5. ПАНЕЛЬ ЛОГОВ С ПОИСКОМ И ФИЛЬТРАМИ
+// 6. ДВУХКАНАЛЬНЫЙ ГРАФИК ТРАФИКА С ПОДДЕРЖКОЙ АКЦЕНТНОЙ ТЕМЫ
 // =========================================================================
+const CHART_POINTS = 40;
+let rxHistory = new Array(CHART_POINTS).fill(0);
+let txHistory = new Array(CHART_POINTS).fill(0);
+let peakSpeedMbps = 0;
+let totalRxMB = 0;
+let totalTxMB = 0;
+let chartHoverIndex = -1;
+
+function updateChart(rxMbps, txMbps) {
+    rxHistory.push(rxMbps);
+    if (rxHistory.length > CHART_POINTS) rxHistory.shift();
+
+    txHistory.push(txMbps);
+    if (txHistory.length > CHART_POINTS) txHistory.shift();
+
+    const maxNow = Math.max(rxMbps, txMbps);
+    if (maxNow > peakSpeedMbps) {
+        peakSpeedMbps = maxNow;
+        const peakEl = document.getElementById('stat-peak');
+        if (peakEl) peakEl.innerText = `Пик: ${peakSpeedMbps.toFixed(1)} Мбит/с`;
+    }
+
+    const intervalSec = Math.max(1, appState.settings.statsUpdateInterval || 1);
+    totalRxMB += (rxMbps * intervalSec) / 8.0;
+    totalTxMB += (txMbps * intervalSec) / 8.0;
+
+    const totalEl = document.getElementById('stat-session-total');
+    if (totalEl) {
+        totalEl.innerText = `Сессия: ↓ ${totalRxMB.toFixed(1)} МБ • ↑ ${totalTxMB.toFixed(1)} МБ`;
+    }
+
+    drawChart();
+}
+
+function onChartMouseMove(e) {
+    const canvas = document.getElementById('traffic-chart');
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const relX = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    chartHoverIndex = Math.round(relX * (CHART_POINTS - 1));
+    drawChart();
+}
+
+function onChartMouseLeave() {
+    chartHoverIndex = -1;
+    drawChart();
+}
+
+function drawChart() {
+    const canvas = document.getElementById('traffic-chart');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width;
+    const h = canvas.height;
+
+    ctx.clearRect(0, 0, w, h);
+
+    const accentLight = getComputedStyle(document.body).getPropertyValue('--accent-light').trim() || '#4CAF50';
+    const maxVal = Math.max(5, ...rxHistory, ...txHistory) * 1.25;
+
+    function drawSeries(data, strokeColor, fillHex) {
+        ctx.beginPath();
+        for (let i = 0; i < data.length; i++) {
+            const x = (i / (CHART_POINTS - 1)) * w;
+            const y = h - 4 - (data[i] / maxVal) * (h - 20);
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.strokeStyle = strokeColor;
+        ctx.lineWidth = 1.8;
+        ctx.stroke();
+
+        ctx.lineTo(w, h);
+        ctx.lineTo(0, h);
+        ctx.closePath();
+
+        const grad = ctx.createLinearGradient(0, 0, 0, h);
+        grad.addColorStop(0, fillHex + '44');
+        grad.addColorStop(1, fillHex + '00');
+        ctx.fillStyle = grad;
+        ctx.fill();
+    }
+
+    drawSeries(txHistory, '#60A5FA', '#3B82F6');
+    drawSeries(rxHistory, accentLight, accentLight.startsWith('#') ? accentLight : '#4CAF50');
+
+    if (chartHoverIndex >= 0 && chartHoverIndex < CHART_POINTS) {
+        const x = (chartHoverIndex / (CHART_POINTS - 1)) * w;
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, h);
+        ctx.strokeStyle = '#555555';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        const rxVal = rxHistory[chartHoverIndex].toFixed(1);
+        const txVal = txHistory[chartHoverIndex].toFixed(1);
+        const label = `↓ ${rxVal}  ↑ ${txVal} Мбит/с`;
+
+        ctx.font = '10px Consolas, monospace';
+        const textW = ctx.measureText(label).width + 10;
+        const boxX = Math.min(w - textW - 4, Math.max(4, x - textW / 2));
+
+        ctx.fillStyle = '#141414E6';
+        ctx.fillRect(boxX, 16, textW, 16);
+        ctx.strokeStyle = '#333333';
+        ctx.strokeRect(boxX, 16, textW, 16);
+
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillText(label, boxX + 5, 27);
+    }
+}
+
+// =========================================================================
+// 7. ЖУРНАЛ СОБЫТИЙ (ЛОГ-БОКС С ПОИСКОМ И ФИЛЬТРАЦИЕЙ)
+// =========================================================================
+function appendLog(time, message, isProgress = false) {
+    const box = document.getElementById('log-box');
+    if (!box) return;
+
+    const fullText = `[${time}] ${message}`;
+    if (isProgress && lastProgressLogEl) {
+        lastProgressLogEl.innerText = fullText;
+        box.scrollTop = box.scrollHeight;
+        return;
+    }
+
+    const row = document.createElement('div');
+    const isErr = message.includes('ОШИБКА') || message.includes('ERR') || message.includes('❌') || message.includes('⚠');
+    row.setAttribute('data-err', isErr ? '1' : '0');
+
+    if (isErr) row.className = 'text-[#F87171]';
+    else if (message.includes('✅') || message.includes('🏆')) row.className = 'text-brand font-semibold';
+    else row.className = 'text-[#CCCCCC]';
+
+    row.innerText = fullText;
+    box.appendChild(row);
+    lastProgressLogEl = isProgress ? row : null;
+
+    updateLogCounter();
+    applyLogFilters();
+    box.scrollTop = box.scrollHeight;
+}
+
+function updateLogCounter() {
+    const box = document.getElementById('log-box');
+    const badge = document.getElementById('log-counter-badge');
+    if (box && badge) {
+        badge.innerText = box.children.length;
+    }
+}
+
 function setLogFilter(mode) {
     sendCmd('playClick');
     currentLogFilter = mode;
+
     const btnAll = document.getElementById('log-filter-all');
     const btnErr = document.getElementById('log-filter-err');
 
-    btnAll.className = mode === 'all'
-        ? 'px-2 py-0.5 rounded text-[11px] font-semibold bg-[#2A2A2A] text-white cursor-pointer transition'
-        : 'px-2 py-0.5 rounded text-[11px] font-medium text-[#888888] hover:text-white cursor-pointer transition';
+    if (btnAll && btnErr) {
+        btnAll.className = mode === 'all'
+            ? 'px-2 py-0.5 rounded text-[11px] font-semibold bg-[#2A2A2A] text-white cursor-pointer transition'
+            : 'px-2 py-0.5 rounded text-[11px] font-medium text-[#888888] hover:text-white cursor-pointer transition';
 
-    btnErr.className = mode === 'err'
-        ? 'px-2 py-0.5 rounded text-[11px] font-semibold bg-[#3B181C] text-[#F44336] cursor-pointer transition'
-        : 'px-2 py-0.5 rounded text-[11px] font-medium text-[#888888] hover:text-white cursor-pointer transition';
+        btnErr.className = mode === 'err'
+            ? 'px-2 py-0.5 rounded text-[11px] font-semibold bg-[#2A1215] text-[#F44336] cursor-pointer transition'
+            : 'px-2 py-0.5 rounded text-[11px] font-medium text-[#888888] hover:text-white cursor-pointer transition';
+    }
 
     applyLogFilters();
 }
 
 function applyLogFilters() {
     const box = document.getElementById('log-box');
-    const query = (document.getElementById('log-search-input')?.value || '').toLowerCase();
+    if (!box) return;
+    const q = (document.getElementById('log-search-input')?.value || '').trim().toLowerCase();
 
     Array.from(box.children).forEach(el => {
-        const isErr = el.dataset.isErr === '1';
-        const text = el.innerText.toLowerCase();
-        const matchMode = currentLogFilter === 'all' || isErr;
-        const matchQuery = !query || text.includes(query);
-        el.style.display = (matchMode && matchQuery) ? '' : 'none';
+        const isErr = el.getAttribute('data-err') === '1';
+        const matchType = currentLogFilter === 'all' || isErr;
+        const matchQuery = !q || el.innerText.toLowerCase().includes(q);
+        el.classList.toggle('hidden', !(matchType && matchQuery));
     });
-}
-
-function appendLog(time, message, isProgress = false) {
-    const box = document.getElementById('log-box');
-    const text = `[${time}] ${message}`;
-
-    if (isProgress && lastProgressLogEl) {
-        lastProgressLogEl.innerText = text;
-        return;
-    }
-
-    while (box.children.length >= 250) {
-        box.removeChild(box.firstChild);
-    }
-
-    const div = document.createElement('div');
-    let color = 'text-[#A0A0A0]';
-    let isErr = false;
-
-    if (message.includes('ОШИБКА') || message.includes('⚠') || message.includes('🛑') || message.includes('❌') || message.includes('ERR')) {
-        color = 'text-[#F44336] font-semibold';
-        isErr = true;
-    } else if (message.includes('✅') || message.includes('✨') || message.includes('🏆')) {
-        color = 'text-brand';
-    } else if (message.includes('🔍') || message.includes('[Auto]')) {
-        color = 'text-[#60A5FA]';
-    }
-
-    div.dataset.isErr = isErr ? '1' : '0';
-    div.className = color;
-    div.innerText = text;
-    box.appendChild(div);
-
-    const counter = document.getElementById('log-counter-badge');
-    if (counter) counter.innerText = box.children.length;
-
-    applyLogFilters();
-    box.scrollTop = box.scrollHeight;
-
-    lastProgressLogEl = isProgress ? div : null;
 }
 
 function clearLogs() {
     sendCmd('playClick');
-    document.getElementById('log-box').innerHTML = '';
-    const counter = document.getElementById('log-counter-badge');
-    if (counter) counter.innerText = '0';
+    const box = document.getElementById('log-box');
+    if (box) box.innerHTML = '';
     lastProgressLogEl = null;
+    updateLogCounter();
 }
 
 function exportLogs() {
     sendCmd('playClick');
-    const text = Array.from(document.getElementById('log-box').children).map(el => el.innerText).join('\r\n');
+    const box = document.getElementById('log-box');
+    if (!box) return;
+    const text = Array.from(box.children).map(el => el.innerText).join('\r\n');
     sendCmd('exportLogs', { text });
 }
 
+// =========================================================================
+// 8. НАВИГАЦИЯ ПО ВКЛАДКАМ, SIDEBAR И МОДАЛЬНЫЕ ДИАЛОГИ
+// =========================================================================
+function toggleSidebar() {
+    sendCmd('playClick');
+    document.getElementById('sidebar')?.classList.toggle('rail-mode');
+}
+
+function switchTab(tabId, btnEl) {
+    sendCmd('playClick');
+
+    document.querySelectorAll('.tab-view').forEach(sec => sec.classList.remove('active'));
+    document.getElementById('tab-' + tabId)?.classList.add('active');
+
+    const navBtns = document.querySelectorAll('#sidebar-nav .nav-btn');
+    navBtns.forEach(b => {
+        b.classList.remove('active', 'font-semibold', 'text-white');
+        b.classList.add('font-medium', 'text-[#CCCCCC]');
+        const ico = b.querySelector('.mdl-icon');
+        if (ico) {
+            ico.classList.remove('text-brand', 'text-[#4CAF50]');
+            ico.classList.add('text-[#888888]');
+        }
+    });
+
+    const targetBtn = btnEl || Array.from(navBtns).find(b => b.getAttribute('onclick')?.includes(`'${tabId}'`));
+    if (targetBtn) {
+        targetBtn.classList.add('active', 'font-semibold', 'text-white');
+        targetBtn.classList.remove('font-medium', 'text-[#CCCCCC]');
+        const ico = targetBtn.querySelector('.mdl-icon');
+        if (ico) {
+            ico.classList.remove('text-[#888888]');
+            ico.classList.add('text-brand');
+        }
+
+        const pill = document.getElementById('sidebar-active-pill');
+        if (pill) {
+            pill.style.transform = `translateY(${targetBtn.offsetTop}px)`;
+        }
+    }
+
+    if (tabId === 'mods' && typeof updateModsSlidingPill === 'function') {
+        setTimeout(updateModsSlidingPill, 30);
+    } else if (tabId === 'settings' && typeof updateSettingsSlidingPill === 'function') {
+        const activeSetBtn = document.querySelector('.set-cat-btn.active');
+        setTimeout(() => updateSettingsSlidingPill(activeSetBtn), 30);
+    }
+}
+
 function showAlert(title, message, isError = false) {
-    confirmCallback = null;
     isBackendConfirm = false;
-    document.getElementById('confirm-title').innerText = title;
-    document.getElementById('confirm-msg').innerText = message;
-    document.getElementById('confirm-cancel-btn').style.display = 'none';
+    confirmCallback = null;
+    cancelConfirmCallback = null;
+
+    document.getElementById('confirm-title').innerText = title || 'Уведомление';
+    document.getElementById('confirm-title').className = `text-base font-bold mb-2 ${isError ? 'text-[#F44336]' : 'text-white'}`;
+    document.getElementById('confirm-msg').innerText = message || '';
+    document.getElementById('confirm-cancel-btn').classList.add('hidden');
+
     const okBtn = document.getElementById('confirm-ok-btn');
     okBtn.innerText = 'ОК';
-    okBtn.className = `px-4 py-1.5 rounded-md text-xs font-semibold text-white transition cursor-pointer ${isError ? 'bg-[#D13438] hover:opacity-90' : 'btn-brand'}`;
+    okBtn.className = 'px-4 py-1.5 rounded-md btn-brand text-xs font-semibold cursor-pointer';
+
     document.getElementById('confirm-modal').classList.add('open');
 }
 
-let cancelCallback = null;
+function showConfirm(title, message, confirmText = 'Да', onAccept = null, isDanger = false, onCancel = null) {
+    confirmCallback = onAccept;
+    cancelConfirmCallback = onCancel;
 
-function showConfirm(title, message, okText = 'Да', onConfirm = null, isDanger = false, onCancel = null) {
-    if (isBackendConfirm && onConfirm !== null) {
-        sendCmd('confirmResponse', { accepted: false });
-        isBackendConfirm = false;
-    }
-
-    confirmCallback = onConfirm;
-    cancelCallback = onCancel;
-    document.getElementById('confirm-title').innerText = title;
-    document.getElementById('confirm-title').className = `text-base font-bold mb-2 ${isDanger ? 'text-[#F44336]' : 'text-white'}`;
-    document.getElementById('confirm-msg').innerText = message;
-
-    const cancelBtn = document.getElementById('confirm-cancel-btn');
-    cancelBtn.classList.remove('hidden');
+    document.getElementById('confirm-title').innerText = title || 'Подтверждение';
+    document.getElementById('confirm-title').className = 'text-base font-bold text-white mb-2';
+    document.getElementById('confirm-msg').innerText = message || '';
+    document.getElementById('confirm-cancel-btn').classList.remove('hidden');
 
     const okBtn = document.getElementById('confirm-ok-btn');
-    okBtn.innerText = okText;
-    okBtn.className = `px-4 py-1.5 rounded-md text-xs font-semibold text-white cursor-pointer ${isDanger ? 'bg-[#D13438] hover:opacity-90' : 'btn-brand'}`;
+    okBtn.innerText = confirmText;
+    okBtn.className = isDanger
+        ? 'px-4 py-1.5 rounded-md bg-[#D13438] hover:bg-[#B8282C] text-white text-xs font-semibold cursor-pointer transition'
+        : 'px-4 py-1.5 rounded-md btn-brand text-xs font-semibold cursor-pointer';
 
     document.getElementById('confirm-modal').classList.add('open');
 }
@@ -1155,343 +1337,85 @@ function closeConfirmModal(accepted) {
         return;
     }
 
-    const cbOk = confirmCallback;
-    const cbCancel = cancelCallback;
-    confirmCallback = null;
-    cancelCallback = null;
-
-    if (accepted && typeof cbOk === 'function') {
-        cbOk();
-    } else if (!accepted && typeof cbCancel === 'function') {
-        cbCancel();
+    if (accepted && typeof confirmCallback === 'function') {
+        const cb = confirmCallback;
+        confirmCallback = null;
+        cb();
+    } else if (!accepted && typeof cancelConfirmCallback === 'function') {
+        const ccb = cancelConfirmCallback;
+        cancelConfirmCallback = null;
+        ccb();
     }
 }
 
-// =========================================================================
-// 6. ИНТЕРАКТИВНЫЙ ГРАФИК ТРАФИКА С ПРИЦЕЛОМ И СЧЕТЧИКОМ СЕССИИ
-// =========================================================================
-const rxHistory = new Array(30).fill(0);
-const txHistory = new Array(30).fill(0);
-let peakSpeedMbps = 0;
-let sessionRxMB = 0;
-let sessionTxMB = 0;
-let chartHoverIdx = -1;
+function openSelectionModal(subTitle, title, options, currentVal, onSelect) {
+    selectionCallback = onSelect;
+    document.getElementById('sel-modal-sub').innerText = subTitle;
+    document.getElementById('sel-modal-title').innerText = title;
 
-function formatTrafficSize(mb) {
-    if (mb >= 1024) return `${(mb / 1024).toFixed(2)} ГБ`;
-    return `${mb.toFixed(0)} МБ`;
+    const list = document.getElementById('sel-modal-list');
+    list.innerHTML = options.map((opt, idx) => {
+        const isSel = String(opt.value) === String(currentVal);
+        return `
+            <div onclick="chooseSelectionOption(${idx})"
+                 class="p-3 rounded-lg border cursor-pointer flex items-center justify-between transition ${isSel ? 'bg-[#0F240F] border-[#107C10]' : 'bg-[#181818] border-[#262626] hover:bg-[#222222]'}">
+                <div class="pr-3">
+                    <div class="text-xs font-bold ${isSel ? 'text-brand' : 'text-white'}">${opt.title}</div>
+                    <div class="text-[11px] text-[#888888] mt-0.5">${opt.desc}</div>
+                </div>
+                <span class="text-sm font-bold ${isSel ? 'text-brand' : 'text-[#555555]'}">${isSel ? '✓' : '→'}</span>
+            </div>
+        `;
+    }).join('');
+
+    list._options = options;
+    document.getElementById('selection-modal').classList.add('open');
 }
 
-function onChartMouseMove(e) {
-    const canvas = e.currentTarget;
-    const rect = canvas.getBoundingClientRect();
-    const relX = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    chartHoverIdx = Math.round(relX * (rxHistory.length - 1));
-    drawTrafficChart();
-}
-
-function onChartMouseLeave() {
-    chartHoverIdx = -1;
-    drawTrafficChart();
-}
-
-function updateChart(rxValue, txValue = 0) {
-    rxHistory.push(rxValue);
-    rxHistory.shift();
-    txHistory.push(txValue);
-    txHistory.shift();
-
-    peakSpeedMbps = Math.max(peakSpeedMbps, rxValue, txValue);
-    const intervalSec = Math.max(1, appState.settings.statsUpdateInterval || 1);
-    sessionRxMB += (rxValue / 8.0) * intervalSec;
-    sessionTxMB += (txValue / 8.0) * intervalSec;
-
-    const peakEl = document.getElementById('stat-peak');
-    const totalEl = document.getElementById('stat-session-total');
-
-    if (chartHoverIdx < 0) {
-        if (peakEl) peakEl.innerText = `Пик: ${peakSpeedMbps.toFixed(1)} Мбит/с`;
-        if (totalEl) totalEl.innerText = `Сессия: ↓ ${formatTrafficSize(sessionRxMB)} • ↑ ${formatTrafficSize(sessionTxMB)}`;
-    }
-
-    drawTrafficChart();
-}
-
-function drawTrafficChart() {
-    const canvas = document.getElementById('traffic-chart');
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    const w = canvas.width;
-    const h = canvas.height;
-    ctx.clearRect(0, 0, w, h);
-
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
-    ctx.lineWidth = 1;
-    [0.33, 0.66].forEach(ratio => {
-        ctx.beginPath();
-        ctx.moveTo(0, h * ratio);
-        ctx.lineTo(w, h * ratio);
-        ctx.stroke();
-    });
-
-    const maxVal = Math.max(5, ...rxHistory, ...txHistory);
-    const isCb = appState.settings.colorblindMode;
-    const rxColor = isCb ? '#0078D7' : '#4CAF50';
-
-    const grad = ctx.createLinearGradient(0, 0, 0, h);
-    grad.addColorStop(0, isCb ? 'rgba(0, 120, 215, 0.35)' : 'rgba(76, 175, 80, 0.35)');
-    grad.addColorStop(1, 'rgba(0, 0, 0, 0.0)');
-
-    ctx.beginPath();
-    rxHistory.forEach((val, idx) => {
-        const x = (idx / (rxHistory.length - 1)) * w;
-        const y = h - (val / maxVal) * (h - 16) - 4;
-        if (idx === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-    });
-    ctx.lineTo(w, h);
-    ctx.lineTo(0, h);
-    ctx.closePath();
-    ctx.fillStyle = grad;
-    ctx.fill();
-
-    ctx.beginPath();
-    ctx.strokeStyle = rxColor;
-    ctx.lineWidth = 2;
-    rxHistory.forEach((val, idx) => {
-        const x = (idx / (rxHistory.length - 1)) * w;
-        const y = h - (val / maxVal) * (h - 16) - 4;
-        if (idx === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-    });
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.setLineDash([3, 3]);
-    ctx.strokeStyle = '#60A5FA';
-    ctx.lineWidth = 1.3;
-    txHistory.forEach((val, idx) => {
-        const x = (idx / (txHistory.length - 1)) * w;
-        const y = h - (val / maxVal) * (h - 16) - 4;
-        if (idx === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-    });
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    const peakEl = document.getElementById('stat-peak');
-    const totalEl = document.getElementById('stat-session-total');
-
-    if (chartHoverIdx >= 0 && chartHoverIdx < rxHistory.length) {
-        const hx = (chartHoverIdx / (rxHistory.length - 1)) * w;
-        const rxVal = rxHistory[chartHoverIdx];
-        const txVal = txHistory[chartHoverIdx];
-        const ry = h - (rxVal / maxVal) * (h - 16) - 4;
-        const ty = h - (txVal / maxVal) * (h - 16) - 4;
-
-        ctx.beginPath();
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
-        ctx.lineWidth = 1;
-        ctx.moveTo(hx, 0);
-        ctx.lineTo(hx, h);
-        ctx.stroke();
-
-        ctx.beginPath();
-        ctx.fillStyle = rxColor;
-        ctx.arc(hx, ry, 3.2, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.beginPath();
-        ctx.fillStyle = '#60A5FA';
-        ctx.arc(hx, ty, 2.8, 0, Math.PI * 2);
-        ctx.fill();
-
-        const secAgo = (rxHistory.length - 1 - chartHoverIdx) * Math.max(1, appState.settings.statsUpdateInterval || 1);
-        if (totalEl) totalEl.innerText = secAgo === 0 ? 'Сейчас:' : `-${secAgo} сек назад:`;
-        if (peakEl) peakEl.innerText = `↓ ${rxVal.toFixed(1)} • ↑ ${txVal.toFixed(1)} Мбит/с`;
-    } else {
-        if (peakEl) peakEl.innerText = `Пик: ${peakSpeedMbps.toFixed(1)} Мбит/с`;
-        if (totalEl) totalEl.innerText = `Сессия: ↓ ${formatTrafficSize(sessionRxMB)} • ↑ ${formatTrafficSize(sessionTxMB)}`;
-    }
-}
-
-let sidebarOpen = true;
-function toggleSidebar() {
+function chooseSelectionOption(idx) {
     sendCmd('playClick');
-    const sb = document.getElementById('sidebar');
-    sb.classList.toggle('rail-mode');
-    setTimeout(updateSidebarPill, 210);
-}
-
-function updateSidebarPill() {
-    const activeBtn = document.querySelector('#sidebar-nav .nav-btn.active');
-    const pill = document.getElementById('sidebar-active-pill');
-    if (!activeBtn || !pill) return;
-    pill.style.transform = `translateY(${activeBtn.offsetTop}px)`;
-    pill.style.height = `${activeBtn.offsetHeight}px`;
-}
-
-function updateSegmentedPill(trackId, pillId) {
-    const track = document.getElementById(trackId);
-    const pill = document.getElementById(pillId);
-    if (!track || !pill) return;
-    const activeBtn = track.querySelector('.mods-seg-btn.active');
-    if (!activeBtn) return;
-
-    pill.style.width = `${activeBtn.offsetWidth}px`;
-    pill.style.transform = `translateX(${activeBtn.offsetLeft}px)`;
-}
-
-function switchTab(tabId, btn) {
-    sendCmd('playClick');
-    document.querySelectorAll('.tab-view').forEach(el => el.classList.remove('active'));
-    document.getElementById('tab-' + tabId).classList.add('active');
-
-    document.querySelectorAll('#sidebar-nav .nav-btn').forEach(el => {
-        el.className = 'nav-btn relative z-10 flex items-center gap-3 px-4 h-[40px] rounded-md text-sm font-medium text-[#CCCCCC] hover:text-white transition-colors cursor-pointer';
-        const icon = el.querySelector('.mdl-icon');
-        if (icon) icon.className = 'mdl-icon text-sm text-[#888888] transition-colors';
-    });
-
-    btn.className = 'nav-btn active relative z-10 flex items-center gap-3 px-4 h-[40px] rounded-md text-sm font-semibold text-white transition-colors cursor-pointer';
-    const activeIcon = btn.querySelector('.mdl-icon');
-    if (activeIcon) activeIcon.className = 'mdl-icon text-sm text-[#4CAF50] transition-colors';
-
-    updateSidebarPill();
-
-    setTimeout(() => {
-        if (tabId === 'mods') updateSegmentedPill('mods-seg-track', 'mods-seg-pill');
-        if (tabId === 'settings') updateSegmentedPill('settings-seg-track', 'settings-seg-pill');
-    }, 20);
-}
-
-window.addEventListener('resize', () => {
-    updateSidebarPill();
-    updateSegmentedPill('mods-seg-track', 'mods-seg-pill');
-    updateSegmentedPill('settings-seg-track', 'settings-seg-pill');
-});
-
-window.addEventListener('DOMContentLoaded', () => {
-    setTimeout(() => {
-        updateSidebarPill();
-        updateSegmentedPill('mods-seg-track', 'mods-seg-pill');
-        updateSegmentedPill('settings-seg-track', 'settings-seg-pill');
-    }, 60);
-    ['titlebar', 'wizard-titlebar'].forEach(id => {
-        document.getElementById(id)?.addEventListener('mousedown', (e) => {
-            if (!e.target.closest('button')) {
-                sendCmd('windowDrag');
-            }
-        });
-    });
-
-    if (window.chrome && window.chrome.webview) {
-        window.chrome.webview.addEventListener('message', event => {
-            const msg = event.data;
-            if (msg && msg.type) handleBackendEvent(msg.type, msg.data);
-        });
+    const list = document.getElementById('sel-modal-list');
+    const opt = list._options?.[idx];
+    document.getElementById('selection-modal').classList.remove('open');
+    if (opt && typeof selectionCallback === 'function') {
+        selectionCallback(opt.value);
     }
+}
 
-    runSplashSequence();
-    sendCmd('init');
-});
+function closeSelectionModal() {
+    sendCmd('playClick');
+    document.getElementById('selection-modal').classList.remove('open');
+}
 
 // =========================================================================
-// 7. ПАЛИТРА БЫСТРЫХ КОМАНД (CTRL + K) И DRAG & DROP ИМПОРТ ФАЙЛОВ
+// 9. COMMAND PALETTE (CTRL + K) И DRAG & DROP ИМПОРТ МОДОВ
 // =========================================================================
 let cmdSelectedIndex = 0;
 let filteredCommands = [];
 
-function getAvailableCommands() {
-    const navBtns = document.querySelectorAll('.nav-btn');
+function getCommandPaletteItems() {
     const base = [
-        {
-            icon: '&#xE7E8;',
-            title: appState.isRunning ? 'Остановить службы обхода' : 'Запустить обход (Починить интернет)',
-            tag: 'Службы',
-            run: () => onMainToggleClick()
-        },
-        {
-            icon: '&#xE777;',
-            title: 'Перезапустить службы (winws + TgWsProxy)',
-            tag: 'Службы',
-            run: () => sendCmd('restartBypass')
-        },
-        {
-            icon: '&#xE721;',
-            title: 'Открыть выбор .bat конфига / Авто-подбор (Smart Scan)',
-            tag: 'Zapret',
-            run: () => openConfigModal()
-        },
-        {
-            icon: '&#xE7FC;',
-            title: 'Настроить Игровой фильтр (Game Filter TCP/UDP)',
-            tag: 'Игры',
-            run: () => openGameFilterModal()
-        },
-        {
-            icon: '&#xE9D9;',
-            title: 'Запустить полную диагностику сети и ТСПУ',
-            tag: 'Диагностика',
-            run: () => { switchTab('diag', navBtns[2]); runDiagnostics(); }
-        },
-        {
-            icon: '&#xE710;',
-            title: 'Создать новую модификацию (.bat или список доменов)',
-            tag: 'Моды',
-            run: () => { switchTab('mods', navBtns[1]); openCreateModModal(); }
-        },
-        {
-            icon: '&#xE945;',
-            title: 'Обновить системный файл Hosts (ChatGPT, AI, Spotify)',
-            tag: 'Сеть',
-            run: () => { switchTab('settings', navBtns[3]); updateSystemHosts(); }
-        },
-        {
-            icon: '&#xE149;',
-            title: 'Обновить базу подсетей IPSet из репозитория Flowseal',
-            tag: 'Сеть',
-            run: () => { switchTab('settings', navBtns[3]); updateIpSetFromWeb(); }
-        },
-        {
-            icon: '&#xE8B7;',
-            title: 'Открыть папку ядра ZapretFiles в Проводнике',
-            tag: 'Файлы',
-            run: () => sendCmd('openFolder', { folder: 'zapret' })
-        },
-        {
-            icon: '&#xE8B7;',
-            title: 'Открыть папку модификаций Mods в Проводнике',
-            tag: 'Файлы',
-            run: () => sendCmd('openFolder', { folder: 'mods' })
-        },
-        {
-            icon: '&#xE73F;',
-            title: 'Переключить Минималистичный режим окна (850×520)',
-            tag: 'Вид',
-            run: () => {
-                const chk = document.getElementById('set-compact-mode');
-                if (chk) {
-                    chk.checked = !chk.checked;
-                    onSettingsChanged();
-                }
-            }
-        },
-        {
-            icon: '&#xE945;',
-            title: 'Открыть Мастер развертывания (3D ASCII Голограмма)',
-            tag: 'Система',
-            run: () => openWizardModal()
-        }
+        { title: appState.isRunning ? 'Остановить обход блокировок' : 'Включить обход блокировок', cat: 'Управление', icon: '&#xE7E8;', run: () => onMainToggleClick() },
+        { title: 'Перезапустить службы Zapret и Proxy', cat: 'Управление', icon: '&#xE777;', run: () => sendCmd('restartBypass') },
+        { title: 'Авто-подбор лучшего конфига (Smart DPI Scan)', cat: 'Сканер', icon: '&#xE721;', run: () => { openConfigModal(); toggleSmartScan(); } },
+        { title: 'Запустить полную диагностику сети', cat: 'Диагностика', icon: '&#xE9D9;', run: () => { switchTab('diag'); runDiagnostics(); } },
+        { title: 'Настроить Игровой фильтр (Game Filter)', cat: 'Игры', icon: '&#xE7FC;', run: () => openGameFilterModal() },
+        { title: 'Создать новую модификацию (.bat / список)', cat: 'Мастерская', icon: '&#xE710;', run: () => { switchTab('mods'); openCreateModModal(); } },
+        { title: 'Выгрузить драйвер WinDivert (для античитов)', cat: 'Система', icon: '&#xEA18;', run: () => sendCmd('unloadWinDivert') },
+        { title: 'Подключить прокси в Telegram Desktop (1 клик)', cat: 'Telegram', icon: '&#xE709;', run: () => sendCmd('connectTelegramProxy') },
+        { title: 'Обновить системный файл Hosts', cat: 'Маршруты', icon: '&#xE8B7;', run: () => updateSystemHosts() },
+        { title: 'Экспортировать резервную копию настроек', cat: 'Бэкап', icon: '&#xE78C;', run: () => sendCmd('exportConfigBackup') },
+        { title: 'Перейти: Главная панель', cat: 'Навигация', icon: '&#xE80F;', run: () => switchTab('home') },
+        { title: 'Перейти: Мастерская модификаций', cat: 'Навигация', icon: '&#xE74C;', run: () => switchTab('mods') },
+        { title: 'Перейти: Настройки системы', cat: 'Навигация', icon: '&#xE713;', run: () => switchTab('settings') }
     ];
 
-    // Добавляем все доступные .bat профили в быстрый поиск
-    appState.configs.forEach(cfg => {
+    appState.configs.forEach(c => {
         base.push({
+            title: `Профиль: ${c.fileName}`,
+            cat: 'Конфиг .bat',
             icon: '&#xE756;',
-            title: `Активировать профиль: ${cfg.fileName}`,
-            tag: cfg.fileName.toLowerCase() === appState.selectedProfile.toLowerCase() ? 'Активен ✓' : 'Профиль .bat',
-            run: () => selectProfile(cfg.fileName)
+            run: () => selectProfile(c.fileName)
         });
     });
 
@@ -1499,177 +1423,161 @@ function getAvailableCommands() {
 }
 
 function openCommandPalette() {
-    if (document.getElementById('wizard-overlay')?.classList.contains('open')) return;
     sendCmd('playClick');
-    const modal = document.getElementById('cmd-palette-modal');
     const input = document.getElementById('cmd-palette-input');
-    if (!modal || !input) return;
-
-    input.value = '';
+    if (input) input.value = '';
     cmdSelectedIndex = 0;
-    modal.classList.add('open');
     renderCommandPaletteList();
-    setTimeout(() => input.focus(), 50);
+    document.getElementById('cmd-palette-modal').classList.add('open');
+    setTimeout(() => input?.focus(), 50);
 }
 
 function closeCommandPalette() {
-    const modal = document.getElementById('cmd-palette-modal');
-    if (modal) modal.classList.remove('open');
+    document.getElementById('cmd-palette-modal').classList.remove('open');
 }
 
 function renderCommandPaletteList() {
-    const query = (document.getElementById('cmd-palette-input')?.value || '').trim().toLowerCase();
-    const all = getAvailableCommands();
-    filteredCommands = all.filter(c => !query || c.title.toLowerCase().includes(query) || c.tag.toLowerCase().includes(query));
+    const q = (document.getElementById('cmd-palette-input')?.value || '').trim().toLowerCase();
+    const all = getCommandPaletteItems();
+    filteredCommands = all.filter(item => !q || item.title.toLowerCase().includes(q) || item.cat.toLowerCase().includes(q));
+    cmdSelectedIndex = Math.max(0, Math.min(cmdSelectedIndex, filteredCommands.length - 1));
 
-    if (cmdSelectedIndex >= filteredCommands.length) cmdSelectedIndex = 0;
-
-    const listEl = document.getElementById('cmd-palette-list');
-    if (!listEl) return;
+    const list = document.getElementById('cmd-palette-list');
+    if (!list) return;
 
     if (filteredCommands.length === 0) {
-        listEl.innerHTML = `<div class="p-4 text-center text-xs text-[#666666] font-mono">Ничего не найдено по запросу «${query}»</div>`;
+        list.innerHTML = `<div class="p-4 text-center text-xs text-[#666666]">Ничего не найдено</div>`;
         return;
     }
 
-    listEl.innerHTML = filteredCommands.map((cmd, idx) => {
+    list.innerHTML = filteredCommands.map((item, idx) => {
         const active = idx === cmdSelectedIndex;
         return `
-        <div onmousedown="event.preventDefault(); executePaletteCommand(${idx})"
-             onmouseenter="updatePaletteHover(${idx})"
-             data-cmd-idx="${idx}"
-             class="cmd-item px-3 py-2 rounded-lg flex items-center justify-between cursor-pointer transition ${active ? 'bg-[#0F240F] border border-[#107C10] text-white' : 'border border-transparent text-[#CCCCCC] hover:bg-[#1E1E1E]'}">
-            <div class="flex items-center gap-2.5 overflow-hidden pointer-events-none">
-                <span class="cmd-icon mdl-icon text-xs ${active ? 'text-brand' : 'text-[#777777]'}">${cmd.icon}</span>
-                <span class="text-xs font-medium truncate">${cmd.title}</span>
+            <div onclick="executeCommandPaletteItem(${idx})"
+                 onmouseenter="cmdSelectedIndex=${idx}; renderCommandPaletteList()"
+                 class="px-3 py-2 rounded-lg flex items-center justify-between cursor-pointer transition ${active ? 'bg-[#0F240F] border border-[#107C10]' : 'border border-transparent hover:bg-[#1C1C1C]'}">
+                <div class="flex items-center gap-2.5 overflow-hidden">
+                    <span class="mdl-icon text-xs ${active ? 'text-brand' : 'text-[#888888]'}">${item.icon}</span>
+                    <span class="text-xs font-medium text-white truncate">${item.title}</span>
+                </div>
+                <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#181818] text-[#888888] shrink-0">${item.cat}</span>
             </div>
-            <span class="cmd-tag text-[10px] font-mono px-1.5 py-0.5 rounded ${active ? 'bg-[#107C10]/30 text-brand' : 'bg-[#1C1C1C] text-[#777777]'} shrink-0 ml-2 pointer-events-none">${cmd.tag}</span>
-        </div>`;
+        `;
     }).join('');
-}
-
-function updatePaletteHover(idx) {
-    cmdSelectedIndex = idx;
-    const items = document.querySelectorAll('#cmd-palette-list .cmd-item');
-    items.forEach((el, i) => {
-        const active = i === idx;
-        el.className = `cmd-item px-3 py-2 rounded-lg flex items-center justify-between cursor-pointer transition ${active ? 'bg-[#0F240F] border border-[#107C10] text-white' : 'border border-transparent text-[#CCCCCC] hover:bg-[#1E1E1E]'}`;
-        const icon = el.querySelector('.cmd-icon');
-        const tag = el.querySelector('.cmd-tag');
-        if (icon) icon.className = `cmd-icon mdl-icon text-xs ${active ? 'text-brand' : 'text-[#777777]'}`;
-        if (tag) tag.className = `cmd-tag text-[10px] font-mono px-1.5 py-0.5 rounded ${active ? 'bg-[#107C10]/30 text-brand' : 'bg-[#1C1C1C] text-[#777777]'} shrink-0 ml-2 pointer-events-none`;
-    });
-}
-
-function executePaletteCommand(idx) {
-    const cmd = filteredCommands[idx];
-    closeCommandPalette();
-    if (cmd && typeof cmd.run === 'function') {
-        sendCmd('playClick');
-        setTimeout(() => cmd.run(), 30);
-    }
 }
 
 function onCommandPaletteKeyDown(e) {
     if (e.key === 'ArrowDown') {
         e.preventDefault();
-        e.stopPropagation();
         if (filteredCommands.length > 0) {
-            updatePaletteHover((cmdSelectedIndex + 1) % filteredCommands.length);
-            document.querySelector(`#cmd-palette-list [data-cmd-idx="${cmdSelectedIndex}"]`)?.scrollIntoView({ block: 'nearest' });
+            cmdSelectedIndex = (cmdSelectedIndex + 1) % filteredCommands.length;
+            renderCommandPaletteList();
         }
     } else if (e.key === 'ArrowUp') {
         e.preventDefault();
-        e.stopPropagation();
         if (filteredCommands.length > 0) {
-            updatePaletteHover((cmdSelectedIndex - 1 + filteredCommands.length) % filteredCommands.length);
-            document.querySelector(`#cmd-palette-list [data-cmd-idx="${cmdSelectedIndex}"]`)?.scrollIntoView({ block: 'nearest' });
+            cmdSelectedIndex = (cmdSelectedIndex - 1 + filteredCommands.length) % filteredCommands.length;
+            renderCommandPaletteList();
         }
     } else if (e.key === 'Enter') {
         e.preventDefault();
-        e.stopPropagation();
-        if (filteredCommands.length > 0) {
-            executePaletteCommand(cmdSelectedIndex);
-        }
+        executeCommandPaletteItem(cmdSelectedIndex);
     } else if (e.key === 'Escape') {
-        e.preventDefault();
-        e.stopPropagation();
         closeCommandPalette();
     }
 }
 
-// Глобальный перехват Ctrl + K на уровне window с захватом события
-window.addEventListener('keydown', (e) => {
-    const isK = e.code === 'KeyK' || e.key?.toLowerCase() === 'k' || e.key?.toLowerCase() === 'л';
-    if ((e.ctrlKey || e.metaKey) && isK) {
-        e.preventDefault();
-        e.stopPropagation();
-        const modal = document.getElementById('cmd-palette-modal');
-        if (modal && modal.classList.contains('open')) {
-            closeCommandPalette();
-        } else {
-            openCommandPalette();
+function executeCommandPaletteItem(idx) {
+    const item = filteredCommands[idx];
+    closeCommandPalette();
+    if (item && typeof item.run === 'function') {
+        item.run();
+    }
+}
+
+// =========================================================================
+// 10. ИНИЦИАЛИЗАЦИЯ ПРИ ЗАГРУЗКЕ DOM
+// =========================================================================
+window.addEventListener('DOMContentLoaded', () => {
+    runSplashSequence();
+
+    if (window.chrome && window.chrome.webview) {
+        window.chrome.webview.addEventListener('message', e => {
+            const msg = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
+            if (msg && msg.type) {
+                handleBackendEvent(msg.type, msg.data);
+            }
+        });
+    }
+
+    // Перетаскивание окна за шапку
+    ['titlebar', 'wizard-titlebar'].forEach(id => {
+        const bar = document.getElementById(id);
+        if (bar) {
+            bar.addEventListener('mousedown', e => {
+                if (e.button === 0 && !e.target.closest('button') && !e.target.closest('input')) {
+                    sendCmd('windowDrag');
+                }
+            });
         }
-    } else if (e.key === 'Escape') {
-        const modal = document.getElementById('cmd-palette-modal');
-        if (modal && modal.classList.contains('open')) {
+    });
+
+    // Горячая клавиша Ctrl+K внутри WebView
+    window.addEventListener('keydown', e => {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
             e.preventDefault();
-            closeCommandPalette();
+            const cmdModal = document.getElementById('cmd-palette-modal');
+            if (cmdModal && cmdModal.classList.contains('open')) closeCommandPalette();
+            else openCommandPalette();
         }
-    }
-}, true);
+    });
 
-let dragCounter = 0;
-window.addEventListener('dragenter', (e) => {
-    e.preventDefault();
-    dragCounter++;
-    const dz = document.getElementById('dropzone-overlay');
-    if (dz) {
-        dz.classList.remove('hidden');
-        dz.classList.add('flex');
-    }
-});
+    // Drag & Drop файлов (.zip, .netfix-mod, .bat, .txt)
+    const dropOverlay = document.getElementById('dropzone-overlay');
+    let dragCounter = 0;
 
-window.addEventListener('dragover', (e) => {
-    e.preventDefault();
-});
+    window.addEventListener('dragenter', e => {
+        e.preventDefault();
+        dragCounter++;
+        if (dropOverlay) {
+            dropOverlay.classList.remove('hidden');
+            dropOverlay.classList.add('flex');
+        }
+    });
 
-window.addEventListener('dragleave', (e) => {
-    e.preventDefault();
-    dragCounter--;
-    if (dragCounter <= 0) {
+    window.addEventListener('dragleave', e => {
+        e.preventDefault();
+        dragCounter--;
+        if (dragCounter <= 0) {
+            dragCounter = 0;
+            if (dropOverlay) {
+                dropOverlay.classList.add('hidden');
+                dropOverlay.classList.remove('flex');
+            }
+        }
+    });
+
+    window.addEventListener('dragover', e => e.preventDefault());
+
+    window.addEventListener('drop', e => {
+        e.preventDefault();
         dragCounter = 0;
-        const dz = document.getElementById('dropzone-overlay');
-        if (dz) {
-            dz.classList.add('hidden');
-            dz.classList.remove('flex');
+        if (dropOverlay) {
+            dropOverlay.classList.add('hidden');
+            dropOverlay.classList.remove('flex');
         }
-    }
-});
 
-window.addEventListener('drop', (e) => {
-    e.preventDefault();
-    dragCounter = 0;
-    const dz = document.getElementById('dropzone-overlay');
-    if (dz) {
-        dz.classList.add('hidden');
-        dz.classList.remove('flex');
-    }
+        const file = e.dataTransfer?.files?.[0];
+        if (!file) return;
 
-    const files = e.dataTransfer?.files;
-    if (!files || files.length === 0) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+            const base64 = String(reader.result).split(',')[1] || '';
+            sendCmd('importDroppedFile', { fileName: file.name, base64 });
+        };
+        reader.readAsDataURL(file);
+    });
 
-    const file = files[0];
-    const ext = file.name.split('.').pop().toLowerCase();
-    if (!['zip', 'netfix-mod', 'bat', 'txt'].includes(ext)) {
-        showAlert('Неподдерживаемый файл', 'Перетащите архив мода (.zip / .netfix-mod), скрипт (.bat) или список доменов (.txt).', true);
-        return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = () => {
-        const base64 = reader.result.split(',')[1];
-        sendCmd('importDroppedFile', { fileName: file.name, base64 });
-    };
-    reader.readAsDataURL(file);
+    drawChart();
+    sendCmd('init');
 });
