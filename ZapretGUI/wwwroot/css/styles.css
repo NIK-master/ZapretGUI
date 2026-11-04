@@ -962,56 +962,67 @@ body[data-accent="crimson"] {
     --accent-soft: rgba(6, 182, 212, 0.16);
 }
 
-/* Контейнеры для 3D-вращающихся камешков выбора темы */
-.gem-swatch {
-    width: 36px;
-    height: 36px;
-    border-radius: 10px;
-    background: #171717;
+/* Просторная 3D-сцена карусели невесомости для 2D-камешков */
+.gem-field-wrap {
+    position: relative;
+    width: 100%;
+    height: 108px;
+    border-radius: 12px;
+    background: radial-gradient(ellipse at 50% 15%, var(--accent-soft) 0%, transparent 68%), linear-gradient(180deg, #09090C 0%, #101014 100%);
     border: 1px solid #282828;
-    padding: 0;
+    box-shadow: inset 0 4px 16px rgba(0, 0, 0, 0.85);
+    overflow: hidden;
+    transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.gem-field-wrap:hover {
+    border-color: #3E3E3E;
+}
+
+.gem-field-canvas {
+    width: 100%;
+    height: 108px;
+    display: block;
+    cursor: grab;
+}
+
+.gem-field-canvas:active {
+    cursor: grabbing;
+}
+
+.gem-nav-btn {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 26px;
+    height: 44px;
+    border-radius: 8px;
+    background: rgba(22, 22, 26, 0.78);
+    border: 1px solid #2E2E34;
+    color: #AAAAAA;
+    font-size: 18px;
+    font-weight: bold;
+    line-height: 1;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    position: relative;
-    transition: all 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+    z-index: 5;
+    transition: all 0.18s ease;
+    backdrop-filter: blur(4px);
 }
 
-.gem-swatch:hover {
-    transform: translateY(-3px) scale(1.08);
-    background: #1F1F1F;
-    border-color: #444444;
-}
-
-.gem-swatch.active {
-    background: radial-gradient(circle at 50% 50%, var(--accent-soft) 0%, #141414 100%);
+.gem-nav-btn:hover {
+    background: #242429;
     border-color: var(--accent-light);
-    box-shadow: 0 0 16px var(--accent-soft), inset 0 0 8px var(--accent-soft);
-    transform: translateY(-2px) scale(1.12);
+    color: #FFFFFF;
+    box-shadow: 0 0 12px var(--accent-soft);
 }
 
-.gem-swatch::after {
-    content: '';
-    position: absolute;
-    bottom: -5px;
-    width: 0;
-    height: 2px;
-    border-radius: 99px;
-    background: var(--accent-light);
-    box-shadow: 0 0 6px var(--accent-light);
-    transition: width 0.22s ease;
+.gem-nav-btn:active {
+    transform: translateY(-50%) scale(0.93);
 }
 
-.gem-swatch.active::after {
-    width: 16px;
-}
-
-.gem-canvas {
-    width: 34px;
-    height: 34px;
-    pointer-events: none;
-}
 .setting-icon-box .mdl-icon {
     color: #999999 !important;
     transition: color 0.2s ease;

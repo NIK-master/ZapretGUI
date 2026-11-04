@@ -220,27 +220,18 @@
 								<input id="wiz-chk-focus" type="checkbox" onchange="onWizardOptionChange()" class="cyber-toggle">
 							</label>
 
-							<div class="wiz-option-card" id="wiz-card-theme">
-								<div>
-									<div class="text-sm font-bold text-white">Акцентная тема интерфейса</div>
-									<div class="text-xs text-[#888888] mt-0.5">Выберите цвет подсветки панели управления и иконки</div>
+							<div class="wiz-option-card flex-col !items-stretch gap-2.5" id="wiz-card-theme">
+								<div class="flex items-center justify-between">
+									<div>
+										<div class="text-sm font-bold text-white">Акцентная тема интерфейса</div>
+										<div class="text-xs text-[#888888] mt-0.5">Листайте 3D-орбиту колесиком мыши, стрелками или кликом по камню</div>
+									</div>
+									<span class="gem-active-label px-2.5 py-0.5 rounded-md bg-[#181818] border border-[#2C2C2C] font-mono text-xs font-bold text-brand">Изумруд</span>
 								</div>
-								<div class="flex items-center gap-2.5 shrink-0">
-									<button type="button" onclick="selectAccentTheme('green')" data-accent-btn="green" class="gem-swatch active" title="Изумруд (Неоновый Зеленый)">
-										<canvas class="gem-canvas" data-gem="green" width="38" height="38"></canvas>
-									</button>
-									<button type="button" onclick="selectAccentTheme('blue')" data-accent-btn="blue" class="gem-swatch" title="Сапфир (Кибер-Синий)">
-										<canvas class="gem-canvas" data-gem="blue" width="38" height="38"></canvas>
-									</button>
-									<button type="button" onclick="selectAccentTheme('purple')" data-accent-btn="purple" class="gem-swatch" title="Аметист (Фиолетовый)">
-										<canvas class="gem-canvas" data-gem="purple" width="38" height="38"></canvas>
-									</button>
-									<button type="button" onclick="selectAccentTheme('amber')" data-accent-btn="amber" class="gem-swatch" title="Топаз (Янтарный)">
-										<canvas class="gem-canvas" data-gem="amber" width="38" height="38"></canvas>
-									</button>
-									<button type="button" onclick="selectAccentTheme('cyan')" data-accent-btn="cyan" class="gem-swatch" title="Аквамарин (Кибер-Бирюза)">
-										<canvas class="gem-canvas" data-gem="cyan" width="38" height="38"></canvas>
-									</button>
+								<div class="gem-field-wrap">
+									<button type="button" onclick="cycleAccentGem(-1)" class="gem-nav-btn left-2" title="Предыдущий кристалл">‹</button>
+									<canvas class="gem-field-canvas" width="460" height="92"></canvas>
+									<button type="button" onclick="cycleAccentGem(1)" class="gem-nav-btn right-2" title="Следующий кристалл">›</button>
 								</div>
 							</div>
 						</div>
@@ -1064,33 +1055,24 @@
 								<span class="text-[10px] font-mono text-[#666666] uppercase">Внешний вид</span>
 							</div>
 
-							<!-- Палитра акцентного цвета (3D камешки) -->
-							<div class="setting-item-row cursor-default" data-search="акцентный цвет тема палитра неоновый зеленый синий фиолетовый янтарь аквамарин">
-								<div class="flex items-center gap-3 overflow-hidden">
-									<div class="setting-icon-box">
-										<span class="mdl-icon text-sm">&#xE790;</span>
+							<!-- Палитра акцентного цвета (Просторная 3D-орбита с парящими 2D-камешками) -->
+							<div class="setting-item-row cursor-default flex-col !items-stretch gap-2.5" data-search="акцентный цвет тема палитра неоновый зеленый синий фиолетовый янтарь аквамарин">
+								<div class="flex items-center justify-between gap-2">
+									<div class="flex items-center gap-3 overflow-hidden">
+										<div class="setting-icon-box">
+											<span class="mdl-icon text-sm">&#xE790;</span>
+										</div>
+										<div>
+											<div class="text-xs font-bold text-white">Акцентный цвет интерфейса</div>
+											<div class="text-[11px] text-[#888888]">Листайте камешки в 3D-пространстве (стрелки, клик или колесико)</div>
+										</div>
 									</div>
-									<div>
-										<div class="text-xs font-bold text-white">Акцентный цвет интерфейса</div>
-										<div class="text-[11px] text-[#888888]">Меняет подсветку панели и иконку приложения</div>
-									</div>
+									<span class="gem-active-label px-2.5 py-0.5 rounded-md bg-[#1A1A1A] border border-[#2E2E2E] font-mono text-[11px] font-bold text-brand shrink-0">Изумруд</span>
 								</div>
-								<div class="flex items-center gap-2.5 shrink-0">
-									<button type="button" onclick="selectAccentTheme('green')" data-accent-btn="green" class="gem-swatch active" title="Изумруд (Неоновый Зеленый)">
-										<canvas class="gem-canvas" data-gem="green" width="38" height="38"></canvas>
-									</button>
-									<button type="button" onclick="selectAccentTheme('blue')" data-accent-btn="blue" class="gem-swatch" title="Сапфир (Кибер-Синий)">
-										<canvas class="gem-canvas" data-gem="blue" width="38" height="38"></canvas>
-									</button>
-									<button type="button" onclick="selectAccentTheme('purple')" data-accent-btn="purple" class="gem-swatch" title="Аметист (Фиолетовый)">
-										<canvas class="gem-canvas" data-gem="purple" width="38" height="38"></canvas>
-									</button>
-									<button type="button" onclick="selectAccentTheme('amber')" data-accent-btn="amber" class="gem-swatch" title="Топаз (Янтарный)">
-										<canvas class="gem-canvas" data-gem="amber" width="38" height="38"></canvas>
-									</button>
-									<button type="button" onclick="selectAccentTheme('cyan')" data-accent-btn="cyan" class="gem-swatch" title="Аквамарин (Кибер-Бирюза)">
-										<canvas class="gem-canvas" data-gem="cyan" width="38" height="38"></canvas>
-									</button>
+								<div class="gem-field-wrap">
+									<button type="button" onclick="cycleAccentGem(-1)" class="gem-nav-btn left-2" title="Предыдущий камень">‹</button>
+									<canvas class="gem-field-canvas" width="460" height="92"></canvas>
+									<button type="button" onclick="cycleAccentGem(1)" class="gem-nav-btn right-2" title="Следующий камень">›</button>
 								</div>
 							</div>
 

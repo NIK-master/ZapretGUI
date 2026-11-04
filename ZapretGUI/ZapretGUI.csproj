@@ -21,6 +21,7 @@
 
 		<!-- Упаковываем нативный WebView2Loader.dll внутрь сборки -->
 		<WebView2LoaderPreference>Static</WebView2LoaderPreference>
+		<ApplicationManifest>app.manifest</ApplicationManifest>
 	</PropertyGroup>
 
 	<!-- WebView2 зависимость -->
