@@ -1031,3 +1031,10 @@ body[data-accent="crimson"] {
 .setting-item-row:hover .setting-icon-box .mdl-icon {
     color: #FFFFFF !important;
 }
+
+.gem-active-label {
+    width: 176px;
+    text-align: center;
+    white-space: nowrap;
+    flex-shrink: 0;
+}

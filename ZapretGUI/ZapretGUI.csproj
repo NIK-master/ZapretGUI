@@ -31,8 +31,10 @@
 
 	<!-- Звуки встраиваем как Embedded Resource напрямую внутрь .exe -->
 	<ItemGroup>
+		<Resource Include="Assets\click.wav" />
 		<Resource Include="Assets\Sounds\click.wav" Condition="Exists('Assets\Sounds\click.wav')" />
 		<Resource Include="Assets\Sounds\success.wav" Condition="Exists('Assets\Sounds\success.wav')" />
+		<Resource Include="Assets\success.wav" />
 	</ItemGroup>
 
 	<!-- АВТОМАТИЧЕСКАЯ АРХИВАЦИЯ ИНТЕРФЕЙСА ПЕРЕД СБОРКОЙ -->
@@ -49,6 +51,8 @@
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 			<CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
 		</None>
+		<None Remove="Assets\click.wav" />
+		<None Remove="Assets\success.wav" />
 		<None Include="README.md" Condition="Exists('README.md')">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 			<CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
