@@ -473,7 +473,6 @@ namespace ZapretGUI
 
 	<!-- Звуки встраиваем как Embedded Resource напрямую внутрь .exe -->
 	<ItemGroup>
-		<Resource Include="Assets\click.wav" />
 		<Resource Include="Assets\Sounds\click.wav" Condition="Exists('Assets\Sounds\click.wav')" />
 		<Resource Include="Assets\Sounds\success.wav" Condition="Exists('Assets\Sounds\success.wav')" />
 		<Resource Include="Assets\success.wav" />
@@ -493,7 +492,6 @@ namespace ZapretGUI
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 			<CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
 		</None>
-		<None Remove="Assets\click.wav" />
 		<None Remove="Assets\success.wav" />
 		<None Include="README.md" Condition="Exists('README.md')">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
@@ -545,26 +543,34 @@ namespace ZapretGUI.Core
 using System;
 using System.Diagnostics;
 using System.IO;
-using System.Media;
-using System.Windows;
+using System.Runtime.InteropServices;
+using System.Text;
 using System.Windows.Media;
 
 namespace ZapretGUI.Core
 {
     public static class AudioHelper
     {
+        [DllImport("winmm.dll", CharSet = CharSet.Auto)]
+        private static extern bool PlaySound(string pszSound, IntPtr hmod, uint fdwSound);
+
+        private const uint SND_FILENAME = 0x00020000;
+        private const uint SND_ASYNC = 0x0001;
+        private const uint SND_NODEFAULT = 0x0002;
+
         private static readonly string? _clickFilePath;
         private static readonly string? _successFilePath;
-
-        private static readonly MediaPlayer _clickMedia = new MediaPlayer();
         private static readonly MediaPlayer _successMedia = new MediaPlayer();
 
         static AudioHelper()
         {
             try
             {
-                _clickFilePath = ResolveSoundFile("click.wav");
-                _successFilePath = ResolveSoundFile("success.wav");
+                // 1. Генерируем клик на диск 1 раз при первом запуске в synth_click_v3.wav
+                _clickFilePath = EnsureSynthClickCached();
+
+                // 2. Кэшируем или создаём звук успеха
+                _successFilePath = EnsureSuccessFileCached("success.wav");
             }
             catch (Exception ex)
             {
@@ -572,101 +578,165 @@ namespace ZapretGUI.Core
             }
         }
 
-        private static string? ResolveSoundFile(string fileName)
+        private static string? EnsureSynthClickCached()
+        {
+            var cacheDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", "Cache", "Sounds");
+            Directory.CreateDirectory(cacheDir);
+            var cachedClickPath = Path.Combine(cacheDir, "synth_click_v3.wav");
+
+            // Если уже сгенерирован при первом запуске — сразу используем готовый файл
+            if (File.Exists(cachedClickPath) && new FileInfo(cachedClickPath).Length > 100)
+                return cachedClickPath;
+
+            // Очищаем старые версии кэша
+            foreach (var old in Directory.GetFiles(cacheDir, "synth_click*.wav"))
+            {
+                try { File.Delete(old); } catch { }
+            }
+
+            // Генерируем сбалансированный клик 1 раз и сохраняем на диск
+            GenerateWavToFile(cachedClickPath, isSuccess: false);
+            return cachedClickPath;
+        }
+
+        private static string? EnsureSuccessFileCached(string fileName)
         {
             var baseDir = AppDomain.CurrentDomain.BaseDirectory;
+            var cacheDir = Path.Combine(baseDir, "Assets", "Cache", "Sounds");
+            Directory.CreateDirectory(cacheDir);
+            var targetCachedPath = Path.Combine(cacheDir, fileName);
 
-            // 1. Ищем файл напрямую в папке Assets\Sounds рядом с .exe
-            var localPath = Path.Combine(baseDir, "Assets", "Sounds", fileName);
-            if (File.Exists(localPath))
-                return localPath;
+            if (File.Exists(targetCachedPath) && new FileInfo(targetCachedPath).Length > 100)
+                return targetCachedPath;
 
-            // 2. Ищем файл в корне проекта (во время запуска из Visual Studio Debug/Release)
-            var devPath = Path.GetFullPath(Path.Combine(baseDir, @"..\..\..\Assets\Sounds", fileName));
-            if (File.Exists(devPath))
-                return devPath;
+            string[] diskCandidates =
+            [
+                Path.Combine(baseDir, "Assets", "Sounds", fileName),
+                Path.Combine(baseDir, "Assets", fileName),
+                Path.GetFullPath(Path.Combine(baseDir, @"..\..\..\Assets\Sounds", fileName)),
+                Path.GetFullPath(Path.Combine(baseDir, @"..\..\..\Assets", fileName))
+            ];
 
-            // 3. Если приложение собрано в один .exe — распаковываем встроенный ресурс во временную папку
-            var tempDir = Path.Combine(Path.GetTempPath(), "ZapretGUI_Audio_" + AppConstants.AppVersion);
-            Directory.CreateDirectory(tempDir);
-            var tempFile = Path.Combine(tempDir, fileName);
-
-            try
+            foreach (var candidate in diskCandidates)
             {
-                var packUri = new Uri($"pack://application:,,,/Assets/Sounds/{fileName}", UriKind.Absolute);
-                // ЯВНОЕ УКАЗАНИЕ WPF APPLICATION:
-                var streamInfo = System.Windows.Application.GetResourceStream(packUri);
-                if (streamInfo?.Stream != null)
+                if (File.Exists(candidate) && new FileInfo(candidate).Length > 100)
                 {
-                    using var fs = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.ReadWrite);
-                    streamInfo.Stream.CopyTo(fs);
-                    return tempFile;
-                }
-            }
-            catch { }
-
-            try
-            {
-                var asm = System.Reflection.Assembly.GetExecutingAssembly();
-                foreach (var resName in asm.GetManifestResourceNames())
-                {
-                    if (resName.EndsWith(fileName, StringComparison.OrdinalIgnoreCase))
+                    try
                     {
-                        using var stream = asm.GetManifestResourceStream(resName);
-                        if (stream != null)
-                        {
-                            using var fs = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.ReadWrite);
-                            stream.CopyTo(fs);
-                            return tempFile;
-                        }
+                        File.Copy(candidate, targetCachedPath, overwrite: true);
+                        return targetCachedPath;
+                    }
+                    catch
+                    {
+                        return candidate;
                     }
                 }
             }
-            catch { }
 
-            return File.Exists(tempFile) ? tempFile : null;
+            string[] packUris =
+            [
+                $"pack://application:,,,/Assets/Sounds/{fileName}",
+                $"pack://application:,,,/Assets/{fileName}"
+            ];
+
+            foreach (var uriStr in packUris)
+            {
+                try
+                {
+                    var streamInfo = System.Windows.Application.GetResourceStream(new Uri(uriStr, UriKind.Absolute));
+                    if (streamInfo?.Stream != null)
+                    {
+                        using var fs = new FileStream(targetCachedPath, FileMode.Create, FileAccess.Write, FileShare.ReadWrite);
+                        streamInfo.Stream.CopyTo(fs);
+                        if (fs.Length > 100)
+                            return targetCachedPath;
+                    }
+                }
+                catch { }
+            }
+
+            GenerateWavToFile(targetCachedPath, isSuccess: true);
+            return targetCachedPath;
         }
 
         public static void PlayClick()
         {
             if (!SettingsManager.Current.SoundEffectsEnabled) return;
-            PlayFile(_clickFilePath, _clickMedia);
+            if (string.IsNullOrEmpty(_clickFilePath) || !File.Exists(_clickFilePath)) return;
+
+            try
+            {
+                PlaySound(_clickFilePath, IntPtr.Zero, SND_FILENAME | SND_ASYNC | SND_NODEFAULT);
+            }
+            catch { }
         }
 
         public static void PlaySuccess()
         {
             if (!SettingsManager.Current.SoundEffectsEnabled) return;
-            PlayFile(_successFilePath, _successMedia);
-        }
+            if (string.IsNullOrEmpty(_successFilePath) || !File.Exists(_successFilePath)) return;
 
-        private static void PlayFile(string? path, MediaPlayer player)
-        {
-            if (string.IsNullOrEmpty(path) || !File.Exists(path))
-                return;
-
-            // ЯВНОЕ УКАЗАНИЕ WPF APPLICATION:
             System.Windows.Application.Current?.Dispatcher.InvokeAsync(() =>
             {
                 try
                 {
-                    var uri = new Uri(path, UriKind.Absolute);
-                    if (player.Source != uri)
-                        player.Open(uri);
-
-                    player.Position = TimeSpan.Zero;
-                    player.Play();
+                    _successMedia.Stop();
+                    _successMedia.Open(new Uri(_successFilePath, UriKind.Absolute));
+                    _successMedia.Volume = 0.75;
+                    _successMedia.Play();
                 }
-                catch
-                {
-                    // Резервный вариант через системный SoundPlayer
-                    try
-                    {
-                        using var sp = new SoundPlayer(path);
-                        sp.Play();
-                    }
-                    catch { }
-                }
+                catch { }
             });
+        }
+
+        private static void GenerateWavToFile(string filePath, bool isSuccess)
+        {
+            const int sampleRate = 44100;
+            // 60 мс для клика, чтобы аудиодрайвер Windows гарантированно не проглатывал звук
+            var durationMs = isSuccess ? 350 : 60;
+            var numSamples = (sampleRate * durationMs) / 1000;
+            var dataSize = numSamples * 2;
+
+            using var fs = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.ReadWrite);
+            using var bw = new BinaryWriter(fs, Encoding.ASCII);
+
+            bw.Write(Encoding.ASCII.GetBytes("RIFF"));
+            bw.Write(36 + dataSize);
+            bw.Write(Encoding.ASCII.GetBytes("WAVEfmt "));
+            bw.Write(16);
+            bw.Write((short)1);
+            bw.Write((short)1);
+            bw.Write(sampleRate);
+            bw.Write(sampleRate * 2);
+            bw.Write((short)2);
+            bw.Write((short)16);
+            bw.Write(Encoding.ASCII.GetBytes("data"));
+            bw.Write(dataSize);
+
+            for (var i = 0; i < numSamples; i++)
+            {
+                var t = (double)i / sampleRate;
+                var progress = (double)i / numSamples;
+                double sample;
+
+                if (!isSuccess)
+                {
+                    // Приятный умеренный клик (частота 620 Гц с плавным спадом и громкостью 0.42)
+                    var env = Math.Exp(-progress * 11.0);
+                    var freq = 620.0 * Math.Exp(-progress * 4.5);
+                    sample = (Math.Sin(2 * Math.PI * freq * t) + 0.25 * Math.Sin(2 * Math.PI * (freq * 1.4) * t)) * env * 0.42;
+                }
+                else
+                {
+                    var freq = progress < 0.45 ? 523.25 : 783.99;
+                    var localP = progress < 0.45 ? (progress / 0.45) : ((progress - 0.45) / 0.55);
+                    var env = Math.Sin(Math.Min(1.0, localP * 8.0) * (Math.PI / 2)) * Math.Exp(-localP * 4.5);
+                    sample = (Math.Sin(2 * Math.PI * freq * t) + 0.35 * Math.Sin(2 * Math.PI * (freq * 2) * t)) * env * 0.35;
+                }
+
+                var pcm = (short)Math.Clamp(sample * short.MaxValue, short.MinValue, short.MaxValue);
+                bw.Write(pcm);
+            }
         }
     }
 }
@@ -2564,7 +2634,6 @@ namespace ZapretGUI.Core
 ////////////////////////////////////////////////////////////////////////////////
 
 using System;
-using System.Drawing;
 using System.Windows;
 using ZapretGUI.Views;
 
@@ -2575,7 +2644,6 @@ namespace ZapretGUI.Core
         private System.Windows.Forms.NotifyIcon? _notifyIcon;
         private TrayMenuWindow? _trayMenu;
         private readonly Window _mainWindow;
-        private IntPtr _hIcon = IntPtr.Zero;
 
         public TrayIconManager(Window mainWindow)
         {
@@ -2643,22 +2711,17 @@ namespace ZapretGUI.Core
             {
                 try
                 {
-                    var oldHIcon = _hIcon;
-                    var (newHIcon, wpfIcon) = UIHelper.CreateDynamicAppIcon(isRunning);
-                    _hIcon = newHIcon;
+                    var (trayIcon, wpfIcon) = UIHelper.GetOrCreateAppIcon(isRunning);
 
                     if (_notifyIcon != null)
                     {
-                        _notifyIcon.Icon = Icon.FromHandle(_hIcon);
+                        _notifyIcon.Icon = trayIcon;
                         _notifyIcon.Text = isRunning
                             ? $"Zapret for ADHD ({SettingsManager.Current.SelectedProfileName} — Активен)"
                             : $"Zapret for ADHD {AppConstants.AppVersion} (Остановлен)";
                     }
 
                     _mainWindow.Icon = wpfIcon;
-
-                    if (oldHIcon != IntPtr.Zero)
-                        UIHelper.DestroyIcon(oldHIcon);
                 }
                 catch { }
             });
@@ -2679,12 +2742,6 @@ namespace ZapretGUI.Core
                 _notifyIcon = null;
             }
 
-            if (_hIcon != IntPtr.Zero)
-            {
-                UIHelper.DestroyIcon(_hIcon);
-                _hIcon = IntPtr.Zero;
-            }
-
             _trayMenu?.Close();
         }
     }
@@ -2695,9 +2752,12 @@ namespace ZapretGUI.Core
 ////////////////////////////////////////////////////////////////////////////////
 
 using System;
+using System.Collections.Concurrent;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
 using System.Drawing.Text;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows;
@@ -2713,6 +2773,9 @@ namespace ZapretGUI.Core
         public static extern bool DestroyIcon(IntPtr handle);
 
         private static readonly BrushConverter _brushConverter = new BrushConverter();
+
+        // Кэш готовых иконок в оперативной памяти на всё время работы программы
+        private static readonly ConcurrentDictionary<string, (Icon trayIcon, ImageSource wpfIcon)> _iconCache = new();
 
         public static Action<string, string, bool>? WebAlertHandler { get; set; }
         public static Func<string, string, string, bool, Task<bool>>? WebConfirmHandler { get; set; }
@@ -2763,62 +2826,113 @@ namespace ZapretGUI.Core
             res["BrandErrorBrush"] = GetErrorBrush();
         }
 
-        public static (IntPtr hIcon, ImageSource wpfIcon) CreateDynamicAppIcon(bool isRunning)
+        public static (Icon trayIcon, ImageSource wpfIcon) GetOrCreateAppIcon(bool isRunning)
         {
-            const int size = 64;
-            using var bmp = new Bitmap(size, size);
-            using (var g = Graphics.FromImage(bmp))
+            var theme = (SettingsManager.Current.AccentTheme ?? "green").ToLowerInvariant();
+            if (theme == "crimson") theme = "cyan";
+
+            var cacheKey = $"{theme}_{(isRunning ? "on" : "off")}";
+
+            // 1. Если иконка уже в ОЗУ — отдаём мгновенно за 0 мс
+            if (_iconCache.TryGetValue(cacheKey, out var cached))
+                return cached;
+
+            var cacheDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", "Cache", "Icons");
+            Directory.CreateDirectory(cacheDir);
+            var pngPath = Path.Combine(cacheDir, $"icon_{cacheKey}.png");
+
+            Bitmap bmp;
+
+            // 2. Если иконка уже была сгенерирована при прошлом запуске на диск — просто читаем готовый PNG
+            if (File.Exists(pngPath) && new FileInfo(pngPath).Length > 100)
             {
-                g.SmoothingMode = SmoothingMode.AntiAlias;
-                g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
-                g.Clear(System.Drawing.Color.Transparent);
-
-                var accentColor = ColorTranslator.FromHtml(GetAccentHex(light: true));
-                var borderColor = isRunning ? accentColor : ColorTranslator.FromHtml("#3A3A3A");
-                var bgTop = isRunning ? ColorTranslator.FromHtml(GetAccentDarkBgHex()) : ColorTranslator.FromHtml("#18181B");
-                var bgBottom = ColorTranslator.FromHtml("#0A0A0C");
-
-                using var path = CreateRoundedRectPath(new Rectangle(4, 4, size - 8, size - 8), 14);
-                using (var bgBrush = new System.Drawing.Drawing2D.LinearGradientBrush(new Rectangle(0, 0, size, size), bgTop, bgBottom, System.Drawing.Drawing2D.LinearGradientMode.Vertical))
+                using var fs = new FileStream(pngPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                bmp = new Bitmap(fs);
+            }
+            else
+            {
+                // 3. Иначе (первый запуск) рисуем иконку и сохраняем PNG на диск для будущих запусков
+                bmp = RenderIconBitmap(isRunning);
+                try
                 {
-                    g.FillPath(bgBrush, path);
+                    bmp.Save(pngPath, ImageFormat.Png);
                 }
-
-                using (var pen = new System.Drawing.Pen(borderColor, 3.2f))
-                {
-                    g.DrawPath(pen, path);
-                }
-
-                using var font = new Font("Segoe UI", 28f, System.Drawing.FontStyle.Bold, GraphicsUnit.Pixel);
-                var textBrush = isRunning ? new SolidBrush(accentColor) : new SolidBrush(System.Drawing.Color.White);
-                using (textBrush)
-                {
-                    var sf = new StringFormat
-                    {
-                        Alignment = StringAlignment.Center,
-                        LineAlignment = StringAlignment.Center
-                    };
-                    g.DrawString("Z", font, textBrush, new RectangleF(0, 1, size, size), sf);
-                }
-
-                var dotColor = isRunning
-                    ? accentColor
-                    : ColorTranslator.FromHtml("#D13438");
-
-                using var dotBgBrush = new SolidBrush(ColorTranslator.FromHtml("#0A0A0C"));
-                using var dotBrush = new SolidBrush(dotColor);
-                g.FillEllipse(dotBgBrush, size - 20, size - 20, 16, 16);
-                g.FillEllipse(dotBrush, size - 17, size - 17, 10, 10);
+                catch { }
             }
 
-            IntPtr hIcon = bmp.GetHicon();
-            var wpfIcon = Imaging.CreateBitmapSourceFromHIcon(
-                hIcon,
-                Int32Rect.Empty,
-                BitmapSizeOptions.FromEmptyOptions());
-            wpfIcon.Freeze();
+            using (bmp)
+            {
+                IntPtr hIcon = bmp.GetHicon();
+                try
+                {
+                    using var tempIcon = Icon.FromHandle(hIcon);
+                    // Клонируем управляемую копию Icon, чтобы безопасно освободить GDI-хэндл
+                    var managedTrayIcon = (Icon)tempIcon.Clone();
 
-            return (hIcon, wpfIcon);
+                    var wpfIcon = Imaging.CreateBitmapSourceFromHIcon(
+                        hIcon,
+                        Int32Rect.Empty,
+                        BitmapSizeOptions.FromEmptyOptions());
+                    wpfIcon.Freeze();
+
+                    var result = (managedTrayIcon, (ImageSource)wpfIcon);
+                    _iconCache[cacheKey] = result;
+                    return result;
+                }
+                finally
+                {
+                    DestroyIcon(hIcon);
+                }
+            }
+        }
+
+        private static Bitmap RenderIconBitmap(bool isRunning)
+        {
+            const int size = 64;
+            var bmp = new Bitmap(size, size);
+            using var g = Graphics.FromImage(bmp);
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+            g.Clear(System.Drawing.Color.Transparent);
+
+            var accentColor = ColorTranslator.FromHtml(GetAccentHex(light: true));
+            var borderColor = isRunning ? accentColor : ColorTranslator.FromHtml("#3A3A3A");
+            var bgTop = isRunning ? ColorTranslator.FromHtml(GetAccentDarkBgHex()) : ColorTranslator.FromHtml("#18181B");
+            var bgBottom = ColorTranslator.FromHtml("#0A0A0C");
+
+            using var path = CreateRoundedRectPath(new Rectangle(4, 4, size - 8, size - 8), 14);
+            using (var bgBrush = new System.Drawing.Drawing2D.LinearGradientBrush(new Rectangle(0, 0, size, size), bgTop, bgBottom, System.Drawing.Drawing2D.LinearGradientMode.Vertical))
+            {
+                g.FillPath(bgBrush, path);
+            }
+
+            using (var pen = new System.Drawing.Pen(borderColor, 3.2f))
+            {
+                g.DrawPath(pen, path);
+            }
+
+            using var font = new Font("Segoe UI", 28f, System.Drawing.FontStyle.Bold, GraphicsUnit.Pixel);
+            var textBrush = isRunning ? new SolidBrush(accentColor) : new SolidBrush(System.Drawing.Color.White);
+            using (textBrush)
+            {
+                var sf = new StringFormat
+                {
+                    Alignment = StringAlignment.Center,
+                    LineAlignment = StringAlignment.Center
+                };
+                g.DrawString("Z", font, textBrush, new RectangleF(0, 1, size, size), sf);
+            }
+
+            var dotColor = isRunning
+                ? accentColor
+                : ColorTranslator.FromHtml("#D13438");
+
+            using var dotBgBrush = new SolidBrush(ColorTranslator.FromHtml("#0A0A0C"));
+            using var dotBrush = new SolidBrush(dotColor);
+            g.FillEllipse(dotBgBrush, size - 20, size - 20, 16, 16);
+            g.FillEllipse(dotBrush, size - 17, size - 17, 10, 10);
+
+            return bmp;
         }
 
         private static GraphicsPath CreateRoundedRectPath(Rectangle bounds, int radius)
@@ -11447,7 +11561,7 @@ const ACCENT_THEME_NAMES = {
     'cyan': 'Аквамарин'
 };
 
-// 5 кардинально разных по силуэту 2D-самоцветов в едином 3D-пространстве
+// 5 совершенно разных по силуэту 2D-камешков на единой 3D-орбите
 const FLOATING_STONES = [
     {
         id: 'green',
@@ -11460,20 +11574,15 @@ const FLOATING_STONES = [
         fillBot: '#065F46',
         edge: '#A7F3D0',
         glow: '#4CAF50',
-        // 1. СТУПЕНЧАТЫЙ ОКТАГОН (Классическая прямоугольная огранка Emerald Cut)
+        // 1. Высокий ступенчатый изумрудный обелиск (8 вершин)
         outer: [
-            { x: -7.5, y: -15 }, { x: 7.5, y: -15 },
-            { x: 11.5, y: -10.5 }, { x: 11.5, y: 10.5 },
-            { x: 7.5, y: 15 }, { x: -7.5, y: 15 },
-            { x: -11.5, y: 10.5 }, { x: -11.5, y: -10.5 }
+            { x: -5, y: -17 }, { x: 5, y: -17 }, { x: 11, y: -10 }, { x: 11, y: 10 },
+            { x: 5, y: 17 }, { x: -5, y: 17 }, { x: -11, y: 10 }, { x: -11, y: -10 }
         ],
         inner: [
-            { x: -4.5, y: -9.5 }, { x: 4.5, y: -9.5 },
-            { x: 6.5, y: -7 }, { x: 6.5, y: 7 },
-            { x: 4.5, y: 9.5 }, { x: -4.5, y: 9.5 },
-            { x: -6.5, y: 7 }, { x: -6.5, y: -7 }
-        ],
-        ribs: [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4], [5, 5], [6, 6], [7, 7]]
+            { x: -3, y: -10 }, { x: 3, y: -10 }, { x: 5.5, y: -5 }, { x: 5.5, y: 5 },
+            { x: 3, y: 10 }, { x: -3, y: 10 }, { x: -5.5, y: 5 }, { x: -5.5, y: -5 }
+        ]
     },
     {
         id: 'blue',
@@ -11486,22 +11595,13 @@ const FLOATING_STONES = [
         fillBot: '#1E3A8A',
         edge: '#BFDBFE',
         glow: '#60A5FA',
-        // 2. УЗКОЕ ОСТРИЁ КОПЬЯ / КИНЖАЛЬНЫЙ ОСКОЛОК (Вытянутый ромб с хребтом)
+        // 2. Острый ромбовидный кристалл-веретено (4 вершины)
         outer: [
-            { x: 0, y: -17.5 },
-            { x: 9.5, y: -3 },
-            { x: 5.5, y: 10.5 },
-            { x: 0, y: 17.5 },
-            { x: -5.5, y: 10.5 },
-            { x: -9.5, y: -3 }
+            { x: 0, y: -18.5 }, { x: 13.5, y: 0 }, { x: 0, y: 18.5 }, { x: -13.5, y: 0 }
         ],
         inner: [
-            { x: 0, y: -10 },
-            { x: 4.2, y: -2 },
-            { x: 0, y: 10.5 },
-            { x: -4.2, y: -2 }
-        ],
-        ribs: [[0, 0], [1, 1], [2, 2], [3, 2], [4, 2], [5, 3]]
+            { x: 0, y: -9.5 }, { x: 6.5, y: 0 }, { x: 0, y: 9.5 }, { x: -6.5, y: 0 }
+        ]
     },
     {
         id: 'purple',
@@ -11514,25 +11614,14 @@ const FLOATING_STONES = [
         fillBot: '#4C1D95',
         edge: '#E9D5FF',
         glow: '#A78BFA',
-        // 3. ТРЁХЗУБАЯ КРИСТАЛЛИЧЕСКАЯ ДРУЗА (3 сросшихся острых пика разной высоты)
+        // 3. Асимметричный звездчатый кластер друзы
         outer: [
-            { x: -13.5, y: -5.5 }, // Левый пик
-            { x: -5.5, y: -3.5 },  // Левая впадина
-            { x: -0.5, y: -17 },   // Главный центральный шпиль
-            { x: 5.5, y: -4.5 },   // Правая впадина
-            { x: 14, y: -8.5 },    // Правый пик
-            { x: 11.5, y: 8.5 },   // Правое основание
-            { x: 0, y: 14.5 },     // Нижний центр
-            { x: -10.5, y: 9.5 }   // Левое основание
+            { x: -9, y: -14 }, { x: 0, y: -9 }, { x: 8, y: -16 }, { x: 15, y: -3 },
+            { x: 10, y: 14 }, { x: -8, y: 15 }, { x: -15, y: 2 }
         ],
         inner: [
-            { x: -5.5, y: -3.5 },
-            { x: -0.5, y: -8.5 },
-            { x: 5.5, y: -4.5 },
-            { x: 4.5, y: 6.5 },
-            { x: -4.5, y: 6.5 }
-        ],
-        ribs: [[0, 0], [2, 1], [4, 2], [5, 3], [6, 3], [6, 4], [7, 4]]
+            { x: -4, y: -5 }, { x: 4, y: -7 }, { x: 7, y: 1 }, { x: 3, y: 7 }, { x: -6, y: 5 }
+        ]
     },
     {
         id: 'amber',
@@ -11545,22 +11634,15 @@ const FLOATING_STONES = [
         fillBot: '#78350F',
         edge: '#FEF3C7',
         glow: '#FBBF24',
-        // 4. КЛАССИЧЕСКИЙ БРИЛЛИАНТ С КОРОНОЙ (Плоский верх и острое клиновидное дно)
+        // 4. Классический ограненный бриллиант с плоской короной и острой вершиной внизу
         outer: [
-            { x: -8.5, y: -12.5 },
-            { x: 8.5, y: -12.5 },
-            { x: 15.5, y: -3.5 },
-            { x: 0, y: 16 },
-            { x: -15.5, y: -3.5 }
+            { x: -8.5, y: -14 }, { x: 8.5, y: -14 }, { x: 15.5, y: -4.5 },
+            { x: 0, y: 17.5 }, { x: -15.5, y: -4.5 }
         ],
         inner: [
-            { x: -6, y: -8 },
-            { x: 6, y: -8 },
-            { x: 8.5, y: -3 },
-            { x: 0, y: 6.5 },
-            { x: -8.5, y: -3 }
-        ],
-        ribs: [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4], [0, 4], [1, 2]]
+            { x: -5.5, y: -9 }, { x: 5.5, y: -9 }, { x: 8.5, y: -3.5 },
+            { x: 0, y: 8.5 }, { x: -8.5, y: -3.5 }
+        ]
     },
     {
         id: 'cyan',
@@ -11573,26 +11655,14 @@ const FLOATING_STONES = [
         fillBot: '#164E63',
         edge: '#CFFAFE',
         glow: '#22D3EE',
-        // 5. АСИММЕТРИЧНЫЙ ЛУННЫЙ СЕРП / КРИСТАЛЛ-ПОЛУМЕСЯЦ
+        // 5. Изящный треугольный осколок-капля с широким основанием
         outer: [
-            { x: 6, y: -16 },
-            { x: -6.5, y: -11.5 },
-            { x: -13.5, y: 0 },
-            { x: -6.5, y: 12 },
-            { x: 6.5, y: 15.5 },
-            { x: 11.5, y: 7 },
-            { x: 2.5, y: 3.5 },   // Внутренний изгиб серпа
-            { x: 2.5, y: -4.5 },  // Внутренний изгиб серпа
-            { x: 11.5, y: -8.5 }
+            { x: 0, y: -18 }, { x: 14.5, y: 7 }, { x: 7, y: 16 },
+            { x: -7, y: 16 }, { x: -14.5, y: 7 }
         ],
         inner: [
-            { x: 3, y: -11 },
-            { x: -5, y: -6.5 },
-            { x: -7.5, y: 0 },
-            { x: -4.5, y: 7.5 },
-            { x: 3.5, y: 10.5 }
-        ],
-        ribs: [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4], [8, 0], [7, 1], [6, 3], [5, 4]]
+            { x: 0, y: -8.5 }, { x: 7.5, y: 5 }, { x: 0, y: 10 }, { x: -7.5, y: 5 }
+        ]
     }
 ];
 
@@ -11737,7 +11807,7 @@ function startGemSwatchesEngine() {
     let time = 0;
 
     function renderZeroGravityCarousel() {
-        time += 0.0038;
+        time += 0.0035;
         currentOrbitAngle += (targetOrbitAngle - currentOrbitAngle) * 0.075;
 
         const canvases = document.querySelectorAll('canvas.gem-field-canvas');
@@ -11767,39 +11837,29 @@ function startGemSwatchesEngine() {
             ctx.scale(dpr, dpr);
             ctx.clearRect(0, 0, w, h);
 
-            // Очень мягкое сглаживание реакции на мышь
             canvas._smoothMouseX += (canvas._targetMouseX - canvas._smoothMouseX) * 0.045;
             canvas._smoothMouseY += (canvas._targetMouseY - canvas._smoothMouseY) * 0.045;
 
             const camTiltX = canvas._smoothMouseX * 3.0;
-            const camTiltY = canvas._smoothMouseY * 1.1;
+            const camTiltY = canvas._smoothMouseY * 1.2;
 
             const cx = w / 2;
-            // Поднимаем центр орбиты выше, чтобы между прицелом и подписью внизу был чистый зазор
-            const cy = h / 2 - 16;
+            const cy = h / 2 - 14;
 
-            const radiusX = Math.min(162, Math.max(112, w * 0.30));
-            const radiusZ = 76;
+            const radiusX = Math.min(160, Math.max(110, w * 0.3));
+            const radiusZ = 75;
             const fov = 250;
 
-            // 1. Орбитальное кольцо и перспективные линии пола
+            // 1. Орбитальное кольцо
             ctx.save();
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.035)';
             ctx.lineWidth = 1;
             ctx.beginPath();
-            ctx.ellipse(cx - camTiltX * 0.25, cy + 22, radiusX * 1.02, 10, 0, 0, Math.PI * 2);
-            ctx.stroke();
-
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.02)';
-            ctx.beginPath();
-            for (let gx = -160; gx <= 160; gx += 40) {
-                ctx.moveTo(cx + gx * 0.65 - camTiltX * 0.2, h - 22);
-                ctx.lineTo(cx + gx * 1.1 + camTiltX * 0.3, h);
-            }
+            ctx.ellipse(cx - camTiltX * 0.25, cy + 24, radiusX * 1.02, 10, 0, 0, Math.PI * 2);
             ctx.stroke();
             ctx.restore();
 
-            // 2. Вычисление 3D-координат камней на орбите
+            // 2. Проекция 3D-орбиты
             const projected = FLOATING_STONES.map((st, idx) => {
                 const theta = idx * stepAngle + currentOrbitAngle;
                 const sinT = Math.sin(theta);
@@ -11808,18 +11868,18 @@ function startGemSwatchesEngine() {
                 const isSelected = st.id === currentTheme;
                 const isHovered = canvas._hoverId === st.id;
 
-                const targetHoverScale = isSelected ? 1.04 : isHovered ? 0.96 : 0.82;
+                const targetHoverScale = isSelected ? 1.08 : isHovered ? 1.0 : 0.84;
                 const prevScale = canvas._hoverScales[st.id] ?? targetHoverScale;
                 const smoothItemScale = prevScale + (targetHoverScale - prevScale) * 0.08;
                 canvas._hoverScales[st.id] = smoothItemScale;
 
-                const bobY = Math.sin(time * st.speed + st.phase) * 2.0;
+                const bobY = Math.sin(time * st.speed + st.phase) * 2.2;
                 const driftX = Math.cos(time * 0.5 * st.speed + st.phase) * 0.9;
                 const swayAngle = Math.sin(time * 0.4 * st.speed + st.phase) * 0.035;
 
                 const worldX = sinT * radiusX + driftX - camTiltX * cosT;
                 const zDepth = (1 - cosT) * radiusZ;
-                const worldY = bobY - (1 - cosT) * 4.5 - camTiltY * 0.25;
+                const worldY = bobY - (1 - cosT) * 5.0 - camTiltY * 0.25;
 
                 const scale3D = fov / (fov + zDepth * 1.35);
                 const screenX = cx + worldX * scale3D;
@@ -11849,24 +11909,24 @@ function startGemSwatchesEngine() {
             canvas._renderedGems = projected;
             projected.sort((a, b) => b.zDepth - a.zDepth);
 
-            // 3. Рисуем задние и передние камни
+            // 3. Рендеринг камешков и подписей
             projected.forEach(item => {
                 const { st, screenX, screenY, scale3D, smoothItemScale, bobY, swayAngle, depthAlpha, isSelected, isHovered } = item;
 
                 ctx.save();
                 ctx.globalAlpha = isHovered ? Math.min(1, depthAlpha + 0.2) : depthAlpha;
 
-                // Тень под камнем
-                const shadowY = screenY + 21 * scale3D;
+                // Тень
+                const shadowY = screenY + 23 * scale3D;
                 const shadowRx = Math.max(4, (10 - bobY * 0.25) * scale3D);
                 ctx.beginPath();
                 ctx.ellipse(screenX, shadowY, shadowRx, 2.0 * scale3D, 0, 0, Math.PI * 2);
                 ctx.fillStyle = isSelected ? st.glow + '45' : 'rgba(0, 0, 0, 0.45)';
                 ctx.fill();
 
-                // Мягкое свечение
+                // Свечение
                 if (isSelected || isHovered) {
-                    const glowR = (isSelected ? 24 : 16) * scale3D;
+                    const glowR = (isSelected ? 25 : 17) * scale3D;
                     const gradGlow = ctx.createRadialGradient(screenX, screenY, 2, screenX, screenY, glowR);
                     gradGlow.addColorStop(0, st.glow + (isSelected ? '50' : '28'));
                     gradGlow.addColorStop(1, st.glow + '00');
@@ -11876,7 +11936,7 @@ function startGemSwatchesEngine() {
                     ctx.fill();
                 }
 
-                // Отрисовка уникальной формы кристалла
+                // Сам камень
                 ctx.save();
                 ctx.translate(screenX, screenY);
                 ctx.rotate(swayAngle);
@@ -11898,72 +11958,72 @@ function startGemSwatchesEngine() {
                 ctx.fill();
 
                 ctx.strokeStyle = isSelected ? '#FFFFFF' : st.edge;
-                ctx.lineWidth = isSelected ? 1.25 : 0.85;
+                ctx.lineWidth = isSelected ? 1.2 : 0.8;
                 ctx.stroke();
 
-                // Внутренние грани по индивидуальной карте ребер камня
-                ctx.strokeStyle = 'rgba(255, 255, 255, 0.32)';
-                ctx.lineWidth = 0.65;
+                // Внутренние грани
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.28)';
+                ctx.lineWidth = 0.6;
                 ctx.beginPath();
-                if (st.ribs) {
-                    st.ribs.forEach(([oIdx, iIdx]) => {
-                        const outPt = st.outer[oIdx];
-                        const inPt = st.inner[iIdx];
-                        if (outPt && inPt) {
-                            ctx.moveTo(outPt.x, outPt.y);
-                            ctx.lineTo(inPt.x, inPt.y);
-                        }
-                    });
+                for (let k = 0; k < st.inner.length; k++) {
+                    const outPt = st.outer[k % st.outer.length];
+                    const inPt = st.inner[k];
+                    ctx.moveTo(outPt.x, outPt.y);
+                    ctx.lineTo(inPt.x, inPt.y);
                 }
                 ctx.stroke();
 
-                // Внутренняя световая грань
+                // Лицевая площадка
                 ctx.beginPath();
                 st.inner.forEach((pt, pIdx) => {
                     if (pIdx === 0) ctx.moveTo(pt.x, pt.y);
                     else ctx.lineTo(pt.x, pt.y);
                 });
                 ctx.closePath();
-                ctx.fillStyle = st.fillTop + (isSelected ? '82' : '42');
+                ctx.fillStyle = st.fillTop + (isSelected ? '80' : '40');
                 ctx.fill();
-                ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
-                ctx.lineWidth = 0.6;
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.42)';
+                ctx.lineWidth = 0.55;
                 ctx.stroke();
                 ctx.restore();
 
-                // Подписи для невыбранных камней (а для выбранного камня подпись рисуется отдельно под рамкой прицела)
-                if (!isSelected) {
-                    const labelY = screenY + 26 * scale3D;
-                    const fontSize = Math.max(8, Math.round(9.5 * scale3D));
-                    ctx.font = `500 ${fontSize}px "Segoe UI", system-ui, sans-serif`;
-                    ctx.textAlign = 'center';
-                    ctx.textBaseline = 'middle';
+                // Подпись под камнем (ниже прицела, без наезда рамки)
+                const labelY = screenY + 32 * scale3D + (isSelected ? 2 : 0);
+                const fontSize = Math.max(8, Math.round(9.5 * scale3D));
+                ctx.font = `${isSelected ? '700' : '500'} ${fontSize}px "Segoe UI", system-ui, sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
 
-                    const textTitle = st.name;
-                    const textW = ctx.measureText(textTitle).width;
-                    const pillW = textW + 10 * scale3D;
-                    const pillH = 13 * scale3D;
+                const textTitle = st.name;
+                const textW = ctx.measureText(textTitle).width;
+                const pillW = textW + 10 * scale3D;
+                const pillH = 13 * scale3D;
 
-                    drawRoundedBadge(ctx, screenX - pillW / 2, labelY - pillH / 2, pillW, pillH, 4 * scale3D);
-                    ctx.fillStyle = 'rgba(14, 14, 18, 0.72)';
-                    ctx.fill();
-                    ctx.strokeStyle = isHovered ? 'rgba(255,255,255,0.28)' : 'rgba(255,255,255,0.07)';
-                    ctx.lineWidth = 0.6;
-                    ctx.stroke();
+                drawRoundedBadge(ctx, screenX - pillW / 2, labelY - pillH / 2, pillW, pillH, 4 * scale3D);
+                ctx.fillStyle = isSelected ? 'rgba(12, 16, 14, 0.92)' : 'rgba(14, 14, 18, 0.72)';
+                ctx.fill();
 
-                    ctx.fillStyle = isHovered ? '#E4E4E7' : '#94A3B8';
-                    ctx.fillText(textTitle, screenX, labelY + 0.3);
+                ctx.strokeStyle = isSelected ? st.glow : isHovered ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.06)';
+                ctx.lineWidth = isSelected ? 0.9 : 0.5;
+                ctx.stroke();
+
+                ctx.fillStyle = isSelected ? '#FFFFFF' : isHovered ? '#E4E4E7' : '#94A3B8';
+                if (isSelected) {
+                    ctx.shadowColor = st.glow;
+                    ctx.shadowBlur = 4;
                 }
+                ctx.fillText(textTitle, screenX, labelY + 0.2);
+                ctx.shadowBlur = 0;
 
                 ctx.restore();
             });
 
-            // 4. Прицел-рамка вокруг выбранного кристалла (строго вокруг камня: заканчивается на cy + 19)
+            // 4. Прицел-рамка вокруг переднего камня (не задевает подпись внизу)
             const selX = cx - camTiltX * 0.25;
             const selY = cy;
-            const boxW = 42, boxH = 38;
+            const boxW = 46, boxH = 44;
             const halfW = boxW / 2, halfH = boxH / 2;
-            const corner = 6.5;
+            const corner = 7;
 
             ctx.save();
             ctx.strokeStyle = activeStone.glow;
@@ -11988,32 +12048,8 @@ function startGemSwatchesEngine() {
             ctx.lineTo(selX - halfW, selY + halfH);
             ctx.lineTo(selX - halfW, selY + halfH - corner);
             ctx.stroke();
-
-            // 5. Подпись выбранного камня — строго НИЖЕ рамки прицела (на cy + 33, с зазором 7px от нижних уголков)
-            const activeLabelY = selY + halfH + 14;
-            ctx.font = '700 10.5px "Segoe UI", system-ui, sans-serif';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-
-            const activeTitle = `✦ ${activeStone.name} ✦`;
-            const actTextW = ctx.measureText(activeTitle).width;
-            const actPillW = actTextW + 16;
-            const actPillH = 16;
-
-            ctx.shadowBlur = 0;
-            drawRoundedBadge(ctx, selX - actPillW / 2, activeLabelY - actPillH / 2, actPillW, actPillH, 5);
-            ctx.fillStyle = 'rgba(12, 16, 15, 0.95)';
-            ctx.fill();
-            ctx.strokeStyle = activeStone.glow;
-            ctx.lineWidth = 1.1;
-            ctx.stroke();
-
-            ctx.fillStyle = '#FFFFFF';
-            ctx.shadowColor = activeStone.glow;
-            ctx.shadowBlur = 5;
-            ctx.fillText(activeTitle, selX, activeLabelY + 0.3);
-
             ctx.restore();
+
             ctx.restore();
         });
 

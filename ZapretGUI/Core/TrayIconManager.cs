@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Drawing;
 using System.Windows;
 using ZapretGUI.Views;
 
@@ -10,7 +9,6 @@ namespace ZapretGUI.Core
         private System.Windows.Forms.NotifyIcon? _notifyIcon;
         private TrayMenuWindow? _trayMenu;
         private readonly Window _mainWindow;
-        private IntPtr _hIcon = IntPtr.Zero;
 
         public TrayIconManager(Window mainWindow)
         {
@@ -78,22 +76,17 @@ namespace ZapretGUI.Core
             {
                 try
                 {
-                    var oldHIcon = _hIcon;
-                    var (newHIcon, wpfIcon) = UIHelper.CreateDynamicAppIcon(isRunning);
-                    _hIcon = newHIcon;
+                    var (trayIcon, wpfIcon) = UIHelper.GetOrCreateAppIcon(isRunning);
 
                     if (_notifyIcon != null)
                     {
-                        _notifyIcon.Icon = Icon.FromHandle(_hIcon);
+                        _notifyIcon.Icon = trayIcon;
                         _notifyIcon.Text = isRunning
                             ? $"Zapret for ADHD ({SettingsManager.Current.SelectedProfileName} — Активен)"
                             : $"Zapret for ADHD {AppConstants.AppVersion} (Остановлен)";
                     }
 
                     _mainWindow.Icon = wpfIcon;
-
-                    if (oldHIcon != IntPtr.Zero)
-                        UIHelper.DestroyIcon(oldHIcon);
                 }
                 catch { }
             });
@@ -112,12 +105,6 @@ namespace ZapretGUI.Core
                 _notifyIcon.Visible = false;
                 _notifyIcon.Dispose();
                 _notifyIcon = null;
-            }
-
-            if (_hIcon != IntPtr.Zero)
-            {
-                UIHelper.DestroyIcon(_hIcon);
-                _hIcon = IntPtr.Zero;
             }
 
             _trayMenu?.Close();

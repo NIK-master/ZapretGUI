@@ -30,7 +30,7 @@ const ACCENT_THEME_NAMES = {
     'cyan': 'Аквамарин'
 };
 
-// 5 кардинально разных по силуэту 2D-самоцветов в едином 3D-пространстве
+// 5 совершенно разных по силуэту 2D-камешков на единой 3D-орбите
 const FLOATING_STONES = [
     {
         id: 'green',
@@ -43,20 +43,15 @@ const FLOATING_STONES = [
         fillBot: '#065F46',
         edge: '#A7F3D0',
         glow: '#4CAF50',
-        // 1. СТУПЕНЧАТЫЙ ОКТАГОН (Классическая прямоугольная огранка Emerald Cut)
+        // 1. Высокий ступенчатый изумрудный обелиск (8 вершин)
         outer: [
-            { x: -7.5, y: -15 }, { x: 7.5, y: -15 },
-            { x: 11.5, y: -10.5 }, { x: 11.5, y: 10.5 },
-            { x: 7.5, y: 15 }, { x: -7.5, y: 15 },
-            { x: -11.5, y: 10.5 }, { x: -11.5, y: -10.5 }
+            { x: -5, y: -17 }, { x: 5, y: -17 }, { x: 11, y: -10 }, { x: 11, y: 10 },
+            { x: 5, y: 17 }, { x: -5, y: 17 }, { x: -11, y: 10 }, { x: -11, y: -10 }
         ],
         inner: [
-            { x: -4.5, y: -9.5 }, { x: 4.5, y: -9.5 },
-            { x: 6.5, y: -7 }, { x: 6.5, y: 7 },
-            { x: 4.5, y: 9.5 }, { x: -4.5, y: 9.5 },
-            { x: -6.5, y: 7 }, { x: -6.5, y: -7 }
-        ],
-        ribs: [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4], [5, 5], [6, 6], [7, 7]]
+            { x: -3, y: -10 }, { x: 3, y: -10 }, { x: 5.5, y: -5 }, { x: 5.5, y: 5 },
+            { x: 3, y: 10 }, { x: -3, y: 10 }, { x: -5.5, y: 5 }, { x: -5.5, y: -5 }
+        ]
     },
     {
         id: 'blue',
@@ -69,22 +64,13 @@ const FLOATING_STONES = [
         fillBot: '#1E3A8A',
         edge: '#BFDBFE',
         glow: '#60A5FA',
-        // 2. УЗКОЕ ОСТРИЁ КОПЬЯ / КИНЖАЛЬНЫЙ ОСКОЛОК (Вытянутый ромб с хребтом)
+        // 2. Острый ромбовидный кристалл-веретено (4 вершины)
         outer: [
-            { x: 0, y: -17.5 },
-            { x: 9.5, y: -3 },
-            { x: 5.5, y: 10.5 },
-            { x: 0, y: 17.5 },
-            { x: -5.5, y: 10.5 },
-            { x: -9.5, y: -3 }
+            { x: 0, y: -18.5 }, { x: 13.5, y: 0 }, { x: 0, y: 18.5 }, { x: -13.5, y: 0 }
         ],
         inner: [
-            { x: 0, y: -10 },
-            { x: 4.2, y: -2 },
-            { x: 0, y: 10.5 },
-            { x: -4.2, y: -2 }
-        ],
-        ribs: [[0, 0], [1, 1], [2, 2], [3, 2], [4, 2], [5, 3]]
+            { x: 0, y: -9.5 }, { x: 6.5, y: 0 }, { x: 0, y: 9.5 }, { x: -6.5, y: 0 }
+        ]
     },
     {
         id: 'purple',
@@ -97,25 +83,14 @@ const FLOATING_STONES = [
         fillBot: '#4C1D95',
         edge: '#E9D5FF',
         glow: '#A78BFA',
-        // 3. ТРЁХЗУБАЯ КРИСТАЛЛИЧЕСКАЯ ДРУЗА (3 сросшихся острых пика разной высоты)
+        // 3. Асимметричный звездчатый кластер друзы
         outer: [
-            { x: -13.5, y: -5.5 }, // Левый пик
-            { x: -5.5, y: -3.5 },  // Левая впадина
-            { x: -0.5, y: -17 },   // Главный центральный шпиль
-            { x: 5.5, y: -4.5 },   // Правая впадина
-            { x: 14, y: -8.5 },    // Правый пик
-            { x: 11.5, y: 8.5 },   // Правое основание
-            { x: 0, y: 14.5 },     // Нижний центр
-            { x: -10.5, y: 9.5 }   // Левое основание
+            { x: -9, y: -14 }, { x: 0, y: -9 }, { x: 8, y: -16 }, { x: 15, y: -3 },
+            { x: 10, y: 14 }, { x: -8, y: 15 }, { x: -15, y: 2 }
         ],
         inner: [
-            { x: -5.5, y: -3.5 },
-            { x: -0.5, y: -8.5 },
-            { x: 5.5, y: -4.5 },
-            { x: 4.5, y: 6.5 },
-            { x: -4.5, y: 6.5 }
-        ],
-        ribs: [[0, 0], [2, 1], [4, 2], [5, 3], [6, 3], [6, 4], [7, 4]]
+            { x: -4, y: -5 }, { x: 4, y: -7 }, { x: 7, y: 1 }, { x: 3, y: 7 }, { x: -6, y: 5 }
+        ]
     },
     {
         id: 'amber',
@@ -128,22 +103,15 @@ const FLOATING_STONES = [
         fillBot: '#78350F',
         edge: '#FEF3C7',
         glow: '#FBBF24',
-        // 4. КЛАССИЧЕСКИЙ БРИЛЛИАНТ С КОРОНОЙ (Плоский верх и острое клиновидное дно)
+        // 4. Классический ограненный бриллиант с плоской короной и острой вершиной внизу
         outer: [
-            { x: -8.5, y: -12.5 },
-            { x: 8.5, y: -12.5 },
-            { x: 15.5, y: -3.5 },
-            { x: 0, y: 16 },
-            { x: -15.5, y: -3.5 }
+            { x: -8.5, y: -14 }, { x: 8.5, y: -14 }, { x: 15.5, y: -4.5 },
+            { x: 0, y: 17.5 }, { x: -15.5, y: -4.5 }
         ],
         inner: [
-            { x: -6, y: -8 },
-            { x: 6, y: -8 },
-            { x: 8.5, y: -3 },
-            { x: 0, y: 6.5 },
-            { x: -8.5, y: -3 }
-        ],
-        ribs: [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4], [0, 4], [1, 2]]
+            { x: -5.5, y: -9 }, { x: 5.5, y: -9 }, { x: 8.5, y: -3.5 },
+            { x: 0, y: 8.5 }, { x: -8.5, y: -3.5 }
+        ]
     },
     {
         id: 'cyan',
@@ -156,26 +124,14 @@ const FLOATING_STONES = [
         fillBot: '#164E63',
         edge: '#CFFAFE',
         glow: '#22D3EE',
-        // 5. АСИММЕТРИЧНЫЙ ЛУННЫЙ СЕРП / КРИСТАЛЛ-ПОЛУМЕСЯЦ
+        // 5. Изящный треугольный осколок-капля с широким основанием
         outer: [
-            { x: 6, y: -16 },
-            { x: -6.5, y: -11.5 },
-            { x: -13.5, y: 0 },
-            { x: -6.5, y: 12 },
-            { x: 6.5, y: 15.5 },
-            { x: 11.5, y: 7 },
-            { x: 2.5, y: 3.5 },   // Внутренний изгиб серпа
-            { x: 2.5, y: -4.5 },  // Внутренний изгиб серпа
-            { x: 11.5, y: -8.5 }
+            { x: 0, y: -18 }, { x: 14.5, y: 7 }, { x: 7, y: 16 },
+            { x: -7, y: 16 }, { x: -14.5, y: 7 }
         ],
         inner: [
-            { x: 3, y: -11 },
-            { x: -5, y: -6.5 },
-            { x: -7.5, y: 0 },
-            { x: -4.5, y: 7.5 },
-            { x: 3.5, y: 10.5 }
-        ],
-        ribs: [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4], [8, 0], [7, 1], [6, 3], [5, 4]]
+            { x: 0, y: -8.5 }, { x: 7.5, y: 5 }, { x: 0, y: 10 }, { x: -7.5, y: 5 }
+        ]
     }
 ];
 
@@ -320,7 +276,7 @@ function startGemSwatchesEngine() {
     let time = 0;
 
     function renderZeroGravityCarousel() {
-        time += 0.0038;
+        time += 0.0035;
         currentOrbitAngle += (targetOrbitAngle - currentOrbitAngle) * 0.075;
 
         const canvases = document.querySelectorAll('canvas.gem-field-canvas');
@@ -350,39 +306,29 @@ function startGemSwatchesEngine() {
             ctx.scale(dpr, dpr);
             ctx.clearRect(0, 0, w, h);
 
-            // Очень мягкое сглаживание реакции на мышь
             canvas._smoothMouseX += (canvas._targetMouseX - canvas._smoothMouseX) * 0.045;
             canvas._smoothMouseY += (canvas._targetMouseY - canvas._smoothMouseY) * 0.045;
 
             const camTiltX = canvas._smoothMouseX * 3.0;
-            const camTiltY = canvas._smoothMouseY * 1.1;
+            const camTiltY = canvas._smoothMouseY * 1.2;
 
             const cx = w / 2;
-            // Поднимаем центр орбиты выше, чтобы между прицелом и подписью внизу был чистый зазор
-            const cy = h / 2 - 16;
+            const cy = h / 2 - 14;
 
-            const radiusX = Math.min(162, Math.max(112, w * 0.30));
-            const radiusZ = 76;
+            const radiusX = Math.min(160, Math.max(110, w * 0.3));
+            const radiusZ = 75;
             const fov = 250;
 
-            // 1. Орбитальное кольцо и перспективные линии пола
+            // 1. Орбитальное кольцо
             ctx.save();
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.035)';
             ctx.lineWidth = 1;
             ctx.beginPath();
-            ctx.ellipse(cx - camTiltX * 0.25, cy + 22, radiusX * 1.02, 10, 0, 0, Math.PI * 2);
-            ctx.stroke();
-
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.02)';
-            ctx.beginPath();
-            for (let gx = -160; gx <= 160; gx += 40) {
-                ctx.moveTo(cx + gx * 0.65 - camTiltX * 0.2, h - 22);
-                ctx.lineTo(cx + gx * 1.1 + camTiltX * 0.3, h);
-            }
+            ctx.ellipse(cx - camTiltX * 0.25, cy + 24, radiusX * 1.02, 10, 0, 0, Math.PI * 2);
             ctx.stroke();
             ctx.restore();
 
-            // 2. Вычисление 3D-координат камней на орбите
+            // 2. Проекция 3D-орбиты
             const projected = FLOATING_STONES.map((st, idx) => {
                 const theta = idx * stepAngle + currentOrbitAngle;
                 const sinT = Math.sin(theta);
@@ -391,18 +337,18 @@ function startGemSwatchesEngine() {
                 const isSelected = st.id === currentTheme;
                 const isHovered = canvas._hoverId === st.id;
 
-                const targetHoverScale = isSelected ? 1.04 : isHovered ? 0.96 : 0.82;
+                const targetHoverScale = isSelected ? 1.08 : isHovered ? 1.0 : 0.84;
                 const prevScale = canvas._hoverScales[st.id] ?? targetHoverScale;
                 const smoothItemScale = prevScale + (targetHoverScale - prevScale) * 0.08;
                 canvas._hoverScales[st.id] = smoothItemScale;
 
-                const bobY = Math.sin(time * st.speed + st.phase) * 2.0;
+                const bobY = Math.sin(time * st.speed + st.phase) * 2.2;
                 const driftX = Math.cos(time * 0.5 * st.speed + st.phase) * 0.9;
                 const swayAngle = Math.sin(time * 0.4 * st.speed + st.phase) * 0.035;
 
                 const worldX = sinT * radiusX + driftX - camTiltX * cosT;
                 const zDepth = (1 - cosT) * radiusZ;
-                const worldY = bobY - (1 - cosT) * 4.5 - camTiltY * 0.25;
+                const worldY = bobY - (1 - cosT) * 5.0 - camTiltY * 0.25;
 
                 const scale3D = fov / (fov + zDepth * 1.35);
                 const screenX = cx + worldX * scale3D;
@@ -432,24 +378,24 @@ function startGemSwatchesEngine() {
             canvas._renderedGems = projected;
             projected.sort((a, b) => b.zDepth - a.zDepth);
 
-            // 3. Рисуем задние и передние камни
+            // 3. Рендеринг камешков и подписей
             projected.forEach(item => {
                 const { st, screenX, screenY, scale3D, smoothItemScale, bobY, swayAngle, depthAlpha, isSelected, isHovered } = item;
 
                 ctx.save();
                 ctx.globalAlpha = isHovered ? Math.min(1, depthAlpha + 0.2) : depthAlpha;
 
-                // Тень под камнем
-                const shadowY = screenY + 21 * scale3D;
+                // Тень
+                const shadowY = screenY + 23 * scale3D;
                 const shadowRx = Math.max(4, (10 - bobY * 0.25) * scale3D);
                 ctx.beginPath();
                 ctx.ellipse(screenX, shadowY, shadowRx, 2.0 * scale3D, 0, 0, Math.PI * 2);
                 ctx.fillStyle = isSelected ? st.glow + '45' : 'rgba(0, 0, 0, 0.45)';
                 ctx.fill();
 
-                // Мягкое свечение
+                // Свечение
                 if (isSelected || isHovered) {
-                    const glowR = (isSelected ? 24 : 16) * scale3D;
+                    const glowR = (isSelected ? 25 : 17) * scale3D;
                     const gradGlow = ctx.createRadialGradient(screenX, screenY, 2, screenX, screenY, glowR);
                     gradGlow.addColorStop(0, st.glow + (isSelected ? '50' : '28'));
                     gradGlow.addColorStop(1, st.glow + '00');
@@ -459,7 +405,7 @@ function startGemSwatchesEngine() {
                     ctx.fill();
                 }
 
-                // Отрисовка уникальной формы кристалла
+                // Сам камень
                 ctx.save();
                 ctx.translate(screenX, screenY);
                 ctx.rotate(swayAngle);
@@ -481,72 +427,72 @@ function startGemSwatchesEngine() {
                 ctx.fill();
 
                 ctx.strokeStyle = isSelected ? '#FFFFFF' : st.edge;
-                ctx.lineWidth = isSelected ? 1.25 : 0.85;
+                ctx.lineWidth = isSelected ? 1.2 : 0.8;
                 ctx.stroke();
 
-                // Внутренние грани по индивидуальной карте ребер камня
-                ctx.strokeStyle = 'rgba(255, 255, 255, 0.32)';
-                ctx.lineWidth = 0.65;
+                // Внутренние грани
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.28)';
+                ctx.lineWidth = 0.6;
                 ctx.beginPath();
-                if (st.ribs) {
-                    st.ribs.forEach(([oIdx, iIdx]) => {
-                        const outPt = st.outer[oIdx];
-                        const inPt = st.inner[iIdx];
-                        if (outPt && inPt) {
-                            ctx.moveTo(outPt.x, outPt.y);
-                            ctx.lineTo(inPt.x, inPt.y);
-                        }
-                    });
+                for (let k = 0; k < st.inner.length; k++) {
+                    const outPt = st.outer[k % st.outer.length];
+                    const inPt = st.inner[k];
+                    ctx.moveTo(outPt.x, outPt.y);
+                    ctx.lineTo(inPt.x, inPt.y);
                 }
                 ctx.stroke();
 
-                // Внутренняя световая грань
+                // Лицевая площадка
                 ctx.beginPath();
                 st.inner.forEach((pt, pIdx) => {
                     if (pIdx === 0) ctx.moveTo(pt.x, pt.y);
                     else ctx.lineTo(pt.x, pt.y);
                 });
                 ctx.closePath();
-                ctx.fillStyle = st.fillTop + (isSelected ? '82' : '42');
+                ctx.fillStyle = st.fillTop + (isSelected ? '80' : '40');
                 ctx.fill();
-                ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
-                ctx.lineWidth = 0.6;
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.42)';
+                ctx.lineWidth = 0.55;
                 ctx.stroke();
                 ctx.restore();
 
-                // Подписи для невыбранных камней (а для выбранного камня подпись рисуется отдельно под рамкой прицела)
-                if (!isSelected) {
-                    const labelY = screenY + 26 * scale3D;
-                    const fontSize = Math.max(8, Math.round(9.5 * scale3D));
-                    ctx.font = `500 ${fontSize}px "Segoe UI", system-ui, sans-serif`;
-                    ctx.textAlign = 'center';
-                    ctx.textBaseline = 'middle';
+                // Подпись под камнем (ниже прицела, без наезда рамки)
+                const labelY = screenY + 32 * scale3D + (isSelected ? 2 : 0);
+                const fontSize = Math.max(8, Math.round(9.5 * scale3D));
+                ctx.font = `${isSelected ? '700' : '500'} ${fontSize}px "Segoe UI", system-ui, sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
 
-                    const textTitle = st.name;
-                    const textW = ctx.measureText(textTitle).width;
-                    const pillW = textW + 10 * scale3D;
-                    const pillH = 13 * scale3D;
+                const textTitle = st.name;
+                const textW = ctx.measureText(textTitle).width;
+                const pillW = textW + 10 * scale3D;
+                const pillH = 13 * scale3D;
 
-                    drawRoundedBadge(ctx, screenX - pillW / 2, labelY - pillH / 2, pillW, pillH, 4 * scale3D);
-                    ctx.fillStyle = 'rgba(14, 14, 18, 0.72)';
-                    ctx.fill();
-                    ctx.strokeStyle = isHovered ? 'rgba(255,255,255,0.28)' : 'rgba(255,255,255,0.07)';
-                    ctx.lineWidth = 0.6;
-                    ctx.stroke();
+                drawRoundedBadge(ctx, screenX - pillW / 2, labelY - pillH / 2, pillW, pillH, 4 * scale3D);
+                ctx.fillStyle = isSelected ? 'rgba(12, 16, 14, 0.92)' : 'rgba(14, 14, 18, 0.72)';
+                ctx.fill();
 
-                    ctx.fillStyle = isHovered ? '#E4E4E7' : '#94A3B8';
-                    ctx.fillText(textTitle, screenX, labelY + 0.3);
+                ctx.strokeStyle = isSelected ? st.glow : isHovered ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.06)';
+                ctx.lineWidth = isSelected ? 0.9 : 0.5;
+                ctx.stroke();
+
+                ctx.fillStyle = isSelected ? '#FFFFFF' : isHovered ? '#E4E4E7' : '#94A3B8';
+                if (isSelected) {
+                    ctx.shadowColor = st.glow;
+                    ctx.shadowBlur = 4;
                 }
+                ctx.fillText(textTitle, screenX, labelY + 0.2);
+                ctx.shadowBlur = 0;
 
                 ctx.restore();
             });
 
-            // 4. Прицел-рамка вокруг выбранного кристалла (строго вокруг камня: заканчивается на cy + 19)
+            // 4. Прицел-рамка вокруг переднего камня (не задевает подпись внизу)
             const selX = cx - camTiltX * 0.25;
             const selY = cy;
-            const boxW = 42, boxH = 38;
+            const boxW = 46, boxH = 44;
             const halfW = boxW / 2, halfH = boxH / 2;
-            const corner = 6.5;
+            const corner = 7;
 
             ctx.save();
             ctx.strokeStyle = activeStone.glow;
@@ -571,32 +517,8 @@ function startGemSwatchesEngine() {
             ctx.lineTo(selX - halfW, selY + halfH);
             ctx.lineTo(selX - halfW, selY + halfH - corner);
             ctx.stroke();
-
-            // 5. Подпись выбранного камня — строго НИЖЕ рамки прицела (на cy + 33, с зазором 7px от нижних уголков)
-            const activeLabelY = selY + halfH + 14;
-            ctx.font = '700 10.5px "Segoe UI", system-ui, sans-serif';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-
-            const activeTitle = `✦ ${activeStone.name} ✦`;
-            const actTextW = ctx.measureText(activeTitle).width;
-            const actPillW = actTextW + 16;
-            const actPillH = 16;
-
-            ctx.shadowBlur = 0;
-            drawRoundedBadge(ctx, selX - actPillW / 2, activeLabelY - actPillH / 2, actPillW, actPillH, 5);
-            ctx.fillStyle = 'rgba(12, 16, 15, 0.95)';
-            ctx.fill();
-            ctx.strokeStyle = activeStone.glow;
-            ctx.lineWidth = 1.1;
-            ctx.stroke();
-
-            ctx.fillStyle = '#FFFFFF';
-            ctx.shadowColor = activeStone.glow;
-            ctx.shadowBlur = 5;
-            ctx.fillText(activeTitle, selX, activeLabelY + 0.3);
-
             ctx.restore();
+
             ctx.restore();
         });
 

@@ -31,9 +31,8 @@
 
 	<!-- Звуки встраиваем как Embedded Resource напрямую внутрь .exe -->
 	<ItemGroup>
-		<Resource Include="Assets\Sounds\click.wav" Condition="Exists('Assets\Sounds\click.wav')" />
 		<Resource Include="Assets\Sounds\success.wav" Condition="Exists('Assets\Sounds\success.wav')" />
-		<Resource Include="Assets\success.wav" />
+		<Resource Include="Assets\success.wav" Condition="Exists('Assets\success.wav')" />
 	</ItemGroup>
 
 	<!-- АВТОМАТИЧЕСКАЯ АРХИВАЦИЯ ИНТЕРФЕЙСА ПЕРЕД СБОРКОЙ -->
