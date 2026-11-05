@@ -3,7 +3,7 @@
 	<PropertyGroup>
 		<OutputType>WinExe</OutputType>
 		<TargetFramework>net8.0-windows</TargetFramework>
-		<UseWPF>true</UseWPF>
+		<UseWPF>false</UseWPF>
 		<UseWindowsForms>true</UseWindowsForms>
 		<Nullable>enable</Nullable>
 		<ImplicitUsings>enable</ImplicitUsings>
@@ -19,20 +19,18 @@
 		<DebugSymbols Condition="'$(Configuration)' == 'Release'">false</DebugSymbols>
 		<GenerateDocumentationFile>false</GenerateDocumentationFile>
 
-		<!-- Упаковываем нативный WebView2Loader.dll внутрь сборки -->
-		<WebView2LoaderPreference>Static</WebView2LoaderPreference>
 		<ApplicationManifest>app.manifest</ApplicationManifest>
 	</PropertyGroup>
 
-	<!-- WebView2 зависимость -->
+	<!-- Photino.NET: нативный легковесный WebView2 хост -->
 	<ItemGroup>
-		<PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2903.40" />
+		<PackageReference Include="Photino.NET" Version="3.2.3" />
 	</ItemGroup>
 
-	<!-- Звуки встраиваем как Embedded Resource напрямую внутрь .exe -->
+	<!-- Звук успеха встраиваем как ресурс напрямую внутрь .exe -->
 	<ItemGroup>
-		<Resource Include="Assets\Sounds\success.wav" Condition="Exists('Assets\Sounds\success.wav')" />
-		<Resource Include="Assets\success.wav" Condition="Exists('Assets\success.wav')" />
+		<EmbeddedResource Include="Assets\Sounds\success.wav" Condition="Exists('Assets\Sounds\success.wav')" LogicalName="success.wav" />
+		<EmbeddedResource Include="Assets\success.wav" Condition="Exists('Assets\success.wav') And !Exists('Assets\Sounds\success.wav')" LogicalName="success.wav" />
 	</ItemGroup>
 
 	<!-- АВТОМАТИЧЕСКАЯ АРХИВАЦИЯ ИНТЕРФЕЙСА ПЕРЕД СБОРКОЙ -->
@@ -50,6 +48,9 @@
 			<CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
 		</None>
 		<None Remove="Assets\success.wav" />
+		<None Remove="Assets\Sounds\success.wav" />
+		<None Remove="Assets\click.wav" />
+		<None Remove="Assets\Sounds\click.wav" />
 		<None Include="README.md" Condition="Exists('README.md')">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 			<CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>

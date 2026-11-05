@@ -108,7 +108,7 @@ namespace ZapretGUI.Core
                     {
                         try
                         {
-                            await ApplyAppUpdateAsync(appUpdate.DownloadUrl, () => System.Windows.Application.Current.Shutdown());
+                            await ApplyAppUpdateAsync(appUpdate.DownloadUrl, () => Environment.Exit(0));
                             return;
                         }
                         catch (Exception ex)

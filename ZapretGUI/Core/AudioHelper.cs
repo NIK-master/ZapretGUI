@@ -1,21 +1,26 @@
 ﻿using System;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text;
-using System.Windows.Media;
 
 namespace ZapretGUI.Core
 {
     public static class AudioHelper
     {
+        [DllImport("winmm.dll", CharSet = CharSet.Auto)]
+        private static extern bool PlaySound(string pszSound, IntPtr hmod, uint fdwSound);
+
+        private const uint SND_FILENAME = 0x00020000;
+        private const uint SND_ASYNC = 0x0001;
+        private const uint SND_NODEFAULT = 0x0002;
+
         private static readonly string? _successFilePath;
-        private static readonly MediaPlayer _successMedia = new MediaPlayer();
 
         static AudioHelper()
         {
             try
             {
-                // Очищаем старые сгенерированные файлы кликов из кэша, если они там остались
                 var cacheDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", "Cache", "Sounds");
                 if (Directory.Exists(cacheDir))
                 {
@@ -25,7 +30,6 @@ namespace ZapretGUI.Core
                     }
                 }
 
-                // Кэшируем или создаём только звук успеха
                 _successFilePath = EnsureSuccessFileCached("success.wav");
             }
             catch (Exception ex)
@@ -68,33 +72,30 @@ namespace ZapretGUI.Core
                 }
             }
 
-            string[] packUris =
-            [
-                $"pack://application:,,,/Assets/Sounds/{fileName}",
-                $"pack://application:,,,/Assets/{fileName}"
-            ];
-
-            foreach (var uriStr in packUris)
+            try
             {
-                try
+                var asm = System.Reflection.Assembly.GetExecutingAssembly();
+                foreach (var resName in asm.GetManifestResourceNames())
                 {
-                    var streamInfo = System.Windows.Application.GetResourceStream(new Uri(uriStr, UriKind.Absolute));
-                    if (streamInfo?.Stream != null)
+                    if (resName.EndsWith(fileName, StringComparison.OrdinalIgnoreCase))
                     {
-                        using var fs = new FileStream(targetCachedPath, FileMode.Create, FileAccess.Write, FileShare.ReadWrite);
-                        streamInfo.Stream.CopyTo(fs);
-                        if (fs.Length > 100)
-                            return targetCachedPath;
+                        using var stream = asm.GetManifestResourceStream(resName);
+                        if (stream != null)
+                        {
+                            using var fs = new FileStream(targetCachedPath, FileMode.Create, FileAccess.Write, FileShare.ReadWrite);
+                            stream.CopyTo(fs);
+                            if (fs.Length > 100)
+                                return targetCachedPath;
+                        }
                     }
                 }
-                catch { }
             }
+            catch { }
 
             GenerateSuccessWavToFile(targetCachedPath);
             return targetCachedPath;
         }
 
-        // Звук кликов полностью отключен
         public static void PlayClick()
         {
         }
@@ -104,17 +105,11 @@ namespace ZapretGUI.Core
             if (!SettingsManager.Current.SoundEffectsEnabled) return;
             if (string.IsNullOrEmpty(_successFilePath) || !File.Exists(_successFilePath)) return;
 
-            System.Windows.Application.Current?.Dispatcher.InvokeAsync(() =>
+            try
             {
-                try
-                {
-                    _successMedia.Stop();
-                    _successMedia.Open(new Uri(_successFilePath, UriKind.Absolute));
-                    _successMedia.Volume = 0.75;
-                    _successMedia.Play();
-                }
-                catch { }
-            });
+                PlaySound(_successFilePath, IntPtr.Zero, SND_FILENAME | SND_ASYNC | SND_NODEFAULT);
+            }
+            catch { }
         }
 
         private static void GenerateSuccessWavToFile(string filePath)

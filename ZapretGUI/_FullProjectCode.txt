@@ -86,145 +86,124 @@
 
 
 ////////////////////////////////////////////////////////////////////////////////
-// ФАЙЛ: App.xaml
+// ФАЙЛ: MainWindow.cs
 ////////////////////////////////////////////////////////////////////////////////
 
-<Application x:Class="ZapretGUI.App"
-             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             Startup="Application_Startup">
-    <Application.Resources>
-        <ResourceDictionary>
-            <SolidColorBrush x:Key="BrandSuccessBrush" Color="#107C10" />
-            <SolidColorBrush x:Key="BrandErrorBrush" Color="#D13438" />
-            <SolidColorBrush x:Key="BrandWarningBrush" Color="#FF8C00" />
-        </ResourceDictionary>
-    </Application.Resources>
-</Application>
-
-////////////////////////////////////////////////////////////////////////////////
-// ФАЙЛ: App.xaml.cs
-////////////////////////////////////////////////////////////////////////////////
-
-using System.Windows;
-using ZapretGUI.Core;
-
-namespace ZapretGUI
-{
-    public partial class App : System.Windows.Application
-    {
-        private void Application_Startup(object sender, StartupEventArgs e)
-        {
-            SettingsManager.Load();
-
-            var mainWindow = new MainWindow();
-            this.MainWindow = mainWindow;
-
-            if (SettingsManager.Current.StartMinimized)
-            {
-                mainWindow.WindowState = WindowState.Minimized;
-                mainWindow.Hide();
-            }
-            else
-            {
-                mainWindow.Show();
-            }
-        }
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// ФАЙЛ: AssemblyInfo.cs
-////////////////////////////////////////////////////////////////////////////////
-
-using System.Windows;
-
-[assembly: ThemeInfo(
-    ResourceDictionaryLocation.None,            //where theme specific resource dictionaries are located
-                                                //(used if a resource is not found in the page,
-                                                // or application resource dictionaries)
-    ResourceDictionaryLocation.SourceAssembly   //where the generic resource dictionary is located
-                                                //(used if a resource is not found in the page,
-                                                // app, or any theme specific resource dictionaries)
-)]
-
-
-////////////////////////////////////////////////////////////////////////////////
-// ФАЙЛ: MainWindow.xaml
-////////////////////////////////////////////////////////////////////////////////
-
-<Window x:Class="ZapretGUI.MainWindow"
-        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
-        Title="Zapret for ADHD" Height="760" Width="1100"
-        WindowStyle="None" AllowsTransparency="True" Background="#09090B"
-        WindowStartupLocation="CenterScreen"
-        Closing="Window_Closing">
-    <Grid>
-        <wv2:WebView2 x:Name="MainWebView" DefaultBackgroundColor="#09090B" />
-    </Grid>
-</Window>
-
-////////////////////////////////////////////////////////////////////////////////
-// ФАЙЛ: MainWindow.xaml.cs
-////////////////////////////////////////////////////////////////////////////////
-
-using Microsoft.Web.WebView2.Core;
+using Photino.NET;
 using System;
+using System.Drawing;
 using System.IO;
 using System.IO.Compression;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
-using System.Windows;
-using System.Windows.Interop;
-using System.Windows.Media;
-using System.Windows.Media.Animation;
+using System.Windows.Forms;
 using ZapretGUI.Core;
 
 namespace ZapretGUI
 {
-    public partial class MainWindow : Window
+    public class MainWindow
     {
+        [DllImport("user32.dll")]
+        private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+        [DllImport("user32.dll")]
+        private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+        private const int SW_HIDE = 0;
+        private const int SW_SHOWNORMAL = 1;
+        private const int SW_SHOWMINIMIZED = 2;
+        private const int SW_RESTORE = 9;
+
+        public PhotinoWindow Window { get; }
         private readonly TrayIconManager _trayIconManager;
         private WebBridge? _webBridge;
         private readonly bool _isFirstRun;
+        private bool _isForceExiting = false;
+
+        public IntPtr WindowHandle => Window.WindowHandle;
 
         public MainWindow()
         {
-            InitializeComponent();
-
             var configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.json");
             _isFirstRun = !File.Exists(configPath);
 
             SettingsManager.Load();
             UIHelper.ApplyThemeColors();
 
-            if (SettingsManager.Current.CompactMode)
-            {
-                this.Width = 850;
-                this.Height = 520;
-            }
+            int initW = SettingsManager.Current.CompactMode ? 850 : 1100;
+            int initH = SettingsManager.Current.CompactMode ? 520 : 760;
 
-            if (!SettingsManager.Current.HardwareAcceleration)
+            Window = new PhotinoWindow()
+                .SetTitle("Zapret for ADHD")
+                .SetUseOsDefaultSize(false)
+                .SetSize(new Size(initW, initH))
+                .Center()
+                .SetChromeless(true)
+                .SetResizable(false)
+                .SetTopMost(SettingsManager.Current.AlwaysOnTop)
+                .SetContextMenuEnabled(false)
+                .SetDevToolsEnabled(false);
+
+            _webBridge = new WebBridge(this, _isFirstRun);
+
+            Window.RegisterWebMessageReceivedHandler((sender, message) =>
             {
-                RenderOptions.ProcessRenderMode = RenderMode.SoftwareOnly;
-            }
+                _webBridge.HandleMessage(message);
+            });
+
+            Window.RegisterWindowCreatedHandler((sender, args) =>
+            {
+                RefreshAppIcon();
+
+                if (SettingsManager.Current.StartMinimized)
+                {
+                    HideToTray();
+                }
+
+                _ = InitializeAppAsync();
+            });
+
+            Window.RegisterWindowClosingHandler((sender, args) =>
+            {
+                if (!_isForceExiting && SettingsManager.Current.MinimizeOnClose)
+                {
+                    HideToTray();
+                    ShowNotification(
+                        "Программа работает в фоне",
+                        "Zapret свернут в системный трей. Дважды кликните по иконке в трее, чтобы открыть окно.");
+                    return true;
+                }
+
+                CleanupOnExit();
+                return false;
+            });
 
             _trayIconManager = new TrayIconManager(this);
+        }
 
-            this.PreviewKeyDown += (s, e) =>
+        public void Run()
+        {
+            var baseDir = AppDomain.CurrentDomain.BaseDirectory;
+            var devWebRoot = Path.GetFullPath(Path.Combine(baseDir, @"..\..\..\wwwroot\index.html"));
+            var localWebRoot = Path.Combine(baseDir, "wwwroot", "index.html");
+
+            string htmlPath;
+            if (File.Exists(devWebRoot))
             {
-                if (e.Key == System.Windows.Input.Key.K &&
-                    (System.Windows.Input.Keyboard.Modifiers & System.Windows.Input.ModifierKeys.Control) == System.Windows.Input.ModifierKeys.Control)
-                {
-                    e.Handled = true;
-                    _webBridge?.SendEvent("toggleCommandPalette", new { });
-                }
-            };
+                htmlPath = devWebRoot;
+            }
+            else if (File.Exists(localWebRoot))
+            {
+                htmlPath = localWebRoot;
+            }
+            else
+            {
+                var webRootDir = ExtractEmbeddedWebUI();
+                htmlPath = Path.Combine(webRootDir, "index.html");
+            }
 
-            _ = InitializeAppAsync();
-
-            this.Topmost = SettingsManager.Current.AlwaysOnTop;
+            Window.Load(htmlPath);
+            Window.WaitForClose();
         }
 
         private async Task InitializeAppAsync()
@@ -233,8 +212,6 @@ namespace ZapretGUI
             modManager.InitializeFolders();
             await modManager.SyncActiveBatModsAsync();
             await modManager.ApplyListModsAsync();
-
-            await InitializeWebViewAsync();
 
             BypassController.Current.NetMonitor.Start();
 
@@ -255,55 +232,84 @@ namespace ZapretGUI
             }
         }
 
-        private async Task InitializeWebViewAsync()
-        {
-            var userDataFolder = Path.Combine(Path.GetTempPath(), "ZapretGUI_WebView2");
-            var env = await CoreWebView2Environment.CreateAsync(null, userDataFolder);
-            await MainWebView.EnsureCoreWebView2Async(env);
-
-            MainWebView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
-            MainWebView.CoreWebView2.Settings.IsZoomControlEnabled = false;
-
-            _webBridge = new WebBridge(MainWebView, this, _isFirstRun);
-            MainWebView.CoreWebView2.WebMessageReceived += (s, e) =>
-            {
-                _webBridge.HandleMessage(e.WebMessageAsJson);
-            };
-
-            var baseDir = AppDomain.CurrentDomain.BaseDirectory;
-
-            // 1. В режиме разработки (Visual Studio) сначала ищем живую папку wwwroot в корне проекта
-            var devWebRoot = Path.GetFullPath(Path.Combine(baseDir, @"..\..\..\wwwroot\index.html"));
-            var localWebRoot = Path.Combine(baseDir, "wwwroot", "index.html");
-
-            string htmlPath;
-            if (File.Exists(devWebRoot))
-            {
-                htmlPath = devWebRoot;
-            }
-            else if (File.Exists(localWebRoot))
-            {
-                htmlPath = localWebRoot;
-            }
-            else
-            {
-                // 2. В собранном single-file .exe распаковываем встроенный wwwroot.zip с перезаписью
-                var webRootDir = ExtractEmbeddedWebUI();
-                htmlPath = Path.Combine(webRootDir, "index.html");
-            }
-
-            if (File.Exists(htmlPath))
-            {
-                MainWebView.CoreWebView2.Navigate(new Uri(htmlPath).AbsoluteUri);
-            }
-        }
-
         private async Task CheckUpdatesOnStartupAsync()
         {
             var stopServicesAction = () => { if (IsBypassRunning()) ToggleBypass(); };
             var progress = new Progress<string>(status =>
-                _webBridge?.SendEvent("log", new { message = $"[Updater] {status}", time = DateTime.Now.ToString("HH:mm:ss"), isProgress = status.Contains("Скачивание:") || status.Contains("Скачано:") }));
+                _webBridge?.SendEvent("log", new
+                {
+                    message = $"[Updater] {status}",
+                    time = DateTime.Now.ToString("HH:mm:ss"),
+                    isProgress = status.Contains("Скачивание:") || status.Contains("Скачано:")
+                }));
             await UpdateManager.RunUpdateWorkflowAsync(isManualCheck: false, stopServicesAction, progress);
+        }
+
+        public void MinimizeWindow()
+        {
+            if (WindowHandle != IntPtr.Zero)
+                ShowWindow(WindowHandle, SW_SHOWMINIMIZED);
+        }
+
+        public void HideToTray()
+        {
+            if (WindowHandle != IntPtr.Zero)
+                ShowWindow(WindowHandle, SW_HIDE);
+        }
+
+        public void RestoreFromTray()
+        {
+            if (WindowHandle != IntPtr.Zero)
+            {
+                ShowWindow(WindowHandle, SW_RESTORE);
+                ShowWindow(WindowHandle, SW_SHOWNORMAL);
+                SetForegroundWindow(WindowHandle);
+            }
+        }
+
+        public void CloseWindow()
+        {
+            if (SettingsManager.Current.MinimizeOnClose && !_isForceExiting)
+            {
+                HideToTray();
+                ShowNotification(
+                    "Программа работает в фоне",
+                    "Zapret свернут в системный трей. Дважды кликните по иконке в трее, чтобы открыть окно.");
+            }
+            else
+            {
+                ForceExit();
+            }
+        }
+
+        public void ForceExit()
+        {
+            _isForceExiting = true;
+            CleanupOnExit();
+            try { Window.Close(); } catch { }
+            Environment.Exit(0);
+        }
+
+        private void CleanupOnExit()
+        {
+            BypassController.Current.NetMonitor.Stop();
+            if (SettingsManager.Current.StopServicesOnExit)
+                BypassController.Current.StopServices();
+
+            _webBridge?.Dispose();
+            _trayIconManager.Dispose();
+        }
+
+        public void InvokeOnUI(Action action)
+        {
+            try
+            {
+                Window.Invoke(action);
+            }
+            catch
+            {
+                try { action(); } catch { }
+            }
         }
 
         public void UpdateIndicators(bool isZapretRunning, bool isProxyRunning)
@@ -328,19 +334,9 @@ namespace ZapretGUI
             _webBridge?.SendEvent("netStatus", new { isOnline });
         }
 
-        public void ShowNotification(string title, string message, System.Windows.Forms.ToolTipIcon icon = System.Windows.Forms.ToolTipIcon.Info)
+        public void ShowNotification(string title, string message, ToolTipIcon icon = ToolTipIcon.Info)
         {
             _trayIconManager.ShowNotification(title, message, icon);
-        }
-
-        private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
-        {
-            if (SettingsManager.Current.MinimizeOnClose)
-            {
-                e.Cancel = true;
-                this.Hide();
-                ShowNotification("Программа работает в фоне", "Zapret свернут в системный трей. Дважды кликните по иконке в трее, чтобы открыть окно.");
-            }
         }
 
         public bool IsBypassRunning() => BypassController.Current.IsRunning;
@@ -379,44 +375,39 @@ namespace ZapretGUI
             }
         }
 
-        public void AnimateWindowSize(bool isCompact)
+        public async void AnimateWindowSize(bool isCompact)
         {
-            Dispatcher.Invoke(() =>
+            var targetWidth = isCompact ? 850 : 1100;
+            var targetHeight = isCompact ? 520 : 760;
+
+            var startSize = Window.Size;
+            var startLoc = Window.Location;
+
+            if (Math.Abs(startSize.Width - targetWidth) < 2 && Math.Abs(startSize.Height - targetHeight) < 2)
+                return;
+
+            const int steps = 14;
+            for (int i = 1; i <= steps; i++)
             {
-                var targetWidth = isCompact ? 850 : 1100;
-                var targetHeight = isCompact ? 520 : 760;
+                double t = (double)i / steps;
+                double ease = 1 - Math.Pow(1 - t, 3);
 
-                if (Math.Abs(this.ActualWidth - targetWidth) < 2 && Math.Abs(this.ActualHeight - targetHeight) < 2)
-                    return;
+                int curW = (int)Math.Round(startSize.Width + (targetWidth - startSize.Width) * ease);
+                int curH = (int)Math.Round(startSize.Height + (targetHeight - startSize.Height) * ease);
 
-                var duration = new Duration(TimeSpan.FromMilliseconds(320));
-                var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+                int curX = startLoc.X - (curW - startSize.Width) / 2;
+                int curY = startLoc.Y - (curH - startSize.Height) / 2;
 
-                var deltaW = targetWidth - this.ActualWidth;
-                var deltaH = targetHeight - this.ActualHeight;
+                InvokeOnUI(() =>
+                {
+                    Window.SetSize(new Size(curW, curH));
+                    Window.SetLocation(new Point(curX, curY));
+                });
 
-                var widthAnim = new DoubleAnimation(this.ActualWidth, targetWidth, duration) { EasingFunction = ease };
-                var heightAnim = new DoubleAnimation(this.ActualHeight, targetHeight, duration) { EasingFunction = ease };
-                var leftAnim = new DoubleAnimation(this.Left, this.Left - deltaW / 2, duration) { EasingFunction = ease };
-                var topAnim = new DoubleAnimation(this.Top, this.Top - deltaH / 2, duration) { EasingFunction = ease };
-
-                this.BeginAnimation(Window.WidthProperty, widthAnim);
-                this.BeginAnimation(Window.HeightProperty, heightAnim);
-                this.BeginAnimation(Window.LeftProperty, leftAnim);
-                this.BeginAnimation(Window.TopProperty, topAnim);
-            });
+                await Task.Delay(14);
+            }
         }
 
-        protected override void OnClosed(EventArgs e)
-        {
-            BypassController.Current.NetMonitor.Stop();
-            if (SettingsManager.Current.StopServicesOnExit)
-                BypassController.Current.StopServices();
-
-            _webBridge?.Dispose();
-            _trayIconManager.Dispose();
-            base.OnClosed(e);
-        }
         private string ExtractEmbeddedWebUI()
         {
             var tempDir = Path.Combine(Path.GetTempPath(), "ZapretGUI_UI_" + AppConstants.AppVersion);
@@ -426,12 +417,39 @@ namespace ZapretGUI
                 using var stream = System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream("wwwroot.zip");
                 if (stream != null)
                 {
-                    using var archive = new System.IO.Compression.ZipArchive(stream);
+                    using var archive = new ZipArchive(stream);
                     archive.ExtractToDirectory(tempDir, overwriteFiles: true);
                 }
             }
             catch { }
             return tempDir;
+        }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// ФАЙЛ: Program.cs
+////////////////////////////////////////////////////////////////////////////////
+
+using System;
+using System.Windows.Forms;
+using ZapretGUI.Core;
+
+namespace ZapretGUI
+{
+    internal static class Program
+    {
+        [STAThread]
+        static void Main()
+        {
+            Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
+            Application.EnableVisualStyles();
+            Application.SetCompatibleTextRenderingDefault(false);
+
+            SettingsManager.Load();
+
+            var mainWindow = new MainWindow();
+            mainWindow.Run();
         }
     }
 }
@@ -445,7 +463,7 @@ namespace ZapretGUI
 	<PropertyGroup>
 		<OutputType>WinExe</OutputType>
 		<TargetFramework>net8.0-windows</TargetFramework>
-		<UseWPF>true</UseWPF>
+		<UseWPF>false</UseWPF>
 		<UseWindowsForms>true</UseWindowsForms>
 		<Nullable>enable</Nullable>
 		<ImplicitUsings>enable</ImplicitUsings>
@@ -461,21 +479,18 @@ namespace ZapretGUI
 		<DebugSymbols Condition="'$(Configuration)' == 'Release'">false</DebugSymbols>
 		<GenerateDocumentationFile>false</GenerateDocumentationFile>
 
-		<!-- Упаковываем нативный WebView2Loader.dll внутрь сборки -->
-		<WebView2LoaderPreference>Static</WebView2LoaderPreference>
 		<ApplicationManifest>app.manifest</ApplicationManifest>
 	</PropertyGroup>
 
-	<!-- WebView2 зависимость -->
+	<!-- Photino.NET: нативный легковесный WebView2 хост -->
 	<ItemGroup>
-		<PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2903.40" />
+		<PackageReference Include="Photino.NET" Version="3.2.3" />
 	</ItemGroup>
 
-	<!-- Звуки встраиваем как Embedded Resource напрямую внутрь .exe -->
+	<!-- Звук успеха встраиваем как ресурс напрямую внутрь .exe -->
 	<ItemGroup>
-		<Resource Include="Assets\Sounds\click.wav" Condition="Exists('Assets\Sounds\click.wav')" />
-		<Resource Include="Assets\Sounds\success.wav" Condition="Exists('Assets\Sounds\success.wav')" />
-		<Resource Include="Assets\success.wav" />
+		<EmbeddedResource Include="Assets\Sounds\success.wav" Condition="Exists('Assets\Sounds\success.wav')" LogicalName="success.wav" />
+		<EmbeddedResource Include="Assets\success.wav" Condition="Exists('Assets\success.wav') And !Exists('Assets\Sounds\success.wav')" LogicalName="success.wav" />
 	</ItemGroup>
 
 	<!-- АВТОМАТИЧЕСКАЯ АРХИВАЦИЯ ИНТЕРФЕЙСА ПЕРЕД СБОРКОЙ -->
@@ -493,6 +508,9 @@ namespace ZapretGUI
 			<CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
 		</None>
 		<None Remove="Assets\success.wav" />
+		<None Remove="Assets\Sounds\success.wav" />
+		<None Remove="Assets\click.wav" />
+		<None Remove="Assets\Sounds\click.wav" />
 		<None Include="README.md" Condition="Exists('README.md')">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 			<CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
@@ -545,7 +563,6 @@ using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Windows.Media;
 
 namespace ZapretGUI.Core
 {
@@ -558,45 +575,27 @@ namespace ZapretGUI.Core
         private const uint SND_ASYNC = 0x0001;
         private const uint SND_NODEFAULT = 0x0002;
 
-        private static readonly string? _clickFilePath;
         private static readonly string? _successFilePath;
-        private static readonly MediaPlayer _successMedia = new MediaPlayer();
 
         static AudioHelper()
         {
             try
             {
-                // 1. Генерируем клик на диск 1 раз при первом запуске в synth_click_v3.wav
-                _clickFilePath = EnsureSynthClickCached();
+                var cacheDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", "Cache", "Sounds");
+                if (Directory.Exists(cacheDir))
+                {
+                    foreach (var oldClick in Directory.GetFiles(cacheDir, "*click*.wav"))
+                    {
+                        try { File.Delete(oldClick); } catch { }
+                    }
+                }
 
-                // 2. Кэшируем или создаём звук успеха
                 _successFilePath = EnsureSuccessFileCached("success.wav");
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"Ошибка инициализации AudioHelper: {ex.Message}");
             }
-        }
-
-        private static string? EnsureSynthClickCached()
-        {
-            var cacheDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", "Cache", "Sounds");
-            Directory.CreateDirectory(cacheDir);
-            var cachedClickPath = Path.Combine(cacheDir, "synth_click_v3.wav");
-
-            // Если уже сгенерирован при первом запуске — сразу используем готовый файл
-            if (File.Exists(cachedClickPath) && new FileInfo(cachedClickPath).Length > 100)
-                return cachedClickPath;
-
-            // Очищаем старые версии кэша
-            foreach (var old in Directory.GetFiles(cacheDir, "synth_click*.wav"))
-            {
-                try { File.Delete(old); } catch { }
-            }
-
-            // Генерируем сбалансированный клик 1 раз и сохраняем на диск
-            GenerateWavToFile(cachedClickPath, isSuccess: false);
-            return cachedClickPath;
         }
 
         private static string? EnsureSuccessFileCached(string fileName)
@@ -633,42 +632,32 @@ namespace ZapretGUI.Core
                 }
             }
 
-            string[] packUris =
-            [
-                $"pack://application:,,,/Assets/Sounds/{fileName}",
-                $"pack://application:,,,/Assets/{fileName}"
-            ];
-
-            foreach (var uriStr in packUris)
+            try
             {
-                try
+                var asm = System.Reflection.Assembly.GetExecutingAssembly();
+                foreach (var resName in asm.GetManifestResourceNames())
                 {
-                    var streamInfo = System.Windows.Application.GetResourceStream(new Uri(uriStr, UriKind.Absolute));
-                    if (streamInfo?.Stream != null)
+                    if (resName.EndsWith(fileName, StringComparison.OrdinalIgnoreCase))
                     {
-                        using var fs = new FileStream(targetCachedPath, FileMode.Create, FileAccess.Write, FileShare.ReadWrite);
-                        streamInfo.Stream.CopyTo(fs);
-                        if (fs.Length > 100)
-                            return targetCachedPath;
+                        using var stream = asm.GetManifestResourceStream(resName);
+                        if (stream != null)
+                        {
+                            using var fs = new FileStream(targetCachedPath, FileMode.Create, FileAccess.Write, FileShare.ReadWrite);
+                            stream.CopyTo(fs);
+                            if (fs.Length > 100)
+                                return targetCachedPath;
+                        }
                     }
                 }
-                catch { }
             }
+            catch { }
 
-            GenerateWavToFile(targetCachedPath, isSuccess: true);
+            GenerateSuccessWavToFile(targetCachedPath);
             return targetCachedPath;
         }
 
         public static void PlayClick()
         {
-            if (!SettingsManager.Current.SoundEffectsEnabled) return;
-            if (string.IsNullOrEmpty(_clickFilePath) || !File.Exists(_clickFilePath)) return;
-
-            try
-            {
-                PlaySound(_clickFilePath, IntPtr.Zero, SND_FILENAME | SND_ASYNC | SND_NODEFAULT);
-            }
-            catch { }
         }
 
         public static void PlaySuccess()
@@ -676,24 +665,17 @@ namespace ZapretGUI.Core
             if (!SettingsManager.Current.SoundEffectsEnabled) return;
             if (string.IsNullOrEmpty(_successFilePath) || !File.Exists(_successFilePath)) return;
 
-            System.Windows.Application.Current?.Dispatcher.InvokeAsync(() =>
+            try
             {
-                try
-                {
-                    _successMedia.Stop();
-                    _successMedia.Open(new Uri(_successFilePath, UriKind.Absolute));
-                    _successMedia.Volume = 0.75;
-                    _successMedia.Play();
-                }
-                catch { }
-            });
+                PlaySound(_successFilePath, IntPtr.Zero, SND_FILENAME | SND_ASYNC | SND_NODEFAULT);
+            }
+            catch { }
         }
 
-        private static void GenerateWavToFile(string filePath, bool isSuccess)
+        private static void GenerateSuccessWavToFile(string filePath)
         {
             const int sampleRate = 44100;
-            // 60 мс для клика, чтобы аудиодрайвер Windows гарантированно не проглатывал звук
-            var durationMs = isSuccess ? 350 : 60;
+            const int durationMs = 350;
             var numSamples = (sampleRate * durationMs) / 1000;
             var dataSize = numSamples * 2;
 
@@ -717,22 +699,11 @@ namespace ZapretGUI.Core
             {
                 var t = (double)i / sampleRate;
                 var progress = (double)i / numSamples;
-                double sample;
 
-                if (!isSuccess)
-                {
-                    // Приятный умеренный клик (частота 620 Гц с плавным спадом и громкостью 0.42)
-                    var env = Math.Exp(-progress * 11.0);
-                    var freq = 620.0 * Math.Exp(-progress * 4.5);
-                    sample = (Math.Sin(2 * Math.PI * freq * t) + 0.25 * Math.Sin(2 * Math.PI * (freq * 1.4) * t)) * env * 0.42;
-                }
-                else
-                {
-                    var freq = progress < 0.45 ? 523.25 : 783.99;
-                    var localP = progress < 0.45 ? (progress / 0.45) : ((progress - 0.45) / 0.55);
-                    var env = Math.Sin(Math.Min(1.0, localP * 8.0) * (Math.PI / 2)) * Math.Exp(-localP * 4.5);
-                    sample = (Math.Sin(2 * Math.PI * freq * t) + 0.35 * Math.Sin(2 * Math.PI * (freq * 2) * t)) * env * 0.35;
-                }
+                var freq = progress < 0.45 ? 523.25 : 783.99;
+                var localP = progress < 0.45 ? (progress / 0.45) : ((progress - 0.45) / 0.55);
+                var env = Math.Sin(Math.Min(1.0, localP * 8.0) * (Math.PI / 2)) * Math.Exp(-localP * 4.5);
+                var sample = (Math.Sin(2 * Math.PI * freq * t) + 0.35 * Math.Sin(2 * Math.PI * (freq * 2) * t)) * env * 0.35;
 
                 var pcm = (short)Math.Clamp(sample * short.MaxValue, short.MinValue, short.MaxValue);
                 bw.Write(pcm);
@@ -2634,18 +2605,21 @@ namespace ZapretGUI.Core
 ////////////////////////////////////////////////////////////////////////////////
 
 using System;
-using System.Windows;
-using ZapretGUI.Views;
+using System.Drawing;
+using System.Drawing.Drawing2D;
+using System.Runtime.InteropServices;
+using System.Threading.Tasks;
+using System.Windows.Forms;
 
 namespace ZapretGUI.Core
 {
     public class TrayIconManager : IDisposable
     {
-        private System.Windows.Forms.NotifyIcon? _notifyIcon;
-        private TrayMenuWindow? _trayMenu;
-        private readonly Window _mainWindow;
+        private NotifyIcon? _notifyIcon;
+        private CustomTrayPopupForm? _trayPopup;
+        private readonly MainWindow _mainWindow;
 
-        public TrayIconManager(Window mainWindow)
+        public TrayIconManager(MainWindow mainWindow)
         {
             _mainWindow = mainWindow;
             SetupTrayIcon();
@@ -2653,10 +2627,9 @@ namespace ZapretGUI.Core
 
         private void SetupTrayIcon()
         {
-            _trayMenu = new TrayMenuWindow();
-            _trayMenu.WindowStartupLocation = WindowStartupLocation.Manual;
+            _trayPopup = new CustomTrayPopupForm(_mainWindow);
 
-            _notifyIcon = new System.Windows.Forms.NotifyIcon
+            _notifyIcon = new NotifyIcon
             {
                 Text = $"Zapret for ADHD {AppConstants.AppVersion}",
                 Visible = true
@@ -2666,68 +2639,41 @@ namespace ZapretGUI.Core
 
             _notifyIcon.DoubleClick += (s, e) =>
             {
-                _mainWindow.Show();
-                _mainWindow.WindowState = WindowState.Normal;
-                _mainWindow.Activate();
+                _mainWindow.RestoreFromTray();
             };
 
             _notifyIcon.MouseClick += (s, e) =>
             {
-                if (e.Button != System.Windows.Forms.MouseButtons.Left && e.Button != System.Windows.Forms.MouseButtons.Right)
+                if (e.Button != MouseButtons.Left && e.Button != MouseButtons.Right)
                     return;
 
-                _trayMenu.RefreshState();
-                _trayMenu.Show();
-                _trayMenu.UpdateLayout();
-
-                var mousePos = System.Windows.Forms.Control.MousePosition;
-                var source = PresentationSource.FromVisual(_mainWindow);
-                double dpiX = 1.0, dpiY = 1.0;
-
-                if (source?.CompositionTarget != null)
-                {
-                    dpiX = source.CompositionTarget.TransformFromDevice.M11;
-                    dpiY = source.CompositionTarget.TransformFromDevice.M22;
-                }
-
-                var workArea = SystemParameters.WorkArea;
-                var targetLeft = (mousePos.X * dpiX) - (_trayMenu.ActualWidth / 2);
-                var targetTop = (mousePos.Y * dpiY) - _trayMenu.ActualHeight - 10;
-
-                targetLeft = Math.Max(workArea.Left + 8, Math.Min(targetLeft, workArea.Right - _trayMenu.ActualWidth - 8));
-                targetTop = Math.Max(workArea.Top + 8, Math.Min(targetTop, workArea.Bottom - _trayMenu.ActualHeight - 8));
-
-                _trayMenu.Left = targetLeft;
-                _trayMenu.Top = targetTop;
-
-                _trayMenu.Activate();
-                _trayMenu.PlayPopupAnimation();
+                _trayPopup.ShowAtCursor();
             };
         }
 
         public void UpdateDynamicIcon(bool isRunning)
         {
-            _mainWindow.Dispatcher.InvokeAsync(() =>
+            try
             {
-                try
+                var (trayIcon, icoFilePath) = UIHelper.GetOrCreateAppIcon(isRunning);
+
+                if (_notifyIcon != null)
                 {
-                    var (trayIcon, wpfIcon) = UIHelper.GetOrCreateAppIcon(isRunning);
-
-                    if (_notifyIcon != null)
-                    {
-                        _notifyIcon.Icon = trayIcon;
-                        _notifyIcon.Text = isRunning
-                            ? $"Zapret for ADHD ({SettingsManager.Current.SelectedProfileName} — Активен)"
-                            : $"Zapret for ADHD {AppConstants.AppVersion} (Остановлен)";
-                    }
-
-                    _mainWindow.Icon = wpfIcon;
+                    _notifyIcon.Icon = trayIcon;
+                    _notifyIcon.Text = isRunning
+                        ? $"Zapret for ADHD ({SettingsManager.Current.SelectedProfileName} — Активен)"
+                        : $"Zapret for ADHD {AppConstants.AppVersion} (Остановлен)";
                 }
-                catch { }
-            });
+
+                _mainWindow.InvokeOnUI(() =>
+                {
+                    try { _mainWindow.Window.SetIconFile(icoFilePath); } catch { }
+                });
+            }
+            catch { }
         }
 
-        public void ShowNotification(string title, string message, System.Windows.Forms.ToolTipIcon icon = System.Windows.Forms.ToolTipIcon.Info)
+        public void ShowNotification(string title, string message, ToolTipIcon icon = ToolTipIcon.Info)
         {
             if (SettingsManager.Current.NotificationsEnabled && _notifyIcon != null && _notifyIcon.Visible)
                 _notifyIcon.ShowBalloonTip(3000, title, message, icon);
@@ -2742,7 +2688,321 @@ namespace ZapretGUI.Core
                 _notifyIcon = null;
             }
 
-            _trayMenu?.Close();
+            _trayPopup?.Dispose();
+        }
+    }
+
+    internal sealed class CustomTrayPopupForm : Form
+    {
+        [DllImport("Gdi32.dll", EntryPoint = "CreateRoundRectRgn")]
+        private static extern IntPtr CreateRoundRectRgn(int nLeftRect, int nTopRect, int nRightRect, int nBottomRect, int nWidthEllipse, int nHeightEllipse);
+
+        private readonly MainWindow _mainWindow;
+        private double _rxMbps = 0;
+        private double _txMbps = 0;
+        private string _pingStr = "...";
+        private Color _pingColor = ColorTranslator.FromHtml("#4CAF50");
+        private int _hoveredZone = -1;
+
+        private readonly Rectangle _rectPrevProf = new(144, 58, 22, 24);
+        private readonly Rectangle _rectNextProf = new(244, 58, 22, 24);
+        private readonly Rectangle _rectPowerBtn = new(14, 92, 252, 40);
+        private readonly Rectangle _rectPingBtn = new(238, 186, 22, 22);
+        private readonly Rectangle _rectRestartBtn = new(14, 224, 252, 32);
+        private readonly Rectangle _rectOpenBtn = new(14, 258, 252, 32);
+        private readonly Rectangle _rectExitBtn = new(14, 292, 252, 32);
+
+        public CustomTrayPopupForm(MainWindow mainWindow)
+        {
+            _mainWindow = mainWindow;
+            FormBorderStyle = FormBorderStyle.None;
+            ShowInTaskbar = false;
+            TopMost = true;
+            DoubleBuffered = true;
+            Size = new Size(280, 336);
+            BackColor = ColorTranslator.FromHtml("#121212");
+            Region = Region.FromHrgn(CreateRoundRectRgn(0, 0, Width, Height, 22, 22));
+
+            BypassController.Current.NetMonitor.StatsUpdated += OnStatsUpdated;
+            Deactivate += (s, e) => Hide();
+        }
+
+        private void OnStatsUpdated(double rx, double tx)
+        {
+            _rxMbps = rx;
+            _txMbps = tx;
+            if (Visible)
+            {
+                try { BeginInvoke(new Action(Invalidate)); } catch { }
+            }
+        }
+
+        public void ShowAtCursor()
+        {
+            var cursor = Cursor.Position;
+            var screen = Screen.FromPoint(cursor).WorkingArea;
+
+            int x = Math.Max(screen.Left + 8, Math.Min(cursor.X - Width / 2, screen.Right - Width - 8));
+            int y = Math.Max(screen.Top + 8, Math.Min(cursor.Y - Height - 10, screen.Bottom - Height - 8));
+
+            Location = new Point(x, y);
+            Show();
+            Activate();
+            Invalidate();
+            _ = RefreshPingAsync();
+        }
+
+        private async Task RefreshPingAsync()
+        {
+            _pingStr = "...";
+            _pingColor = ColorTranslator.FromHtml("#888888");
+            Invalidate();
+
+            var ms = await BypassController.Current.CheckPingAsync();
+            if (ms >= 0)
+            {
+                _pingStr = $"{ms} мс";
+                _pingColor = ms < 80 ? UIHelper.GetAccentColor(true) : ms < 150 ? ColorTranslator.FromHtml("#FF8C00") : UIHelper.GetErrorColor();
+            }
+            else
+            {
+                _pingStr = "ошибка";
+                _pingColor = UIHelper.GetErrorColor();
+            }
+            if (Visible) Invalidate();
+        }
+
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            base.OnMouseMove(e);
+            int zone = GetZoneAt(e.Location);
+            if (zone != _hoveredZone)
+            {
+                _hoveredZone = zone;
+                Cursor = zone >= 0 ? Cursors.Hand : Cursors.Default;
+                Invalidate();
+            }
+        }
+
+        protected override void OnMouseLeave(EventArgs e)
+        {
+            base.OnMouseLeave(e);
+            _hoveredZone = -1;
+            Cursor = Cursors.Default;
+            Invalidate();
+        }
+
+        protected override async void OnMouseClick(MouseEventArgs e)
+        {
+            base.OnMouseClick(e);
+            if (e.Button != MouseButtons.Left) return;
+
+            switch (GetZoneAt(e.Location))
+            {
+                case 1:
+                    await CycleProfileAsync(-1);
+                    break;
+                case 2:
+                    await CycleProfileAsync(1);
+                    break;
+                case 3:
+                    _mainWindow.ToggleBypass();
+                    await Task.Delay(450);
+                    Invalidate();
+                    break;
+                case 4:
+                    await RefreshPingAsync();
+                    break;
+                case 5:
+                    await _mainWindow.RestartBypassAsync();
+                    Invalidate();
+                    break;
+                case 6:
+                    Hide();
+                    _mainWindow.RestoreFromTray();
+                    break;
+                case 7:
+                    Hide();
+                    _mainWindow.ForceExit();
+                    break;
+            }
+        }
+
+        private async Task CycleProfileAsync(int dir)
+        {
+            var profiles = BypassController.Current.Zapret.GetAvailableProfiles();
+            if (profiles.Count == 0) return;
+
+            var current = SettingsManager.Current.SelectedProfileName ?? "general.bat";
+            var idx = profiles.FindIndex(p => string.Equals(p, current, StringComparison.OrdinalIgnoreCase));
+            var nextIdx = idx < 0 ? 0 : (idx + dir + profiles.Count) % profiles.Count;
+
+            await _mainWindow.SelectProfileFromTrayAsync(profiles[nextIdx]);
+            Invalidate();
+        }
+
+        private int GetZoneAt(Point pt)
+        {
+            if (_rectPrevProf.Contains(pt)) return 1;
+            if (_rectNextProf.Contains(pt)) return 2;
+            if (_rectPowerBtn.Contains(pt)) return 3;
+            if (_rectPingBtn.Contains(pt)) return 4;
+            if (_rectRestartBtn.Contains(pt)) return 5;
+            if (_rectOpenBtn.Contains(pt)) return 6;
+            if (_rectExitBtn.Contains(pt)) return 7;
+            return -1;
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            var g = e.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+
+            bool zapretRun = BypassController.Current.Zapret.IsRunning;
+            bool proxyRun = BypassController.Current.TgProxy.IsRunning;
+            bool anyRun = zapretRun || proxyRun;
+
+            var accent = UIHelper.GetAccentColor(false);
+            var accentLight = UIHelper.GetAccentColor(true);
+            var accentDarkBg = UIHelper.GetAccentDarkBgColor();
+            var danger = UIHelper.GetErrorColor();
+
+            using (var borderPen = new Pen(ColorTranslator.FromHtml("#2A2A2A"), 1.5f))
+            using (var borderPath = UIHelper.CreateRoundedRectPath(new Rectangle(1, 1, Width - 3, Height - 3), 11))
+            {
+                g.DrawPath(borderPen, borderPath);
+            }
+
+            using (var logoBg = new SolidBrush(accentDarkBg))
+            using (var logoPen = new Pen(accent, 1f))
+            using (var logoPath = UIHelper.CreateRoundedRectPath(new Rectangle(14, 14, 28, 28), 7))
+            {
+                g.FillPath(logoBg, logoPath);
+                g.DrawPath(logoPen, logoPath);
+            }
+            using (var fLogo = new Font("Segoe UI", 11f, FontStyle.Bold))
+            using (var bLogo = new SolidBrush(accentLight))
+            {
+                g.DrawString("⚡", fLogo, bLogo, 17, 17);
+            }
+
+            using (var fTitle = new Font("Segoe UI", 10.5f, FontStyle.Bold))
+            using (var fSub = new Font("Segoe UI", 8.5f, FontStyle.Regular))
+            using (var bSub = new SolidBrush(anyRun ? accentLight : ColorTranslator.FromHtml("#888888")))
+            {
+                g.DrawString("Zapret for ADHD", fTitle, Brushes.White, 48, 13);
+                string subTxt = (zapretRun && proxyRun) ? "Zapret + TgWsProxy активны"
+                              : zapretRun ? "Обход Zapret активен"
+                              : proxyRun ? "Прокси Telegram активен"
+                              : "Службы остановлены";
+                g.DrawString(subTxt, fSub, bSub, 48, 30);
+            }
+
+            DrawStatusPill(g, new Rectangle(14, 58, 60, 24), "Zapret", zapretRun ? accentLight : danger);
+            DrawStatusPill(g, new Rectangle(78, 58, 60, 24), "Proxy", proxyRun ? accentLight : danger);
+
+            using (var profBg = new SolidBrush(ColorTranslator.FromHtml("#181818")))
+            using (var profPen = new Pen(ColorTranslator.FromHtml("#262626")))
+            using (var profPath = UIHelper.CreateRoundedRectPath(new Rectangle(144, 58, 122, 24), 6))
+            {
+                g.FillPath(profBg, profPath);
+                g.DrawPath(profPen, profPath);
+            }
+            using (var fProf = new Font("Consolas", 8.2f, FontStyle.Bold))
+            {
+                g.DrawString("‹", fProf, _hoveredZone == 1 ? Brushes.White : Brushes.Gray, 150, 62);
+                g.DrawString("›", fProf, _hoveredZone == 2 ? Brushes.White : Brushes.Gray, 252, 62);
+
+                string profName = SettingsManager.Current.SelectedProfileName ?? "general.bat";
+                if (profName.Length > 11) profName = profName.Substring(0, 10) + "…";
+                g.DrawString(profName, fProf, Brushes.White, 166, 63);
+            }
+
+            var pwrBgColor = anyRun ? ColorTranslator.FromHtml("#2A1215") : accentDarkBg;
+            var pwrBorderColor = anyRun ? danger : accent;
+            using (var pwrBg = new SolidBrush(pwrBgColor))
+            using (var pwrPen = new Pen(pwrBorderColor, 1.2f))
+            using (var pwrPath = UIHelper.CreateRoundedRectPath(_rectPowerBtn, 9))
+            {
+                g.FillPath(pwrBg, pwrPath);
+                g.DrawPath(pwrPen, pwrPath);
+            }
+            using (var fPwr = new Font("Segoe UI", 10f, FontStyle.Bold))
+            {
+                var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+                g.DrawString(anyRun ? "■  Остановить обход" : "▶  Включить обход", fPwr, Brushes.White, _rectPowerBtn, sf);
+            }
+
+            var teleRect = new Rectangle(14, 140, 252, 74);
+            using (var teleBg = new SolidBrush(ColorTranslator.FromHtml("#171717")))
+            using (var telePen = new Pen(ColorTranslator.FromHtml("#242424")))
+            using (var telePath = UIHelper.CreateRoundedRectPath(teleRect, 9))
+            {
+                g.FillPath(teleBg, telePath);
+                g.DrawPath(telePen, telePath);
+            }
+
+            using (var fLbl = new Font("Segoe UI", 7.8f))
+            using (var fVal = new Font("Consolas", 9.2f, FontStyle.Bold))
+            using (var bGray = new SolidBrush(ColorTranslator.FromHtml("#888888")))
+            {
+                g.DrawString("↓ Входящий", fLbl, bGray, 24, 147);
+                g.DrawString($"{_rxMbps:0.0} Мбит/с", fVal, Brushes.White, 24, 161);
+
+                g.DrawString("↑ Исходящий", fLbl, bGray, 152, 147);
+                g.DrawString($"{_txMbps:0.0} Мбит/с", fVal, Brushes.White, 152, 161);
+
+                using var sepPen = new Pen(ColorTranslator.FromHtml("#232323"));
+                g.DrawLine(sepPen, 22, 181, 258, 181);
+
+                g.DrawString("Пинг (EU):", new Font("Segoe UI", 8.8f), bGray, 24, 189);
+                using var bPing = new SolidBrush(_pingColor);
+                g.DrawString(_pingStr, fVal, bPing, 92, 189);
+
+                using var btnPath = UIHelper.CreateRoundedRectPath(_rectPingBtn, 5);
+                using var btnBg = new SolidBrush(_hoveredZone == 4 ? ColorTranslator.FromHtml("#2E2E2E") : ColorTranslator.FromHtml("#222222"));
+                g.FillPath(btnBg, btnPath);
+                g.DrawString("↻", fVal, Brushes.LightGray, 242, 188);
+            }
+
+            DrawMenuRow(g, _rectRestartBtn, "↻   Перезапустить службы", _hoveredZone == 5, false);
+            DrawMenuRow(g, _rectOpenBtn, "❐   Открыть панель управления", _hoveredZone == 6, false);
+            DrawMenuRow(g, _rectExitBtn, "✕   Полностью закрыть", _hoveredZone == 7, true);
+        }
+
+        private static void DrawStatusPill(Graphics g, Rectangle rect, string text, Color dotColor)
+        {
+            using var bg = new SolidBrush(ColorTranslator.FromHtml("#181818"));
+            using var pen = new Pen(ColorTranslator.FromHtml("#262626"));
+            using var path = UIHelper.CreateRoundedRectPath(rect, 6);
+            g.FillPath(bg, path);
+            g.DrawPath(pen, path);
+
+            using var dotBrush = new SolidBrush(dotColor);
+            g.FillEllipse(dotBrush, rect.X + 7, rect.Y + 9, 6, 6);
+
+            using var font = new Font("Segoe UI", 8f, FontStyle.Bold);
+            using var textBrush = new SolidBrush(ColorTranslator.FromHtml("#CCCCCC"));
+            g.DrawString(text, font, textBrush, rect.X + 16, rect.Y + 5);
+        }
+
+        private static void DrawMenuRow(Graphics g, Rectangle rect, string text, bool hovered, bool isDanger)
+        {
+            if (hovered)
+            {
+                var bgCol = isDanger ? ColorTranslator.FromHtml("#2A1215") : ColorTranslator.FromHtml("#1E1E1E");
+                var brdCol = isDanger ? ColorTranslator.FromHtml("#5C242A") : ColorTranslator.FromHtml("#2E2E2E");
+                using var bg = new SolidBrush(bgCol);
+                using var pen = new Pen(brdCol);
+                using var path = UIHelper.CreateRoundedRectPath(rect, 7);
+                g.FillPath(bg, path);
+                g.DrawPath(pen, path);
+            }
+
+            using var font = new Font("Segoe UI", 9.2f, isDanger ? FontStyle.Bold : FontStyle.Regular);
+            using var brush = new SolidBrush(isDanger ? ColorTranslator.FromHtml("#F44336") : ColorTranslator.FromHtml("#E0E0E0"));
+            g.DrawString(text, font, brush, rect.X + 10, rect.Y + 7);
         }
     }
 }
@@ -2760,10 +3020,6 @@ using System.Drawing.Text;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
-using System.Windows;
-using System.Windows.Interop;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
 
 namespace ZapretGUI.Core
 {
@@ -2772,16 +3028,10 @@ namespace ZapretGUI.Core
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         public static extern bool DestroyIcon(IntPtr handle);
 
-        private static readonly BrushConverter _brushConverter = new BrushConverter();
-
-        // Кэш готовых иконок в оперативной памяти на всё время работы программы
-        private static readonly ConcurrentDictionary<string, (Icon trayIcon, ImageSource wpfIcon)> _iconCache = new();
+        private static readonly ConcurrentDictionary<string, (Icon trayIcon, string icoFilePath)> _iconCache = new();
 
         public static Action<string, string, bool>? WebAlertHandler { get; set; }
         public static Func<string, string, string, bool, Task<bool>>? WebConfirmHandler { get; set; }
-
-        public static SolidColorBrush GetBrushFromHex(string hex)
-            => (SolidColorBrush)_brushConverter.ConvertFromString(hex)!;
 
         public static string GetAccentHex(bool light = false)
         {
@@ -2807,34 +3057,27 @@ namespace ZapretGUI.Core
             };
         }
 
-        public static SolidColorBrush GetSuccessBrush()
-            => GetBrushFromHex(GetAccentHex(light: false));
+        public static Color GetAccentColor(bool light = false)
+            => ColorTranslator.FromHtml(GetAccentHex(light));
 
-        public static SolidColorBrush GetSuccessLightBrush()
-            => GetBrushFromHex(GetAccentHex(light: true));
+        public static Color GetAccentDarkBgColor()
+            => ColorTranslator.FromHtml(GetAccentDarkBgHex());
 
-        public static SolidColorBrush GetErrorBrush()
-            => GetBrushFromHex("#D13438");
+        public static Color GetErrorColor()
+            => ColorTranslator.FromHtml("#D13438");
 
         public static void ApplyThemeColors()
         {
-            var res = System.Windows.Application.Current?.Resources;
-            if (res == null)
-                return;
-
-            res["BrandSuccessBrush"] = GetSuccessBrush();
-            res["BrandErrorBrush"] = GetErrorBrush();
         }
 
-        public static (Icon trayIcon, ImageSource wpfIcon) GetOrCreateAppIcon(bool isRunning)
+        public static (Icon trayIcon, string icoFilePath) GetOrCreateAppIcon(bool isRunning)
         {
             var theme = (SettingsManager.Current.AccentTheme ?? "green").ToLowerInvariant();
             if (theme == "crimson") theme = "cyan";
 
             var cacheKey = $"{theme}_{(isRunning ? "on" : "off")}";
 
-            // 1. Если иконка уже в ОЗУ — отдаём мгновенно за 0 мс
-            if (_iconCache.TryGetValue(cacheKey, out var cached))
+            if (_iconCache.TryGetValue(cacheKey, out var cached) && File.Exists(cached.icoFilePath))
                 return cached;
 
             var cacheDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", "Cache", "Icons");
@@ -2843,7 +3086,6 @@ namespace ZapretGUI.Core
 
             Bitmap bmp;
 
-            // 2. Если иконка уже была сгенерирована при прошлом запуске на диск — просто читаем готовый PNG
             if (File.Exists(pngPath) && new FileInfo(pngPath).Length > 100)
             {
                 using var fs = new FileStream(pngPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
@@ -2851,7 +3093,6 @@ namespace ZapretGUI.Core
             }
             else
             {
-                // 3. Иначе (первый запуск) рисуем иконку и сохраняем PNG на диск для будущих запусков
                 bmp = RenderIconBitmap(isRunning);
                 try
                 {
@@ -2866,16 +3107,9 @@ namespace ZapretGUI.Core
                 try
                 {
                     using var tempIcon = Icon.FromHandle(hIcon);
-                    // Клонируем управляемую копию Icon, чтобы безопасно освободить GDI-хэндл
                     var managedTrayIcon = (Icon)tempIcon.Clone();
 
-                    var wpfIcon = Imaging.CreateBitmapSourceFromHIcon(
-                        hIcon,
-                        Int32Rect.Empty,
-                        BitmapSizeOptions.FromEmptyOptions());
-                    wpfIcon.Freeze();
-
-                    var result = (managedTrayIcon, (ImageSource)wpfIcon);
+                    var result = (managedTrayIcon, pngPath);
                     _iconCache[cacheKey] = result;
                     return result;
                 }
@@ -2893,26 +3127,26 @@ namespace ZapretGUI.Core
             using var g = Graphics.FromImage(bmp);
             g.SmoothingMode = SmoothingMode.AntiAlias;
             g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
-            g.Clear(System.Drawing.Color.Transparent);
+            g.Clear(Color.Transparent);
 
-            var accentColor = ColorTranslator.FromHtml(GetAccentHex(light: true));
+            var accentColor = GetAccentColor(light: true);
             var borderColor = isRunning ? accentColor : ColorTranslator.FromHtml("#3A3A3A");
-            var bgTop = isRunning ? ColorTranslator.FromHtml(GetAccentDarkBgHex()) : ColorTranslator.FromHtml("#18181B");
+            var bgTop = isRunning ? GetAccentDarkBgColor() : ColorTranslator.FromHtml("#18181B");
             var bgBottom = ColorTranslator.FromHtml("#0A0A0C");
 
             using var path = CreateRoundedRectPath(new Rectangle(4, 4, size - 8, size - 8), 14);
-            using (var bgBrush = new System.Drawing.Drawing2D.LinearGradientBrush(new Rectangle(0, 0, size, size), bgTop, bgBottom, System.Drawing.Drawing2D.LinearGradientMode.Vertical))
+            using (var bgBrush = new LinearGradientBrush(new Rectangle(0, 0, size, size), bgTop, bgBottom, LinearGradientMode.Vertical))
             {
                 g.FillPath(bgBrush, path);
             }
 
-            using (var pen = new System.Drawing.Pen(borderColor, 3.2f))
+            using (var pen = new Pen(borderColor, 3.2f))
             {
                 g.DrawPath(pen, path);
             }
 
-            using var font = new Font("Segoe UI", 28f, System.Drawing.FontStyle.Bold, GraphicsUnit.Pixel);
-            var textBrush = isRunning ? new SolidBrush(accentColor) : new SolidBrush(System.Drawing.Color.White);
+            using var font = new Font("Segoe UI", 28f, FontStyle.Bold, GraphicsUnit.Pixel);
+            var textBrush = isRunning ? new SolidBrush(accentColor) : new SolidBrush(Color.White);
             using (textBrush)
             {
                 var sf = new StringFormat
@@ -2923,10 +3157,7 @@ namespace ZapretGUI.Core
                 g.DrawString("Z", font, textBrush, new RectangleF(0, 1, size, size), sf);
             }
 
-            var dotColor = isRunning
-                ? accentColor
-                : ColorTranslator.FromHtml("#D13438");
-
+            var dotColor = isRunning ? accentColor : GetErrorColor();
             using var dotBgBrush = new SolidBrush(ColorTranslator.FromHtml("#0A0A0C"));
             using var dotBrush = new SolidBrush(dotColor);
             g.FillEllipse(dotBgBrush, size - 20, size - 20, 16, 16);
@@ -2935,7 +3166,7 @@ namespace ZapretGUI.Core
             return bmp;
         }
 
-        private static GraphicsPath CreateRoundedRectPath(Rectangle bounds, int radius)
+        public static GraphicsPath CreateRoundedRectPath(Rectangle bounds, int radius)
         {
             int d = radius * 2;
             var path = new GraphicsPath();
@@ -3076,7 +3307,7 @@ namespace ZapretGUI.Core
                     {
                         try
                         {
-                            await ApplyAppUpdateAsync(appUpdate.DownloadUrl, () => System.Windows.Application.Current.Shutdown());
+                            await ApplyAppUpdateAsync(appUpdate.DownloadUrl, () => Environment.Exit(0));
                             return;
                         }
                         catch (Exception ex)
@@ -3486,15 +3717,12 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
-using System.Runtime.InteropServices;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Windows;
-using System.Windows.Interop;
-using System.Windows.Media;
-using Microsoft.Web.WebView2.Wpf;
+using System.Windows.Forms;
 
 namespace ZapretGUI.Core
 {
@@ -3505,8 +3733,8 @@ namespace ZapretGUI.Core
 
         [DllImport("user32.dll")]
         private static extern IntPtr SendMessage(IntPtr hWnd, int Msg, int wParam, int lParam);
-        private readonly WebView2 _webView;
-        private readonly Window _mainWindow;
+
+        private readonly MainWindow _mainWindow;
         private readonly ModManager _modManager = new ModManager();
         private bool _isFirstRun;
 
@@ -3521,16 +3749,14 @@ namespace ZapretGUI.Core
             PropertyNameCaseInsensitive = true
         };
 
-        public WebBridge(WebView2 webView, Window mainWindow, bool isFirstRun = false)
+        public WebBridge(MainWindow mainWindow, bool isFirstRun = false)
         {
-            _webView = webView;
             _mainWindow = mainWindow;
             _isFirstRun = isFirstRun;
 
             _modManager.InitializeFolders();
             SetupLiveModsWatcher();
 
-            // Подключаем веб-диалоги для UpdateManager и UIHelper
             UIHelper.WebAlertHandler = (title, message, isError) =>
             {
                 SendEvent("alert", new { title, message, isError });
@@ -3653,18 +3879,12 @@ namespace ZapretGUI.Core
         {
             try
             {
-                _mainWindow.Dispatcher.InvokeAsync(() =>
-                {
-                    if (_webView.CoreWebView2 != null)
-                    {
-                        var json = JsonSerializer.Serialize(new { type = eventName, data = payload }, _jsonOptions);
-                        _webView.CoreWebView2.PostWebMessageAsJson(json);
-                    }
-                });
+                var json = JsonSerializer.Serialize(new { type = eventName, data = payload }, _jsonOptions);
+                _mainWindow.Window.SendWebMessage(json);
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Ошибка отправки в WebView2: {ex.Message}");
+                Debug.WriteLine($"Ошибка отправки в Photino: {ex.Message}");
             }
         }
 
@@ -3717,11 +3937,11 @@ namespace ZapretGUI.Core
                     break;
 
                 case "windowDrag":
-                    _mainWindow.Dispatcher.Invoke(() =>
+                    _mainWindow.InvokeOnUI(() =>
                     {
                         try
                         {
-                            var hwnd = new WindowInteropHelper(_mainWindow).Handle;
+                            var hwnd = _mainWindow.WindowHandle;
                             ReleaseCapture();
                             SendMessage(hwnd, 0xA1 /* WM_NCLBUTTONDOWN */, 0x2 /* HT_CAPTION */, 0);
                         }
@@ -3730,11 +3950,11 @@ namespace ZapretGUI.Core
                     break;
 
                 case "windowMinimize":
-                    _mainWindow.Dispatcher.Invoke(() => _mainWindow.WindowState = WindowState.Minimized);
+                    _mainWindow.MinimizeWindow();
                     break;
 
                 case "windowClose":
-                    _mainWindow.Dispatcher.Invoke(() => _mainWindow.Close());
+                    _mainWindow.CloseWindow();
                     break;
 
                 case "playClick":
@@ -3937,8 +4157,7 @@ namespace ZapretGUI.Core
 
                 case "unloadWinDivert":
                     var msgUnload = ServiceToolsManager.UnloadWinDivertDriver();
-                    if (_mainWindow is MainWindow mwUnload)
-                        mwUnload.UpdateIndicators(false, false);
+                    _mainWindow.UpdateIndicators(false, false);
                     SendEvent("log", new { message = $"🛡 [System] {msgUnload}", time = DateTime.Now.ToString("HH:mm:ss") });
                     SendEvent("alert", new { title = "Выгрузка драйвера WinDivert", message = msgUnload, isError = false });
                     break;
@@ -3988,8 +4207,7 @@ namespace ZapretGUI.Core
             SettingsManager.Current.FocusMode = focusMode;
             SettingsManager.Current.AccentTheme = accentTheme;
             UIHelper.ApplyThemeColors();
-            if (_mainWindow is MainWindow mwWiz)
-                mwWiz.RefreshAppIcon();
+            _mainWindow.RefreshAppIcon();
 
             WizLog("[Config] Сохранение пользовательских настроек UI...");
             SettingsManager.Save();
@@ -4129,8 +4347,8 @@ namespace ZapretGUI.Core
         {
             Action stopServicesAction = () =>
             {
-                if (_mainWindow is MainWindow mw && mw.IsBypassRunning())
-                    mw.ToggleBypass();
+                if (_mainWindow.IsBypassRunning())
+                    _mainWindow.ToggleBypass();
             };
 
             var progress = new Progress<string>(status =>
@@ -4155,8 +4373,7 @@ namespace ZapretGUI.Core
                 ServiceToolsManager.SyncGameFilterFile();
                 UIHelper.ApplyThemeColors();
 
-                if (_mainWindow is MainWindow mw)
-                    mw.AnimateWindowSize(SettingsManager.Current.CompactMode);
+                _mainWindow.AnimateWindowSize(SettingsManager.Current.CompactMode);
 
                 await SendInitialStateAsync();
                 SendEvent("alert", new { title = "Готово", message = "Настройки успешно сброшены к состоянию по умолчанию.", isError = false });
@@ -4465,14 +4682,14 @@ namespace ZapretGUI.Core
         private async Task HandleImportModAsync()
         {
             string? selectedFile = null;
-            _mainWindow.Dispatcher.Invoke(() =>
+            _mainWindow.InvokeOnUI(() =>
             {
-                var openFileDialog = new Microsoft.Win32.OpenFileDialog
+                using var openFileDialog = new OpenFileDialog
                 {
                     Filter = "Архивы модов (*.zip;*.netfix-mod)|*.zip;*.netfix-mod|Все файлы (*.*)|*.*",
                     Title = "Выберите архив с модом"
                 };
-                if (openFileDialog.ShowDialog() == true)
+                if (openFileDialog.ShowDialog() == DialogResult.OK)
                     selectedFile = openFileDialog.FileName;
             });
 
@@ -4575,15 +4792,15 @@ namespace ZapretGUI.Core
             var modName = root.TryGetProperty("name", out var n) ? n.GetString() ?? id : id;
 
             string? savePath = null;
-            _mainWindow.Dispatcher.Invoke(() =>
+            _mainWindow.InvokeOnUI(() =>
             {
-                var saveFileDialog = new Microsoft.Win32.SaveFileDialog
+                using var saveFileDialog = new SaveFileDialog
                 {
                     Filter = "Архивы модов (*.zip)|*.zip|Мод NetFix (*.netfix-mod)|*.netfix-mod|Все файлы (*.*)|*.*",
                     Title = "Экспорт мода",
                     FileName = $"{id}_export.zip"
                 };
-                if (saveFileDialog.ShowDialog() == true)
+                if (saveFileDialog.ShowDialog() == DialogResult.OK)
                     savePath = saveFileDialog.FileName;
             });
 
@@ -4743,16 +4960,16 @@ namespace ZapretGUI.Core
         private void HandleExportLogs(JsonElement root)
         {
             var logText = root.GetProperty("text").GetString() ?? "";
-            _mainWindow.Dispatcher.Invoke(() =>
+            _mainWindow.InvokeOnUI(() =>
             {
-                var saveFileDialog = new Microsoft.Win32.SaveFileDialog
+                using var saveFileDialog = new SaveFileDialog
                 {
                     Filter = "Текстовые файлы (*.txt)|*.txt|Все файлы (*.*)|*.*",
                     DefaultExt = ".txt",
                     FileName = $"Zapret_Log_{DateTime.Now:yyyyMMdd_HHmmss}.txt"
                 };
 
-                if (saveFileDialog.ShowDialog() == true)
+                if (saveFileDialog.ShowDialog() == DialogResult.OK)
                 {
                     File.WriteAllText(saveFileDialog.FileName, logText);
                     SendEvent("alert", new { title = "Экспорт завершен", message = "Лог событий успешно сохранен в файл!", isError = false });
@@ -4796,7 +5013,7 @@ namespace ZapretGUI.Core
             {
                 bool top = aot.GetBoolean();
                 cur.AlwaysOnTop = top;
-                _mainWindow.Dispatcher.Invoke(() => _mainWindow.Topmost = top);
+                _mainWindow.InvokeOnUI(() => _mainWindow.Window.SetTopMost(top));
             }
 
             bool themeChanged = false;
@@ -4816,29 +5033,19 @@ namespace ZapretGUI.Core
                 if (cur.CompactMode != newCompact)
                 {
                     cur.CompactMode = newCompact;
-                    if (_mainWindow is MainWindow mw)
-                        mw.AnimateWindowSize(newCompact);
+                    _mainWindow.AnimateWindowSize(newCompact);
                 }
             }
 
             if (s.TryGetProperty("hardwareAcceleration", out var ha))
             {
-                bool useGpu = ha.GetBoolean();
-                if (cur.HardwareAcceleration != useGpu)
-                {
-                    cur.HardwareAcceleration = useGpu;
-                    _mainWindow.Dispatcher.Invoke(() =>
-                    {
-                        RenderOptions.ProcessRenderMode = useGpu ? RenderMode.Default : RenderMode.SoftwareOnly;
-                    });
-                }
+                cur.HardwareAcceleration = ha.GetBoolean();
             }
 
             if (themeChanged)
             {
                 UIHelper.ApplyThemeColors();
-                if (_mainWindow is MainWindow mwIcon)
-                    mwIcon.RefreshAppIcon();
+                _mainWindow.RefreshAppIcon();
             }
 
             if (s.TryGetProperty("pingUrl", out var pu))
@@ -4858,18 +5065,19 @@ namespace ZapretGUI.Core
 
             SettingsManager.Save();
         }
+
         private void HandleExportConfigBackup()
         {
-            _mainWindow.Dispatcher.Invoke(() =>
+            _mainWindow.InvokeOnUI(() =>
             {
-                var sfd = new Microsoft.Win32.SaveFileDialog
+                using var sfd = new SaveFileDialog
                 {
                     Filter = "Конфигурация Zapret (*.json)|*.json",
                     Title = "Экспорт резервной копии настроек",
                     FileName = $"ZapretForADHD_Config_{DateTime.Now:yyyyMMdd}.json"
                 };
 
-                if (sfd.ShowDialog() == true)
+                if (sfd.ShowDialog() == DialogResult.OK)
                 {
                     try
                     {
@@ -4888,14 +5096,14 @@ namespace ZapretGUI.Core
         private async Task HandleImportConfigBackupAsync()
         {
             string? selectedFile = null;
-            _mainWindow.Dispatcher.Invoke(() =>
+            _mainWindow.InvokeOnUI(() =>
             {
-                var ofd = new Microsoft.Win32.OpenFileDialog
+                using var ofd = new OpenFileDialog
                 {
                     Filter = "Конфигурация Zapret (*.json)|*.json",
                     Title = "Импорт резервной копии настроек"
                 };
-                if (ofd.ShowDialog() == true)
+                if (ofd.ShowDialog() == DialogResult.OK)
                     selectedFile = ofd.FileName;
             });
 
@@ -4912,14 +5120,11 @@ namespace ZapretGUI.Core
                 SettingsManager.Save();
                 UIHelper.ApplyThemeColors();
 
-                _mainWindow.Dispatcher.Invoke(() =>
+                _mainWindow.InvokeOnUI(() =>
                 {
-                    _mainWindow.Topmost = SettingsManager.Current.AlwaysOnTop;
-                    if (_mainWindow is MainWindow mw)
-                    {
-                        mw.AnimateWindowSize(SettingsManager.Current.CompactMode);
-                        mw.RefreshAppIcon();
-                    }
+                    _mainWindow.Window.SetTopMost(SettingsManager.Current.AlwaysOnTop);
+                    _mainWindow.AnimateWindowSize(SettingsManager.Current.CompactMode);
+                    _mainWindow.RefreshAppIcon();
                 });
 
                 await SendInitialStateAsync();
@@ -4931,6 +5136,7 @@ namespace ZapretGUI.Core
                 SendEvent("alert", new { title = "Ошибка импорта", message = $"Не удалось загрузить файл настроек:\n{ex.Message}", isError = true });
             }
         }
+
         public void Dispose()
         {
             _watcherDebounceCts?.Cancel();
@@ -4938,7 +5144,6 @@ namespace ZapretGUI.Core
             _modsWatcher?.Dispose();
             _pendingConfirmTcs?.TrySetResult(false);
         }
-
     }
 }
 
@@ -5445,575 +5650,6 @@ namespace ZapretGUI.Core
             }
 
             return null;
-        }
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// ФАЙЛ: Views\TrayMenuWindow.xaml
-////////////////////////////////////////////////////////////////////////////////
-
-<Window x:Class="ZapretGUI.Views.TrayMenuWindow"
-        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="TrayMenu" Width="300" SizeToContent="Height"
-        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
-        ShowInTaskbar="False" Topmost="True" Deactivated="Window_Deactivated">
-
-    <Window.Resources>
-        <!-- Стиль для строк меню с темным ховером без стандартного синего выделения WPF -->
-        <Style x:Key="TrayActionItemStyle" TargetType="Button">
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderBrush" Value="Transparent"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="10,8"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="ItemBorder"
-                                Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="8"
-                                Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                              VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="ItemBorder" Property="Background" Value="#1E1E1E"/>
-                                <Setter TargetName="ItemBorder" Property="BorderBrush" Value="#2E2E2E"/>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="ItemBorder" Property="Background" Value="#252525"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <!-- Стиль для кнопки выхода (красный акцент при наведении) -->
-        <Style x:Key="TrayDangerItemStyle" TargetType="Button" BasedOn="{StaticResource TrayActionItemStyle}">
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="ItemBorder"
-                                Background="Transparent"
-                                BorderBrush="Transparent"
-                                BorderThickness="1"
-                                CornerRadius="8"
-                                Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                              VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="ItemBorder" Property="Background" Value="#2A1215"/>
-                                <Setter TargetName="ItemBorder" Property="BorderBrush" Value="#5C242A"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-    </Window.Resources>
-
-    <Border x:Name="MainBorder"
-            Background="#121212"
-            CornerRadius="14"
-            BorderBrush="#2A2A2A"
-            BorderThickness="1"
-            Margin="12"
-            RenderTransformOrigin="0.5,1">
-        <Border.RenderTransform>
-            <TransformGroup>
-                <ScaleTransform x:Name="MenuScale" ScaleX="1" ScaleY="1"/>
-                <TranslateTransform x:Name="MenuTranslate" Y="0"/>
-            </TransformGroup>
-        </Border.RenderTransform>
-        <Border.Effect>
-            <DropShadowEffect Color="Black" BlurRadius="22" ShadowDepth="6" Opacity="0.65"/>
-        </Border.Effect>
-
-        <StackPanel Margin="14,14,14,12">
-            <!-- 1. ШАПКА: НАЗВАНИЕ, СТАТУС И ВЕРСИЯ -->
-            <Grid Margin="2,0,2,10">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-
-                <Border x:Name="TrayLogoBorder" Grid.Column="0" Width="28" Height="28" CornerRadius="7" Background="#1A2E1A" BorderBrush="#107C10" BorderThickness="1" Margin="0,0,9,0">
-                    <TextBlock x:Name="TrayLogoIcon" Text="&#xE945;" FontFamily="Segoe MDL2 Assets" Foreground="#4CAF50" FontSize="13" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                </Border>
-
-                <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                    <TextBlock Text="Zapret for ADHD" Foreground="White" FontSize="13.5" FontWeight="Bold" LineHeight="16"/>
-                    <TextBlock x:Name="TxtSubStatus" Text="Службы остановлены" Foreground="#888888" FontSize="11" Margin="0,1,0,0"/>
-                </StackPanel>
-
-                <Border Grid.Column="2" Background="#1A1A1A" BorderBrush="#2A2A2A" BorderThickness="1" CornerRadius="5" Padding="6,2" VerticalAlignment="Center">
-                    <TextBlock x:Name="TxtTrayVersion" Text="v4.0" Foreground="#777777" FontFamily="Consolas" FontSize="11" FontWeight="SemiBold"/>
-                </Border>
-            </Grid>
-
-            <!-- 2. ПИЛЮЛИ СТАТУСА МОДУЛЕЙ И АКТИВНОГО ПРОФИЛЯ -->
-            <Grid Margin="0,0,0,10">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                </Grid.ColumnDefinitions>
-
-                <!-- Индикатор Zapret -->
-                <Border Grid.Column="0" Background="#181818" BorderBrush="#262626" BorderThickness="1" CornerRadius="6" Padding="7,4" Margin="0,0,5,0">
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <Ellipse x:Name="DotZapret" Width="6" Height="6" Fill="#D13438" Margin="0,0,5,0" VerticalAlignment="Center"/>
-                        <TextBlock Text="Zapret" Foreground="#CCCCCC" FontSize="10.5" FontWeight="SemiBold"/>
-                    </StackPanel>
-                </Border>
-
-                <!-- Индикатор TgWsProxy -->
-                <Border Grid.Column="1" Background="#181818" BorderBrush="#262626" BorderThickness="1" CornerRadius="6" Padding="7,4" Margin="0,0,5,0">
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <Ellipse x:Name="DotProxy" Width="6" Height="6" Fill="#D13438" Margin="0,0,5,0" VerticalAlignment="Center"/>
-                        <TextBlock Text="Proxy" Foreground="#CCCCCC" FontSize="10.5" FontWeight="SemiBold"/>
-                    </StackPanel>
-                </Border>
-
-                <!-- Интерактивный переключатель .bat профиля прямо из трея -->
-                <Border Grid.Column="2" Background="#181818" BorderBrush="#262626" BorderThickness="1" CornerRadius="6" Padding="3,2">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="20"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="20"/>
-                        </Grid.ColumnDefinitions>
-
-                        <Button Grid.Column="0" Click="BtnPrevProfile_Click" ToolTip="Предыдущий конфиг" Cursor="Hand" Background="Transparent" BorderThickness="0">
-                            <Button.Template>
-                                <ControlTemplate TargetType="Button">
-                                    <Border Background="{TemplateBinding Background}" CornerRadius="4">
-                                        <TextBlock Text="&#xE76B;" FontFamily="Segoe MDL2 Assets" Foreground="#888888" FontSize="9" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                    </Border>
-                                </ControlTemplate>
-                            </Button.Template>
-                        </Button>
-
-                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="2,0">
-                            <TextBlock x:Name="TrayProfileIcon" Text="&#xE756;" FontFamily="Segoe MDL2 Assets" Foreground="#4CAF50" FontSize="9.5" Margin="0,0,4,0" VerticalAlignment="Center"/>
-                            <TextBlock x:Name="TxtActiveProfile" Text="general.bat" Foreground="White" FontFamily="Consolas" FontSize="10.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" MaxWidth="92" ToolTip="Активный профиль обхода"/>
-                        </StackPanel>
-
-                        <Button Grid.Column="2" Click="BtnNextProfile_Click" ToolTip="Следующий конфиг" Cursor="Hand" Background="Transparent" BorderThickness="0">
-                            <Button.Template>
-                                <ControlTemplate TargetType="Button">
-                                    <Border Background="{TemplateBinding Background}" CornerRadius="4">
-                                        <TextBlock Text="&#xE76C;" FontFamily="Segoe MDL2 Assets" Foreground="#888888" FontSize="9" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                    </Border>
-                                </ControlTemplate>
-                            </Button.Template>
-                        </Button>
-                    </Grid>
-                </Border>
-            </Grid>
-
-            <!-- 3. ГЛАВНАЯ КНОПКА ВКЛЮЧЕНИЯ / ОСТАНОВКИ ОБХОДА -->
-            <Button x:Name="BtnTogglePower"
-                    Background="#162919"
-                    BorderThickness="1"
-                    BorderBrush="#107C10"
-                    Cursor="Hand"
-                    Margin="0,0,0,10"
-                    Padding="0,11"
-                    HorizontalAlignment="Stretch"
-                    Click="BtnTogglePower_Click">
-                <Button.Template>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="PowerBorder"
-                                Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="10"
-                                Padding="{TemplateBinding Padding}">
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <TextBlock x:Name="PowerIcon" Text="&#xE7E8;" FontFamily="Segoe MDL2 Assets" FontSize="15" Foreground="#4CAF50" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                                <TextBlock x:Name="PowerText" Text="Включить обход" Foreground="White" FontSize="13.5" FontWeight="Bold" VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="PowerBorder" Property="Opacity" Value="0.9"/>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="PowerBorder" Property="Opacity" Value="0.78"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Button.Template>
-            </Button>
-
-            <!-- 4. БЕНТО-ПАНЕЛЬ ТЕЛЕМЕТРИИ: СКОРОСТЬ СЕТИ И ПИНГ -->
-            <Border Background="#171717" BorderBrush="#242424" BorderThickness="1" CornerRadius="10" Padding="10,8" Margin="0,0,0,10">
-                <StackPanel>
-                    <!-- Строка 1: Входящий и Исходящий трафик -->
-                    <Grid Margin="0,0,0,7">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="1"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-
-                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="&#xE896;" FontFamily="Segoe MDL2 Assets" Foreground="#4CAF50" FontSize="12" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                            <StackPanel>
-                                <TextBlock Text="Входящий" Foreground="#777777" FontSize="9.5"/>
-                                <TextBlock x:Name="TxtDownloadSpeed" Text="0.0 Мбит/с" Foreground="White" FontFamily="Consolas" FontSize="11.5" FontWeight="Bold"/>
-                            </StackPanel>
-                        </StackPanel>
-
-                        <Rectangle Grid.Column="1" Fill="#262626" Margin="0,2"/>
-
-                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Right">
-                            <StackPanel Margin="0,0,6,0">
-                                <TextBlock Text="Исходящий" Foreground="#777777" FontSize="9.5" HorizontalAlignment="Right"/>
-                                <TextBlock x:Name="TxtUploadSpeed" Text="0.0 Мбит/с" Foreground="White" FontFamily="Consolas" FontSize="11.5" FontWeight="Bold" HorizontalAlignment="Right"/>
-                            </StackPanel>
-                            <TextBlock Text="&#xE898;" FontFamily="Segoe MDL2 Assets" Foreground="#60A5FA" FontSize="12" VerticalAlignment="Center"/>
-                        </StackPanel>
-                    </Grid>
-
-                    <Rectangle Height="1" Fill="#222222" Margin="0,0,0,7"/>
-
-                    <!-- Строка 2: Пинг + Кнопка быстрого обновления -->
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-
-                        <TextBlock Grid.Column="0" Text="&#xE916;" FontFamily="Segoe MDL2 Assets" Foreground="#888888" FontSize="12.5" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                        <TextBlock Grid.Column="1" Text="Пинг (EU):" Foreground="#BBBBBB" FontSize="12" VerticalAlignment="Center"/>
-                        <TextBlock Grid.Column="2" x:Name="PingText" Text="..." Foreground="#4CAF50" FontFamily="Consolas" FontSize="12.5" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,6,0"/>
-
-                        <Button Grid.Column="3" Click="BtnRefreshPing_Click" ToolTip="Обновить пинг" Cursor="Hand" Background="#222222" BorderBrush="#333333" BorderThickness="1" Width="22" Height="22">
-                            <Button.Template>
-                                <ControlTemplate TargetType="Button">
-                                    <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="5">
-                                        <TextBlock Text="&#xE149;" FontFamily="Segoe MDL2 Assets" Foreground="#AAAAAA" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                    </Border>
-                                </ControlTemplate>
-                            </Button.Template>
-                        </Button>
-                    </Grid>
-                </StackPanel>
-            </Border>
-
-            <Rectangle Height="1" Fill="#222222" Margin="2,0,2,5"/>
-
-            <!-- 5. БЫСТРЫЕ ДЕЙСТВИЯ -->
-            <Button x:Name="BtnRestartBypass" Style="{StaticResource TrayActionItemStyle}" Click="BtnRestartBypass_Click" Margin="0,0,0,2">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="&#xE777;" FontFamily="Segoe MDL2 Assets" Foreground="#60A5FA" FontSize="14" Margin="0,0,10,0" VerticalAlignment="Center"/>
-                    <TextBlock Grid.Column="1" Text="Перезапустить службы" Foreground="#E0E0E0" FontSize="12.5" VerticalAlignment="Center"/>
-                </Grid>
-            </Button>
-
-            <Button x:Name="BtnOpenApp" Style="{StaticResource TrayActionItemStyle}" Click="BtnOpenApp_Click" Margin="0,0,0,2">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="&#xE8A7;" FontFamily="Segoe MDL2 Assets" Foreground="#999999" FontSize="14" Margin="0,0,10,0" VerticalAlignment="Center"/>
-                    <TextBlock Grid.Column="1" Text="Открыть панель управления" Foreground="#E0E0E0" FontSize="12.5" VerticalAlignment="Center"/>
-                    <TextBlock Grid.Column="2" Text="&#xE76C;" FontFamily="Segoe MDL2 Assets" Foreground="#555555" FontSize="10" VerticalAlignment="Center"/>
-                </Grid>
-            </Button>
-
-            <Button x:Name="BtnExit" Style="{StaticResource TrayDangerItemStyle}" Click="BtnExit_Click">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="&#xF3B1;" FontFamily="Segoe MDL2 Assets" Foreground="#F44336" FontSize="14" Margin="0,0,10,0" VerticalAlignment="Center"/>
-                    <TextBlock Grid.Column="1" Text="Полностью закрыть" Foreground="#F44336" FontSize="12.5" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                </Grid>
-            </Button>
-        </StackPanel>
-    </Border>
-</Window>
-
-////////////////////////////////////////////////////////////////////////////////
-// ФАЙЛ: Views\TrayMenuWindow.xaml.cs
-////////////////////////////////////////////////////////////////////////////////
-
-using System;
-using System.Diagnostics;
-using System.IO;
-using System.Windows;
-using System.Windows.Media;
-using System.Windows.Media.Animation;
-using ZapretGUI.Core;
-
-namespace ZapretGUI.Views
-{
-    public partial class TrayMenuWindow : Window
-    {
-        private bool _isRunning = false;
-
-        public TrayMenuWindow()
-        {
-            InitializeComponent();
-            TxtTrayVersion.Text = AppConstants.AppVersion;
-            BypassController.Current.NetMonitor.StatsUpdated += OnNetStatsUpdated;
-        }
-
-        private void OnNetStatsUpdated(double rxMbps, double txMbps)
-        {
-            if (!IsVisible) return;
-
-            Dispatcher.InvokeAsync(() =>
-            {
-                TxtDownloadSpeed.Text = $"{rxMbps:0.0} Мбит/с";
-                TxtUploadSpeed.Text = $"{txMbps:0.0} Мбит/с";
-                SyncStatus();
-            });
-        }
-
-        public void PlayPopupAnimation()
-        {
-            var duration = new Duration(TimeSpan.FromMilliseconds(220));
-            var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
-
-            MainBorder.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0.0, 1.0, duration) { EasingFunction = ease });
-            MenuScale.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(0.88, 1.0, duration) { EasingFunction = ease });
-            MenuScale.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(0.95, 1.0, duration) { EasingFunction = ease });
-            MenuTranslate.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(12.0, 0.0, duration) { EasingFunction = ease });
-        }
-
-        public void RefreshState()
-        {
-            SyncStatus();
-            CheckPingAsync();
-        }
-
-        private void Window_Deactivated(object sender, EventArgs e)
-        {
-            this.Hide();
-        }
-
-        private async void CheckPingAsync()
-        {
-            PingText.Text = "...";
-            PingText.Foreground = UIHelper.GetBrushFromHex("#888888");
-
-            try
-            {
-                var pingMs = await BypassController.Current.CheckPingAsync();
-
-                if (pingMs >= 0)
-                {
-                    PingText.Text = $"{pingMs} мс";
-
-                    if (pingMs < 80)
-                        PingText.Foreground = UIHelper.GetSuccessBrush();
-                    else if (pingMs < 150)
-                        PingText.Foreground = UIHelper.GetBrushFromHex("#FF8C00");
-                    else
-                        PingText.Foreground = UIHelper.GetErrorBrush();
-                }
-                else
-                {
-                    PingText.Text = "недоступен";
-                    PingText.Foreground = UIHelper.GetErrorBrush();
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Ошибка проверки пинга из трея: {ex.Message}");
-                PingText.Text = "ошибка";
-                PingText.Foreground = UIHelper.GetErrorBrush();
-            }
-        }
-
-        private void SyncStatus()
-        {
-            bool zapretRun = BypassController.Current.Zapret.IsRunning;
-            bool proxyRun = BypassController.Current.TgProxy.IsRunning;
-            _isRunning = zapretRun || proxyRun;
-
-            var accentBrush = UIHelper.GetSuccessBrush();
-            var accentLightBrush = UIHelper.GetSuccessLightBrush();
-            var accentBgBrush = UIHelper.GetBrushFromHex(UIHelper.GetAccentDarkBgHex());
-            var offlineBrush = UIHelper.GetErrorBrush();
-
-            if (TrayLogoBorder != null)
-            {
-                TrayLogoBorder.Background = accentBgBrush;
-                TrayLogoBorder.BorderBrush = accentBrush;
-            }
-            if (TrayLogoIcon != null)
-                TrayLogoIcon.Foreground = accentLightBrush;
-            if (TrayProfileIcon != null)
-                TrayProfileIcon.Foreground = accentLightBrush;
-
-            DotZapret.Fill = zapretRun ? accentLightBrush : offlineBrush;
-            DotProxy.Fill = proxyRun ? accentLightBrush : offlineBrush;
-
-            TxtActiveProfile.Text = string.IsNullOrWhiteSpace(SettingsManager.Current.SelectedProfileName)
-                ? "general.bat"
-                : SettingsManager.Current.SelectedProfileName;
-
-            if (zapretRun && proxyRun)
-                TxtSubStatus.Text = "Zapret + TgWsProxy активны";
-            else if (zapretRun)
-                TxtSubStatus.Text = "Обход Zapret активен";
-            else if (proxyRun)
-                TxtSubStatus.Text = "Прокси Telegram активен";
-            else
-                TxtSubStatus.Text = "Службы остановлены";
-
-            TxtSubStatus.Foreground = _isRunning
-                ? accentLightBrush
-                : UIHelper.GetBrushFromHex("#888888");
-
-            UpdateToggleButtonVisuals();
-        }
-
-        private void BtnTogglePower_Click(object sender, RoutedEventArgs e)
-        {
-            AudioHelper.PlayClick();
-            _isRunning = !_isRunning;
-            UpdateToggleButtonVisuals();
-
-            if (System.Windows.Application.Current.MainWindow is MainWindow mainWindow)
-                mainWindow.ToggleBypass();
-
-            Dispatcher.InvokeAsync(async () =>
-            {
-                await System.Threading.Tasks.Task.Delay(450);
-                SyncStatus();
-            });
-        }
-
-        private void BtnRefreshPing_Click(object sender, RoutedEventArgs e)
-        {
-            AudioHelper.PlayClick();
-            CheckPingAsync();
-        }
-
-        private async void BtnRestartBypass_Click(object sender, RoutedEventArgs e)
-        {
-            AudioHelper.PlayClick();
-            TxtSubStatus.Text = "Перезапуск служб...";
-            TxtSubStatus.Foreground = UIHelper.GetBrushFromHex("#FF8C00");
-
-            if (System.Windows.Application.Current.MainWindow is MainWindow mainWindow)
-            {
-                await mainWindow.RestartBypassAsync();
-            }
-            SyncStatus();
-        }
-
-        private void UpdateToggleButtonVisuals()
-        {
-            BtnTogglePower.ApplyTemplate();
-
-            var powerIcon = (System.Windows.Controls.TextBlock)BtnTogglePower.Template.FindName("PowerIcon", BtnTogglePower);
-            var powerText = (System.Windows.Controls.TextBlock)BtnTogglePower.Template.FindName("PowerText", BtnTogglePower);
-
-            if (_isRunning)
-            {
-                BtnTogglePower.Background = UIHelper.GetBrushFromHex("#2A1215");
-                BtnTogglePower.BorderBrush = UIHelper.GetBrushFromHex("#D13438");
-
-                if (powerIcon != null)
-                {
-                    powerIcon.Foreground = UIHelper.GetBrushFromHex("#F44336");
-                    powerIcon.Text = "\xE71A";
-                }
-                if (powerText != null)
-                    powerText.Text = "Остановить обход";
-            }
-            else
-            {
-                BtnTogglePower.Background = UIHelper.GetBrushFromHex(UIHelper.GetAccentDarkBgHex());
-                BtnTogglePower.BorderBrush = UIHelper.GetSuccessBrush();
-
-                if (powerIcon != null)
-                {
-                    powerIcon.Foreground = UIHelper.GetSuccessLightBrush();
-                    powerIcon.Text = "\xE7E8";
-                }
-                if (powerText != null)
-                    powerText.Text = "Включить обход";
-            }
-        }
-
-        private void BtnOpenApp_Click(object sender, RoutedEventArgs e)
-        {
-            AudioHelper.PlayClick();
-            if (System.Windows.Application.Current.MainWindow != null)
-            {
-                System.Windows.Application.Current.MainWindow.Show();
-                System.Windows.Application.Current.MainWindow.WindowState = WindowState.Normal;
-                System.Windows.Application.Current.MainWindow.Activate();
-            }
-            this.Hide();
-        }
-
-        private void BtnExit_Click(object sender, RoutedEventArgs e)
-        {
-            AudioHelper.PlayClick();
-            BypassController.Current.NetMonitor.StatsUpdated -= OnNetStatsUpdated;
-            System.Windows.Application.Current.Shutdown();
-        }
-        private void BtnPrevProfile_Click(object sender, RoutedEventArgs e)
-        {
-            _ = CycleProfileAsync(-1);
-        }
-
-        private void BtnNextProfile_Click(object sender, RoutedEventArgs e)
-        {
-            _ = CycleProfileAsync(1);
-        }
-
-        private async System.Threading.Tasks.Task CycleProfileAsync(int dir)
-        {
-            AudioHelper.PlayClick();
-            var profiles = BypassController.Current.Zapret.GetAvailableProfiles();
-            if (profiles.Count == 0) return;
-
-            var current = SettingsManager.Current.SelectedProfileName ?? "general.bat";
-            var idx = profiles.FindIndex(p => string.Equals(p, current, StringComparison.OrdinalIgnoreCase));
-            var nextIdx = idx < 0 ? 0 : (idx + dir + profiles.Count) % profiles.Count;
-            var nextProfile = profiles[nextIdx];
-
-            TxtActiveProfile.Text = nextProfile;
-
-            if (System.Windows.Application.Current.MainWindow is MainWindow mainWindow)
-            {
-                if (BypassController.Current.Zapret.IsRunning)
-                {
-                    TxtSubStatus.Text = $"Запуск {nextProfile}...";
-                    TxtSubStatus.Foreground = UIHelper.GetBrushFromHex("#FF8C00");
-                }
-                await mainWindow.SelectProfileFromTrayAsync(nextProfile);
-            }
-            SyncStatus();
         }
     }
 }
@@ -8769,6 +8405,42 @@ body[data-accent="crimson"] {
 ////////////////////////////////////////////////////////////////////////////////
 // ФАЙЛ: wwwroot\js\app.js
 ////////////////////////////////////////////////////////////////////////////////
+
+function sendCmd(action, data = {}) {
+    const payload = JSON.stringify({ action, ...data });
+    if (window.external && typeof window.external.sendMessage === 'function') {
+        window.external.sendMessage(payload);
+    } else if (window.chrome && window.chrome.webview) {
+        window.chrome.webview.postMessage(payload);
+    }
+}
+
+// Приём сообщений из бэкенда
+if (window.external && typeof window.external.receiveMessage === 'function') {
+    window.external.receiveMessage(rawMsg => {
+        try {
+            const msg = typeof rawMsg === 'string' ? JSON.parse(rawMsg) : rawMsg;
+            if (typeof handleBackendEvent === 'function') {
+                handleBackendEvent(msg.type, msg.data);
+            }
+        } catch (e) {
+            console.error('Ошибка Photino message:', e);
+        }
+    });
+}
+
+// Обработка горячей клавиши Ctrl+K внутри WebView
+window.addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && e.code === 'KeyK') {
+        e.preventDefault();
+        if (typeof openCommandPalette === 'function') {
+            const modal = document.getElementById('cmd-palette-modal');
+            if (modal && modal.classList.contains('open')) closeCommandPalette();
+            else openCommandPalette();
+        }
+    }
+});
+
 
 // =========================================================================
 // 1. SPLASH WINDOW (МАТРИЧНЫЙ ТЕРМИНАЛ ЗАГРУЗКИ)

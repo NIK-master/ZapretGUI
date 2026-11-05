@@ -3,15 +3,12 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
-using System.Runtime.InteropServices;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Windows;
-using System.Windows.Interop;
-using System.Windows.Media;
-using Microsoft.Web.WebView2.Wpf;
+using System.Windows.Forms;
 
 namespace ZapretGUI.Core
 {
@@ -22,8 +19,8 @@ namespace ZapretGUI.Core
 
         [DllImport("user32.dll")]
         private static extern IntPtr SendMessage(IntPtr hWnd, int Msg, int wParam, int lParam);
-        private readonly WebView2 _webView;
-        private readonly Window _mainWindow;
+
+        private readonly MainWindow _mainWindow;
         private readonly ModManager _modManager = new ModManager();
         private bool _isFirstRun;
 
@@ -38,16 +35,14 @@ namespace ZapretGUI.Core
             PropertyNameCaseInsensitive = true
         };
 
-        public WebBridge(WebView2 webView, Window mainWindow, bool isFirstRun = false)
+        public WebBridge(MainWindow mainWindow, bool isFirstRun = false)
         {
-            _webView = webView;
             _mainWindow = mainWindow;
             _isFirstRun = isFirstRun;
 
             _modManager.InitializeFolders();
             SetupLiveModsWatcher();
 
-            // Подключаем веб-диалоги для UpdateManager и UIHelper
             UIHelper.WebAlertHandler = (title, message, isError) =>
             {
                 SendEvent("alert", new { title, message, isError });
@@ -170,23 +165,27 @@ namespace ZapretGUI.Core
         {
             try
             {
-                _mainWindow.Dispatcher.InvokeAsync(() =>
+                var json = JsonSerializer.Serialize(new { type = eventName, data = payload }, _jsonOptions);
+                _mainWindow.InvokeOnUI(() =>
                 {
-                    if (_webView.CoreWebView2 != null)
+                    try
                     {
-                        var json = JsonSerializer.Serialize(new { type = eventName, data = payload }, _jsonOptions);
-                        _webView.CoreWebView2.PostWebMessageAsJson(json);
+                        _mainWindow.Window.SendWebMessage(json);
                     }
+                    catch { }
                 });
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Ошибка отправки в WebView2: {ex.Message}");
+                Debug.WriteLine($"Ошибка отправки в Photino: {ex.Message}");
             }
         }
 
-        public async void HandleMessage(string rawJson)
+        public async void HandleMessage(string? rawJson)
         {
+            if (string.IsNullOrWhiteSpace(rawJson))
+                return;
+
             try
             {
                 using var doc = JsonDocument.Parse(rawJson);
@@ -194,10 +193,14 @@ namespace ZapretGUI.Core
 
                 if (root.ValueKind == JsonValueKind.String)
                 {
-                    using var innerDoc = JsonDocument.Parse(root.GetString() ?? "{}");
+                    var innerStr = root.GetString();
+                    if (string.IsNullOrWhiteSpace(innerStr))
+                        return;
+
+                    using var innerDoc = JsonDocument.Parse(innerStr);
                     await ProcessActionAsync(innerDoc.RootElement.Clone());
                 }
-                else
+                else if (root.ValueKind == JsonValueKind.Object)
                 {
                     await ProcessActionAsync(root.Clone());
                 }
@@ -234,11 +237,11 @@ namespace ZapretGUI.Core
                     break;
 
                 case "windowDrag":
-                    _mainWindow.Dispatcher.Invoke(() =>
+                    _mainWindow.InvokeOnUI(() =>
                     {
                         try
                         {
-                            var hwnd = new WindowInteropHelper(_mainWindow).Handle;
+                            var hwnd = _mainWindow.WindowHandle;
                             ReleaseCapture();
                             SendMessage(hwnd, 0xA1 /* WM_NCLBUTTONDOWN */, 0x2 /* HT_CAPTION */, 0);
                         }
@@ -247,11 +250,11 @@ namespace ZapretGUI.Core
                     break;
 
                 case "windowMinimize":
-                    _mainWindow.Dispatcher.Invoke(() => _mainWindow.WindowState = WindowState.Minimized);
+                    _mainWindow.MinimizeWindow();
                     break;
 
                 case "windowClose":
-                    _mainWindow.Dispatcher.Invoke(() => _mainWindow.Close());
+                    _mainWindow.CloseWindow();
                     break;
 
                 case "playClick":
@@ -454,8 +457,7 @@ namespace ZapretGUI.Core
 
                 case "unloadWinDivert":
                     var msgUnload = ServiceToolsManager.UnloadWinDivertDriver();
-                    if (_mainWindow is MainWindow mwUnload)
-                        mwUnload.UpdateIndicators(false, false);
+                    _mainWindow.UpdateIndicators(false, false);
                     SendEvent("log", new { message = $"🛡 [System] {msgUnload}", time = DateTime.Now.ToString("HH:mm:ss") });
                     SendEvent("alert", new { title = "Выгрузка драйвера WinDivert", message = msgUnload, isError = false });
                     break;
@@ -505,8 +507,7 @@ namespace ZapretGUI.Core
             SettingsManager.Current.FocusMode = focusMode;
             SettingsManager.Current.AccentTheme = accentTheme;
             UIHelper.ApplyThemeColors();
-            if (_mainWindow is MainWindow mwWiz)
-                mwWiz.RefreshAppIcon();
+            _mainWindow.RefreshAppIcon();
 
             WizLog("[Config] Сохранение пользовательских настроек UI...");
             SettingsManager.Save();
@@ -646,8 +647,8 @@ namespace ZapretGUI.Core
         {
             Action stopServicesAction = () =>
             {
-                if (_mainWindow is MainWindow mw && mw.IsBypassRunning())
-                    mw.ToggleBypass();
+                if (_mainWindow.IsBypassRunning())
+                    _mainWindow.ToggleBypass();
             };
 
             var progress = new Progress<string>(status =>
@@ -672,8 +673,7 @@ namespace ZapretGUI.Core
                 ServiceToolsManager.SyncGameFilterFile();
                 UIHelper.ApplyThemeColors();
 
-                if (_mainWindow is MainWindow mw)
-                    mw.AnimateWindowSize(SettingsManager.Current.CompactMode);
+                _mainWindow.AnimateWindowSize(SettingsManager.Current.CompactMode);
 
                 await SendInitialStateAsync();
                 SendEvent("alert", new { title = "Готово", message = "Настройки успешно сброшены к состоянию по умолчанию.", isError = false });
@@ -982,14 +982,14 @@ namespace ZapretGUI.Core
         private async Task HandleImportModAsync()
         {
             string? selectedFile = null;
-            _mainWindow.Dispatcher.Invoke(() =>
+            _mainWindow.InvokeOnUI(() =>
             {
-                var openFileDialog = new Microsoft.Win32.OpenFileDialog
+                using var openFileDialog = new OpenFileDialog
                 {
                     Filter = "Архивы модов (*.zip;*.netfix-mod)|*.zip;*.netfix-mod|Все файлы (*.*)|*.*",
                     Title = "Выберите архив с модом"
                 };
-                if (openFileDialog.ShowDialog() == true)
+                if (openFileDialog.ShowDialog() == DialogResult.OK)
                     selectedFile = openFileDialog.FileName;
             });
 
@@ -1092,15 +1092,15 @@ namespace ZapretGUI.Core
             var modName = root.TryGetProperty("name", out var n) ? n.GetString() ?? id : id;
 
             string? savePath = null;
-            _mainWindow.Dispatcher.Invoke(() =>
+            _mainWindow.InvokeOnUI(() =>
             {
-                var saveFileDialog = new Microsoft.Win32.SaveFileDialog
+                using var saveFileDialog = new SaveFileDialog
                 {
                     Filter = "Архивы модов (*.zip)|*.zip|Мод NetFix (*.netfix-mod)|*.netfix-mod|Все файлы (*.*)|*.*",
                     Title = "Экспорт мода",
                     FileName = $"{id}_export.zip"
                 };
-                if (saveFileDialog.ShowDialog() == true)
+                if (saveFileDialog.ShowDialog() == DialogResult.OK)
                     savePath = saveFileDialog.FileName;
             });
 
@@ -1260,16 +1260,16 @@ namespace ZapretGUI.Core
         private void HandleExportLogs(JsonElement root)
         {
             var logText = root.GetProperty("text").GetString() ?? "";
-            _mainWindow.Dispatcher.Invoke(() =>
+            _mainWindow.InvokeOnUI(() =>
             {
-                var saveFileDialog = new Microsoft.Win32.SaveFileDialog
+                using var saveFileDialog = new SaveFileDialog
                 {
                     Filter = "Текстовые файлы (*.txt)|*.txt|Все файлы (*.*)|*.*",
                     DefaultExt = ".txt",
                     FileName = $"Zapret_Log_{DateTime.Now:yyyyMMdd_HHmmss}.txt"
                 };
 
-                if (saveFileDialog.ShowDialog() == true)
+                if (saveFileDialog.ShowDialog() == DialogResult.OK)
                 {
                     File.WriteAllText(saveFileDialog.FileName, logText);
                     SendEvent("alert", new { title = "Экспорт завершен", message = "Лог событий успешно сохранен в файл!", isError = false });
@@ -1313,7 +1313,7 @@ namespace ZapretGUI.Core
             {
                 bool top = aot.GetBoolean();
                 cur.AlwaysOnTop = top;
-                _mainWindow.Dispatcher.Invoke(() => _mainWindow.Topmost = top);
+                _mainWindow.InvokeOnUI(() => _mainWindow.Window.SetTopMost(top));
             }
 
             bool themeChanged = false;
@@ -1333,29 +1333,19 @@ namespace ZapretGUI.Core
                 if (cur.CompactMode != newCompact)
                 {
                     cur.CompactMode = newCompact;
-                    if (_mainWindow is MainWindow mw)
-                        mw.AnimateWindowSize(newCompact);
+                    _mainWindow.AnimateWindowSize(newCompact);
                 }
             }
 
             if (s.TryGetProperty("hardwareAcceleration", out var ha))
             {
-                bool useGpu = ha.GetBoolean();
-                if (cur.HardwareAcceleration != useGpu)
-                {
-                    cur.HardwareAcceleration = useGpu;
-                    _mainWindow.Dispatcher.Invoke(() =>
-                    {
-                        RenderOptions.ProcessRenderMode = useGpu ? RenderMode.Default : RenderMode.SoftwareOnly;
-                    });
-                }
+                cur.HardwareAcceleration = ha.GetBoolean();
             }
 
             if (themeChanged)
             {
                 UIHelper.ApplyThemeColors();
-                if (_mainWindow is MainWindow mwIcon)
-                    mwIcon.RefreshAppIcon();
+                _mainWindow.RefreshAppIcon();
             }
 
             if (s.TryGetProperty("pingUrl", out var pu))
@@ -1375,18 +1365,19 @@ namespace ZapretGUI.Core
 
             SettingsManager.Save();
         }
+
         private void HandleExportConfigBackup()
         {
-            _mainWindow.Dispatcher.Invoke(() =>
+            _mainWindow.InvokeOnUI(() =>
             {
-                var sfd = new Microsoft.Win32.SaveFileDialog
+                using var sfd = new SaveFileDialog
                 {
                     Filter = "Конфигурация Zapret (*.json)|*.json",
                     Title = "Экспорт резервной копии настроек",
                     FileName = $"ZapretForADHD_Config_{DateTime.Now:yyyyMMdd}.json"
                 };
 
-                if (sfd.ShowDialog() == true)
+                if (sfd.ShowDialog() == DialogResult.OK)
                 {
                     try
                     {
@@ -1405,14 +1396,14 @@ namespace ZapretGUI.Core
         private async Task HandleImportConfigBackupAsync()
         {
             string? selectedFile = null;
-            _mainWindow.Dispatcher.Invoke(() =>
+            _mainWindow.InvokeOnUI(() =>
             {
-                var ofd = new Microsoft.Win32.OpenFileDialog
+                using var ofd = new OpenFileDialog
                 {
                     Filter = "Конфигурация Zapret (*.json)|*.json",
                     Title = "Импорт резервной копии настроек"
                 };
-                if (ofd.ShowDialog() == true)
+                if (ofd.ShowDialog() == DialogResult.OK)
                     selectedFile = ofd.FileName;
             });
 
@@ -1429,14 +1420,11 @@ namespace ZapretGUI.Core
                 SettingsManager.Save();
                 UIHelper.ApplyThemeColors();
 
-                _mainWindow.Dispatcher.Invoke(() =>
+                _mainWindow.InvokeOnUI(() =>
                 {
-                    _mainWindow.Topmost = SettingsManager.Current.AlwaysOnTop;
-                    if (_mainWindow is MainWindow mw)
-                    {
-                        mw.AnimateWindowSize(SettingsManager.Current.CompactMode);
-                        mw.RefreshAppIcon();
-                    }
+                    _mainWindow.Window.SetTopMost(SettingsManager.Current.AlwaysOnTop);
+                    _mainWindow.AnimateWindowSize(SettingsManager.Current.CompactMode);
+                    _mainWindow.RefreshAppIcon();
                 });
 
                 await SendInitialStateAsync();
@@ -1448,6 +1436,7 @@ namespace ZapretGUI.Core
                 SendEvent("alert", new { title = "Ошибка импорта", message = $"Не удалось загрузить файл настроек:\n{ex.Message}", isError = true });
             }
         }
+
         public void Dispose()
         {
             _watcherDebounceCts?.Cancel();
@@ -1455,6 +1444,5 @@ namespace ZapretGUI.Core
             _modsWatcher?.Dispose();
             _pendingConfirmTcs?.TrySetResult(false);
         }
-
     }
 }

@@ -7,10 +7,6 @@ using System.Drawing.Text;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
-using System.Windows;
-using System.Windows.Interop;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
 
 namespace ZapretGUI.Core
 {
@@ -19,16 +15,10 @@ namespace ZapretGUI.Core
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         public static extern bool DestroyIcon(IntPtr handle);
 
-        private static readonly BrushConverter _brushConverter = new BrushConverter();
-
-        // Кэш готовых иконок в оперативной памяти на всё время работы программы
-        private static readonly ConcurrentDictionary<string, (Icon trayIcon, ImageSource wpfIcon)> _iconCache = new();
+        private static readonly ConcurrentDictionary<string, (Icon trayIcon, string icoFilePath)> _iconCache = new();
 
         public static Action<string, string, bool>? WebAlertHandler { get; set; }
         public static Func<string, string, string, bool, Task<bool>>? WebConfirmHandler { get; set; }
-
-        public static SolidColorBrush GetBrushFromHex(string hex)
-            => (SolidColorBrush)_brushConverter.ConvertFromString(hex)!;
 
         public static string GetAccentHex(bool light = false)
         {
@@ -54,34 +44,27 @@ namespace ZapretGUI.Core
             };
         }
 
-        public static SolidColorBrush GetSuccessBrush()
-            => GetBrushFromHex(GetAccentHex(light: false));
+        public static Color GetAccentColor(bool light = false)
+            => ColorTranslator.FromHtml(GetAccentHex(light));
 
-        public static SolidColorBrush GetSuccessLightBrush()
-            => GetBrushFromHex(GetAccentHex(light: true));
+        public static Color GetAccentDarkBgColor()
+            => ColorTranslator.FromHtml(GetAccentDarkBgHex());
 
-        public static SolidColorBrush GetErrorBrush()
-            => GetBrushFromHex("#D13438");
+        public static Color GetErrorColor()
+            => ColorTranslator.FromHtml("#D13438");
 
         public static void ApplyThemeColors()
         {
-            var res = System.Windows.Application.Current?.Resources;
-            if (res == null)
-                return;
-
-            res["BrandSuccessBrush"] = GetSuccessBrush();
-            res["BrandErrorBrush"] = GetErrorBrush();
         }
 
-        public static (Icon trayIcon, ImageSource wpfIcon) GetOrCreateAppIcon(bool isRunning)
+        public static (Icon trayIcon, string icoFilePath) GetOrCreateAppIcon(bool isRunning)
         {
             var theme = (SettingsManager.Current.AccentTheme ?? "green").ToLowerInvariant();
             if (theme == "crimson") theme = "cyan";
 
             var cacheKey = $"{theme}_{(isRunning ? "on" : "off")}";
 
-            // 1. Если иконка уже в ОЗУ — отдаём мгновенно за 0 мс
-            if (_iconCache.TryGetValue(cacheKey, out var cached))
+            if (_iconCache.TryGetValue(cacheKey, out var cached) && File.Exists(cached.icoFilePath))
                 return cached;
 
             var cacheDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", "Cache", "Icons");
@@ -90,7 +73,6 @@ namespace ZapretGUI.Core
 
             Bitmap bmp;
 
-            // 2. Если иконка уже была сгенерирована при прошлом запуске на диск — просто читаем готовый PNG
             if (File.Exists(pngPath) && new FileInfo(pngPath).Length > 100)
             {
                 using var fs = new FileStream(pngPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
@@ -98,7 +80,6 @@ namespace ZapretGUI.Core
             }
             else
             {
-                // 3. Иначе (первый запуск) рисуем иконку и сохраняем PNG на диск для будущих запусков
                 bmp = RenderIconBitmap(isRunning);
                 try
                 {
@@ -113,16 +94,9 @@ namespace ZapretGUI.Core
                 try
                 {
                     using var tempIcon = Icon.FromHandle(hIcon);
-                    // Клонируем управляемую копию Icon, чтобы безопасно освободить GDI-хэндл
                     var managedTrayIcon = (Icon)tempIcon.Clone();
 
-                    var wpfIcon = Imaging.CreateBitmapSourceFromHIcon(
-                        hIcon,
-                        Int32Rect.Empty,
-                        BitmapSizeOptions.FromEmptyOptions());
-                    wpfIcon.Freeze();
-
-                    var result = (managedTrayIcon, (ImageSource)wpfIcon);
+                    var result = (managedTrayIcon, pngPath);
                     _iconCache[cacheKey] = result;
                     return result;
                 }
@@ -140,26 +114,26 @@ namespace ZapretGUI.Core
             using var g = Graphics.FromImage(bmp);
             g.SmoothingMode = SmoothingMode.AntiAlias;
             g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
-            g.Clear(System.Drawing.Color.Transparent);
+            g.Clear(Color.Transparent);
 
-            var accentColor = ColorTranslator.FromHtml(GetAccentHex(light: true));
+            var accentColor = GetAccentColor(light: true);
             var borderColor = isRunning ? accentColor : ColorTranslator.FromHtml("#3A3A3A");
-            var bgTop = isRunning ? ColorTranslator.FromHtml(GetAccentDarkBgHex()) : ColorTranslator.FromHtml("#18181B");
+            var bgTop = isRunning ? GetAccentDarkBgColor() : ColorTranslator.FromHtml("#18181B");
             var bgBottom = ColorTranslator.FromHtml("#0A0A0C");
 
             using var path = CreateRoundedRectPath(new Rectangle(4, 4, size - 8, size - 8), 14);
-            using (var bgBrush = new System.Drawing.Drawing2D.LinearGradientBrush(new Rectangle(0, 0, size, size), bgTop, bgBottom, System.Drawing.Drawing2D.LinearGradientMode.Vertical))
+            using (var bgBrush = new LinearGradientBrush(new Rectangle(0, 0, size, size), bgTop, bgBottom, LinearGradientMode.Vertical))
             {
                 g.FillPath(bgBrush, path);
             }
 
-            using (var pen = new System.Drawing.Pen(borderColor, 3.2f))
+            using (var pen = new Pen(borderColor, 3.2f))
             {
                 g.DrawPath(pen, path);
             }
 
-            using var font = new Font("Segoe UI", 28f, System.Drawing.FontStyle.Bold, GraphicsUnit.Pixel);
-            var textBrush = isRunning ? new SolidBrush(accentColor) : new SolidBrush(System.Drawing.Color.White);
+            using var font = new Font("Segoe UI", 28f, FontStyle.Bold, GraphicsUnit.Pixel);
+            var textBrush = isRunning ? new SolidBrush(accentColor) : new SolidBrush(Color.White);
             using (textBrush)
             {
                 var sf = new StringFormat
@@ -170,10 +144,7 @@ namespace ZapretGUI.Core
                 g.DrawString("Z", font, textBrush, new RectangleF(0, 1, size, size), sf);
             }
 
-            var dotColor = isRunning
-                ? accentColor
-                : ColorTranslator.FromHtml("#D13438");
-
+            var dotColor = isRunning ? accentColor : GetErrorColor();
             using var dotBgBrush = new SolidBrush(ColorTranslator.FromHtml("#0A0A0C"));
             using var dotBrush = new SolidBrush(dotColor);
             g.FillEllipse(dotBgBrush, size - 20, size - 20, 16, 16);
@@ -182,7 +153,7 @@ namespace ZapretGUI.Core
             return bmp;
         }
 
-        private static GraphicsPath CreateRoundedRectPath(Rectangle bounds, int radius)
+        public static GraphicsPath CreateRoundedRectPath(Rectangle bounds, int radius)
         {
             int d = radius * 2;
             var path = new GraphicsPath();

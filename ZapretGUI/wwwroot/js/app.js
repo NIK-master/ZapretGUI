@@ -421,7 +421,7 @@ function appendWizardLog(time, message, isProgress) {
 }
 
 // =========================================================================
-// 3. ГЛОБАЛЬНОЕ СОСТОЯНИЕ И МОСТ WEBVIEW2
+// 3. ГЛОБАЛЬНОЕ СОСТОЯНИЕ И МОСТ PHOTINO / WEBVIEW2
 // =========================================================================
 let appState = {
     isRunning: false,
@@ -454,17 +454,21 @@ let cancelConfirmCallback = null;
 let isBackendConfirm = false;
 let selectionCallback = null;
 
-// Таймер активной сессии обхода и Ping-Watchdog
 let sessionStartTime = null;
 let sessionTimerId = null;
 let watchdogFailCount = 0;
-
-// Фильтр логов
 let currentLogFilter = 'all';
 
-function sendCmd(action, payload = {}) {
-    if (window.chrome && window.chrome.webview) {
-        window.chrome.webview.postMessage({ action, ...payload });
+function sendCmd(action, data = {}) {
+    if (!action) return;
+    if (action === 'playClick') return;
+
+    const payload = JSON.stringify({ action, ...data });
+
+    if (window.external && typeof window.external.sendMessage === 'function') {
+        window.external.sendMessage(payload);
+    } else if (window.chrome && window.chrome.webview) {
+        window.chrome.webview.postMessage(payload);
     }
 }
 
@@ -630,7 +634,6 @@ function handleBackendEvent(type, data) {
             appState.configs.forEach(c => c.pingMs = data.ping > 0 ? data.ping : 999999);
             renderConfigCards();
 
-            // Проверка Ping-Watchdog
             if (appState.isRunning && appState.settings.watchdogPingAutoRestart) {
                 if (data.ping < 0) {
                     watchdogFailCount++;
@@ -779,7 +782,6 @@ function updateSessionBadgeTick() {
         dot.className = 'w-1.5 h-1.5 rounded-full dot-online';
         txt.innerText = `АКТИВЕН • ${formatUptime(elapsed)}`;
 
-        // Раз в 25 секунд проверяем пинг для Ping-Watchdog, если он включен
         if (appState.settings.watchdogPingAutoRestart && Math.floor(elapsed / 1000) % 25 === 0) {
             sendCmd('ping');
         }
@@ -1040,7 +1042,7 @@ function saveGameFilter() {
 }
 
 // =========================================================================
-// 6. ДВУХКАНАЛЬНЫЙ ГРАФИК ТРАФИКА С ПОДДЕРЖКОЙ АКЦЕНТНОЙ ТЕМЫ
+// 6. ДВУХКАНАЛЬНЫЙ ГРАФИК ТРАФИКА
 // =========================================================================
 const CHART_POINTS = 40;
 let rxHistory = new Array(CHART_POINTS).fill(0);
@@ -1156,7 +1158,7 @@ function drawChart() {
 }
 
 // =========================================================================
-// 7. ЖУРНАЛ СОБЫТИЙ (ЛОГ-БОКС С ПОИСКОМ И ФИЛЬТРАЦИЕЙ)
+// 7. ЖУРНАЛ СОБЫТИЙ
 // =========================================================================
 function appendLog(time, message, isProgress = false) {
     const box = document.getElementById('log-box');
@@ -1244,7 +1246,7 @@ function exportLogs() {
 }
 
 // =========================================================================
-// 8. НАВИГАЦИЯ ПО ВКЛАДКАМ, SIDEBAR И МОДАЛЬНЫЕ ДИАЛОГИ
+// 8. НАВИГАЦИЯ И ДИАЛОГИ
 // =========================================================================
 function toggleSidebar() {
     sendCmd('playClick');
@@ -1388,7 +1390,7 @@ function closeSelectionModal() {
 }
 
 // =========================================================================
-// 9. COMMAND PALETTE (CTRL + K) И DRAG & DROP ИМПОРТ МОДОВ
+// 9. COMMAND PALETTE (CTRL + К) И DRAG & DROP
 // =========================================================================
 let cmdSelectedIndex = 0;
 let filteredCommands = [];
@@ -1501,7 +1503,19 @@ function executeCommandPaletteItem(idx) {
 window.addEventListener('DOMContentLoaded', () => {
     runSplashSequence();
 
-    if (window.chrome && window.chrome.webview) {
+    // Подключение приёма сообщений от Photino.NET и WebView2
+    if (window.external && typeof window.external.receiveMessage === 'function') {
+        window.external.receiveMessage(rawMsg => {
+            try {
+                const msg = typeof rawMsg === 'string' ? JSON.parse(rawMsg) : rawMsg;
+                if (msg && msg.type) {
+                    handleBackendEvent(msg.type, msg.data);
+                }
+            } catch (e) {
+                console.error('Ошибка Photino message:', e);
+            }
+        });
+    } else if (window.chrome && window.chrome.webview) {
         window.chrome.webview.addEventListener('message', e => {
             const msg = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
             if (msg && msg.type) {
@@ -1522,7 +1536,7 @@ window.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Горячая клавиша Ctrl+K внутри WebView
+    // Горячая клавиша Ctrl+K
     window.addEventListener('keydown', e => {
         if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
             e.preventDefault();
@@ -1532,7 +1546,7 @@ window.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Drag & Drop файлов (.zip, .netfix-mod, .bat, .txt)
+    // Drag & Drop файлов
     const dropOverlay = document.getElementById('dropzone-overlay');
     let dragCounter = 0;
 
