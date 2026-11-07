@@ -8,7 +8,7 @@ def collect_project_files(source_dir, output_file):
     # Папки, которые парсер будет пропускать
     ignore_dirs = {'.git', '.vs', 'bin', 'obj', 'packages', 'Properties'}
     # Расширения файлов для сборки
-    target_extensions = {'.cs', '.xaml','.js', '.html', '.css', '.csproj', '.manifest'}
+    target_extensions = {'.cs', '.xaml','.js', '.html', '.css', '.csproj', '.manifest', '.md'}
 
     files_processed = 0
 

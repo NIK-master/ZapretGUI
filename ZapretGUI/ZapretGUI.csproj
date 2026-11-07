@@ -19,7 +19,7 @@
 		<PublishSingleFile>true</PublishSingleFile>
 		<SelfContained>false</SelfContained>
 		<IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
-		<EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+		<EnableCompressionInSingleFile>false</EnableCompressionInSingleFile>
 		<PublishTrimmed>false</PublishTrimmed>
 
 		<!-- Отключаем генерацию лишних файлов (.pdb, .xml) в релизе -->
@@ -42,14 +42,16 @@
 	</ItemGroup>
 
 	<!-- АВТОМАТИЧЕСКАЯ АРХИВАЦИЯ ИНТЕРФЕЙСА ПЕРЕД СБОРКОЙ -->
+	<!-- Сохраняем zip в корень проекта, чтобы избежать проблем с правами и путями в obj/Release -->
 	<Target Name="ZipWebUI" BeforeTargets="BeforeBuild">
-		<ZipDirectory SourceDirectory="$(MSBuildProjectDirectory)\wwwroot" DestinationFile="$(IntermediateOutputPath)wwwroot.zip" Overwrite="true" />
+		<MakeDir Directories="$(IntermediateOutputPath)" />
+		<ZipDirectory SourceDirectory="$(MSBuildProjectDirectory)\wwwroot" DestinationFile="$(MSBuildProjectDirectory)\wwwroot.zip" Overwrite="true" />
 		<ItemGroup>
-			<EmbeddedResource Include="$(IntermediateOutputPath)wwwroot.zip" LogicalName="wwwroot.zip" />
+			<EmbeddedResource Include="$(MSBuildProjectDirectory)\wwwroot.zip" LogicalName="wwwroot.zip" />
 		</ItemGroup>
 	</Target>
 
-	<!-- Запрещаем копирование wwwroot и звуков в выходную папку релиза (они уже вшиты в .exe) -->
+	<!-- Запрещаем копирование исходных папок и временного архива в папку Publish (они уже внутри .exe) -->
 	<ItemGroup>
 		<Content Remove="wwwroot\**\*.*" />
 		<None Include="wwwroot\**\*.*">
@@ -57,18 +59,23 @@
 			<CopyToPublishDirectory>Never</CopyToPublishDirectory>
 		</None>
 		<None Remove="Assets\**\*.*" />
+		<None Include="wwwroot.zip">
+			<CopyToOutputDirectory>Never</CopyToOutputDirectory>
+			<CopyToPublishDirectory>Never</CopyToPublishDirectory>
+		</None>
 	</ItemGroup>
 
-	<!-- Копируем в Publish директорию ТОЛЬКО ядро (ZapretFiles) и README -->
+	<!-- Копируем в Publish директорию ТОЛЬКО ядро (ZapretFiles) -->
 	<ItemGroup>
 		<None Include="ZapretFiles\**\*.*" Condition="Exists('ZapretFiles')">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 			<CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
 		</None>
-		<None Include="README.md" Condition="Exists('README.md')">
-			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-			<CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-		</None>
 	</ItemGroup>
+
+	<!-- УДАЛЯЕМ ВРЕМЕННЫЙ АРХИВ ПОСЛЕ УСПЕШНОЙ СБОРКИ -->
+	<Target Name="CleanZipWebUI" AfterTargets="Build">
+		<Delete Files="$(MSBuildProjectDirectory)\wwwroot.zip" Condition="Exists('$(MSBuildProjectDirectory)\wwwroot.zip')" />
+	</Target>
 
 </Project>
