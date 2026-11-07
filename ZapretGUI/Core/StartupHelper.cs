@@ -7,18 +7,35 @@ namespace ZapretGUI.Core
 {
     public static class StartupHelper
     {
-        private const string RegistryKeyPath = "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run";
+        private const string RegistryKeyPath = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
+        private const string TaskName = AppConstants.AppRegistryName;
 
         public static bool IsAutoStartEnabled()
         {
             try
             {
+                // 1. Проверяем наличие задачи в Планировщике Windows (основной способ для requireAdministrator)
+                using var p = Process.Start(new ProcessStartInfo
+                {
+                    FileName = "schtasks.exe",
+                    Arguments = $"/Query /TN \"{TaskName}\"",
+                    CreateNoWindow = true,
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true
+                });
+
+                p?.WaitForExit(1500);
+                if (p != null && p.ExitCode == 0)
+                    return true;
+
+                // 2. Фолбэк: проверяем реестр (на случай если запуск без админ-прав)
                 using var key = Registry.CurrentUser.OpenSubKey(RegistryKeyPath, false);
                 return key?.GetValue(AppConstants.AppRegistryName) != null;
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Ошибка чтения реестра: {ex.Message}");
+                Debug.WriteLine($"Ошибка проверки автозапуска: {ex.Message}");
                 return false;
             }
         }
@@ -27,25 +44,54 @@ namespace ZapretGUI.Core
         {
             try
             {
-                using var key = Registry.CurrentUser.OpenSubKey(RegistryKeyPath, true);
-                if (key == null) return;
+                var exePath = Environment.ProcessPath;
+                if (string.IsNullOrEmpty(exePath))
+                    exePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ZapretGUI.exe");
+
+                // Всегда подчищаем старый ключ в Run, чтобы Windows не плодила дубликаты
+                using (var key = Registry.CurrentUser.OpenSubKey(RegistryKeyPath, true))
+                {
+                    key?.DeleteValue(AppConstants.AppRegistryName, false);
+                }
 
                 if (enable)
                 {
-                    var exePath = Environment.ProcessPath;
-                    if (string.IsNullOrEmpty(exePath))
-                        exePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ZapretGUI.exe");
+                    // Создаем задачу при входе пользователя с наивысшими правами (/RL HIGHEST)
+                    using var p = Process.Start(new ProcessStartInfo
+                    {
+                        FileName = "schtasks.exe",
+                        Arguments = $"/Create /F /RL HIGHEST /SC ONLOGON /TN \"{TaskName}\" /TR \"\\\"{exePath}\\\"\"",
+                        CreateNoWindow = true,
+                        UseShellExecute = false,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true
+                    });
+                    p?.WaitForExit(2500);
 
-                    key.SetValue(AppConstants.AppRegistryName, $"\"{exePath}\"");
+                    // Если по какой-то причине служба планировщика отключена, пишем в реестр как резерв
+                    if (p == null || p.ExitCode != 0)
+                    {
+                        using var key = Registry.CurrentUser.OpenSubKey(RegistryKeyPath, true);
+                        key?.SetValue(AppConstants.AppRegistryName, $"\"{exePath}\"");
+                    }
                 }
                 else
                 {
-                    key.DeleteValue(AppConstants.AppRegistryName, false);
+                    using var p = Process.Start(new ProcessStartInfo
+                    {
+                        FileName = "schtasks.exe",
+                        Arguments = $"/Delete /F /TN \"{TaskName}\"",
+                        CreateNoWindow = true,
+                        UseShellExecute = false,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true
+                    });
+                    p?.WaitForExit(2500);
                 }
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Ошибка записи в реестр: {ex.Message}");
+                Debug.WriteLine($"Ошибка настройки автозапуска: {ex.Message}");
             }
         }
     }

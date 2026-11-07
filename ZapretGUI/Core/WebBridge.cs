@@ -88,12 +88,7 @@ namespace ZapretGUI.Core
                     });
 
                     await BypassController.Current.RestartServicesAsync(SettingsManager.Current.SelectedProfileName);
-                    SendEvent("bypassState", new
-                    {
-                        isRunning = BypassController.Current.IsRunning,
-                        zapretRunning = BypassController.Current.Zapret.IsRunning,
-                        proxyRunning = BypassController.Current.TgProxy.IsRunning
-                    });
+                    BroadcastBypassState();
                 }
             };
 
@@ -277,12 +272,7 @@ namespace ZapretGUI.Core
 
                 case "restartBypass":
                     await BypassController.Current.RestartServicesAsync(SettingsManager.Current.SelectedProfileName);
-                    SendEvent("bypassState", new
-                    {
-                        isRunning = BypassController.Current.IsRunning,
-                        zapretRunning = BypassController.Current.Zapret.IsRunning,
-                        proxyRunning = BypassController.Current.TgProxy.IsRunning
-                    });
+                    BroadcastBypassState();
                     break;
 
                 case "updateModuleToggles":
@@ -307,12 +297,7 @@ namespace ZapretGUI.Core
                             isProgress = false
                         });
                         await BypassController.Current.RestartServicesAsync(prof);
-                        SendEvent("bypassState", new
-                        {
-                            isRunning = BypassController.Current.IsRunning,
-                            zapretRunning = BypassController.Current.Zapret.IsRunning,
-                            proxyRunning = BypassController.Current.TgProxy.IsRunning
-                        });
+                        BroadcastBypassState();
                     }
                     break;
 
@@ -1160,12 +1145,7 @@ namespace ZapretGUI.Core
             if (BypassController.Current.IsRunning)
             {
                 BypassController.Current.StopServices();
-                SendEvent("bypassState", new
-                {
-                    isRunning = false,
-                    zapretRunning = false,
-                    proxyRunning = false
-                });
+                BroadcastBypassState();
             }
             else
             {
@@ -1199,12 +1179,7 @@ namespace ZapretGUI.Core
                         SendEvent("log", new { message = $"❌ ОШИБКА: {line.Trim()}", time = DateTime.Now.ToString("HH:mm:ss") });
                 }
 
-                SendEvent("bypassState", new
-                {
-                    isRunning = BypassController.Current.IsRunning,
-                    zapretRunning = BypassController.Current.Zapret.IsRunning,
-                    proxyRunning = BypassController.Current.TgProxy.IsRunning
-                });
+                BroadcastBypassState();
             }
         }
 
@@ -1248,12 +1223,7 @@ namespace ZapretGUI.Core
             if (restartNow && BypassController.Current.Zapret.IsRunning)
             {
                 await BypassController.Current.RestartServicesAsync(SettingsManager.Current.SelectedProfileName);
-                SendEvent("bypassState", new
-                {
-                    isRunning = BypassController.Current.IsRunning,
-                    zapretRunning = BypassController.Current.Zapret.IsRunning,
-                    proxyRunning = BypassController.Current.TgProxy.IsRunning
-                });
+                BroadcastBypassState();
             }
         }
 
@@ -1443,6 +1413,13 @@ namespace ZapretGUI.Core
             _watcherDebounceCts?.Dispose();
             _modsWatcher?.Dispose();
             _pendingConfirmTcs?.TrySetResult(false);
+        }
+
+        private void BroadcastBypassState()
+        {
+            _mainWindow.UpdateIndicators(
+                BypassController.Current.Zapret.IsRunning,
+                BypassController.Current.TgProxy.IsRunning);
         }
     }
 }

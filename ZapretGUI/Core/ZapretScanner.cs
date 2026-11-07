@@ -32,16 +32,31 @@ namespace ZapretGUI.Core
             if (IsScanning) return;
 
             _topConfigs.Clear();
+            _scanCts?.Dispose();
             _scanCts = new CancellationTokenSource();
 
-            using var hideTimer = new System.Timers.Timer(100);
+            using var hideTimer = new System.Timers.Timer(120) { AutoReset = false };
             hideTimer.Elapsed += (s, ev) =>
             {
-                foreach (var p in Process.GetProcessesByName(AppConstants.ZapretProcessName))
+                if (_scanCts == null || _scanCts.IsCancellationRequested)
+                    return;
+
+                var procs = Process.GetProcessesByName(AppConstants.ZapretProcessName);
+                foreach (var p in procs)
                 {
-                    if (p.MainWindowHandle != IntPtr.Zero)
-                        ShowWindow(p.MainWindowHandle, SW_HIDE);
+                    try
+                    {
+                        if (p.MainWindowHandle != IntPtr.Zero)
+                            ShowWindow(p.MainWindowHandle, SW_HIDE);
+                    }
+                    catch { }
+                    finally
+                    {
+                        p.Dispose();
+                    }
                 }
+
+                try { if (!_scanCts.IsCancellationRequested) hideTimer.Start(); } catch { }
             };
             hideTimer.Start();
 
@@ -105,6 +120,12 @@ namespace ZapretGUI.Core
             finally
             {
                 hideTimer.Stop();
+                try
+                {
+                    _scanProcess?.Dispose();
+                    _scanProcess = null;
+                }
+                catch { }
             }
         }
 

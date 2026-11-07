@@ -205,11 +205,14 @@ namespace ZapretGUI.Core
         public static AppStatus CheckAppStatus()
         {
             var status = new AppStatus();
+            Process[]? procs = null;
             try
             {
-                var names = Process.GetProcesses()
-                    .Select(p => { try { return p.ProcessName.ToLower(); } catch { return ""; } })
-                    .Where(n => n.Length > 0).ToList();
+                procs = Process.GetProcesses();
+                var names = procs
+                    .Select(p => { try { return p.ProcessName.ToLowerInvariant(); } catch { return ""; } })
+                    .Where(n => n.Length > 0)
+                    .ToList();
 
                 string Match(string key) =>
                     names.FirstOrDefault(n => AppSignatures[key].Any(s => n.Contains(s))) ?? "";
@@ -220,6 +223,16 @@ namespace ZapretGUI.Core
                 var tw = Match("tgwsproxy"); if (tw != "") { status.TgWsProxyRunning = true; status.TgWsProxyProcName = tw; }
             }
             catch { }
+            finally
+            {
+                if (procs != null)
+                {
+                    foreach (var p in procs)
+                    {
+                        try { p.Dispose(); } catch { }
+                    }
+                }
+            }
             return status;
         }
 
@@ -462,6 +475,9 @@ namespace ZapretGUI.Core
 
             Step(0.00, "Определение процессов...");
             report.AppStatus = await Task.Run(CheckAppStatus);
+
+            Step(0.05, "Проверка базового пинга...");
+            report.PingResults = await CheckPingAsync(p => Step(0.05 + p * 0.05, "Пинг узлов..."));
 
             Step(0.10, "Проверка DC Telegram...");
             report.DcResults = await CheckTelegramDcsAsync(p => Step(0.10 + p * 0.20, "DC Telegram..."));

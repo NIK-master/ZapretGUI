@@ -1,28 +1,25 @@
-﻿using System.Diagnostics;
+﻿using System;
+using System.Diagnostics;
 using System.Net.Sockets;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace ZapretGUI.Core
 {
     public static class NetworkHelper
     {
-        public static async Task<long> TcpPingAsync(string host, int port)
+        public static async Task<long> TcpPingAsync(string host, int port, int timeoutMs = 2000)
         {
             try
             {
                 using var client = new TcpClient();
-                var stopwatch = new Stopwatch();
+                using var cts = new CancellationTokenSource(timeoutMs);
+                var stopwatch = Stopwatch.StartNew();
 
-                stopwatch.Start();
-                var connectTask = client.ConnectAsync(host, port);
+                await client.ConnectAsync(host, port, cts.Token);
+                stopwatch.Stop();
 
-                if (await Task.WhenAny(connectTask, Task.Delay(2000)) == connectTask)
-                {
-                    stopwatch.Stop();
-                    return client.Connected ? stopwatch.ElapsedMilliseconds : -1;
-                }
-
-                return -1;
+                return client.Connected ? stopwatch.ElapsedMilliseconds : -1;
             }
             catch
             {

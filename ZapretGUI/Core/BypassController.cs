@@ -1,4 +1,5 @@
 ﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
@@ -77,16 +78,18 @@ namespace ZapretGUI.Core
             var hostToPing = AppConstants.AwsPingHost;
             var portToPing = AppConstants.AwsPingPort;
 
-            var fullUrl = SettingsManager.Current.PingUrl;
-            if (!string.IsNullOrWhiteSpace(fullUrl))
+            var rawInput = SettingsManager.Current.PingUrl?.Trim();
+            if (!string.IsNullOrWhiteSpace(rawInput))
             {
-                if (Uri.TryCreate(fullUrl, UriKind.Absolute, out Uri? uri))
+                var normalized = rawInput.Contains("://") ? rawInput : $"https://{rawInput}";
+
+                if (Uri.TryCreate(normalized, UriKind.Absolute, out Uri? uri) && !string.IsNullOrWhiteSpace(uri.Host))
                 {
                     hostToPing = uri.Host;
                     portToPing = uri.Port > 0 ? uri.Port : 443;
                 }
                 else
-                    hostToPing = fullUrl;
+                    hostToPing = rawInput;
             }
 
             return await NetworkHelper.TcpPingAsync(hostToPing, portToPing);

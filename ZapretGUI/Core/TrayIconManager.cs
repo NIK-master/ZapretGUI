@@ -96,6 +96,9 @@ namespace ZapretGUI.Core
         [DllImport("Gdi32.dll", EntryPoint = "CreateRoundRectRgn")]
         private static extern IntPtr CreateRoundRectRgn(int nLeftRect, int nTopRect, int nRightRect, int nBottomRect, int nWidthEllipse, int nHeightEllipse);
 
+        [DllImport("Gdi32.dll")]
+        private static extern bool DeleteObject(IntPtr hObject);
+
         [DllImport("user32.dll")]
         private static extern bool GetCursorPos(out Point lpPoint);
 
@@ -157,7 +160,17 @@ namespace ZapretGUI.Core
             if (Width != w || Height != h)
             {
                 Size = new Size(w, h);
-                Region = Region.FromHrgn(CreateRoundRectRgn(0, 0, w, h, SI(22), SI(22)));
+                var oldRegion = Region;
+                IntPtr hrgn = CreateRoundRectRgn(0, 0, w, h, SI(22), SI(22));
+                try
+                {
+                    Region = Region.FromHrgn(hrgn);
+                }
+                finally
+                {
+                    DeleteObject(hrgn);
+                    oldRegion?.Dispose();
+                }
             }
         }
 
