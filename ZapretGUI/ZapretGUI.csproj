@@ -3,15 +3,23 @@
 	<PropertyGroup>
 		<OutputType>WinExe</OutputType>
 		<TargetFramework>net8.0-windows</TargetFramework>
+		<RuntimeIdentifier>win-x64</RuntimeIdentifier>
 		<UseWPF>false</UseWPF>
 		<UseWindowsForms>true</UseWindowsForms>
 		<Nullable>enable</Nullable>
 		<ImplicitUsings>enable</ImplicitUsings>
 
+		<!-- Метаданные исполняемого файла -->
+		<AssemblyName>ZapretGUI</AssemblyName>
+		<Product>Zapret for ADHD</Product>
+		<Version>4.1.0</Version>
+		<FileVersion>4.1.0.0</FileVersion>
+
 		<!-- Настройки сборки в ОДИН чистый .exe -->
 		<PublishSingleFile>true</PublishSingleFile>
 		<SelfContained>false</SelfContained>
 		<IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+		<EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
 		<PublishTrimmed>false</PublishTrimmed>
 
 		<!-- Отключаем генерацию лишних файлов (.pdb, .xml) в релизе -->
@@ -41,16 +49,22 @@
 		</ItemGroup>
 	</Target>
 
+	<!-- Запрещаем копирование wwwroot и звуков в выходную папку релиза (они уже вшиты в .exe) -->
+	<ItemGroup>
+		<Content Remove="wwwroot\**\*.*" />
+		<None Include="wwwroot\**\*.*">
+			<CopyToOutputDirectory>Never</CopyToOutputDirectory>
+			<CopyToPublishDirectory>Never</CopyToPublishDirectory>
+		</None>
+		<None Remove="Assets\**\*.*" />
+	</ItemGroup>
+
 	<!-- Копируем в Publish директорию ТОЛЬКО ядро (ZapretFiles) и README -->
 	<ItemGroup>
-		<None Include="ZapretFiles\**\*.*">
+		<None Include="ZapretFiles\**\*.*" Condition="Exists('ZapretFiles')">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 			<CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
 		</None>
-		<None Remove="Assets\success.wav" />
-		<None Remove="Assets\Sounds\success.wav" />
-		<None Remove="Assets\click.wav" />
-		<None Remove="Assets\Sounds\click.wav" />
 		<None Include="README.md" Condition="Exists('README.md')">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 			<CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
