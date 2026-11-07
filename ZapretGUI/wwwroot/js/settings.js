@@ -27,7 +27,7 @@ const ACCENT_THEME_NAMES = {
     'blue': 'Сапфир',
     'purple': 'Аметист',
     'amber': 'Топаз',
-    'cyan': 'Аквамарин'
+    'pink': 'Морганит'
 };
 
 // 5 совершенно разных по силуэту 2D-камешков на единой 3D-орбите
@@ -114,23 +114,23 @@ const FLOATING_STONES = [
         ]
     },
     {
-        id: 'cyan',
-        name: 'Аквамарин',
-        sub: 'AQUAMARINE',
+        id: 'pink',
+        name: 'Морганит',
+        sub: 'MORGANITE',
         phase: 5.5,
         speed: 0.65,
-        fillTop: '#67E8F9',
-        fillMid: '#0891B2',
-        fillBot: '#164E63',
-        edge: '#CFFAFE',
-        glow: '#22D3EE',
-        // 5. Изящный треугольный осколок-капля с широким основанием
+        fillTop: '#F9A8D4',
+        fillMid: '#DB2777',
+        fillBot: '#831843',
+        edge: '#FCE7F3',
+        glow: '#F472B6',
         outer: [
-            { x: 0, y: -18 }, { x: 14.5, y: 7 }, { x: 7, y: 16 },
-            { x: -7, y: 16 }, { x: -14.5, y: 7 }
+            { x: -7, y: -16.5 }, { x: 7, y: -16.5 }, { x: 15, y: -5 },
+            { x: 9, y: 10 }, { x: 0, y: 18 }, { x: -9, y: 10 }, { x: -15, y: -5 }
         ],
         inner: [
-            { x: 0, y: -8.5 }, { x: 7.5, y: 5 }, { x: 0, y: 10 }, { x: -7.5, y: 5 }
+            { x: -4, y: -10 }, { x: 4, y: -10 }, { x: 8, y: -3 },
+            { x: 0, y: 10 }, { x: -8, y: -3 }
         ]
     }
 ];
@@ -546,7 +546,9 @@ let currentSettingsCat = 'all';
 let saveToastTimeout = null;
 
 function applyAccentThemeToDom(theme) {
-    const clean = (!theme || theme === 'crimson') ? (theme === 'crimson' ? 'cyan' : 'green') : theme;
+    const clean = (!theme || theme === 'crimson' || theme === 'cyan')
+        ? ((theme === 'crimson' || theme === 'cyan') ? 'pink' : 'green')
+        : theme;
     appState.settings.accentTheme = clean;
 
     document.body.setAttribute('data-accent', clean);

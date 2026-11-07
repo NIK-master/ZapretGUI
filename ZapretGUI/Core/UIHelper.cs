@@ -16,7 +16,7 @@ namespace ZapretGUI.Core
         public static extern bool DestroyIcon(IntPtr handle);
 
         private static readonly ConcurrentDictionary<string, (Icon trayIcon, string icoFilePath)> _iconCache = new();
-        private static readonly string[] AllThemes = ["green", "blue", "purple", "amber", "cyan"];
+        private static readonly string[] AllThemes = ["green", "blue", "purple", "amber", "pink"];
 
         public static Action<string, string, bool>? WebAlertHandler { get; set; }
         public static Func<string, string, string, bool, Task<bool>>? WebConfirmHandler { get; set; }
@@ -29,7 +29,7 @@ namespace ZapretGUI.Core
                 "blue" => light ? "#60A5FA" : "#0078D7",
                 "purple" => light ? "#A78BFA" : "#7C3AED",
                 "amber" => light ? "#FBBF24" : "#D97706",
-                "cyan" or "crimson" => light ? "#22D3EE" : "#0891B2",
+                "pink" or "cyan" or "crimson" => light ? "#F472B6" : "#DB2777",
                 _ => light ? "#4CAF50" : "#107C10"
             };
         }
@@ -42,7 +42,7 @@ namespace ZapretGUI.Core
                 "blue" => "#102033",
                 "purple" => "#1E1433",
                 "amber" => "#2B1D0E",
-                "cyan" or "crimson" => "#0D262B",
+                "pink" or "cyan" or "crimson" => "#2D1222",
                 _ => "#142616"
             };
         }
@@ -67,7 +67,7 @@ namespace ZapretGUI.Core
             try
             {
                 var currentTheme = (SettingsManager.Current.AccentTheme ?? "green").ToLowerInvariant();
-                if (currentTheme == "crimson") currentTheme = "cyan";
+                if (currentTheme is "crimson" or "cyan") currentTheme = "pink";
 
                 // Сначала мгновенно готовим обе версии (ON и OFF) для текущей темы
                 GetOrCreateAppIcon(false, currentTheme);
@@ -93,7 +93,7 @@ namespace ZapretGUI.Core
         public static (Icon trayIcon, string icoFilePath) GetOrCreateAppIcon(bool isRunning, string? themeOverride = null)
         {
             var theme = (themeOverride ?? SettingsManager.Current.AccentTheme ?? "green").ToLowerInvariant();
-            if (theme == "crimson") theme = "cyan";
+            if (theme is "crimson" or "cyan") theme = "pink";
 
             var cacheKey = $"{theme}_{(isRunning ? "on" : "off")}";
 
