@@ -4,6 +4,7 @@ using System.Drawing;
 using System.IO;
 using System.IO.Compression;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using ZapretGUI.Core;
@@ -36,23 +37,39 @@ namespace ZapretGUI
         private static readonly IntPtr ICON_SMALL = new(0);
         private static readonly IntPtr ICON_BIG = new(1);
 
-        // Базовые логические размеры (как были в WPF)
         private const int NormalLogicalWidth = 1100;
         private const int NormalLogicalHeight = 760;
         private const int CompactLogicalWidth = 850;
         private const int CompactLogicalHeight = 520;
 
         public PhotinoWindow Window { get; }
-        private readonly TrayIconManager _trayIconManager;
+        private TrayIconManager? _trayIconManager;
         private WebBridge? _webBridge;
         private readonly bool _isFirstRun;
         private bool _isForceExiting = false;
+        private bool _isWindowCreated = false;
+        private CancellationTokenSource? _resizeAnimCts;
 
-        public IntPtr WindowHandle => Window.WindowHandle;
+        // Безопасное получение дескриптора окна только после физического создания HWND
+        public IntPtr WindowHandle
+        {
+            get
+            {
+                if (!_isWindowCreated || Window == null)
+                    return IntPtr.Zero;
+                try
+                {
+                    return Window.WindowHandle;
+                }
+                catch
+                {
+                    return IntPtr.Zero;
+                }
+            }
+        }
 
         public MainWindow()
         {
-            // Убираем белую вспышку WebView2 при запуске (делаем фон #0A0A0A до загрузки HTML)
             Environment.SetEnvironmentVariable("WEBVIEW2_DEFAULT_BACKGROUND_COLOR", "FF0A0A0A");
 
             var configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.json");
@@ -85,11 +102,17 @@ namespace ZapretGUI
 
             Window.RegisterWindowCreatedHandler((sender, args) =>
             {
-                // Повторно применяем точный DPI-размер и центрирование после создания HWND
-                var exactSize = GetScaledWindowSize(SettingsManager.Current.CompactMode);
-                Window.SetSize(exactSize);
-                Window.Center();
+                _isWindowCreated = true;
 
+                try
+                {
+                    var exactSize = GetScaledWindowSize(SettingsManager.Current.CompactMode);
+                    Window.SetSize(exactSize);
+                    Window.Center();
+                }
+                catch { }
+
+                _trayIconManager = new TrayIconManager(this);
                 RefreshAppIcon();
 
                 if (SettingsManager.Current.StartMinimized)
@@ -114,16 +137,15 @@ namespace ZapretGUI
                 CleanupOnExit();
                 return false;
             });
-
-            _trayIconManager = new TrayIconManager(this);
         }
 
         private double GetDpiScale()
         {
             try
             {
-                uint dpi = Window != null && Window.WindowHandle != IntPtr.Zero
-                    ? GetDpiForWindow(Window.WindowHandle)
+                IntPtr hwnd = WindowHandle;
+                uint dpi = hwnd != IntPtr.Zero
+                    ? GetDpiForWindow(hwnd)
                     : GetDpiForSystem();
 
                 if (dpi >= 96)
@@ -211,34 +233,38 @@ namespace ZapretGUI
 
         public void SetTaskbarIcon(Icon icon)
         {
-            if (WindowHandle == IntPtr.Zero) return;
+            IntPtr hwnd = WindowHandle;
+            if (hwnd == IntPtr.Zero) return;
             try
             {
-                SendMessage(WindowHandle, WM_SETICON, ICON_SMALL, icon.Handle);
-                SendMessage(WindowHandle, WM_SETICON, ICON_BIG, icon.Handle);
+                SendMessage(hwnd, WM_SETICON, ICON_SMALL, icon.Handle);
+                SendMessage(hwnd, WM_SETICON, ICON_BIG, icon.Handle);
             }
             catch { }
         }
 
         public void MinimizeWindow()
         {
-            if (WindowHandle != IntPtr.Zero)
-                ShowWindow(WindowHandle, SW_SHOWMINIMIZED);
+            IntPtr hwnd = WindowHandle;
+            if (hwnd != IntPtr.Zero)
+                ShowWindow(hwnd, SW_SHOWMINIMIZED);
         }
 
         public void HideToTray()
         {
-            if (WindowHandle != IntPtr.Zero)
-                ShowWindow(WindowHandle, SW_HIDE);
+            IntPtr hwnd = WindowHandle;
+            if (hwnd != IntPtr.Zero)
+                ShowWindow(hwnd, SW_HIDE);
         }
 
         public void RestoreFromTray()
         {
-            if (WindowHandle != IntPtr.Zero)
+            IntPtr hwnd = WindowHandle;
+            if (hwnd != IntPtr.Zero)
             {
-                ShowWindow(WindowHandle, SW_RESTORE);
-                ShowWindow(WindowHandle, SW_SHOWNORMAL);
-                SetForegroundWindow(WindowHandle);
+                ShowWindow(hwnd, SW_RESTORE);
+                ShowWindow(hwnd, SW_SHOWNORMAL);
+                SetForegroundWindow(hwnd);
             }
         }
 
@@ -267,30 +293,31 @@ namespace ZapretGUI
 
         private void CleanupOnExit()
         {
+            _resizeAnimCts?.Cancel();
             BypassController.Current.NetMonitor.Stop();
             if (SettingsManager.Current.StopServicesOnExit)
                 BypassController.Current.StopServices();
 
             _webBridge?.Dispose();
-            _trayIconManager.Dispose();
+            _trayIconManager?.Dispose();
         }
 
         public void InvokeOnUI(Action action)
         {
+            if (!_isWindowCreated || Window == null)
+                return;
+
             try
             {
                 Window.Invoke(action);
             }
-            catch
-            {
-                try { action(); } catch { }
-            }
+            catch { }
         }
 
         public void UpdateIndicators(bool isZapretRunning, bool isProxyRunning)
         {
             var anyRunning = isZapretRunning || isProxyRunning;
-            _trayIconManager.UpdateDynamicIcon(anyRunning);
+            _trayIconManager?.UpdateDynamicIcon(anyRunning);
             _webBridge?.SendEvent("bypassState", new
             {
                 isRunning = anyRunning,
@@ -301,7 +328,7 @@ namespace ZapretGUI
 
         public void RefreshAppIcon()
         {
-            _trayIconManager.UpdateDynamicIcon(BypassController.Current.IsRunning);
+            _trayIconManager?.UpdateDynamicIcon(BypassController.Current.IsRunning);
         }
 
         public void UpdateNetworkIndicator(bool isOnline)
@@ -311,7 +338,7 @@ namespace ZapretGUI
 
         public void ShowNotification(string title, string message, ToolTipIcon icon = ToolTipIcon.Info)
         {
-            _trayIconManager.ShowNotification(title, message, icon);
+            _trayIconManager?.ShowNotification(title, message, icon);
         }
 
         public bool IsBypassRunning() => BypassController.Current.IsRunning;
@@ -350,34 +377,62 @@ namespace ZapretGUI
             }
         }
 
-        public void AnimateWindowSize(bool isCompact)
+        public async void AnimateWindowSize(bool isCompact)
         {
+            if (!_isWindowCreated) return;
+
+            _resizeAnimCts?.Cancel();
+            _resizeAnimCts = new CancellationTokenSource();
+            var token = _resizeAnimCts.Token;
+
+            Size targetSize = default;
+            Size startSize = default;
+            Point startLoc = default;
+            int targetX = 0, targetY = 0;
+
             InvokeOnUI(() =>
             {
-                var targetSize = GetScaledWindowSize(isCompact);
-                var currentSize = Window.Size;
-                var currentLoc = Window.Location;
+                targetSize = GetScaledWindowSize(isCompact);
+                startSize = Window.Size;
+                startLoc = Window.Location;
 
-                if (Math.Abs(currentSize.Width - targetSize.Width) < 2 &&
-                    Math.Abs(currentSize.Height - targetSize.Height) < 2)
-                {
-                    return;
-                }
+                var screen = WindowHandle != IntPtr.Zero
+                    ? Screen.FromHandle(WindowHandle).WorkingArea
+                    : Screen.PrimaryScreen!.WorkingArea;
 
-                int newX = currentLoc.X - (targetSize.Width - currentSize.Width) / 2;
-                int newY = currentLoc.Y - (targetSize.Height - currentSize.Height) / 2;
-
-                if (WindowHandle != IntPtr.Zero)
-                {
-                    var screen = Screen.FromHandle(WindowHandle).WorkingArea;
-                    newX = Math.Max(screen.Left, Math.Min(newX, screen.Right - targetSize.Width));
-                    newY = Math.Max(screen.Top, Math.Min(newY, screen.Bottom - targetSize.Height));
-                }
-
-                // Штатные методы PhotinoWindow корректно обновляют и рамку окна, и внутренний контрол WebView2
-                Window.SetSize(targetSize);
-                Window.SetLocation(new Point(newX, newY));
+                targetX = startLoc.X - (targetSize.Width - startSize.Width) / 2;
+                targetY = startLoc.Y - (targetSize.Height - startSize.Height) / 2;
+                targetX = Math.Max(screen.Left, Math.Min(targetX, screen.Right - targetSize.Width));
+                targetY = Math.Max(screen.Top, Math.Min(targetY, screen.Bottom - targetSize.Height));
             });
+
+            if (Math.Abs(startSize.Width - targetSize.Width) < 2 &&
+                Math.Abs(startSize.Height - targetSize.Height) < 2)
+            {
+                return;
+            }
+
+            const int steps = 14;
+            for (int i = 1; i <= steps; i++)
+            {
+                if (token.IsCancellationRequested) return;
+
+                double t = (double)i / steps;
+                double ease = 1.0 - Math.Pow(1.0 - t, 3.0);
+
+                int curW = (int)Math.Round(startSize.Width + (targetSize.Width - startSize.Width) * ease);
+                int curH = (int)Math.Round(startSize.Height + (targetSize.Height - startSize.Height) * ease);
+                int curX = (int)Math.Round(startLoc.X + (targetX - startLoc.X) * ease);
+                int curY = (int)Math.Round(startLoc.Y + (targetY - startLoc.Y) * ease);
+
+                InvokeOnUI(() =>
+                {
+                    Window.SetSize(new Size(curW, curH));
+                    Window.SetLocation(new Point(curX, curY));
+                });
+
+                await Task.Delay(14);
+            }
         }
 
         private string ExtractEmbeddedWebUI()

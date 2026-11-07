@@ -46,9 +46,9 @@ body {
 
 /* Тонкая техническая сетка на фоне главной области */
 #main-container {
-    background-color: var(--bg-content);
-    background-image: radial-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px);
-    background-size: 22px 22px;
+    background-color: var(--bg-content) !important;
+    background-image: radial-gradient(rgba(255, 255, 255, 0.11) 1.25px, transparent 1.25px) !important;
+    background-size: 20px 20px !important;
 }
 
 .glass-card {
@@ -1037,4 +1037,48 @@ body[data-accent="crimson"] {
     text-align: center;
     white-space: nowrap;
     flex-shrink: 0;
+}
+
+/* =========================================================
+   ПОЛНАЯ АДАПТАЦИЯ МИНИМАЛИСТИЧНОГО РЕЖИМА (850x520)
+   ========================================================= */
+body.compact-mode #sidebar {
+    width: 60px !important;
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+}
+
+    body.compact-mode #sidebar nav {
+        width: 100% !important;
+    }
+
+    body.compact-mode #sidebar .nav-btn {
+        justify-content: center;
+        padding-left: 0;
+        padding-right: 0;
+    }
+
+        body.compact-mode #sidebar .nav-btn span:not(.mdl-icon),
+        body.compact-mode #sidebar #sidebar-footer {
+            display: none;
+        }
+
+/* На главной вкладке в компактном режиме скрываем лишние громоздкие блоки (верхний баннер и большой лог-бокс) */
+body.compact-mode #tab-home > div:first-child,
+body.compact-mode #home-logs-panel {
+    display: none !important;
+}
+
+body.compact-mode #tab-home {
+    justify-content: center !important;
+}
+
+body.compact-mode .reactor-wrap {
+    width: 196px;
+    height: 196px;
+}
+
+body.compact-mode .power-btn {
+    width: 160px;
+    height: 160px;
 }

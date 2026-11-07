@@ -15,7 +15,7 @@
 				<div class="flex items-center gap-2">
 					<span class="text-[#39FF14] font-mono font-bold text-sm">>_ ADHD ENGINE BOOTLOADER</span>
 				</div>
-				<button onclick="skipSplash()" class="text-xs font-mono text-zinc-500 hover:text-zinc-300 transition cursor-pointer">
+				<button onclick="if(window.skipSplash) skipSplash(); else document.getElementById('splash-overlay').style.display='none';" class="text-xs font-mono text-zinc-500 hover:text-zinc-300 transition cursor-pointer">	
 					[Пропустить Intro]
 				</button>
 			</div>

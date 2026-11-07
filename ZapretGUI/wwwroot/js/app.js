@@ -37,7 +37,10 @@ const SPLASH_LINES = [
 let splashSkipped = false;
 async function runSplashSequence() {
     const term = document.getElementById('splash-terminal');
-    if (!term) return;
+    if (!term) {
+        skipSplash();
+        return;
+    }
     for (let i = 0; i < SPLASH_LINES.length; i++) {
         if (splashSkipped) return;
         const line = SPLASH_LINES[i];
@@ -61,7 +64,7 @@ function skipSplash() {
     if (!el) return;
     el.style.opacity = '0';
     el.style.pointerEvents = 'none';
-    setTimeout(() => el.style.display = 'none', 450);
+    setTimeout(() => { el.style.display = 'none'; }, 450);
 }
 
 // =========================================================================
@@ -71,7 +74,7 @@ let wizardStep = 0;
 let wizardFinished = false;
 let lastWizProgressEl = null;
 let wizCurrentPct = 0;
-let wizDownloadPhase = 0; // 0: init, 1: Zapret, 2: TgWsProxy
+let wizDownloadPhase = 0;
 
 let wizAsciiTimer = null;
 let wizAsciiShape = 0;
@@ -175,7 +178,6 @@ function renderWizAsciiFrame() {
         if (depth <= 0.5) return;
         const ooz = 1 / depth;
 
-        // Точное соотношение 2:1 для компенсации высоты моноширинного шрифта
         const xp = Math.floor(W / 2 + 42 * ooz * x2);
         const yp = Math.floor(H / 2 - 21 * ooz * y2);
 
@@ -204,25 +206,13 @@ function renderWizAsciiFrame() {
             for (let phi = 0; phi < 6.28; phi += 0.045) {
                 const cosp = Math.cos(phi), sinp = Math.sin(phi);
                 const circleX = R2 + R1 * cost;
-                plotPoint(
-                    circleX * cosp,
-                    circleX * sinp,
-                    R1 * sint,
-                    cost * cosp,
-                    cost * sinp,
-                    sint
-                );
+                plotPoint(circleX * cosp, circleX * sinp, R1 * sint, cost * cosp, cost * sinp, sint);
             }
         }
     } else if (wizAsciiShape === 1) {
         const S = 1.95;
-        const verts = [
-            [0, S, 0], [0, -S, 0], [S, 0, 0], [-S, 0, 0], [0, 0, S], [0, 0, -S]
-        ];
-        const faces = [
-            [0, 4, 2], [0, 2, 5], [0, 5, 3], [0, 3, 4],
-            [1, 2, 4], [1, 5, 2], [1, 3, 5], [1, 4, 3]
-        ];
+        const verts = [[0, S, 0], [0, -S, 0], [S, 0, 0], [-S, 0, 0], [0, 0, S], [0, 0, -S]];
+        const faces = [[0, 4, 2], [0, 2, 5], [0, 5, 3], [0, 3, 4], [1, 2, 4], [1, 5, 2], [1, 3, 5], [1, 4, 3]];
         faces.forEach(([i0, i1, i2]) => {
             const v0 = verts[i0], v1 = verts[i1], v2 = verts[i2];
             const nx = (v0[0] + v1[0] + v2[0]) / 3;
@@ -437,12 +427,12 @@ function appendWizardLog(time, message, isProgress) {
             const rawPct = parseFloat(pctMatch[1]);
             if (bothCores) {
                 if (wizDownloadPhase <= 1) {
-                    setWizardProgress(15 + rawPct * 0.35); // 15% -> 50%
+                    setWizardProgress(15 + rawPct * 0.35);
                 } else {
-                    setWizardProgress(58 + rawPct * 0.38); // 58% -> 96%
+                    setWizardProgress(58 + rawPct * 0.38);
                 }
             } else {
-                setWizardProgress(15 + rawPct * 0.80); // 15% -> 95%
+                setWizardProgress(15 + rawPct * 0.80);
             }
         }
     }
@@ -525,7 +515,9 @@ function handleBackendEvent(type, data) {
                 udp: data.settings.gameFilterUdpRange || '1024-65535'
             };
 
-            initSettingsFromBackend(data);
+            if (typeof initSettingsFromBackend === 'function') {
+                initSettingsFromBackend(data);
+            }
             document.body.classList.toggle('compact-mode', !!data.settings.compactMode);
 
             if (data.settings.skipSplashScreen && !data.isFirstRun) {
@@ -536,8 +528,8 @@ function handleBackendEvent(type, data) {
             appState.listMods = data.listMods || [];
 
             initConfigsList(data.profiles || ['general.bat']);
-            renderModsView();
-            prepareDiagSkeletons();
+            if (typeof renderModsView === 'function') renderModsView();
+            if (typeof prepareDiagSkeletons === 'function') prepareDiagSkeletons();
             updateGameFilterBadge(data.gameFilterStatus, appState.gameFilter.mode !== 'disabled');
             updateRunningUI(data.zapretRunning, data.proxyRunning);
 
@@ -574,7 +566,7 @@ function handleBackendEvent(type, data) {
             break;
 
         case 'routingStatusUpdated':
-            updateRoutingStatusUI(data);
+            if (typeof updateRoutingStatusUI === 'function') updateRoutingStatusUI(data);
             document.getElementById('btn-update-ipset').innerHTML = '<span class="mdl-icon text-xs text-brand">&#xE149;</span><span>Обновить базу</span>';
             document.getElementById('btn-update-ipset').disabled = false;
             document.getElementById('btn-update-hosts').innerHTML = '<span class="mdl-icon text-xs">&#xE945;</span><span>Обновить</span>';
@@ -590,31 +582,31 @@ function handleBackendEvent(type, data) {
             appState.batMods = data.batMods || [];
             appState.listMods = data.listMods || [];
             initConfigsList(data.profiles || ['general.bat']);
-            renderModsView();
+            if (typeof renderModsView === 'function') renderModsView();
             break;
 
         case 'modIdGenerated':
             document.getElementById('new-mod-id').value = data.id;
-            updateModIdValidationUI(data.id, false, false);
+            if (typeof updateModIdValidationUI === 'function') updateModIdValidationUI(data.id, false, false);
             break;
 
         case 'modIdChecked':
-            updateModIdValidationUI(data.cleanId, data.isTaken, data.isEmpty);
+            if (typeof updateModIdValidationUI === 'function') updateModIdValidationUI(data.cleanId, data.isTaken, data.isEmpty);
             break;
 
         case 'modCreated':
-            closeCreateModModal();
+            if (typeof closeCreateModModal === 'function') closeCreateModModal();
             break;
 
         case 'modContentLoaded':
-            openEditorWithData(data);
+            if (typeof openEditorWithData === 'function') openEditorWithData(data);
             break;
 
         case 'batValidationResult':
             if (data.isValid) {
-                setEditorStatus('✓ Синтаксис корректен!', 'text-brand');
+                if (typeof setEditorStatus === 'function') setEditorStatus('✓ Синтаксис корректен!', 'text-brand');
             } else {
-                setEditorStatus('⚠ Ошибка в скрипте', 'text-[#F44336]');
+                if (typeof setEditorStatus === 'function') setEditorStatus('⚠ Ошибка в скрипте', 'text-[#F44336]');
                 showAlert('Проверка синтаксиса Zapret', data.errorMessage, true);
             }
             break;
@@ -629,7 +621,7 @@ function handleBackendEvent(type, data) {
             break;
 
         case 'modContentSaved':
-            closeEditorModal();
+            if (typeof closeEditorModal === 'function') closeEditorModal();
             break;
 
         case 'promptRestartZapret':
@@ -650,7 +642,8 @@ function handleBackendEvent(type, data) {
             break;
 
         case 'diagResult':
-            renderDiagnosticsReport(data);
+            if (typeof renderDiagnosticsReport === 'function') renderDiagnosticsReport(data);
+            updateRadarNodesFromReport(data);
             break;
 
         case 'log':
@@ -1030,7 +1023,7 @@ function updateGameFilterBadge(statusText, isEnabled) {
 }
 
 function openGameFilterModal() {
-    selectGfMode(appState.gameFilter.mode || 'disabled', true);
+    selectGfMode(appState.gameFilter.mode || 'disabled');
     document.getElementById('gf-tcp-input').value = appState.gameFilter.tcp || '1024-65535';
     document.getElementById('gf-udp-input').value = appState.gameFilter.udp || '1024-65535';
     document.getElementById('gf-modal').classList.add('open');
@@ -1528,7 +1521,7 @@ function executeCommandPaletteItem(idx) {
 function updateModsSlidingPill() {
     const pill = document.getElementById('mods-seg-pill');
     const activeBtn = document.querySelector('#mods-seg-track .mods-seg-btn.active') ||
-                      document.getElementById('mod-tab-' + (appState.modsSubTab || 'bat'));
+        document.getElementById('mod-tab-' + (appState.modsSubTab || 'bat'));
     if (!pill || !activeBtn) return;
 
     pill.style.width = `${activeBtn.offsetWidth}px`;
@@ -1544,7 +1537,6 @@ function updateSettingsSlidingPill(targetBtn) {
     pill.style.transform = `translateX(${btn.offsetLeft}px)`;
 }
 
-// Исправленный фильтр поиска по настройкам (прячет пустые карточки и секции, если внутри ничего не найдено)
 function filterSettingsView() {
     const query = (document.getElementById('settings-search-input')?.value || '').trim().toLowerCase();
     const activeCatBtn = document.querySelector('#settings-seg-track .set-cat-btn.active');
@@ -1569,7 +1561,6 @@ function filterSettingsView() {
             return;
         }
 
-        // Проверяем отдельные карточки внутри группы (например, 2 колонки в верхней Bento-сетке)
         const innerCards = group.classList.contains('glass-card') ? [group] : Array.from(group.querySelectorAll('.glass-card'));
         let anyVisibleInGroup = false;
 
@@ -1584,7 +1575,6 @@ function filterSettingsView() {
                 if (match) visibleInCard++;
             });
 
-            // Если в подсетке маршрутизации обе подкарточки скрыты — прячем саму сетку
             const routingGrid = card.querySelector('#settings-routing-grid');
             if (routingGrid) {
                 const visRouting = routingGrid.querySelectorAll('[data-search]:not(.hidden)').length;
@@ -1599,7 +1589,6 @@ function filterSettingsView() {
     });
 }
 
-// Надежное сохранение всех настроек + переключение CompactMode
 let settingsSaveToastTimer = null;
 function onSettingsChanged() {
     const compact = document.getElementById('set-compact-mode')?.checked ?? false;
@@ -1649,11 +1638,349 @@ function onSettingsChanged() {
 }
 
 // =========================================================================
-// 11. ИНИЦИАЛИЗАЦИЯ ПРИ ЗАГРУЗКЕ DOM
+// 11. ИНТЕРАКТИВНЫЙ РАДАР И ГРАФ СЕТИ (NODE GRAPH RADAR) ДЛЯ ДИАГНОСТИКИ
+// =========================================================================
+let diagViewMode = 'radar';
+let diagRadarAnimId = null;
+let diagRadarAngle = 0;
+let diagRadarNodes = [];
+let diagHoveredNode = null;
+
+function initDiagnosticsRadarView() {
+    const dcGrid = document.getElementById('diag-dc-grid');
+    if (!dcGrid) return;
+    const matrixCard = dcGrid.closest('.glass-card');
+    if (!matrixCard || document.getElementById('diag-radar-wrap')) return;
+
+    const headerBar = document.createElement('div');
+    headerBar.className = 'flex items-center justify-between pb-3 mb-3 border-b border-[#242424]';
+    headerBar.innerHTML = `
+        <div class="flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full dot-online"></span>
+            <span class="text-xs font-bold text-white uppercase tracking-wider">Топология маршрутов: Telegram DC & Discord</span>
+        </div>
+        <div class="flex items-center gap-2">
+            <div class="flex items-center bg-[#101010] border border-[#2A2A2A] rounded-lg p-0.5 text-[11px] font-semibold">
+                <button id="btn-diag-view-radar" onclick="setDiagViewMode('radar')" class="px-2.5 py-1 rounded-md bg-[#262626] text-white transition cursor-pointer">🎯 Радар узлов</button>
+                <button id="btn-diag-view-table" onclick="setDiagViewMode('table')" class="px-2.5 py-1 rounded-md text-[#888888] hover:text-white transition cursor-pointer">📋 Таблица</button>
+            </div>
+        </div>
+    `;
+
+    const radarWrap = document.createElement('div');
+    radarWrap.id = 'diag-radar-wrap';
+    radarWrap.className = 'relative w-full h-[300px] rounded-xl bg-[#08080A] border border-[#222226] overflow-hidden flex items-center justify-center';
+    radarWrap.innerHTML = `
+        <canvas id="diag-radar-canvas" width="760" height="300" class="w-full h-full cursor-crosshair"></canvas>
+        <div class="absolute top-2.5 left-3 pointer-events-none flex items-center gap-3 text-[11px] font-mono text-[#888888]">
+            <span class="flex items-center gap-1.5"><i class="w-2 h-2 rounded-full bg-[#4CAF50] inline-block"></i>Маршрут пробит</span>
+            <span class="flex items-center gap-1.5"><i class="w-2 h-2 rounded-full bg-[#F59E0B] inline-block"></i>Частично / Пинг</span>
+            <span class="flex items-center gap-1.5"><i class="w-2 h-2 rounded-full bg-[#D13438] inline-block"></i>Потеря пакетов</span>
+        </div>
+        <div id="diag-radar-tooltip" class="hidden absolute pointer-events-none bg-[#121216]/95 border border-[#33333A] rounded-lg px-3 py-2 text-xs font-mono text-white shadow-2xl z-20"></div>
+    `;
+
+    const tablesContainer = document.createElement('div');
+    tablesContainer.id = 'diag-tables-wrap';
+    tablesContainer.className = 'space-y-4 hidden';
+    while (matrixCard.firstChild) {
+        tablesContainer.appendChild(matrixCard.firstChild);
+    }
+
+    matrixCard.appendChild(headerBar);
+    matrixCard.appendChild(radarWrap);
+    matrixCard.appendChild(tablesContainer);
+
+    const canvas = document.getElementById('diag-radar-canvas');
+    if (canvas) {
+        canvas.addEventListener('mousemove', onDiagRadarMouseMove);
+        canvas.addEventListener('mouseleave', () => {
+            diagHoveredNode = null;
+            document.getElementById('diag-radar-tooltip')?.classList.add('hidden');
+        });
+    }
+
+    buildDefaultRadarNodes();
+    startDiagRadarLoop();
+}
+
+function setDiagViewMode(mode) {
+    diagViewMode = mode;
+    const radarWrap = document.getElementById('diag-radar-wrap');
+    const tablesWrap = document.getElementById('diag-tables-wrap');
+    const btnRadar = document.getElementById('btn-diag-view-radar');
+    const btnTable = document.getElementById('btn-diag-view-table');
+
+    if (mode === 'radar') {
+        radarWrap?.classList.remove('hidden');
+        tablesWrap?.classList.add('hidden');
+        if (btnRadar) btnRadar.className = 'px-2.5 py-1 rounded-md bg-[#262626] text-white transition cursor-pointer';
+        if (btnTable) btnTable.className = 'px-2.5 py-1 rounded-md text-[#888888] hover:text-white transition cursor-pointer';
+    } else {
+        radarWrap?.classList.add('hidden');
+        tablesWrap?.classList.remove('hidden');
+        if (btnRadar) btnRadar.className = 'px-2.5 py-1 rounded-md text-[#888888] hover:text-white transition cursor-pointer';
+        if (btnTable) btnTable.className = 'px-2.5 py-1 rounded-md bg-[#262626] text-white transition cursor-pointer';
+    }
+}
+
+function buildDefaultRadarNodes() {
+    diagRadarNodes = [
+        { id: 'dc1', label: 'TG DC 1', sub: '149.154.175.50 (US)', angle: -2.45, radius: 0.78, status: 'idle', ping: null, details: 'Ожидание сканирования...' },
+        { id: 'dc2', label: 'TG DC 2', sub: '149.154.167.51 (NL)', angle: -1.80, radius: 0.62, status: 'idle', ping: null, details: 'Ожидание сканирования...' },
+        { id: 'dc3', label: 'TG DC 3', sub: '149.154.175.100 (US)', angle: -1.15, radius: 0.80, status: 'idle', ping: null, details: 'Ожидание сканирования...' },
+        { id: 'dc4', label: 'TG DC 4', sub: '149.154.167.91 (NL)', angle: -0.50, radius: 0.64, status: 'idle', ping: null, details: 'Ожидание сканирования...' },
+        { id: 'dc5', label: 'TG DC 5', sub: '91.108.56.130 (SG)', angle: 0.25, radius: 0.82, status: 'idle', ping: null, details: 'Ожидание сканирования...' },
+        { id: 'ds_gw', label: 'Discord GW', sub: '162.159.130.234 :443', angle: 1.05, radius: 0.66, status: 'idle', ping: null, details: 'Gateway TCP :443' },
+        { id: 'ds_med', label: 'Discord Media', sub: '162.159.129.235 :443', angle: 1.75, radius: 0.76, status: 'idle', ping: null, details: 'Media TCP :443' },
+        { id: 'ds_api', label: 'Discord API', sub: '162.159.128.233 :443', angle: 2.40, radius: 0.62, status: 'idle', ping: null, details: 'API TCP :443' },
+        { id: 'ds_udp', label: 'Voice UDP', sub: 'Ports 50000–50010', angle: 3.05, radius: 0.82, status: 'idle', ping: null, details: 'Голосовой шлюз UDP' }
+    ];
+}
+
+function updateRadarNodesFromReport(report) {
+    if (!report) return;
+    if (!diagRadarNodes.length) buildDefaultRadarNodes();
+
+    for (let dcId = 1; dcId <= 5; dcId++) {
+        const node = diagRadarNodes.find(n => n.id === 'dc' + dcId);
+        if (!node) continue;
+
+        const ports = (report.dcResults || []).filter(r => r.dcId === dcId);
+        const okPorts = ports.filter(p => p.ok);
+
+        if (ports.length === 0) node.status = 'idle';
+        else if (okPorts.length === ports.length) node.status = 'ok';
+        else if (okPorts.length > 0) node.status = 'warn';
+        else node.status = 'fail';
+
+        const lats = okPorts.filter(p => p.latencyMs != null).map(p => p.latencyMs);
+        node.ping = lats.length > 0 ? Math.round(Math.min(...lats)) : null;
+        node.details = ports.map(p => `:${p.port} → ${p.ok ? Math.round(p.latencyMs) + ' мс ✓' : 'Блок ✕'}`).join('\n');
+    }
+
+    const dsMap = { 'Gateway': 'ds_gw', 'Media': 'ds_med', 'API': 'ds_api' };
+    (report.discordPing || []).forEach(d => {
+        const node = diagRadarNodes.find(n => n.id === dsMap[d.label]);
+        if (node) {
+            node.status = d.ok ? (d.latencyMs > 180 ? 'warn' : 'ok') : 'fail';
+            node.ping = d.ok && d.latencyMs != null ? Math.round(d.latencyMs) : null;
+            node.details = `${d.ip}:443\nСтатус: ${d.ok ? node.ping + ' мс ✓' : 'Недоступен ✕'}`;
+        }
+    });
+
+    const udpNode = diagRadarNodes.find(n => n.id === 'ds_udp');
+    if (udpNode && report.udpResult) {
+        const openCount = (report.udpResult.openPorts || []).length;
+        const totalCount = (report.udpResult.testedPorts || []).length || 5;
+        udpNode.status = !report.udpResult.blocked ? 'ok' : (report.appStatus?.zapretRunning ? 'warn' : 'fail');
+        udpNode.ping = null;
+        udpNode.details = `Открыто UDP: ${openCount}/${totalCount}\n${!report.udpResult.blocked ? 'Голос доступен ✓' : (report.appStatus?.zapretRunning ? 'Обход через Zapret ✓' : 'UDP заблокирован ✕')}`;
+    }
+}
+
+function onDiagRadarMouseMove(e) {
+    const canvas = document.getElementById('diag-radar-canvas');
+    const tooltip = document.getElementById('diag-radar-tooltip');
+    if (!canvas || !tooltip) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const mx = (e.clientX - rect.left) * scaleX;
+    const my = (e.clientY - rect.top) * scaleY;
+
+    let found = null;
+    for (const n of diagRadarNodes) {
+        if (n._px && Math.hypot(mx - n._px, my - n._py) < 22) {
+            found = n;
+            break;
+        }
+    }
+
+    diagHoveredNode = found;
+    if (found) {
+        tooltip.classList.remove('hidden');
+        tooltip.innerHTML = `
+            <div class="font-bold text-brand mb-0.5">${found.label}</div>
+            <div class="text-[10px] text-[#888888] mb-1">${found.sub}</div>
+            <div class="whitespace-pre-line text-[11px] text-[#E0E0E0]">${found.details}</div>
+        `;
+        const leftPx = Math.min(rect.width - 180, Math.max(8, e.clientX - rect.left + 14));
+        const topPx = Math.min(rect.height - 90, Math.max(8, e.clientY - rect.top - 10));
+        tooltip.style.left = `${leftPx}px`;
+        tooltip.style.top = `${topPx}px`;
+    } else {
+        tooltip.classList.add('hidden');
+    }
+}
+
+function startDiagRadarLoop() {
+    if (diagRadarAnimId) return;
+    function frame() {
+        try { drawDiagRadarFrame(); } catch (e) { }
+        diagRadarAnimId = requestAnimationFrame(frame);
+    }
+    diagRadarAnimId = requestAnimationFrame(frame);
+}
+
+function drawDiagRadarFrame() {
+    const canvas = document.getElementById('diag-radar-canvas');
+    if (!canvas || canvas.offsetParent === null) return;
+
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width;
+    const h = canvas.height;
+    const cx = w / 2;
+    const cy = h / 2 + 6;
+    const maxR = Math.min(w * 0.42, h * 0.43);
+
+    ctx.clearRect(0, 0, w, h);
+
+    const accentHex = getComputedStyle(document.body).getPropertyValue('--accent-light').trim() || '#4CAF50';
+    const isScanningNow = !document.getElementById('diag-progress-wrap')?.classList.contains('hidden');
+
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+    ctx.lineWidth = 1;
+    [0.35, 0.65, 0.95].forEach(rMult => {
+        ctx.beginPath();
+        ctx.arc(cx, cy, maxR * rMult, 0, Math.PI * 2);
+        ctx.stroke();
+    });
+
+    ctx.beginPath();
+    ctx.moveTo(cx - maxR * 1.15, cy);
+    ctx.lineTo(cx + maxR * 1.15, cy);
+    ctx.moveTo(cx, cy - maxR * 0.98);
+    ctx.lineTo(cx, cy + maxR * 0.98);
+    ctx.stroke();
+
+    // Сектор сканирующего луча (совместимый со всеми версиями Canvas)
+    diagRadarAngle = (diagRadarAngle + (isScanningNow ? 0.045 : 0.012)) % (Math.PI * 2);
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, maxR * 1.02, diagRadarAngle - 0.55, diagRadarAngle);
+    ctx.closePath();
+    ctx.fillStyle = isScanningNow ? 'rgba(76, 175, 80, 0.16)' : 'rgba(76, 175, 80, 0.06)';
+    ctx.fill();
+    ctx.restore();
+
+    const pulseTime = performance.now() * 0.002;
+
+    diagRadarNodes.forEach((node, idx) => {
+        const nx = cx + Math.cos(node.angle) * (maxR * 1.75 * node.radius);
+        const ny = cy + Math.sin(node.angle) * (maxR * 0.92 * node.radius);
+        node._px = nx;
+        node._py = ny;
+
+        let col = '#44444A';
+        if (node.status === 'ok') col = accentHex;
+        else if (node.status === 'warn') col = '#F59E0B';
+        else if (node.status === 'fail') col = '#D13438';
+        else if (isScanningNow) col = '#3B82F6';
+
+        ctx.save();
+        ctx.beginPath();
+        if (node.status === 'fail') {
+            ctx.setLineDash([4, 5]);
+            ctx.strokeStyle = 'rgba(209, 52, 56, 0.35)';
+        } else if (node.status === 'ok' || node.status === 'warn') {
+            ctx.strokeStyle = col + '66';
+        } else {
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+        }
+        ctx.lineWidth = diagHoveredNode === node ? 2.2 : 1.3;
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(nx, ny);
+        ctx.stroke();
+        ctx.restore();
+
+        if (node.status === 'ok' || node.status === 'warn' || isScanningNow) {
+            const p = (pulseTime + idx * 0.27) % 1;
+            const px = cx + (nx - cx) * p;
+            const py = cy + (ny - cy) * p;
+            ctx.fillStyle = col;
+            ctx.beginPath();
+            ctx.arc(px, py, 2.6, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    });
+
+    ctx.fillStyle = '#141418';
+    ctx.strokeStyle = accentHex;
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 18, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = 'bold 9.5px Consolas, monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('YOU', cx, cy);
+
+    diagRadarNodes.forEach(node => {
+        const nx = node._px;
+        const ny = node._py;
+        const isHov = diagHoveredNode === node;
+
+        let col = '#52525B';
+        let glow = 'transparent';
+        if (node.status === 'ok') { col = accentHex; glow = accentHex + '55'; }
+        else if (node.status === 'warn') { col = '#F59E0B'; glow = 'rgba(245, 158, 11, 0.35)'; }
+        else if (node.status === 'fail') { col = '#D13438'; glow = 'rgba(209, 52, 56, 0.25)'; }
+        else if (isScanningNow) { col = '#60A5FA'; glow = 'rgba(96, 165, 250, 0.3)'; }
+
+        if (node.status === 'ok' || isHov) {
+            ctx.fillStyle = glow;
+            ctx.beginPath();
+            ctx.arc(nx, ny, isHov ? 19 : 15, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        ctx.fillStyle = '#121216';
+        ctx.strokeStyle = col;
+        ctx.lineWidth = isHov ? 2.5 : 1.8;
+        ctx.beginPath();
+        ctx.arc(nx, ny, isHov ? 11 : 9, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = col;
+        ctx.beginPath();
+        ctx.arc(nx, ny, node.status === 'fail' ? 2.5 : 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.font = 'bold 10.5px Consolas, monospace';
+        ctx.fillStyle = node.status === 'fail' ? '#888888' : '#FFFFFF';
+        ctx.textAlign = 'center';
+        ctx.fillText(node.label, nx, ny - 16);
+
+        if (node.ping != null) {
+            ctx.font = '10px Consolas, monospace';
+            ctx.fillStyle = col;
+            ctx.fillText(`${node.ping} мс`, nx, ny + 18);
+        } else if (node.status === 'fail') {
+            ctx.font = '9.5px Consolas, monospace';
+            ctx.fillStyle = '#F87171';
+            ctx.fillText('LOSS', nx, ny + 18);
+        }
+    });
+}
+
+// =========================================================================
+// 12. ИНИЦИАЛИЗАЦИЯ ПРИ ЗАГРУЗКЕ DOM
 // =========================================================================
 window.addEventListener('DOMContentLoaded', () => {
-    runSplashSequence();
+    // 1. Сразу запускаем матричный терминал загрузки (и ставим страховочный таймер)
+    runSplashSequence().catch(() => skipSplash());
+    setTimeout(() => {
+        if (!splashSkipped) skipSplash();
+    }, 6500);
 
+    // 2. Подключаем мост Photino.NET / WebView2
     if (window.external && typeof window.external.receiveMessage === 'function') {
         window.external.receiveMessage(rawMsg => {
             try {
@@ -1667,14 +1994,18 @@ window.addEventListener('DOMContentLoaded', () => {
         });
     } else if (window.chrome && window.chrome.webview) {
         window.chrome.webview.addEventListener('message', e => {
-            const msg = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
-            if (msg && msg.type) {
-                handleBackendEvent(msg.type, msg.data);
+            try {
+                const msg = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
+                if (msg && msg.type) {
+                    handleBackendEvent(msg.type, msg.data);
+                }
+            } catch (err) {
+                console.error(err);
             }
         });
     }
 
-    // Оборачиваем switchModsSubTab, чтобы капсула в Модификациях всегда плавно ездила
+    // 3. Оборачиваем вкладки Модов, Настроек и Диагностику
     if (typeof window.switchModsSubTab === 'function') {
         const origSwitchMods = window.switchModsSubTab;
         window.switchModsSubTab = function (sub) {
@@ -1683,7 +2014,6 @@ window.addEventListener('DOMContentLoaded', () => {
         };
     }
 
-    // Оборачиваем setSettingsCat, чтобы фильтр категорий и поиск работали синхронно
     if (typeof window.setSettingsCat === 'function') {
         const origSetCat = window.setSettingsCat;
         window.setSettingsCat = function (cat, btnEl) {
@@ -1694,12 +2024,26 @@ window.addEventListener('DOMContentLoaded', () => {
         };
     }
 
+    if (typeof window.runDiagnostics === 'function') {
+        const origRunDiag = window.runDiagnostics;
+        window.runDiagnostics = function () {
+            buildDefaultRadarNodes();
+            origRunDiag();
+        };
+    }
+
+    try {
+        initDiagnosticsRadarView();
+    } catch (e) {
+        console.error('Radar init error:', e);
+    }
+
     window.addEventListener('resize', () => {
         updateModsSlidingPill();
         updateSettingsSlidingPill();
     });
 
-    // Перетаскивание окна за шапку
+    // 4. Перетаскивание окна за шапку
     ['titlebar', 'wizard-titlebar'].forEach(id => {
         const bar = document.getElementById(id);
         if (bar) {
@@ -1711,7 +2055,7 @@ window.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Глобальный перехват Ctrl+K (работает на любой раскладке клавиатуры RU/EN в фазе capture)
+    // 5. Глобальный перехват Ctrl+K
     window.addEventListener('keydown', e => {
         if ((e.ctrlKey || e.metaKey) && (e.code === 'KeyK' || e.key === 'k' || e.key === 'K' || e.key === 'л' || e.key === 'Л')) {
             e.preventDefault();
@@ -1720,7 +2064,7 @@ window.addEventListener('DOMContentLoaded', () => {
         }
     }, true);
 
-    // Drag & Drop файлов
+    // 6. Drag & Drop файлов
     const dropOverlay = document.getElementById('dropzone-overlay');
     let dragCounter = 0;
 
