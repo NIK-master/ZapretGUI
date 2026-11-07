@@ -57,8 +57,8 @@ function switchModsSubTab(subTab) {
         }
         renderModsView();
     }
-    if (typeof updateSegmentedPill === 'function') {
-        updateSegmentedPill('mods-seg-track', 'mods-seg-pill');
+    if (typeof updateModsSlidingPill === 'function') {
+        requestAnimationFrame(() => updateModsSlidingPill());
     }
 }
 

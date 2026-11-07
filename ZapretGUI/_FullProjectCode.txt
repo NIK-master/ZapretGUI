@@ -835,6 +835,7 @@ namespace ZapretGUI.Core
 ////////////////////////////////////////////////////////////////////////////////
 
 using System;
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
@@ -913,16 +914,18 @@ namespace ZapretGUI.Core
             var hostToPing = AppConstants.AwsPingHost;
             var portToPing = AppConstants.AwsPingPort;
 
-            var fullUrl = SettingsManager.Current.PingUrl;
-            if (!string.IsNullOrWhiteSpace(fullUrl))
+            var rawInput = SettingsManager.Current.PingUrl?.Trim();
+            if (!string.IsNullOrWhiteSpace(rawInput))
             {
-                if (Uri.TryCreate(fullUrl, UriKind.Absolute, out Uri? uri))
+                var normalized = rawInput.Contains("://") ? rawInput : $"https://{rawInput}";
+
+                if (Uri.TryCreate(normalized, UriKind.Absolute, out Uri? uri) && !string.IsNullOrWhiteSpace(uri.Host))
                 {
                     hostToPing = uri.Host;
                     portToPing = uri.Port > 0 ? uri.Port : 443;
                 }
                 else
-                    hostToPing = fullUrl;
+                    hostToPing = rawInput;
             }
 
             return await NetworkHelper.TcpPingAsync(hostToPing, portToPing);
@@ -1141,11 +1144,14 @@ namespace ZapretGUI.Core
         public static AppStatus CheckAppStatus()
         {
             var status = new AppStatus();
+            Process[]? procs = null;
             try
             {
-                var names = Process.GetProcesses()
-                    .Select(p => { try { return p.ProcessName.ToLower(); } catch { return ""; } })
-                    .Where(n => n.Length > 0).ToList();
+                procs = Process.GetProcesses();
+                var names = procs
+                    .Select(p => { try { return p.ProcessName.ToLowerInvariant(); } catch { return ""; } })
+                    .Where(n => n.Length > 0)
+                    .ToList();
 
                 string Match(string key) =>
                     names.FirstOrDefault(n => AppSignatures[key].Any(s => n.Contains(s))) ?? "";
@@ -1156,6 +1162,16 @@ namespace ZapretGUI.Core
                 var tw = Match("tgwsproxy"); if (tw != "") { status.TgWsProxyRunning = true; status.TgWsProxyProcName = tw; }
             }
             catch { }
+            finally
+            {
+                if (procs != null)
+                {
+                    foreach (var p in procs)
+                    {
+                        try { p.Dispose(); } catch { }
+                    }
+                }
+            }
             return status;
         }
 
@@ -1398,6 +1414,9 @@ namespace ZapretGUI.Core
 
             Step(0.00, "Определение процессов...");
             report.AppStatus = await Task.Run(CheckAppStatus);
+
+            Step(0.05, "Проверка базового пинга...");
+            report.PingResults = await CheckPingAsync(p => Step(0.05 + p * 0.05, "Пинг узлов..."));
 
             Step(0.10, "Проверка DC Telegram...");
             report.DcResults = await CheckTelegramDcsAsync(p => Step(0.10 + p * 0.20, "DC Telegram..."));
@@ -1909,31 +1928,28 @@ namespace ZapretGUI.Core
 // ФАЙЛ: Core\NetworkHelper.cs
 ////////////////////////////////////////////////////////////////////////////////
 
+using System;
 using System.Diagnostics;
 using System.Net.Sockets;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace ZapretGUI.Core
 {
     public static class NetworkHelper
     {
-        public static async Task<long> TcpPingAsync(string host, int port)
+        public static async Task<long> TcpPingAsync(string host, int port, int timeoutMs = 2000)
         {
             try
             {
                 using var client = new TcpClient();
-                var stopwatch = new Stopwatch();
+                using var cts = new CancellationTokenSource(timeoutMs);
+                var stopwatch = Stopwatch.StartNew();
 
-                stopwatch.Start();
-                var connectTask = client.ConnectAsync(host, port);
+                await client.ConnectAsync(host, port, cts.Token);
+                stopwatch.Stop();
 
-                if (await Task.WhenAny(connectTask, Task.Delay(2000)) == connectTask)
-                {
-                    stopwatch.Stop();
-                    return client.Connected ? stopwatch.ElapsedMilliseconds : -1;
-                }
-
-                return -1;
+                return client.Connected ? stopwatch.ElapsedMilliseconds : -1;
             }
             catch
             {
@@ -2576,18 +2592,35 @@ namespace ZapretGUI.Core
 {
     public static class StartupHelper
     {
-        private const string RegistryKeyPath = "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run";
+        private const string RegistryKeyPath = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
+        private const string TaskName = AppConstants.AppRegistryName;
 
         public static bool IsAutoStartEnabled()
         {
             try
             {
+                // 1. Проверяем наличие задачи в Планировщике Windows (основной способ для requireAdministrator)
+                using var p = Process.Start(new ProcessStartInfo
+                {
+                    FileName = "schtasks.exe",
+                    Arguments = $"/Query /TN \"{TaskName}\"",
+                    CreateNoWindow = true,
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true
+                });
+
+                p?.WaitForExit(1500);
+                if (p != null && p.ExitCode == 0)
+                    return true;
+
+                // 2. Фолбэк: проверяем реестр (на случай если запуск без админ-прав)
                 using var key = Registry.CurrentUser.OpenSubKey(RegistryKeyPath, false);
                 return key?.GetValue(AppConstants.AppRegistryName) != null;
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Ошибка чтения реестра: {ex.Message}");
+                Debug.WriteLine($"Ошибка проверки автозапуска: {ex.Message}");
                 return false;
             }
         }
@@ -2596,25 +2629,54 @@ namespace ZapretGUI.Core
         {
             try
             {
-                using var key = Registry.CurrentUser.OpenSubKey(RegistryKeyPath, true);
-                if (key == null) return;
+                var exePath = Environment.ProcessPath;
+                if (string.IsNullOrEmpty(exePath))
+                    exePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ZapretGUI.exe");
+
+                // Всегда подчищаем старый ключ в Run, чтобы Windows не плодила дубликаты
+                using (var key = Registry.CurrentUser.OpenSubKey(RegistryKeyPath, true))
+                {
+                    key?.DeleteValue(AppConstants.AppRegistryName, false);
+                }
 
                 if (enable)
                 {
-                    var exePath = Environment.ProcessPath;
-                    if (string.IsNullOrEmpty(exePath))
-                        exePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ZapretGUI.exe");
+                    // Создаем задачу при входе пользователя с наивысшими правами (/RL HIGHEST)
+                    using var p = Process.Start(new ProcessStartInfo
+                    {
+                        FileName = "schtasks.exe",
+                        Arguments = $"/Create /F /RL HIGHEST /SC ONLOGON /TN \"{TaskName}\" /TR \"\\\"{exePath}\\\"\"",
+                        CreateNoWindow = true,
+                        UseShellExecute = false,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true
+                    });
+                    p?.WaitForExit(2500);
 
-                    key.SetValue(AppConstants.AppRegistryName, $"\"{exePath}\"");
+                    // Если по какой-то причине служба планировщика отключена, пишем в реестр как резерв
+                    if (p == null || p.ExitCode != 0)
+                    {
+                        using var key = Registry.CurrentUser.OpenSubKey(RegistryKeyPath, true);
+                        key?.SetValue(AppConstants.AppRegistryName, $"\"{exePath}\"");
+                    }
                 }
                 else
                 {
-                    key.DeleteValue(AppConstants.AppRegistryName, false);
+                    using var p = Process.Start(new ProcessStartInfo
+                    {
+                        FileName = "schtasks.exe",
+                        Arguments = $"/Delete /F /TN \"{TaskName}\"",
+                        CreateNoWindow = true,
+                        UseShellExecute = false,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true
+                    });
+                    p?.WaitForExit(2500);
                 }
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Ошибка записи в реестр: {ex.Message}");
+                Debug.WriteLine($"Ошибка настройки автозапуска: {ex.Message}");
             }
         }
     }
@@ -2820,6 +2882,9 @@ namespace ZapretGUI.Core
         [DllImport("Gdi32.dll", EntryPoint = "CreateRoundRectRgn")]
         private static extern IntPtr CreateRoundRectRgn(int nLeftRect, int nTopRect, int nRightRect, int nBottomRect, int nWidthEllipse, int nHeightEllipse);
 
+        [DllImport("Gdi32.dll")]
+        private static extern bool DeleteObject(IntPtr hObject);
+
         [DllImport("user32.dll")]
         private static extern bool GetCursorPos(out Point lpPoint);
 
@@ -2881,7 +2946,17 @@ namespace ZapretGUI.Core
             if (Width != w || Height != h)
             {
                 Size = new Size(w, h);
-                Region = Region.FromHrgn(CreateRoundRectRgn(0, 0, w, h, SI(22), SI(22)));
+                var oldRegion = Region;
+                IntPtr hrgn = CreateRoundRectRgn(0, 0, w, h, SI(22), SI(22));
+                try
+                {
+                    Region = Region.FromHrgn(hrgn);
+                }
+                finally
+                {
+                    DeleteObject(hrgn);
+                    oldRegion?.Dispose();
+                }
             }
         }
 
@@ -4053,12 +4128,7 @@ namespace ZapretGUI.Core
                     });
 
                     await BypassController.Current.RestartServicesAsync(SettingsManager.Current.SelectedProfileName);
-                    SendEvent("bypassState", new
-                    {
-                        isRunning = BypassController.Current.IsRunning,
-                        zapretRunning = BypassController.Current.Zapret.IsRunning,
-                        proxyRunning = BypassController.Current.TgProxy.IsRunning
-                    });
+                    BroadcastBypassState();
                 }
             };
 
@@ -4242,12 +4312,7 @@ namespace ZapretGUI.Core
 
                 case "restartBypass":
                     await BypassController.Current.RestartServicesAsync(SettingsManager.Current.SelectedProfileName);
-                    SendEvent("bypassState", new
-                    {
-                        isRunning = BypassController.Current.IsRunning,
-                        zapretRunning = BypassController.Current.Zapret.IsRunning,
-                        proxyRunning = BypassController.Current.TgProxy.IsRunning
-                    });
+                    BroadcastBypassState();
                     break;
 
                 case "updateModuleToggles":
@@ -4272,12 +4337,7 @@ namespace ZapretGUI.Core
                             isProgress = false
                         });
                         await BypassController.Current.RestartServicesAsync(prof);
-                        SendEvent("bypassState", new
-                        {
-                            isRunning = BypassController.Current.IsRunning,
-                            zapretRunning = BypassController.Current.Zapret.IsRunning,
-                            proxyRunning = BypassController.Current.TgProxy.IsRunning
-                        });
+                        BroadcastBypassState();
                     }
                     break;
 
@@ -5125,12 +5185,7 @@ namespace ZapretGUI.Core
             if (BypassController.Current.IsRunning)
             {
                 BypassController.Current.StopServices();
-                SendEvent("bypassState", new
-                {
-                    isRunning = false,
-                    zapretRunning = false,
-                    proxyRunning = false
-                });
+                BroadcastBypassState();
             }
             else
             {
@@ -5164,12 +5219,7 @@ namespace ZapretGUI.Core
                         SendEvent("log", new { message = $"❌ ОШИБКА: {line.Trim()}", time = DateTime.Now.ToString("HH:mm:ss") });
                 }
 
-                SendEvent("bypassState", new
-                {
-                    isRunning = BypassController.Current.IsRunning,
-                    zapretRunning = BypassController.Current.Zapret.IsRunning,
-                    proxyRunning = BypassController.Current.TgProxy.IsRunning
-                });
+                BroadcastBypassState();
             }
         }
 
@@ -5213,12 +5263,7 @@ namespace ZapretGUI.Core
             if (restartNow && BypassController.Current.Zapret.IsRunning)
             {
                 await BypassController.Current.RestartServicesAsync(SettingsManager.Current.SelectedProfileName);
-                SendEvent("bypassState", new
-                {
-                    isRunning = BypassController.Current.IsRunning,
-                    zapretRunning = BypassController.Current.Zapret.IsRunning,
-                    proxyRunning = BypassController.Current.TgProxy.IsRunning
-                });
+                BroadcastBypassState();
             }
         }
 
@@ -5408,6 +5453,13 @@ namespace ZapretGUI.Core
             _watcherDebounceCts?.Dispose();
             _modsWatcher?.Dispose();
             _pendingConfirmTcs?.TrySetResult(false);
+        }
+
+        private void BroadcastBypassState()
+        {
+            _mainWindow.UpdateIndicators(
+                BypassController.Current.Zapret.IsRunning,
+                BypassController.Current.TgProxy.IsRunning);
         }
     }
 }
@@ -5773,16 +5825,31 @@ namespace ZapretGUI.Core
             if (IsScanning) return;
 
             _topConfigs.Clear();
+            _scanCts?.Dispose();
             _scanCts = new CancellationTokenSource();
 
-            using var hideTimer = new System.Timers.Timer(100);
+            using var hideTimer = new System.Timers.Timer(120) { AutoReset = false };
             hideTimer.Elapsed += (s, ev) =>
             {
-                foreach (var p in Process.GetProcessesByName(AppConstants.ZapretProcessName))
+                if (_scanCts == null || _scanCts.IsCancellationRequested)
+                    return;
+
+                var procs = Process.GetProcessesByName(AppConstants.ZapretProcessName);
+                foreach (var p in procs)
                 {
-                    if (p.MainWindowHandle != IntPtr.Zero)
-                        ShowWindow(p.MainWindowHandle, SW_HIDE);
+                    try
+                    {
+                        if (p.MainWindowHandle != IntPtr.Zero)
+                            ShowWindow(p.MainWindowHandle, SW_HIDE);
+                    }
+                    catch { }
+                    finally
+                    {
+                        p.Dispose();
+                    }
                 }
+
+                try { if (!_scanCts.IsCancellationRequested) hideTimer.Start(); } catch { }
             };
             hideTimer.Start();
 
@@ -5846,6 +5913,12 @@ namespace ZapretGUI.Core
             finally
             {
                 hideTimer.Stop();
+                try
+                {
+                    _scanProcess?.Dispose();
+                    _scanProcess = null;
+                }
+                catch { }
             }
         }
 

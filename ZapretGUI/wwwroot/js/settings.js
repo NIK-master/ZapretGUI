@@ -274,8 +274,22 @@ function startGemSwatchesEngine() {
     }
 
     let time = 0;
+    let lastGemFrameTime = performance.now();
 
-    function renderZeroGravityCarousel() {
+    function renderZeroGravityCarousel(now = performance.now()) {
+        const dt = Math.min(0.05, Math.max(0.001, (now - lastGemFrameTime) / 1000));
+        lastGemFrameTime = now;
+
+        const settingsOpen = document.getElementById('tab-settings')?.classList.contains('active');
+        const wizardOpen = document.getElementById('wizard-overlay')?.classList.contains('open');
+        if (document.hidden || (!settingsOpen && !wizardOpen)) {
+            requestAnimationFrame(renderZeroGravityCarousel);
+            return;
+        }
+
+        time += dt * 0.22;
+        const lerpFactor = 1 - Math.pow(0.001, dt);
+        currentOrbitAngle += (targetOrbitAngle - currentOrbitAngle) * (lerpFactor * 1.15);
         time += 0.0035;
         currentOrbitAngle += (targetOrbitAngle - currentOrbitAngle) * 0.075;
 
@@ -649,59 +663,6 @@ function updateRoutingStatusUI(rs) {
     }
 }
 
-function onSettingsChanged() {
-    sendCmd('playClick');
-
-    const compact = document.getElementById('set-compact-mode')?.checked ?? false;
-    const focus = document.getElementById('set-focus-mode')?.checked ?? false;
-    const watchdog = document.getElementById('set-watchdog-ping')?.checked ?? false;
-
-    appState.settings.compactMode = compact;
-    appState.settings.focusMode = focus;
-    appState.settings.watchdogPingAutoRestart = watchdog;
-
-    document.body.classList.toggle('compact-mode', compact);
-
-    const payload = {
-        autoStart: document.getElementById('set-autostart')?.checked ?? false,
-        autoStartBypass: document.getElementById('set-autostart-bypass')?.checked ?? false,
-        startMinimized: document.getElementById('set-start-minimized')?.checked ?? false,
-        minimizeOnClose: document.getElementById('set-minimize-close')?.checked ?? true,
-        stopServicesOnExit: document.getElementById('set-stop-on-exit')?.checked ?? true,
-        notificationsEnabled: document.getElementById('set-notifications')?.checked ?? true,
-        alwaysOnTop: document.getElementById('set-always-on-top')?.checked ?? false,
-
-        accentTheme: appState.settings.accentTheme || 'green',
-        soundEffectsEnabled: document.getElementById('set-sound-effects')?.checked ?? true,
-        skipSplashScreen: document.getElementById('set-skip-splash')?.checked ?? false,
-        compactMode: compact,
-        focusMode: focus,
-        hardwareAcceleration: document.getElementById('set-hw-accel')?.checked ?? true,
-
-        pingUrl: document.getElementById('set-ping-url')?.value?.trim() || 'https://dynamodb.eu-central-1.amazonaws.com',
-        statsUpdateInterval: appState.settings.statsUpdateInterval || 1,
-        autoRestartServices: document.getElementById('set-autorestart')?.checked ?? false,
-        watchdogPingAutoRestart: watchdog,
-        hostsSourceIndex: appState.settings.hostsSourceIndex ?? 2
-    };
-
-    sendCmd('saveSettings', { settings: payload });
-    showSettingsSavedToast();
-}
-
-function showSettingsSavedToast() {
-    const toast = document.getElementById('settings-save-toast');
-    if (!toast) return;
-    toast.classList.remove('opacity-0');
-    toast.classList.add('opacity-100');
-
-    if (saveToastTimeout) clearTimeout(saveToastTimeout);
-    saveToastTimeout = setTimeout(() => {
-        toast.classList.remove('opacity-100');
-        toast.classList.add('opacity-0');
-    }, 1600);
-}
-
 function setPingUrlPreset(url) {
     const input = document.getElementById('set-ping-url');
     if (input) {
@@ -721,50 +682,6 @@ function setSettingsCat(cat, btnEl) {
     }
 
     filterSettingsView();
-}
-
-function updateSettingsSlidingPill(activeBtn) {
-    const pill = document.getElementById('settings-seg-pill');
-    const track = document.getElementById('settings-seg-track');
-    if (!pill || !track || !activeBtn) return;
-
-    const trackRect = track.getBoundingClientRect();
-    const btnRect = activeBtn.getBoundingClientRect();
-    const offsetLeft = btnRect.left - trackRect.left + track.scrollLeft;
-
-    pill.style.width = `${btnRect.width}px`;
-    pill.style.transform = `translateX(${offsetLeft}px)`;
-}
-
-function filterSettingsView() {
-    const query = (document.getElementById('settings-search-input')?.value || '').trim().toLowerCase();
-    const groups = document.querySelectorAll('#tab-settings [data-set-group]');
-
-    groups.forEach(group => {
-        const groupCat = group.getAttribute('data-set-group');
-        const catMatches = (currentSettingsCat === 'all' || currentSettingsCat === groupCat);
-
-        if (!catMatches && !query) {
-            group.classList.add('hidden');
-            return;
-        }
-
-        const searchableRows = group.querySelectorAll('[data-search]');
-        if (searchableRows.length === 0) {
-            group.classList.toggle('hidden', !catMatches);
-            return;
-        }
-
-        let visibleInGroup = 0;
-        searchableRows.forEach(row => {
-            const text = (row.getAttribute('data-search') + ' ' + row.innerText).toLowerCase();
-            const match = !query || text.includes(query);
-            row.classList.toggle('hidden', !match);
-            if (match) visibleInGroup++;
-        });
-
-        group.classList.toggle('hidden', visibleInGroup === 0);
-    });
 }
 
 function openIntervalSelector() {

@@ -220,7 +220,14 @@ namespace ZapretGUI
 
         private async Task CheckUpdatesOnStartupAsync()
         {
-            var stopServicesAction = () => { if (IsBypassRunning()) ToggleBypass(); };
+            var stopServicesAction = () =>
+            {
+                if (BypassController.Current.IsRunning)
+                {
+                    BypassController.Current.StopServices();
+                    UpdateIndicators(false, false);
+                }
+            };
             var progress = new Progress<string>(status =>
                 _webBridge?.SendEvent("log", new
                 {

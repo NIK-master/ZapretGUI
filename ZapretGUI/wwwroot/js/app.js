@@ -1114,11 +1114,24 @@ function onChartMouseLeave() {
 
 function drawChart() {
     const canvas = document.getElementById('traffic-chart');
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    const w = canvas.width;
-    const h = canvas.height;
+    if (!canvas || canvas.offsetParent === null) return;
 
+    const rect = canvas.getBoundingClientRect();
+    const w = rect.width;
+    const h = rect.height;
+    if (w < 10 || h < 10) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const targetW = Math.round(w * dpr);
+    const targetH = Math.round(h * dpr);
+    if (canvas.width !== targetW || canvas.height !== targetH) {
+        canvas.width = targetW;
+        canvas.height = targetH;
+    }
+
+    const ctx = canvas.getContext('2d');
+    ctx.save();
+    ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, w, h);
 
     const accentLight = getComputedStyle(document.body).getPropertyValue('--accent-light').trim() || '#4CAF50';
@@ -1133,7 +1146,7 @@ function drawChart() {
             else ctx.lineTo(x, y);
         }
         ctx.strokeStyle = strokeColor;
-        ctx.lineWidth = 1.8;
+        ctx.lineWidth = 1.6;
         ctx.stroke();
 
         ctx.lineTo(w, h);
@@ -1141,7 +1154,7 @@ function drawChart() {
         ctx.closePath();
 
         const grad = ctx.createLinearGradient(0, 0, 0, h);
-        grad.addColorStop(0, fillHex + '44');
+        grad.addColorStop(0, fillHex + '40');
         grad.addColorStop(1, fillHex + '00');
         ctx.fillStyle = grad;
         ctx.fill();
@@ -1151,7 +1164,7 @@ function drawChart() {
     drawSeries(rxHistory, accentLight, accentLight.startsWith('#') ? accentLight : '#4CAF50');
 
     if (chartHoverIndex >= 0 && chartHoverIndex < CHART_POINTS) {
-        const x = (chartHoverIndex / (CHART_POINTS - 1)) * w;
+        const x = Math.floor((chartHoverIndex / (CHART_POINTS - 1)) * w) + 0.5;
         ctx.beginPath();
         ctx.moveTo(x, 0);
         ctx.lineTo(x, h);
@@ -1163,11 +1176,11 @@ function drawChart() {
         const txVal = txHistory[chartHoverIndex].toFixed(1);
         const label = `↓ ${rxVal}  ↑ ${txVal} Мбит/с`;
 
-        ctx.font = '10px Consolas, monospace';
+        ctx.font = '600 10px Consolas, monospace';
         const textW = ctx.measureText(label).width + 10;
         const boxX = Math.min(w - textW - 4, Math.max(4, x - textW / 2));
 
-        ctx.fillStyle = '#141414E6';
+        ctx.fillStyle = 'rgba(20, 20, 20, 0.92)';
         ctx.fillRect(boxX, 16, textW, 16);
         ctx.strokeStyle = '#333333';
         ctx.strokeRect(boxX, 16, textW, 16);
@@ -1175,17 +1188,21 @@ function drawChart() {
         ctx.fillStyle = '#FFFFFF';
         ctx.fillText(label, boxX + 5, 27);
     }
+
+    ctx.restore();
 }
 
 // =========================================================================
 // 7. ЖУРНАЛ СОБЫТИЙ
 // =========================================================================
+const MAX_LOG_LINES = 300;
+
 function appendLog(time, message, isProgress = false) {
     const box = document.getElementById('log-box');
     if (!box) return;
 
     const fullText = `[${time}] ${message}`;
-    if (isProgress && lastProgressLogEl) {
+    if (isProgress && lastProgressLogEl && lastProgressLogEl.parentNode === box) {
         lastProgressLogEl.innerText = fullText;
         box.scrollTop = box.scrollHeight;
         return;
@@ -1202,6 +1219,11 @@ function appendLog(time, message, isProgress = false) {
     row.innerText = fullText;
     box.appendChild(row);
     lastProgressLogEl = isProgress ? row : null;
+
+    // Удаляем самые старые строки, если лог перевалил за лимит
+    while (box.children.length > MAX_LOG_LINES) {
+        box.removeChild(box.firstElementChild);
+    }
 
     updateLogCounter();
     applyLogFilters();
@@ -1646,140 +1668,6 @@ let diagRadarAngle = 0;
 let diagRadarNodes = [];
 let diagHoveredNode = null;
 
-
-function initDiagnosticsRadarView() {
-    const dcGrid = document.getElementById('diag-dc-grid');
-    if (!dcGrid) return;
-    const matrixCard = dcGrid.closest('.glass-card');
-    if (!matrixCard || document.getElementById('diag-radar-wrap')) return;
-
-    const headerBar = document.createElement('div');
-    headerBar.className = 'flex items-center justify-between pb-3 mb-3 border-b border-[#242424]';
-    headerBar.innerHTML = `
-        <div class="flex items-center gap-2">
-            <span class="w-2 h-2 rounded-full dot-online"></span>
-            <span class="text-xs font-bold text-white uppercase tracking-wider">Топология маршрутов: Telegram DC & Discord</span>
-        </div>
-        <div class="flex items-center gap-2">
-            <div class="flex items-center bg-[#101010] border border-[#2A2A2A] rounded-lg p-0.5 text-[11px] font-semibold">
-                <button id="btn-diag-view-radar" onclick="setDiagViewMode('radar')" class="px-2.5 py-1 rounded-md bg-[#262626] text-white transition cursor-pointer">🎯 Радар узлов</button>
-                <button id="btn-diag-view-table" onclick="setDiagViewMode('table')" class="px-2.5 py-1 rounded-md text-[#888888] hover:text-white transition cursor-pointer">📋 Таблица</button>
-            </div>
-        </div>
-    `;
-
-    const radarWrap = document.createElement('div');
-    radarWrap.id = 'diag-radar-wrap';
-    radarWrap.className = 'relative w-full h-[300px] rounded-xl bg-[#08080A] border border-[#222226] overflow-hidden flex items-center justify-center';
-    radarWrap.innerHTML = `
-        <canvas id="diag-radar-canvas" width="760" height="300" class="w-full h-full cursor-crosshair"></canvas>
-        <div class="absolute top-2.5 left-3 pointer-events-none flex items-center gap-3 text-[11px] font-mono text-[#888888]">
-            <span class="flex items-center gap-1.5"><i class="w-2 h-2 rounded-full bg-[#4CAF50] inline-block"></i>Маршрут пробит</span>
-            <span class="flex items-center gap-1.5"><i class="w-2 h-2 rounded-full bg-[#F59E0B] inline-block"></i>Частично / Пинг</span>
-            <span class="flex items-center gap-1.5"><i class="w-2 h-2 rounded-full bg-[#D13438] inline-block"></i>Потеря пакетов</span>
-        </div>
-        <div id="diag-radar-tooltip" class="hidden absolute pointer-events-none bg-[#121216]/95 border border-[#33333A] rounded-lg px-3 py-2 text-xs font-mono text-white shadow-2xl z-20"></div>
-    `;
-
-    const tablesContainer = document.createElement('div');
-    tablesContainer.id = 'diag-tables-wrap';
-    tablesContainer.className = 'space-y-4 hidden';
-    while (matrixCard.firstChild) {
-        tablesContainer.appendChild(matrixCard.firstChild);
-    }
-
-    matrixCard.appendChild(headerBar);
-    matrixCard.appendChild(radarWrap);
-    matrixCard.appendChild(tablesContainer);
-
-    const canvas = document.getElementById('diag-radar-canvas');
-    if (canvas) {
-        canvas.addEventListener('mousemove', onDiagRadarMouseMove);
-        canvas.addEventListener('mouseleave', () => {
-            diagHoveredNode = null;
-            document.getElementById('diag-radar-tooltip')?.classList.add('hidden');
-        });
-    }
-
-    buildDefaultRadarNodes();
-    startDiagRadarLoop();
-}
-
-function setDiagViewMode(mode) {
-    diagViewMode = mode;
-    const radarWrap = document.getElementById('diag-radar-wrap');
-    const tablesWrap = document.getElementById('diag-tables-wrap');
-    const btnRadar = document.getElementById('btn-diag-view-radar');
-    const btnTable = document.getElementById('btn-diag-view-table');
-
-    if (mode === 'radar') {
-        radarWrap?.classList.remove('hidden');
-        tablesWrap?.classList.add('hidden');
-        if (btnRadar) btnRadar.className = 'px-2.5 py-1 rounded-md bg-[#262626] text-white transition cursor-pointer';
-        if (btnTable) btnTable.className = 'px-2.5 py-1 rounded-md text-[#888888] hover:text-white transition cursor-pointer';
-    } else {
-        radarWrap?.classList.add('hidden');
-        tablesWrap?.classList.remove('hidden');
-        if (btnRadar) btnRadar.className = 'px-2.5 py-1 rounded-md text-[#888888] hover:text-white transition cursor-pointer';
-        if (btnTable) btnTable.className = 'px-2.5 py-1 rounded-md bg-[#262626] text-white transition cursor-pointer';
-    }
-}
-
-function buildDefaultRadarNodes() {
-    diagRadarNodes = [
-        { id: 'dc1', label: 'TG DC 1', sub: '149.154.175.50 (US)', angle: -2.45, radius: 0.78, status: 'idle', ping: null, details: 'Ожидание сканирования...' },
-        { id: 'dc2', label: 'TG DC 2', sub: '149.154.167.51 (NL)', angle: -1.80, radius: 0.62, status: 'idle', ping: null, details: 'Ожидание сканирования...' },
-        { id: 'dc3', label: 'TG DC 3', sub: '149.154.175.100 (US)', angle: -1.15, radius: 0.80, status: 'idle', ping: null, details: 'Ожидание сканирования...' },
-        { id: 'dc4', label: 'TG DC 4', sub: '149.154.167.91 (NL)', angle: -0.50, radius: 0.64, status: 'idle', ping: null, details: 'Ожидание сканирования...' },
-        { id: 'dc5', label: 'TG DC 5', sub: '91.108.56.130 (SG)', angle: 0.25, radius: 0.82, status: 'idle', ping: null, details: 'Ожидание сканирования...' },
-        { id: 'ds_gw', label: 'Discord GW', sub: '162.159.130.234 :443', angle: 1.05, radius: 0.66, status: 'idle', ping: null, details: 'Gateway TCP :443' },
-        { id: 'ds_med', label: 'Discord Media', sub: '162.159.129.235 :443', angle: 1.75, radius: 0.76, status: 'idle', ping: null, details: 'Media TCP :443' },
-        { id: 'ds_api', label: 'Discord API', sub: '162.159.128.233 :443', angle: 2.40, radius: 0.62, status: 'idle', ping: null, details: 'API TCP :443' },
-        { id: 'ds_udp', label: 'Voice UDP', sub: 'Ports 50000–50010', angle: 3.05, radius: 0.82, status: 'idle', ping: null, details: 'Голосовой шлюз UDP' }
-    ];
-}
-
-function updateRadarNodesFromReport(report) {
-    if (!report) return;
-    if (!diagRadarNodes.length) buildDefaultRadarNodes();
-
-    for (let dcId = 1; dcId <= 5; dcId++) {
-        const node = diagRadarNodes.find(n => n.id === 'dc' + dcId);
-        if (!node) continue;
-
-        const ports = (report.dcResults || []).filter(r => r.dcId === dcId);
-        const okPorts = ports.filter(p => p.ok);
-
-        if (ports.length === 0) node.status = 'idle';
-        else if (okPorts.length === ports.length) node.status = 'ok';
-        else if (okPorts.length > 0) node.status = 'warn';
-        else node.status = 'fail';
-
-        const lats = okPorts.filter(p => p.latencyMs != null).map(p => p.latencyMs);
-        node.ping = lats.length > 0 ? Math.round(Math.min(...lats)) : null;
-        node.details = ports.map(p => `:${p.port} → ${p.ok ? Math.round(p.latencyMs) + ' мс ✓' : 'Блок ✕'}`).join('\n');
-    }
-
-    const dsMap = { 'Gateway': 'ds_gw', 'Media': 'ds_med', 'API': 'ds_api' };
-    (report.discordPing || []).forEach(d => {
-        const node = diagRadarNodes.find(n => n.id === dsMap[d.label]);
-        if (node) {
-            node.status = d.ok ? (d.latencyMs > 180 ? 'warn' : 'ok') : 'fail';
-            node.ping = d.ok && d.latencyMs != null ? Math.round(d.latencyMs) : null;
-            node.details = `${d.ip}:443\nСтатус: ${d.ok ? node.ping + ' мс ✓' : 'Недоступен ✕'}`;
-        }
-    });
-
-    const udpNode = diagRadarNodes.find(n => n.id === 'ds_udp');
-    if (udpNode && report.udpResult) {
-        const openCount = (report.udpResult.openPorts || []).length;
-        const totalCount = (report.udpResult.testedPorts || []).length || 5;
-        udpNode.status = !report.udpResult.blocked ? 'ok' : (report.appStatus?.zapretRunning ? 'warn' : 'fail');
-        udpNode.ping = null;
-        udpNode.details = `Открыто UDP: ${openCount}/${totalCount}\n${!report.udpResult.blocked ? 'Голос доступен ✓' : (report.appStatus?.zapretRunning ? 'Обход через Zapret ✓' : 'UDP заблокирован ✕')}`;
-    }
-}
-
 let diagRadarLastTime = 0;
 
 function onDiagRadarMouseMove(e) {
@@ -2019,6 +1907,7 @@ function drawDiagRadarFrame(dt = 0.016, now = performance.now()) {
     ctx.restore();
 }
 
+
 // =========================================================================
 // 12. ИНИЦИАЛИЗАЦИЯ ПРИ ЗАГРУЗКЕ DOM
 // =========================================================================
@@ -2052,25 +1941,6 @@ window.addEventListener('DOMContentLoaded', () => {
                 console.error(err);
             }
         });
-    }
-
-    // 3. Оборачиваем вкладки Модов, Настроек и Диагностику
-    if (typeof window.switchModsSubTab === 'function') {
-        const origSwitchMods = window.switchModsSubTab;
-        window.switchModsSubTab = function (sub) {
-            origSwitchMods(sub);
-            requestAnimationFrame(() => updateModsSlidingPill());
-        };
-    }
-
-    if (typeof window.setSettingsCat === 'function') {
-        const origSetCat = window.setSettingsCat;
-        window.setSettingsCat = function (cat, btnEl) {
-            window.currentSettingsCat = cat;
-            origSetCat(cat, btnEl);
-            filterSettingsView();
-            requestAnimationFrame(() => updateSettingsSlidingPill(btnEl));
-        };
     }
 
     if (typeof window.runDiagnostics === 'function') {

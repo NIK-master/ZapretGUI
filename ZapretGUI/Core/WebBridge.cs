@@ -630,10 +630,13 @@ namespace ZapretGUI.Core
 
         private async Task HandleCheckUpdatesManualAsync()
         {
-            Action stopServicesAction = () =>
+            var stopServicesAction = () =>
             {
-                if (_mainWindow.IsBypassRunning())
-                    _mainWindow.ToggleBypass();
+                if (BypassController.Current.IsRunning)
+                {
+                    BypassController.Current.StopServices();
+                    BroadcastBypassState();
+                }
             };
 
             var progress = new Progress<string>(status =>
