@@ -37,6 +37,7 @@ const SPLASH_LINES = [
 let splashSkipped = false;
 async function runSplashSequence() {
     const term = document.getElementById('splash-terminal');
+    if (!term) return;
     for (let i = 0; i < SPLASH_LINES.length; i++) {
         if (splashSkipped) return;
         const line = SPLASH_LINES[i];
@@ -69,9 +70,11 @@ function skipSplash() {
 let wizardStep = 0;
 let wizardFinished = false;
 let lastWizProgressEl = null;
+let wizCurrentPct = 0;
+let wizDownloadPhase = 0; // 0: init, 1: Zapret, 2: TgWsProxy
 
 let wizAsciiTimer = null;
-let wizAsciiShape = 0; // 0: Torus, 1: Octahedron Shield, 2: DNA Network Helix, 3: Cyber Cube
+let wizAsciiShape = 0;
 let wizPitch = 0.45;
 let wizYaw = 0.4;
 let wizVelPitch = 0;
@@ -88,6 +91,12 @@ const ASCII_MODELS = [
 ];
 
 function startWizAsciiEngine() {
+    const stage = document.getElementById('wiz-ascii-stage');
+    if (stage) {
+        stage.style.letterSpacing = '0px';
+        stage.style.lineHeight = '11px';
+        stage.style.fontSize = '11px';
+    }
     if (wizAsciiTimer) return;
     wizAsciiTimer = setInterval(renderWizAsciiFrame, 33);
 }
@@ -100,7 +109,6 @@ function stopWizAsciiEngine() {
 }
 
 function cycleWizAsciiShape() {
-    sendCmd('playClick');
     wizAsciiShape = (wizAsciiShape + 1) % 4;
     const lbl = document.getElementById('wiz-ascii-model-name');
     if (lbl) lbl.innerText = ASCII_MODELS[wizAsciiShape];
@@ -138,14 +146,14 @@ function renderWizAsciiFrame() {
     const stage = document.getElementById('wiz-ascii-stage');
     if (!stage) return;
 
-    const W = 58, H = 30;
+    const W = 60, H = 28;
     const output = new Array(W * H).fill(' ');
     const zbuffer = new Array(W * H).fill(0);
     const chars = '.,-~:;=!*#$@';
 
     if (!wizIsDragging) {
-        const speedMult = wizHyperSpeed ? 2.8 : 1.0;
-        wizYaw += (0.032 * speedMult) + wizVelYaw;
+        const speedMult = wizHyperSpeed ? 2.4 : 1.0;
+        wizYaw += (0.03 * speedMult) + wizVelYaw;
         wizPitch += (0.014 * speedMult) + wizVelPitch;
         wizVelYaw *= 0.90;
         wizVelPitch *= 0.90;
@@ -163,12 +171,13 @@ function renderWizAsciiFrame() {
         const z2 = y1 * sinX + z1 * cosX;
         const x2 = x1;
 
-        const depth = z2 + 5.0;
+        const depth = z2 + 5.2;
         if (depth <= 0.5) return;
         const ooz = 1 / depth;
 
-        const xp = Math.floor(W / 2 + 34 * ooz * x2);
-        const yp = Math.floor(H / 2 - 17 * ooz * y2);
+        // Точное соотношение 2:1 для компенсации высоты моноширинного шрифта
+        const xp = Math.floor(W / 2 + 42 * ooz * x2);
+        const yp = Math.floor(H / 2 - 21 * ooz * y2);
 
         if (xp < 0 || xp >= W || yp < 0 || yp >= H) return;
         const idx = xp + W * yp;
@@ -181,17 +190,18 @@ function renderWizAsciiFrame() {
             const ny2 = ny * cosX - nz1 * sinX;
             const nz2 = ny * sinX + nz1 * cosX;
 
-            const lum = (nx1 * 0.35 + ny2 * 0.45 - nz2 * 0.75 + 1) * 0.5;
+            const netLen = Math.hypot(nx1, ny2, nz2) || 1;
+            const lum = ((nx1 / netLen) * 0.35 + (ny2 / netLen) * 0.45 - (nz2 / netLen) * 0.75 + 1) * 0.5;
             const cIdx = Math.max(0, Math.min(chars.length - 1, Math.floor(lum * chars.length)));
             output[idx] = chars[cIdx];
         }
     }
 
     if (wizAsciiShape === 0) {
-        const R1 = 0.85, R2 = 1.75;
-        for (let theta = 0; theta < 6.28; theta += 0.13) {
+        const R1 = 0.82, R2 = 1.65;
+        for (let theta = 0; theta < 6.28; theta += 0.11) {
             const cost = Math.cos(theta), sint = Math.sin(theta);
-            for (let phi = 0; phi < 6.28; phi += 0.055) {
+            for (let phi = 0; phi < 6.28; phi += 0.045) {
                 const cosp = Math.cos(phi), sinp = Math.sin(phi);
                 const circleX = R2 + R1 * cost;
                 plotPoint(
@@ -205,7 +215,7 @@ function renderWizAsciiFrame() {
             }
         }
     } else if (wizAsciiShape === 1) {
-        const S = 2.05;
+        const S = 1.95;
         const verts = [
             [0, S, 0], [0, -S, 0], [S, 0, 0], [-S, 0, 0], [0, 0, S], [0, 0, -S]
         ];
@@ -218,8 +228,8 @@ function renderWizAsciiFrame() {
             const nx = (v0[0] + v1[0] + v2[0]) / 3;
             const ny = (v0[1] + v1[1] + v2[1]) / 3;
             const nz = (v0[2] + v1[2] + v2[2]) / 3;
-            for (let u = 0; u <= 1; u += 0.07) {
-                for (let v = 0; u + v <= 1; v += 0.07) {
+            for (let u = 0; u <= 1; u += 0.06) {
+                for (let v = 0; u + v <= 1; v += 0.06) {
                     const w = 1 - u - v;
                     plotPoint(
                         u * v0[0] + v * v1[0] + w * v2[0],
@@ -231,27 +241,27 @@ function renderWizAsciiFrame() {
             }
         });
     } else if (wizAsciiShape === 2) {
-        for (let t = -2.2; t <= 2.2; t += 0.05) {
-            const angle = t * 2.2;
-            const r = 1.35;
+        for (let t = -2.1; t <= 2.1; t += 0.045) {
+            const angle = t * 2.1;
+            const r = 1.3;
             const x1 = r * Math.cos(angle), z1 = r * Math.sin(angle);
             const x2 = -x1, z2 = -z1;
 
-            for (let a = 0; a < 6.28; a += 0.7) {
+            for (let a = 0; a < 6.28; a += 0.65) {
                 const cr = 0.24;
                 plotPoint(x1 + cr * Math.cos(a), t, z1 + cr * Math.sin(a), Math.cos(a), 0, Math.sin(a));
                 plotPoint(x2 + cr * Math.cos(a), t, z2 + cr * Math.sin(a), -Math.cos(a), 0, -Math.sin(a));
             }
-            if (Math.abs((t * 10) % 4) < 0.5) {
-                for (let s = -1; s <= 1; s += 0.11) {
+            if (Math.abs((t * 10) % 4) < 0.45) {
+                for (let s = -1; s <= 1; s += 0.1) {
                     plotPoint(x1 * s, t, z1 * s, 0, 1, 0);
                 }
             }
         }
     } else {
-        const C = 1.4;
-        for (let u = -C; u <= C; u += 0.12) {
-            for (let v = -C; v <= C; v += 0.12) {
+        const C = 1.35;
+        for (let u = -C; u <= C; u += 0.1) {
+            for (let v = -C; v <= C; v += 0.1) {
                 plotPoint(u, v, C, 0, 0, 1);
                 plotPoint(u, v, -C, 0, 0, -1);
                 plotPoint(u, C, v, 0, 1, 0);
@@ -270,7 +280,6 @@ function renderWizAsciiFrame() {
 }
 
 function onWizardOptionChange() {
-    sendCmd('playClick');
     const zap = document.getElementById('wiz-chk-zapret').checked;
     const prx = document.getElementById('wiz-chk-proxy').checked;
     const aut = document.getElementById('wiz-chk-autostart').checked;
@@ -294,6 +303,8 @@ function openWizardModal() {
     wizardStep = 0;
     wizardFinished = false;
     wizHyperSpeed = false;
+    wizCurrentPct = 0;
+    wizDownloadPhase = 0;
     const btnNext = document.getElementById('wiz-btn-next');
     if (btnNext) {
         btnNext.disabled = false;
@@ -350,26 +361,33 @@ function updateWizardUI() {
 }
 
 function wizardPrevStep() {
-    sendCmd('playClick');
     if (wizardStep > 0 && wizardStep < 4) {
         wizardStep--;
         updateWizardUI();
     }
 }
 
+function setWizardProgress(val) {
+    wizCurrentPct = Math.max(wizCurrentPct, Math.min(100, Math.round(val)));
+    const bar = document.getElementById('wiz-finish-bar');
+    const pctEl = document.getElementById('wiz-finish-pct');
+    if (bar) bar.style.width = `${wizCurrentPct}%`;
+    if (pctEl) pctEl.innerText = `${wizCurrentPct}%`;
+}
+
 function wizardNextStep() {
-    sendCmd('playClick');
     if (wizardStep === 3) {
         wizardStep = 4;
+        wizCurrentPct = 8;
+        wizDownloadPhase = 0;
+        lastWizProgressEl = null;
         updateWizardUI();
 
         const btnNext = document.getElementById('wiz-btn-next');
         btnNext.disabled = true;
         btnNext.style.opacity = '0.5';
         document.getElementById('wiz-console-log').innerHTML = '';
-        document.getElementById('wiz-finish-bar').style.width = '30%';
-        const pct = document.getElementById('wiz-finish-pct');
-        if (pct) pct.innerText = '30%';
+        setWizardProgress(8);
 
         sendCmd('runWizardSetup', {
             useZapret: document.getElementById('wiz-chk-zapret').checked,
@@ -390,7 +408,6 @@ function wizardNextStep() {
 }
 
 function skipWizard() {
-    sendCmd('playClick');
     stopWizAsciiEngine();
     sendCmd('skipWizard');
     document.getElementById('wizard-overlay').classList.remove('open');
@@ -400,12 +417,34 @@ function appendWizardLog(time, message, isProgress) {
     const box = document.getElementById('wiz-console-log');
     const text = `[${time}] ${message}`;
 
-    const pctMatch = message.match(/(\d+(?:\.\d+)?)%/);
-    if (pctMatch) {
-        const val = Math.min(98, Math.max(30, Math.round(parseFloat(pctMatch[1]))));
-        document.getElementById('wiz-finish-bar').style.width = `${val}%`;
-        const pctEl = document.getElementById('wiz-finish-pct');
-        if (pctEl) pctEl.innerText = `${val}%`;
+    const wantZapret = document.getElementById('wiz-chk-zapret')?.checked ?? true;
+    const wantProxy = document.getElementById('wiz-chk-proxy')?.checked ?? true;
+    const bothCores = wantZapret && wantProxy;
+
+    if (message.includes('Поиск последней версии Zapret')) {
+        wizDownloadPhase = 1;
+        setWizardProgress(15);
+    } else if (message.includes('Поиск последней версии TgWsProxy')) {
+        wizDownloadPhase = 2;
+        setWizardProgress(bothCores ? 58 : 15);
+    } else if (message.includes('Распаковка архива')) {
+        setWizardProgress(bothCores ? 52 : 90);
+    } else if (message.includes('Модули успешно загружены') || message.includes('Настройка успешно завершена')) {
+        setWizardProgress(100);
+    } else {
+        const pctMatch = message.match(/(\d+(?:\.\d+)?)%/);
+        if (pctMatch) {
+            const rawPct = parseFloat(pctMatch[1]);
+            if (bothCores) {
+                if (wizDownloadPhase <= 1) {
+                    setWizardProgress(15 + rawPct * 0.35); // 15% -> 50%
+                } else {
+                    setWizardProgress(58 + rawPct * 0.38); // 58% -> 96%
+                }
+            } else {
+                setWizardProgress(15 + rawPct * 0.80); // 15% -> 95%
+            }
+        }
     }
 
     if (isProgress && lastWizProgressEl) {
@@ -460,8 +499,7 @@ let watchdogFailCount = 0;
 let currentLogFilter = 'all';
 
 function sendCmd(action, data = {}) {
-    if (!action) return;
-    if (action === 'playClick') return;
+    if (!action || action === 'playClick') return;
 
     const payload = JSON.stringify({ action, ...data });
 
@@ -488,6 +526,11 @@ function handleBackendEvent(type, data) {
             };
 
             initSettingsFromBackend(data);
+            document.body.classList.toggle('compact-mode', !!data.settings.compactMode);
+
+            if (data.settings.skipSplashScreen && !data.isFirstRun) {
+                skipSplash();
+            }
 
             appState.batMods = data.batMods || [];
             appState.listMods = data.listMods || [];
@@ -515,11 +558,10 @@ function handleBackendEvent(type, data) {
         case 'wizardCompleted':
             wizardFinished = true;
             wizHyperSpeed = false;
+            wizCurrentPct = 100;
             document.getElementById('wiz-finish-status').innerText = 'Установка успешно завершена!';
             document.getElementById('wiz-finish-status').className = 'text-base font-bold text-brand';
-            document.getElementById('wiz-finish-bar').style.width = '100%';
-            const wizPct = document.getElementById('wiz-finish-pct');
-            if (wizPct) wizPct.innerText = '100%';
+            setWizardProgress(100);
             const btnNext = document.getElementById('wiz-btn-next');
             btnNext.disabled = false;
             btnNext.style.opacity = '1';
@@ -725,9 +767,7 @@ function handleBackendEvent(type, data) {
             break;
 
         case 'toggleCommandPalette':
-            const cmdModal = document.getElementById('cmd-palette-modal');
-            if (cmdModal && cmdModal.classList.contains('open')) closeCommandPalette();
-            else openCommandPalette();
+            toggleCommandPaletteModal();
             break;
     }
 }
@@ -793,8 +833,6 @@ function updateSessionBadgeTick() {
 }
 
 function onMainToggleClick() {
-    sendCmd('playClick');
-
     if (!appState.isRunning) {
         const useZapret = document.getElementById('chk-zapret').checked;
         const useProxy = document.getElementById('chk-proxy').checked;
@@ -834,7 +872,6 @@ function onMainToggleClick() {
 }
 
 function onModuleToggleChange() {
-    sendCmd('playClick');
     sendCmd('updateModuleToggles', {
         useZapret: document.getElementById('chk-zapret').checked,
         useProxy: document.getElementById('chk-proxy').checked
@@ -842,7 +879,6 @@ function onModuleToggleChange() {
 }
 
 function refreshPing() {
-    sendCmd('playClick');
     document.getElementById('stat-ping').innerText = '...';
     document.getElementById('ping-refresh-icon').classList.add('spin-anim');
     sendCmd('ping');
@@ -952,7 +988,6 @@ function renderConfigCards() {
 }
 
 function selectProfile(profileName) {
-    sendCmd('playClick');
     appState.selectedProfile = profileName;
     document.getElementById('txt-main-profile').innerText = profileName;
     document.getElementById('modal-active-profile').innerText = profileName;
@@ -961,18 +996,15 @@ function selectProfile(profileName) {
 }
 
 function openConfigModal() {
-    sendCmd('playClick');
     renderConfigCards();
     document.getElementById('config-modal').classList.add('open');
 }
 
 function closeConfigModal() {
-    sendCmd('playClick');
     document.getElementById('config-modal').classList.remove('open');
 }
 
 function toggleSmartScan() {
-    sendCmd('playClick');
     sendCmd('startScan');
 }
 
@@ -998,7 +1030,6 @@ function updateGameFilterBadge(statusText, isEnabled) {
 }
 
 function openGameFilterModal() {
-    sendCmd('playClick');
     selectGfMode(appState.gameFilter.mode || 'disabled', true);
     document.getElementById('gf-tcp-input').value = appState.gameFilter.tcp || '1024-65535';
     document.getElementById('gf-udp-input').value = appState.gameFilter.udp || '1024-65535';
@@ -1006,12 +1037,10 @@ function openGameFilterModal() {
 }
 
 function closeGameFilterModal() {
-    sendCmd('playClick');
     document.getElementById('gf-modal').classList.remove('open');
 }
 
-function selectGfMode(mode, silent = false) {
-    if (!silent) sendCmd('playClick');
+function selectGfMode(mode) {
     appState.gameFilter.mode = mode;
 
     document.querySelectorAll('.gf-mode-card').forEach(card => {
@@ -1026,13 +1055,11 @@ function selectGfMode(mode, silent = false) {
 }
 
 function resetGfPorts() {
-    sendCmd('playClick');
     document.getElementById('gf-tcp-input').value = '1024-65535';
     document.getElementById('gf-udp-input').value = '1024-65535';
 }
 
 function saveGameFilter() {
-    sendCmd('playClick');
     sendCmd('saveGameFilter', {
         mode: appState.gameFilter.mode,
         tcp: document.getElementById('gf-tcp-input').value.trim(),
@@ -1197,7 +1224,6 @@ function updateLogCounter() {
 }
 
 function setLogFilter(mode) {
-    sendCmd('playClick');
     currentLogFilter = mode;
 
     const btnAll = document.getElementById('log-filter-all');
@@ -1230,7 +1256,6 @@ function applyLogFilters() {
 }
 
 function clearLogs() {
-    sendCmd('playClick');
     const box = document.getElementById('log-box');
     if (box) box.innerHTML = '';
     lastProgressLogEl = null;
@@ -1238,7 +1263,6 @@ function clearLogs() {
 }
 
 function exportLogs() {
-    sendCmd('playClick');
     const box = document.getElementById('log-box');
     if (!box) return;
     const text = Array.from(box.children).map(el => el.innerText).join('\r\n');
@@ -1249,13 +1273,10 @@ function exportLogs() {
 // 8. НАВИГАЦИЯ И ДИАЛОГИ
 // =========================================================================
 function toggleSidebar() {
-    sendCmd('playClick');
     document.getElementById('sidebar')?.classList.toggle('rail-mode');
 }
 
 function switchTab(tabId, btnEl) {
-    sendCmd('playClick');
-
     document.querySelectorAll('.tab-view').forEach(sec => sec.classList.remove('active'));
     document.getElementById('tab-' + tabId)?.classList.add('active');
 
@@ -1286,11 +1307,13 @@ function switchTab(tabId, btnEl) {
         }
     }
 
-    if (tabId === 'mods' && typeof updateModsSlidingPill === 'function') {
-        setTimeout(updateModsSlidingPill, 30);
-    } else if (tabId === 'settings' && typeof updateSettingsSlidingPill === 'function') {
-        const activeSetBtn = document.querySelector('.set-cat-btn.active');
-        setTimeout(() => updateSettingsSlidingPill(activeSetBtn), 30);
+    if (tabId === 'mods') {
+        requestAnimationFrame(() => updateModsSlidingPill());
+    } else if (tabId === 'settings') {
+        requestAnimationFrame(() => {
+            const activeSetBtn = document.querySelector('.set-cat-btn.active');
+            if (activeSetBtn) updateSettingsSlidingPill(activeSetBtn);
+        });
     }
 }
 
@@ -1330,7 +1353,6 @@ function showConfirm(title, message, confirmText = 'Да', onAccept = null, isDa
 }
 
 function closeConfirmModal(accepted) {
-    sendCmd('playClick');
     document.getElementById('confirm-modal').classList.remove('open');
 
     if (isBackendConfirm) {
@@ -1375,7 +1397,6 @@ function openSelectionModal(subTitle, title, options, currentVal, onSelect) {
 }
 
 function chooseSelectionOption(idx) {
-    sendCmd('playClick');
     const list = document.getElementById('sel-modal-list');
     const opt = list._options?.[idx];
     document.getElementById('selection-modal').classList.remove('open');
@@ -1385,12 +1406,11 @@ function chooseSelectionOption(idx) {
 }
 
 function closeSelectionModal() {
-    sendCmd('playClick');
     document.getElementById('selection-modal').classList.remove('open');
 }
 
 // =========================================================================
-// 9. COMMAND PALETTE (CTRL + К) И DRAG & DROP
+// 9. COMMAND PALETTE (CTRL + K)
 // =========================================================================
 let cmdSelectedIndex = 0;
 let filteredCommands = [];
@@ -1424,14 +1444,19 @@ function getCommandPaletteItems() {
     return base;
 }
 
+function toggleCommandPaletteModal() {
+    const modal = document.getElementById('cmd-palette-modal');
+    if (modal && modal.classList.contains('open')) closeCommandPalette();
+    else openCommandPalette();
+}
+
 function openCommandPalette() {
-    sendCmd('playClick');
     const input = document.getElementById('cmd-palette-input');
     if (input) input.value = '';
     cmdSelectedIndex = 0;
     renderCommandPaletteList();
     document.getElementById('cmd-palette-modal').classList.add('open');
-    setTimeout(() => input?.focus(), 50);
+    setTimeout(() => input?.focus(), 40);
 }
 
 function closeCommandPalette() {
@@ -1498,12 +1523,137 @@ function executeCommandPaletteItem(idx) {
 }
 
 // =========================================================================
-// 10. ИНИЦИАЛИЗАЦИЯ ПРИ ЗАГРУЗКЕ DOM
+// 10. ФИКСЫ СЛАЙДЯЩИХ ПЛАШЕК, ПОИСКА И СОХРАНЕНИЯ НАСТРОЕК
+// =========================================================================
+function updateModsSlidingPill() {
+    const pill = document.getElementById('mods-seg-pill');
+    const activeBtn = document.querySelector('#mods-seg-track .mods-seg-btn.active') ||
+                      document.getElementById('mod-tab-' + (appState.modsSubTab || 'bat'));
+    if (!pill || !activeBtn) return;
+
+    pill.style.width = `${activeBtn.offsetWidth}px`;
+    pill.style.transform = `translateX(${activeBtn.offsetLeft}px)`;
+}
+
+function updateSettingsSlidingPill(targetBtn) {
+    const pill = document.getElementById('settings-seg-pill');
+    const btn = targetBtn || document.querySelector('#settings-seg-track .set-cat-btn.active');
+    if (!pill || !btn) return;
+
+    pill.style.width = `${btn.offsetWidth}px`;
+    pill.style.transform = `translateX(${btn.offsetLeft}px)`;
+}
+
+// Исправленный фильтр поиска по настройкам (прячет пустые карточки и секции, если внутри ничего не найдено)
+function filterSettingsView() {
+    const query = (document.getElementById('settings-search-input')?.value || '').trim().toLowerCase();
+    const activeCatBtn = document.querySelector('#settings-seg-track .set-cat-btn.active');
+    const currentCat = window.currentSettingsCat || (activeCatBtn?.getAttribute('onclick')?.match(/'([^']+)'/)?.[1] || 'all');
+
+    const groups = document.querySelectorAll('#tab-settings [data-set-group]');
+    groups.forEach(group => {
+        const groupCat = group.getAttribute('data-set-group');
+        const catMatches = (currentCat === 'all' || currentCat === groupCat);
+
+        if (!catMatches) {
+            group.classList.add('hidden');
+            return;
+        }
+
+        if (!query) {
+            group.classList.remove('hidden');
+            group.querySelectorAll('[data-search]').forEach(item => item.classList.remove('hidden'));
+            group.querySelectorAll('.glass-card').forEach(card => card.classList.remove('hidden'));
+            const routingGrid = group.querySelector('#settings-routing-grid');
+            if (routingGrid) routingGrid.classList.remove('hidden');
+            return;
+        }
+
+        // Проверяем отдельные карточки внутри группы (например, 2 колонки в верхней Bento-сетке)
+        const innerCards = group.classList.contains('glass-card') ? [group] : Array.from(group.querySelectorAll('.glass-card'));
+        let anyVisibleInGroup = false;
+
+        innerCards.forEach(card => {
+            const searchableItems = card.querySelectorAll('[data-search]');
+            let visibleInCard = 0;
+
+            searchableItems.forEach(item => {
+                const hay = (item.getAttribute('data-search') + ' ' + item.innerText).toLowerCase();
+                const match = hay.includes(query);
+                item.classList.toggle('hidden', !match);
+                if (match) visibleInCard++;
+            });
+
+            // Если в подсетке маршрутизации обе подкарточки скрыты — прячем саму сетку
+            const routingGrid = card.querySelector('#settings-routing-grid');
+            if (routingGrid) {
+                const visRouting = routingGrid.querySelectorAll('[data-search]:not(.hidden)').length;
+                routingGrid.classList.toggle('hidden', visRouting === 0);
+            }
+
+            card.classList.toggle('hidden', visibleInCard === 0);
+            if (visibleInCard > 0) anyVisibleInGroup = true;
+        });
+
+        group.classList.toggle('hidden', !anyVisibleInGroup);
+    });
+}
+
+// Надежное сохранение всех настроек + переключение CompactMode
+let settingsSaveToastTimer = null;
+function onSettingsChanged() {
+    const compact = document.getElementById('set-compact-mode')?.checked ?? false;
+    const focus = document.getElementById('set-focus-mode')?.checked ?? false;
+    const watchdog = document.getElementById('set-watchdog-ping')?.checked ?? false;
+
+    appState.settings.compactMode = compact;
+    appState.settings.focusMode = focus;
+    appState.settings.watchdogPingAutoRestart = watchdog;
+
+    document.body.classList.toggle('compact-mode', compact);
+
+    const payload = {
+        autoStart: document.getElementById('set-autostart')?.checked ?? false,
+        autoStartBypass: document.getElementById('set-autostart-bypass')?.checked ?? false,
+        startMinimized: document.getElementById('set-start-minimized')?.checked ?? false,
+        minimizeOnClose: document.getElementById('set-minimize-close')?.checked ?? true,
+        stopServicesOnExit: document.getElementById('set-stop-on-exit')?.checked ?? true,
+        notificationsEnabled: document.getElementById('set-notifications')?.checked ?? true,
+        alwaysOnTop: document.getElementById('set-always-on-top')?.checked ?? false,
+        soundEffectsEnabled: document.getElementById('set-sound-effects')?.checked ?? true,
+        skipSplashScreen: document.getElementById('set-skip-splash')?.checked ?? false,
+        compactMode: compact,
+        focusMode: focus,
+        hardwareAcceleration: document.getElementById('set-hw-accel')?.checked ?? true,
+        pingUrl: document.getElementById('set-ping-url')?.value?.trim() || 'https://dynamodb.eu-central-1.amazonaws.com',
+        statsUpdateInterval: appState.settings.statsUpdateInterval || 1,
+        autoRestartServices: document.getElementById('set-autorestart')?.checked ?? false,
+        watchdogPingAutoRestart: watchdog,
+        accentTheme: appState.settings.accentTheme || 'green',
+        hostsSourceIndex: appState.settings.hostsSourceIndex ?? 2
+    };
+
+    sendCmd('saveSettings', { settings: payload });
+
+    const toast = document.getElementById('settings-save-toast');
+    if (toast) {
+        toast.style.opacity = '1';
+        clearTimeout(settingsSaveToastTimer);
+        settingsSaveToastTimer = setTimeout(() => { toast.style.opacity = '0'; }, 1600);
+    }
+
+    setTimeout(() => {
+        updateModsSlidingPill();
+        updateSettingsSlidingPill();
+    }, 60);
+}
+
+// =========================================================================
+// 11. ИНИЦИАЛИЗАЦИЯ ПРИ ЗАГРУЗКЕ DOM
 // =========================================================================
 window.addEventListener('DOMContentLoaded', () => {
     runSplashSequence();
 
-    // Подключение приёма сообщений от Photino.NET и WebView2
     if (window.external && typeof window.external.receiveMessage === 'function') {
         window.external.receiveMessage(rawMsg => {
             try {
@@ -1524,6 +1674,31 @@ window.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Оборачиваем switchModsSubTab, чтобы капсула в Модификациях всегда плавно ездила
+    if (typeof window.switchModsSubTab === 'function') {
+        const origSwitchMods = window.switchModsSubTab;
+        window.switchModsSubTab = function (sub) {
+            origSwitchMods(sub);
+            requestAnimationFrame(() => updateModsSlidingPill());
+        };
+    }
+
+    // Оборачиваем setSettingsCat, чтобы фильтр категорий и поиск работали синхронно
+    if (typeof window.setSettingsCat === 'function') {
+        const origSetCat = window.setSettingsCat;
+        window.setSettingsCat = function (cat, btnEl) {
+            window.currentSettingsCat = cat;
+            origSetCat(cat, btnEl);
+            filterSettingsView();
+            requestAnimationFrame(() => updateSettingsSlidingPill(btnEl));
+        };
+    }
+
+    window.addEventListener('resize', () => {
+        updateModsSlidingPill();
+        updateSettingsSlidingPill();
+    });
+
     // Перетаскивание окна за шапку
     ['titlebar', 'wizard-titlebar'].forEach(id => {
         const bar = document.getElementById(id);
@@ -1536,15 +1711,14 @@ window.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Горячая клавиша Ctrl+K
+    // Глобальный перехват Ctrl+K (работает на любой раскладке клавиатуры RU/EN в фазе capture)
     window.addEventListener('keydown', e => {
-        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        if ((e.ctrlKey || e.metaKey) && (e.code === 'KeyK' || e.key === 'k' || e.key === 'K' || e.key === 'л' || e.key === 'Л')) {
             e.preventDefault();
-            const cmdModal = document.getElementById('cmd-palette-modal');
-            if (cmdModal && cmdModal.classList.contains('open')) closeCommandPalette();
-            else openCommandPalette();
+            e.stopPropagation();
+            toggleCommandPaletteModal();
         }
-    });
+    }, true);
 
     // Drag & Drop файлов
     const dropOverlay = document.getElementById('dropzone-overlay');

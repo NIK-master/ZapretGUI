@@ -61,7 +61,12 @@ namespace ZapretGUI.Core
 
                 _mainWindow.InvokeOnUI(() =>
                 {
-                    try { _mainWindow.Window.SetIconFile(icoFilePath); } catch { }
+                    try
+                    {
+                        _mainWindow.Window.SetIconFile(icoFilePath);
+                        _mainWindow.SetTaskbarIcon(trayIcon);
+                    }
+                    catch { }
                 });
             }
             catch { }
@@ -91,6 +96,12 @@ namespace ZapretGUI.Core
         [DllImport("Gdi32.dll", EntryPoint = "CreateRoundRectRgn")]
         private static extern IntPtr CreateRoundRectRgn(int nLeftRect, int nTopRect, int nRightRect, int nBottomRect, int nWidthEllipse, int nHeightEllipse);
 
+        [DllImport("user32.dll")]
+        private static extern bool GetCursorPos(out Point lpPoint);
+
+        [DllImport("user32.dll")]
+        private static extern bool SetForegroundWindow(IntPtr hWnd);
+
         private readonly MainWindow _mainWindow;
         private double _rxMbps = 0;
         private double _txMbps = 0;
@@ -109,6 +120,7 @@ namespace ZapretGUI.Core
         public CustomTrayPopupForm(MainWindow mainWindow)
         {
             _mainWindow = mainWindow;
+            StartPosition = FormStartPosition.Manual; // Обязательно, чтобы Windows не сбрасывала позицию в (0,0)
             FormBorderStyle = FormBorderStyle.None;
             ShowInTaskbar = false;
             TopMost = true;
@@ -133,14 +145,20 @@ namespace ZapretGUI.Core
 
         public void ShowAtCursor()
         {
-            var cursor = Cursor.Position;
+            if (!GetCursorPos(out Point cursor))
+                cursor = Cursor.Position;
+
             var screen = Screen.FromPoint(cursor).WorkingArea;
 
             int x = Math.Max(screen.Left + 8, Math.Min(cursor.X - Width / 2, screen.Right - Width - 8));
-            int y = Math.Max(screen.Top + 8, Math.Min(cursor.Y - Height - 10, screen.Bottom - Height - 8));
+            int y = Math.Max(screen.Top + 8, Math.Min(cursor.Y - Height - 12, screen.Bottom - Height - 8));
 
             Location = new Point(x, y);
-            Show();
+            if (!Visible)
+                Show();
+
+            SetDesktopLocation(x, y);
+            SetForegroundWindow(Handle);
             Activate();
             Invalidate();
             _ = RefreshPingAsync();

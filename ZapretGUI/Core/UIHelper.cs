@@ -16,13 +16,15 @@ namespace ZapretGUI.Core
         public static extern bool DestroyIcon(IntPtr handle);
 
         private static readonly ConcurrentDictionary<string, (Icon trayIcon, string icoFilePath)> _iconCache = new();
+        private static readonly string[] AllThemes = ["green", "blue", "purple", "amber", "cyan"];
 
         public static Action<string, string, bool>? WebAlertHandler { get; set; }
         public static Func<string, string, string, bool, Task<bool>>? WebConfirmHandler { get; set; }
 
-        public static string GetAccentHex(bool light = false)
+        public static string GetAccentHex(bool light = false, string? themeOverride = null)
         {
-            return (SettingsManager.Current.AccentTheme ?? "green") switch
+            var t = (themeOverride ?? SettingsManager.Current.AccentTheme ?? "green").ToLowerInvariant();
+            return t switch
             {
                 "blue" => light ? "#60A5FA" : "#0078D7",
                 "purple" => light ? "#A78BFA" : "#7C3AED",
@@ -32,9 +34,10 @@ namespace ZapretGUI.Core
             };
         }
 
-        public static string GetAccentDarkBgHex()
+        public static string GetAccentDarkBgHex(string? themeOverride = null)
         {
-            return (SettingsManager.Current.AccentTheme ?? "green") switch
+            var t = (themeOverride ?? SettingsManager.Current.AccentTheme ?? "green").ToLowerInvariant();
+            return t switch
             {
                 "blue" => "#102033",
                 "purple" => "#1E1433",
@@ -55,11 +58,41 @@ namespace ZapretGUI.Core
 
         public static void ApplyThemeColors()
         {
+            // При старте или смене темы гарантируем наличие обеих иконок (ON и OFF)
+            WarmupAllIcons();
         }
 
-        public static (Icon trayIcon, string icoFilePath) GetOrCreateAppIcon(bool isRunning)
+        public static void WarmupAllIcons()
         {
-            var theme = (SettingsManager.Current.AccentTheme ?? "green").ToLowerInvariant();
+            try
+            {
+                var currentTheme = (SettingsManager.Current.AccentTheme ?? "green").ToLowerInvariant();
+                if (currentTheme == "crimson") currentTheme = "cyan";
+
+                // Сначала мгновенно готовим обе версии (ON и OFF) для текущей темы
+                GetOrCreateAppIcon(false, currentTheme);
+                GetOrCreateAppIcon(true, currentTheme);
+
+                // Остальные темы догенерируем в фоне, если их ещё нет на диске
+                Task.Run(() =>
+                {
+                    foreach (var theme in AllThemes)
+                    {
+                        try
+                        {
+                            GetOrCreateAppIcon(false, theme);
+                            GetOrCreateAppIcon(true, theme);
+                        }
+                        catch { }
+                    }
+                });
+            }
+            catch { }
+        }
+
+        public static (Icon trayIcon, string icoFilePath) GetOrCreateAppIcon(bool isRunning, string? themeOverride = null)
+        {
+            var theme = (themeOverride ?? SettingsManager.Current.AccentTheme ?? "green").ToLowerInvariant();
             if (theme == "crimson") theme = "cyan";
 
             var cacheKey = $"{theme}_{(isRunning ? "on" : "off")}";
@@ -69,45 +102,50 @@ namespace ZapretGUI.Core
 
             var cacheDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", "Cache", "Icons");
             Directory.CreateDirectory(cacheDir);
-            var pngPath = Path.Combine(cacheDir, $"icon_{cacheKey}.png");
+            var icoPath = Path.Combine(cacheDir, $"icon_{cacheKey}.ico");
 
-            Bitmap bmp;
-
-            if (File.Exists(pngPath) && new FileInfo(pngPath).Length > 100)
+            if (!File.Exists(icoPath) || new FileInfo(icoPath).Length < 100)
             {
-                using var fs = new FileStream(pngPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-                bmp = new Bitmap(fs);
-            }
-            else
-            {
-                bmp = RenderIconBitmap(isRunning);
-                try
-                {
-                    bmp.Save(pngPath, ImageFormat.Png);
-                }
-                catch { }
+                using var bmp = RenderIconBitmap(isRunning, theme);
+                SaveBitmapAsTrueIco(bmp, icoPath);
             }
 
-            using (bmp)
-            {
-                IntPtr hIcon = bmp.GetHicon();
-                try
-                {
-                    using var tempIcon = Icon.FromHandle(hIcon);
-                    var managedTrayIcon = (Icon)tempIcon.Clone();
-
-                    var result = (managedTrayIcon, pngPath);
-                    _iconCache[cacheKey] = result;
-                    return result;
-                }
-                finally
-                {
-                    DestroyIcon(hIcon);
-                }
-            }
+            var managedTrayIcon = new Icon(icoPath, 64, 64);
+            var result = (managedTrayIcon, icoPath);
+            _iconCache[cacheKey] = result;
+            return result;
         }
 
-        private static Bitmap RenderIconBitmap(bool isRunning)
+        // Записывает настоящий бинарный .ICO файл с PNG-слоем внутри (понимается Windows Taskbar, Alt+Tab и Photino)
+        private static void SaveBitmapAsTrueIco(Bitmap bmp, string icoPath)
+        {
+            using var pngMs = new MemoryStream();
+            bmp.Save(pngMs, ImageFormat.Png);
+            byte[] pngBytes = pngMs.ToArray();
+
+            using var fs = new FileStream(icoPath, FileMode.Create, FileAccess.Write, FileShare.ReadWrite);
+            using var bw = new BinaryWriter(fs);
+
+            // ICONDIR header (6 байт)
+            bw.Write((short)0);   // Reserved
+            bw.Write((short)1);   // Type: 1 = ICO
+            bw.Write((short)1);   // Count: 1 image
+
+            // ICONDIRENTRY (16 байт)
+            bw.Write((byte)bmp.Width);
+            bw.Write((byte)bmp.Height);
+            bw.Write((byte)0);    // Palette
+            bw.Write((byte)0);    // Reserved
+            bw.Write((short)1);   // Color planes
+            bw.Write((short)32);  // Bits per pixel
+            bw.Write(pngBytes.Length); // Size of image data
+            bw.Write(22);         // Offset of image data (6 + 16 = 22)
+
+            // PNG payload
+            bw.Write(pngBytes);
+        }
+
+        private static Bitmap RenderIconBitmap(bool isRunning, string theme)
         {
             const int size = 64;
             var bmp = new Bitmap(size, size);
@@ -116,9 +154,9 @@ namespace ZapretGUI.Core
             g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
             g.Clear(Color.Transparent);
 
-            var accentColor = GetAccentColor(light: true);
+            var accentColor = ColorTranslator.FromHtml(GetAccentHex(light: true, theme));
             var borderColor = isRunning ? accentColor : ColorTranslator.FromHtml("#3A3A3A");
-            var bgTop = isRunning ? GetAccentDarkBgColor() : ColorTranslator.FromHtml("#18181B");
+            var bgTop = isRunning ? ColorTranslator.FromHtml(GetAccentDarkBgHex(theme)) : ColorTranslator.FromHtml("#18181B");
             var bgBottom = ColorTranslator.FromHtml("#0A0A0C");
 
             using var path = CreateRoundedRectPath(new Rectangle(4, 4, size - 8, size - 8), 14);

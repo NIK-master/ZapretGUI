@@ -109,10 +109,31 @@ namespace ZapretGUI
         [DllImport("user32.dll")]
         private static extern bool SetForegroundWindow(IntPtr hWnd);
 
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        private static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct RECT
+        {
+            public int Left, Top, Right, Bottom;
+        }
+
         private const int SW_HIDE = 0;
         private const int SW_SHOWNORMAL = 1;
         private const int SW_SHOWMINIMIZED = 2;
         private const int SW_RESTORE = 9;
+
+        private const uint WM_SETICON = 0x0080;
+        private static readonly IntPtr ICON_SMALL = new(0);
+        private static readonly IntPtr ICON_BIG = new(1);
+        private const uint SWP_NOZORDER = 0x0004;
+        private const uint SWP_NOACTIVATE = 0x0010;
 
         public PhotinoWindow Window { get; }
         private readonly TrayIconManager _trayIconManager;
@@ -124,17 +145,23 @@ namespace ZapretGUI
 
         public MainWindow()
         {
+            // Убираем белую вспышку WebView2 при запуске (делаем фон #0A0A0A до загрузки HTML)
+            Environment.SetEnvironmentVariable("WEBVIEW2_DEFAULT_BACKGROUND_COLOR", "FF0A0A0A");
+
             var configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.json");
             _isFirstRun = !File.Exists(configPath);
 
             SettingsManager.Load();
             UIHelper.ApplyThemeColors();
 
+            var (_, initIcoPath) = UIHelper.GetOrCreateAppIcon(false);
+
             int initW = SettingsManager.Current.CompactMode ? 850 : 1100;
             int initH = SettingsManager.Current.CompactMode ? 520 : 760;
 
             Window = new PhotinoWindow()
                 .SetTitle("Zapret for ADHD")
+                .SetIconFile(initIcoPath)
                 .SetUseOsDefaultSize(false)
                 .SetSize(new Size(initW, initH))
                 .Center()
@@ -243,6 +270,17 @@ namespace ZapretGUI
                     isProgress = status.Contains("Скачивание:") || status.Contains("Скачано:")
                 }));
             await UpdateManager.RunUpdateWorkflowAsync(isManualCheck: false, stopServicesAction, progress);
+        }
+
+        public void SetTaskbarIcon(Icon icon)
+        {
+            if (WindowHandle == IntPtr.Zero) return;
+            try
+            {
+                SendMessage(WindowHandle, WM_SETICON, ICON_SMALL, icon.Handle);
+                SendMessage(WindowHandle, WM_SETICON, ICON_BIG, icon.Handle);
+            }
+            catch { }
         }
 
         public void MinimizeWindow()
@@ -375,37 +413,36 @@ namespace ZapretGUI
             }
         }
 
-        public async void AnimateWindowSize(bool isCompact)
+        public void AnimateWindowSize(bool isCompact)
         {
-            var targetWidth = isCompact ? 850 : 1100;
-            var targetHeight = isCompact ? 520 : 760;
-
-            var startSize = Window.Size;
-            var startLoc = Window.Location;
-
-            if (Math.Abs(startSize.Width - targetWidth) < 2 && Math.Abs(startSize.Height - targetHeight) < 2)
-                return;
-
-            const int steps = 14;
-            for (int i = 1; i <= steps; i++)
+            InvokeOnUI(() =>
             {
-                double t = (double)i / steps;
-                double ease = 1 - Math.Pow(1 - t, 3);
+                int targetW = isCompact ? 850 : 1100;
+                int targetH = isCompact ? 520 : 760;
 
-                int curW = (int)Math.Round(startSize.Width + (targetWidth - startSize.Width) * ease);
-                int curH = (int)Math.Round(startSize.Height + (targetHeight - startSize.Height) * ease);
-
-                int curX = startLoc.X - (curW - startSize.Width) / 2;
-                int curY = startLoc.Y - (curH - startSize.Height) / 2;
-
-                InvokeOnUI(() =>
+                if (WindowHandle != IntPtr.Zero && GetWindowRect(WindowHandle, out var rect))
                 {
-                    Window.SetSize(new Size(curW, curH));
-                    Window.SetLocation(new Point(curX, curY));
-                });
+                    int curW = rect.Right - rect.Left;
+                    int curH = rect.Bottom - rect.Top;
 
-                await Task.Delay(14);
-            }
+                    if (Math.Abs(curW - targetW) < 2 && Math.Abs(curH - targetH) < 2)
+                        return;
+
+                    int newX = rect.Left - (targetW - curW) / 2;
+                    int newY = rect.Top - (targetH - curH) / 2;
+
+                    var screen = Screen.FromHandle(WindowHandle).WorkingArea;
+                    newX = Math.Max(screen.Left, Math.Min(newX, screen.Right - targetW));
+                    newY = Math.Max(screen.Top, Math.Min(newY, screen.Bottom - targetH));
+
+                    SetWindowPos(WindowHandle, IntPtr.Zero, newX, newY, targetW, targetH, SWP_NOZORDER | SWP_NOACTIVATE);
+                }
+                else
+                {
+                    Window.SetSize(new Size(targetW, targetH));
+                    Window.Center();
+                }
+            });
         }
 
         private string ExtractEmbeddedWebUI()
@@ -2667,7 +2704,12 @@ namespace ZapretGUI.Core
 
                 _mainWindow.InvokeOnUI(() =>
                 {
-                    try { _mainWindow.Window.SetIconFile(icoFilePath); } catch { }
+                    try
+                    {
+                        _mainWindow.Window.SetIconFile(icoFilePath);
+                        _mainWindow.SetTaskbarIcon(trayIcon);
+                    }
+                    catch { }
                 });
             }
             catch { }
@@ -2697,6 +2739,12 @@ namespace ZapretGUI.Core
         [DllImport("Gdi32.dll", EntryPoint = "CreateRoundRectRgn")]
         private static extern IntPtr CreateRoundRectRgn(int nLeftRect, int nTopRect, int nRightRect, int nBottomRect, int nWidthEllipse, int nHeightEllipse);
 
+        [DllImport("user32.dll")]
+        private static extern bool GetCursorPos(out Point lpPoint);
+
+        [DllImport("user32.dll")]
+        private static extern bool SetForegroundWindow(IntPtr hWnd);
+
         private readonly MainWindow _mainWindow;
         private double _rxMbps = 0;
         private double _txMbps = 0;
@@ -2715,6 +2763,7 @@ namespace ZapretGUI.Core
         public CustomTrayPopupForm(MainWindow mainWindow)
         {
             _mainWindow = mainWindow;
+            StartPosition = FormStartPosition.Manual; // Обязательно, чтобы Windows не сбрасывала позицию в (0,0)
             FormBorderStyle = FormBorderStyle.None;
             ShowInTaskbar = false;
             TopMost = true;
@@ -2739,14 +2788,20 @@ namespace ZapretGUI.Core
 
         public void ShowAtCursor()
         {
-            var cursor = Cursor.Position;
+            if (!GetCursorPos(out Point cursor))
+                cursor = Cursor.Position;
+
             var screen = Screen.FromPoint(cursor).WorkingArea;
 
             int x = Math.Max(screen.Left + 8, Math.Min(cursor.X - Width / 2, screen.Right - Width - 8));
-            int y = Math.Max(screen.Top + 8, Math.Min(cursor.Y - Height - 10, screen.Bottom - Height - 8));
+            int y = Math.Max(screen.Top + 8, Math.Min(cursor.Y - Height - 12, screen.Bottom - Height - 8));
 
             Location = new Point(x, y);
-            Show();
+            if (!Visible)
+                Show();
+
+            SetDesktopLocation(x, y);
+            SetForegroundWindow(Handle);
             Activate();
             Invalidate();
             _ = RefreshPingAsync();
@@ -3029,13 +3084,15 @@ namespace ZapretGUI.Core
         public static extern bool DestroyIcon(IntPtr handle);
 
         private static readonly ConcurrentDictionary<string, (Icon trayIcon, string icoFilePath)> _iconCache = new();
+        private static readonly string[] AllThemes = ["green", "blue", "purple", "amber", "cyan"];
 
         public static Action<string, string, bool>? WebAlertHandler { get; set; }
         public static Func<string, string, string, bool, Task<bool>>? WebConfirmHandler { get; set; }
 
-        public static string GetAccentHex(bool light = false)
+        public static string GetAccentHex(bool light = false, string? themeOverride = null)
         {
-            return (SettingsManager.Current.AccentTheme ?? "green") switch
+            var t = (themeOverride ?? SettingsManager.Current.AccentTheme ?? "green").ToLowerInvariant();
+            return t switch
             {
                 "blue" => light ? "#60A5FA" : "#0078D7",
                 "purple" => light ? "#A78BFA" : "#7C3AED",
@@ -3045,9 +3102,10 @@ namespace ZapretGUI.Core
             };
         }
 
-        public static string GetAccentDarkBgHex()
+        public static string GetAccentDarkBgHex(string? themeOverride = null)
         {
-            return (SettingsManager.Current.AccentTheme ?? "green") switch
+            var t = (themeOverride ?? SettingsManager.Current.AccentTheme ?? "green").ToLowerInvariant();
+            return t switch
             {
                 "blue" => "#102033",
                 "purple" => "#1E1433",
@@ -3068,11 +3126,41 @@ namespace ZapretGUI.Core
 
         public static void ApplyThemeColors()
         {
+            // При старте или смене темы гарантируем наличие обеих иконок (ON и OFF)
+            WarmupAllIcons();
         }
 
-        public static (Icon trayIcon, string icoFilePath) GetOrCreateAppIcon(bool isRunning)
+        public static void WarmupAllIcons()
         {
-            var theme = (SettingsManager.Current.AccentTheme ?? "green").ToLowerInvariant();
+            try
+            {
+                var currentTheme = (SettingsManager.Current.AccentTheme ?? "green").ToLowerInvariant();
+                if (currentTheme == "crimson") currentTheme = "cyan";
+
+                // Сначала мгновенно готовим обе версии (ON и OFF) для текущей темы
+                GetOrCreateAppIcon(false, currentTheme);
+                GetOrCreateAppIcon(true, currentTheme);
+
+                // Остальные темы догенерируем в фоне, если их ещё нет на диске
+                Task.Run(() =>
+                {
+                    foreach (var theme in AllThemes)
+                    {
+                        try
+                        {
+                            GetOrCreateAppIcon(false, theme);
+                            GetOrCreateAppIcon(true, theme);
+                        }
+                        catch { }
+                    }
+                });
+            }
+            catch { }
+        }
+
+        public static (Icon trayIcon, string icoFilePath) GetOrCreateAppIcon(bool isRunning, string? themeOverride = null)
+        {
+            var theme = (themeOverride ?? SettingsManager.Current.AccentTheme ?? "green").ToLowerInvariant();
             if (theme == "crimson") theme = "cyan";
 
             var cacheKey = $"{theme}_{(isRunning ? "on" : "off")}";
@@ -3082,45 +3170,50 @@ namespace ZapretGUI.Core
 
             var cacheDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", "Cache", "Icons");
             Directory.CreateDirectory(cacheDir);
-            var pngPath = Path.Combine(cacheDir, $"icon_{cacheKey}.png");
+            var icoPath = Path.Combine(cacheDir, $"icon_{cacheKey}.ico");
 
-            Bitmap bmp;
-
-            if (File.Exists(pngPath) && new FileInfo(pngPath).Length > 100)
+            if (!File.Exists(icoPath) || new FileInfo(icoPath).Length < 100)
             {
-                using var fs = new FileStream(pngPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-                bmp = new Bitmap(fs);
-            }
-            else
-            {
-                bmp = RenderIconBitmap(isRunning);
-                try
-                {
-                    bmp.Save(pngPath, ImageFormat.Png);
-                }
-                catch { }
+                using var bmp = RenderIconBitmap(isRunning, theme);
+                SaveBitmapAsTrueIco(bmp, icoPath);
             }
 
-            using (bmp)
-            {
-                IntPtr hIcon = bmp.GetHicon();
-                try
-                {
-                    using var tempIcon = Icon.FromHandle(hIcon);
-                    var managedTrayIcon = (Icon)tempIcon.Clone();
-
-                    var result = (managedTrayIcon, pngPath);
-                    _iconCache[cacheKey] = result;
-                    return result;
-                }
-                finally
-                {
-                    DestroyIcon(hIcon);
-                }
-            }
+            var managedTrayIcon = new Icon(icoPath, 64, 64);
+            var result = (managedTrayIcon, icoPath);
+            _iconCache[cacheKey] = result;
+            return result;
         }
 
-        private static Bitmap RenderIconBitmap(bool isRunning)
+        // Записывает настоящий бинарный .ICO файл с PNG-слоем внутри (понимается Windows Taskbar, Alt+Tab и Photino)
+        private static void SaveBitmapAsTrueIco(Bitmap bmp, string icoPath)
+        {
+            using var pngMs = new MemoryStream();
+            bmp.Save(pngMs, ImageFormat.Png);
+            byte[] pngBytes = pngMs.ToArray();
+
+            using var fs = new FileStream(icoPath, FileMode.Create, FileAccess.Write, FileShare.ReadWrite);
+            using var bw = new BinaryWriter(fs);
+
+            // ICONDIR header (6 байт)
+            bw.Write((short)0);   // Reserved
+            bw.Write((short)1);   // Type: 1 = ICO
+            bw.Write((short)1);   // Count: 1 image
+
+            // ICONDIRENTRY (16 байт)
+            bw.Write((byte)bmp.Width);
+            bw.Write((byte)bmp.Height);
+            bw.Write((byte)0);    // Palette
+            bw.Write((byte)0);    // Reserved
+            bw.Write((short)1);   // Color planes
+            bw.Write((short)32);  // Bits per pixel
+            bw.Write(pngBytes.Length); // Size of image data
+            bw.Write(22);         // Offset of image data (6 + 16 = 22)
+
+            // PNG payload
+            bw.Write(pngBytes);
+        }
+
+        private static Bitmap RenderIconBitmap(bool isRunning, string theme)
         {
             const int size = 64;
             var bmp = new Bitmap(size, size);
@@ -3129,9 +3222,9 @@ namespace ZapretGUI.Core
             g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
             g.Clear(Color.Transparent);
 
-            var accentColor = GetAccentColor(light: true);
+            var accentColor = ColorTranslator.FromHtml(GetAccentHex(light: true, theme));
             var borderColor = isRunning ? accentColor : ColorTranslator.FromHtml("#3A3A3A");
-            var bgTop = isRunning ? GetAccentDarkBgColor() : ColorTranslator.FromHtml("#18181B");
+            var bgTop = isRunning ? ColorTranslator.FromHtml(GetAccentDarkBgHex(theme)) : ColorTranslator.FromHtml("#18181B");
             var bgBottom = ColorTranslator.FromHtml("#0A0A0C");
 
             using var path = CreateRoundedRectPath(new Rectangle(4, 4, size - 8, size - 8), 14);
@@ -8459,6 +8552,7 @@ const SPLASH_LINES = [
 let splashSkipped = false;
 async function runSplashSequence() {
     const term = document.getElementById('splash-terminal');
+    if (!term) return;
     for (let i = 0; i < SPLASH_LINES.length; i++) {
         if (splashSkipped) return;
         const line = SPLASH_LINES[i];
@@ -8491,9 +8585,11 @@ function skipSplash() {
 let wizardStep = 0;
 let wizardFinished = false;
 let lastWizProgressEl = null;
+let wizCurrentPct = 0;
+let wizDownloadPhase = 0; // 0: init, 1: Zapret, 2: TgWsProxy
 
 let wizAsciiTimer = null;
-let wizAsciiShape = 0; // 0: Torus, 1: Octahedron Shield, 2: DNA Network Helix, 3: Cyber Cube
+let wizAsciiShape = 0;
 let wizPitch = 0.45;
 let wizYaw = 0.4;
 let wizVelPitch = 0;
@@ -8510,6 +8606,12 @@ const ASCII_MODELS = [
 ];
 
 function startWizAsciiEngine() {
+    const stage = document.getElementById('wiz-ascii-stage');
+    if (stage) {
+        stage.style.letterSpacing = '0px';
+        stage.style.lineHeight = '11px';
+        stage.style.fontSize = '11px';
+    }
     if (wizAsciiTimer) return;
     wizAsciiTimer = setInterval(renderWizAsciiFrame, 33);
 }
@@ -8522,7 +8624,6 @@ function stopWizAsciiEngine() {
 }
 
 function cycleWizAsciiShape() {
-    sendCmd('playClick');
     wizAsciiShape = (wizAsciiShape + 1) % 4;
     const lbl = document.getElementById('wiz-ascii-model-name');
     if (lbl) lbl.innerText = ASCII_MODELS[wizAsciiShape];
@@ -8560,14 +8661,14 @@ function renderWizAsciiFrame() {
     const stage = document.getElementById('wiz-ascii-stage');
     if (!stage) return;
 
-    const W = 58, H = 30;
+    const W = 60, H = 28;
     const output = new Array(W * H).fill(' ');
     const zbuffer = new Array(W * H).fill(0);
     const chars = '.,-~:;=!*#$@';
 
     if (!wizIsDragging) {
-        const speedMult = wizHyperSpeed ? 2.8 : 1.0;
-        wizYaw += (0.032 * speedMult) + wizVelYaw;
+        const speedMult = wizHyperSpeed ? 2.4 : 1.0;
+        wizYaw += (0.03 * speedMult) + wizVelYaw;
         wizPitch += (0.014 * speedMult) + wizVelPitch;
         wizVelYaw *= 0.90;
         wizVelPitch *= 0.90;
@@ -8585,12 +8686,13 @@ function renderWizAsciiFrame() {
         const z2 = y1 * sinX + z1 * cosX;
         const x2 = x1;
 
-        const depth = z2 + 5.0;
+        const depth = z2 + 5.2;
         if (depth <= 0.5) return;
         const ooz = 1 / depth;
 
-        const xp = Math.floor(W / 2 + 34 * ooz * x2);
-        const yp = Math.floor(H / 2 - 17 * ooz * y2);
+        // Точное соотношение 2:1 для компенсации высоты моноширинного шрифта
+        const xp = Math.floor(W / 2 + 42 * ooz * x2);
+        const yp = Math.floor(H / 2 - 21 * ooz * y2);
 
         if (xp < 0 || xp >= W || yp < 0 || yp >= H) return;
         const idx = xp + W * yp;
@@ -8603,17 +8705,18 @@ function renderWizAsciiFrame() {
             const ny2 = ny * cosX - nz1 * sinX;
             const nz2 = ny * sinX + nz1 * cosX;
 
-            const lum = (nx1 * 0.35 + ny2 * 0.45 - nz2 * 0.75 + 1) * 0.5;
+            const netLen = Math.hypot(nx1, ny2, nz2) || 1;
+            const lum = ((nx1 / netLen) * 0.35 + (ny2 / netLen) * 0.45 - (nz2 / netLen) * 0.75 + 1) * 0.5;
             const cIdx = Math.max(0, Math.min(chars.length - 1, Math.floor(lum * chars.length)));
             output[idx] = chars[cIdx];
         }
     }
 
     if (wizAsciiShape === 0) {
-        const R1 = 0.85, R2 = 1.75;
-        for (let theta = 0; theta < 6.28; theta += 0.13) {
+        const R1 = 0.82, R2 = 1.65;
+        for (let theta = 0; theta < 6.28; theta += 0.11) {
             const cost = Math.cos(theta), sint = Math.sin(theta);
-            for (let phi = 0; phi < 6.28; phi += 0.055) {
+            for (let phi = 0; phi < 6.28; phi += 0.045) {
                 const cosp = Math.cos(phi), sinp = Math.sin(phi);
                 const circleX = R2 + R1 * cost;
                 plotPoint(
@@ -8627,7 +8730,7 @@ function renderWizAsciiFrame() {
             }
         }
     } else if (wizAsciiShape === 1) {
-        const S = 2.05;
+        const S = 1.95;
         const verts = [
             [0, S, 0], [0, -S, 0], [S, 0, 0], [-S, 0, 0], [0, 0, S], [0, 0, -S]
         ];
@@ -8640,8 +8743,8 @@ function renderWizAsciiFrame() {
             const nx = (v0[0] + v1[0] + v2[0]) / 3;
             const ny = (v0[1] + v1[1] + v2[1]) / 3;
             const nz = (v0[2] + v1[2] + v2[2]) / 3;
-            for (let u = 0; u <= 1; u += 0.07) {
-                for (let v = 0; u + v <= 1; v += 0.07) {
+            for (let u = 0; u <= 1; u += 0.06) {
+                for (let v = 0; u + v <= 1; v += 0.06) {
                     const w = 1 - u - v;
                     plotPoint(
                         u * v0[0] + v * v1[0] + w * v2[0],
@@ -8653,27 +8756,27 @@ function renderWizAsciiFrame() {
             }
         });
     } else if (wizAsciiShape === 2) {
-        for (let t = -2.2; t <= 2.2; t += 0.05) {
-            const angle = t * 2.2;
-            const r = 1.35;
+        for (let t = -2.1; t <= 2.1; t += 0.045) {
+            const angle = t * 2.1;
+            const r = 1.3;
             const x1 = r * Math.cos(angle), z1 = r * Math.sin(angle);
             const x2 = -x1, z2 = -z1;
 
-            for (let a = 0; a < 6.28; a += 0.7) {
+            for (let a = 0; a < 6.28; a += 0.65) {
                 const cr = 0.24;
                 plotPoint(x1 + cr * Math.cos(a), t, z1 + cr * Math.sin(a), Math.cos(a), 0, Math.sin(a));
                 plotPoint(x2 + cr * Math.cos(a), t, z2 + cr * Math.sin(a), -Math.cos(a), 0, -Math.sin(a));
             }
-            if (Math.abs((t * 10) % 4) < 0.5) {
-                for (let s = -1; s <= 1; s += 0.11) {
+            if (Math.abs((t * 10) % 4) < 0.45) {
+                for (let s = -1; s <= 1; s += 0.1) {
                     plotPoint(x1 * s, t, z1 * s, 0, 1, 0);
                 }
             }
         }
     } else {
-        const C = 1.4;
-        for (let u = -C; u <= C; u += 0.12) {
-            for (let v = -C; v <= C; v += 0.12) {
+        const C = 1.35;
+        for (let u = -C; u <= C; u += 0.1) {
+            for (let v = -C; v <= C; v += 0.1) {
                 plotPoint(u, v, C, 0, 0, 1);
                 plotPoint(u, v, -C, 0, 0, -1);
                 plotPoint(u, C, v, 0, 1, 0);
@@ -8692,7 +8795,6 @@ function renderWizAsciiFrame() {
 }
 
 function onWizardOptionChange() {
-    sendCmd('playClick');
     const zap = document.getElementById('wiz-chk-zapret').checked;
     const prx = document.getElementById('wiz-chk-proxy').checked;
     const aut = document.getElementById('wiz-chk-autostart').checked;
@@ -8716,6 +8818,8 @@ function openWizardModal() {
     wizardStep = 0;
     wizardFinished = false;
     wizHyperSpeed = false;
+    wizCurrentPct = 0;
+    wizDownloadPhase = 0;
     const btnNext = document.getElementById('wiz-btn-next');
     if (btnNext) {
         btnNext.disabled = false;
@@ -8772,26 +8876,33 @@ function updateWizardUI() {
 }
 
 function wizardPrevStep() {
-    sendCmd('playClick');
     if (wizardStep > 0 && wizardStep < 4) {
         wizardStep--;
         updateWizardUI();
     }
 }
 
+function setWizardProgress(val) {
+    wizCurrentPct = Math.max(wizCurrentPct, Math.min(100, Math.round(val)));
+    const bar = document.getElementById('wiz-finish-bar');
+    const pctEl = document.getElementById('wiz-finish-pct');
+    if (bar) bar.style.width = `${wizCurrentPct}%`;
+    if (pctEl) pctEl.innerText = `${wizCurrentPct}%`;
+}
+
 function wizardNextStep() {
-    sendCmd('playClick');
     if (wizardStep === 3) {
         wizardStep = 4;
+        wizCurrentPct = 8;
+        wizDownloadPhase = 0;
+        lastWizProgressEl = null;
         updateWizardUI();
 
         const btnNext = document.getElementById('wiz-btn-next');
         btnNext.disabled = true;
         btnNext.style.opacity = '0.5';
         document.getElementById('wiz-console-log').innerHTML = '';
-        document.getElementById('wiz-finish-bar').style.width = '30%';
-        const pct = document.getElementById('wiz-finish-pct');
-        if (pct) pct.innerText = '30%';
+        setWizardProgress(8);
 
         sendCmd('runWizardSetup', {
             useZapret: document.getElementById('wiz-chk-zapret').checked,
@@ -8812,7 +8923,6 @@ function wizardNextStep() {
 }
 
 function skipWizard() {
-    sendCmd('playClick');
     stopWizAsciiEngine();
     sendCmd('skipWizard');
     document.getElementById('wizard-overlay').classList.remove('open');
@@ -8822,12 +8932,34 @@ function appendWizardLog(time, message, isProgress) {
     const box = document.getElementById('wiz-console-log');
     const text = `[${time}] ${message}`;
 
-    const pctMatch = message.match(/(\d+(?:\.\d+)?)%/);
-    if (pctMatch) {
-        const val = Math.min(98, Math.max(30, Math.round(parseFloat(pctMatch[1]))));
-        document.getElementById('wiz-finish-bar').style.width = `${val}%`;
-        const pctEl = document.getElementById('wiz-finish-pct');
-        if (pctEl) pctEl.innerText = `${val}%`;
+    const wantZapret = document.getElementById('wiz-chk-zapret')?.checked ?? true;
+    const wantProxy = document.getElementById('wiz-chk-proxy')?.checked ?? true;
+    const bothCores = wantZapret && wantProxy;
+
+    if (message.includes('Поиск последней версии Zapret')) {
+        wizDownloadPhase = 1;
+        setWizardProgress(15);
+    } else if (message.includes('Поиск последней версии TgWsProxy')) {
+        wizDownloadPhase = 2;
+        setWizardProgress(bothCores ? 58 : 15);
+    } else if (message.includes('Распаковка архива')) {
+        setWizardProgress(bothCores ? 52 : 90);
+    } else if (message.includes('Модули успешно загружены') || message.includes('Настройка успешно завершена')) {
+        setWizardProgress(100);
+    } else {
+        const pctMatch = message.match(/(\d+(?:\.\d+)?)%/);
+        if (pctMatch) {
+            const rawPct = parseFloat(pctMatch[1]);
+            if (bothCores) {
+                if (wizDownloadPhase <= 1) {
+                    setWizardProgress(15 + rawPct * 0.35); // 15% -> 50%
+                } else {
+                    setWizardProgress(58 + rawPct * 0.38); // 58% -> 96%
+                }
+            } else {
+                setWizardProgress(15 + rawPct * 0.80); // 15% -> 95%
+            }
+        }
     }
 
     if (isProgress && lastWizProgressEl) {
@@ -8882,8 +9014,7 @@ let watchdogFailCount = 0;
 let currentLogFilter = 'all';
 
 function sendCmd(action, data = {}) {
-    if (!action) return;
-    if (action === 'playClick') return;
+    if (!action || action === 'playClick') return;
 
     const payload = JSON.stringify({ action, ...data });
 
@@ -8910,6 +9041,11 @@ function handleBackendEvent(type, data) {
             };
 
             initSettingsFromBackend(data);
+            document.body.classList.toggle('compact-mode', !!data.settings.compactMode);
+
+            if (data.settings.skipSplashScreen && !data.isFirstRun) {
+                skipSplash();
+            }
 
             appState.batMods = data.batMods || [];
             appState.listMods = data.listMods || [];
@@ -8937,11 +9073,10 @@ function handleBackendEvent(type, data) {
         case 'wizardCompleted':
             wizardFinished = true;
             wizHyperSpeed = false;
+            wizCurrentPct = 100;
             document.getElementById('wiz-finish-status').innerText = 'Установка успешно завершена!';
             document.getElementById('wiz-finish-status').className = 'text-base font-bold text-brand';
-            document.getElementById('wiz-finish-bar').style.width = '100%';
-            const wizPct = document.getElementById('wiz-finish-pct');
-            if (wizPct) wizPct.innerText = '100%';
+            setWizardProgress(100);
             const btnNext = document.getElementById('wiz-btn-next');
             btnNext.disabled = false;
             btnNext.style.opacity = '1';
@@ -9147,9 +9282,7 @@ function handleBackendEvent(type, data) {
             break;
 
         case 'toggleCommandPalette':
-            const cmdModal = document.getElementById('cmd-palette-modal');
-            if (cmdModal && cmdModal.classList.contains('open')) closeCommandPalette();
-            else openCommandPalette();
+            toggleCommandPaletteModal();
             break;
     }
 }
@@ -9215,8 +9348,6 @@ function updateSessionBadgeTick() {
 }
 
 function onMainToggleClick() {
-    sendCmd('playClick');
-
     if (!appState.isRunning) {
         const useZapret = document.getElementById('chk-zapret').checked;
         const useProxy = document.getElementById('chk-proxy').checked;
@@ -9256,7 +9387,6 @@ function onMainToggleClick() {
 }
 
 function onModuleToggleChange() {
-    sendCmd('playClick');
     sendCmd('updateModuleToggles', {
         useZapret: document.getElementById('chk-zapret').checked,
         useProxy: document.getElementById('chk-proxy').checked
@@ -9264,7 +9394,6 @@ function onModuleToggleChange() {
 }
 
 function refreshPing() {
-    sendCmd('playClick');
     document.getElementById('stat-ping').innerText = '...';
     document.getElementById('ping-refresh-icon').classList.add('spin-anim');
     sendCmd('ping');
@@ -9374,7 +9503,6 @@ function renderConfigCards() {
 }
 
 function selectProfile(profileName) {
-    sendCmd('playClick');
     appState.selectedProfile = profileName;
     document.getElementById('txt-main-profile').innerText = profileName;
     document.getElementById('modal-active-profile').innerText = profileName;
@@ -9383,18 +9511,15 @@ function selectProfile(profileName) {
 }
 
 function openConfigModal() {
-    sendCmd('playClick');
     renderConfigCards();
     document.getElementById('config-modal').classList.add('open');
 }
 
 function closeConfigModal() {
-    sendCmd('playClick');
     document.getElementById('config-modal').classList.remove('open');
 }
 
 function toggleSmartScan() {
-    sendCmd('playClick');
     sendCmd('startScan');
 }
 
@@ -9420,7 +9545,6 @@ function updateGameFilterBadge(statusText, isEnabled) {
 }
 
 function openGameFilterModal() {
-    sendCmd('playClick');
     selectGfMode(appState.gameFilter.mode || 'disabled', true);
     document.getElementById('gf-tcp-input').value = appState.gameFilter.tcp || '1024-65535';
     document.getElementById('gf-udp-input').value = appState.gameFilter.udp || '1024-65535';
@@ -9428,12 +9552,10 @@ function openGameFilterModal() {
 }
 
 function closeGameFilterModal() {
-    sendCmd('playClick');
     document.getElementById('gf-modal').classList.remove('open');
 }
 
-function selectGfMode(mode, silent = false) {
-    if (!silent) sendCmd('playClick');
+function selectGfMode(mode) {
     appState.gameFilter.mode = mode;
 
     document.querySelectorAll('.gf-mode-card').forEach(card => {
@@ -9448,13 +9570,11 @@ function selectGfMode(mode, silent = false) {
 }
 
 function resetGfPorts() {
-    sendCmd('playClick');
     document.getElementById('gf-tcp-input').value = '1024-65535';
     document.getElementById('gf-udp-input').value = '1024-65535';
 }
 
 function saveGameFilter() {
-    sendCmd('playClick');
     sendCmd('saveGameFilter', {
         mode: appState.gameFilter.mode,
         tcp: document.getElementById('gf-tcp-input').value.trim(),
@@ -9619,7 +9739,6 @@ function updateLogCounter() {
 }
 
 function setLogFilter(mode) {
-    sendCmd('playClick');
     currentLogFilter = mode;
 
     const btnAll = document.getElementById('log-filter-all');
@@ -9652,7 +9771,6 @@ function applyLogFilters() {
 }
 
 function clearLogs() {
-    sendCmd('playClick');
     const box = document.getElementById('log-box');
     if (box) box.innerHTML = '';
     lastProgressLogEl = null;
@@ -9660,7 +9778,6 @@ function clearLogs() {
 }
 
 function exportLogs() {
-    sendCmd('playClick');
     const box = document.getElementById('log-box');
     if (!box) return;
     const text = Array.from(box.children).map(el => el.innerText).join('\r\n');
@@ -9671,13 +9788,10 @@ function exportLogs() {
 // 8. НАВИГАЦИЯ И ДИАЛОГИ
 // =========================================================================
 function toggleSidebar() {
-    sendCmd('playClick');
     document.getElementById('sidebar')?.classList.toggle('rail-mode');
 }
 
 function switchTab(tabId, btnEl) {
-    sendCmd('playClick');
-
     document.querySelectorAll('.tab-view').forEach(sec => sec.classList.remove('active'));
     document.getElementById('tab-' + tabId)?.classList.add('active');
 
@@ -9708,11 +9822,13 @@ function switchTab(tabId, btnEl) {
         }
     }
 
-    if (tabId === 'mods' && typeof updateModsSlidingPill === 'function') {
-        setTimeout(updateModsSlidingPill, 30);
-    } else if (tabId === 'settings' && typeof updateSettingsSlidingPill === 'function') {
-        const activeSetBtn = document.querySelector('.set-cat-btn.active');
-        setTimeout(() => updateSettingsSlidingPill(activeSetBtn), 30);
+    if (tabId === 'mods') {
+        requestAnimationFrame(() => updateModsSlidingPill());
+    } else if (tabId === 'settings') {
+        requestAnimationFrame(() => {
+            const activeSetBtn = document.querySelector('.set-cat-btn.active');
+            if (activeSetBtn) updateSettingsSlidingPill(activeSetBtn);
+        });
     }
 }
 
@@ -9752,7 +9868,6 @@ function showConfirm(title, message, confirmText = 'Да', onAccept = null, isDa
 }
 
 function closeConfirmModal(accepted) {
-    sendCmd('playClick');
     document.getElementById('confirm-modal').classList.remove('open');
 
     if (isBackendConfirm) {
@@ -9797,7 +9912,6 @@ function openSelectionModal(subTitle, title, options, currentVal, onSelect) {
 }
 
 function chooseSelectionOption(idx) {
-    sendCmd('playClick');
     const list = document.getElementById('sel-modal-list');
     const opt = list._options?.[idx];
     document.getElementById('selection-modal').classList.remove('open');
@@ -9807,12 +9921,11 @@ function chooseSelectionOption(idx) {
 }
 
 function closeSelectionModal() {
-    sendCmd('playClick');
     document.getElementById('selection-modal').classList.remove('open');
 }
 
 // =========================================================================
-// 9. COMMAND PALETTE (CTRL + К) И DRAG & DROP
+// 9. COMMAND PALETTE (CTRL + K)
 // =========================================================================
 let cmdSelectedIndex = 0;
 let filteredCommands = [];
@@ -9846,14 +9959,19 @@ function getCommandPaletteItems() {
     return base;
 }
 
+function toggleCommandPaletteModal() {
+    const modal = document.getElementById('cmd-palette-modal');
+    if (modal && modal.classList.contains('open')) closeCommandPalette();
+    else openCommandPalette();
+}
+
 function openCommandPalette() {
-    sendCmd('playClick');
     const input = document.getElementById('cmd-palette-input');
     if (input) input.value = '';
     cmdSelectedIndex = 0;
     renderCommandPaletteList();
     document.getElementById('cmd-palette-modal').classList.add('open');
-    setTimeout(() => input?.focus(), 50);
+    setTimeout(() => input?.focus(), 40);
 }
 
 function closeCommandPalette() {
@@ -9920,12 +10038,137 @@ function executeCommandPaletteItem(idx) {
 }
 
 // =========================================================================
-// 10. ИНИЦИАЛИЗАЦИЯ ПРИ ЗАГРУЗКЕ DOM
+// 10. ФИКСЫ СЛАЙДЯЩИХ ПЛАШЕК, ПОИСКА И СОХРАНЕНИЯ НАСТРОЕК
+// =========================================================================
+function updateModsSlidingPill() {
+    const pill = document.getElementById('mods-seg-pill');
+    const activeBtn = document.querySelector('#mods-seg-track .mods-seg-btn.active') ||
+                      document.getElementById('mod-tab-' + (appState.modsSubTab || 'bat'));
+    if (!pill || !activeBtn) return;
+
+    pill.style.width = `${activeBtn.offsetWidth}px`;
+    pill.style.transform = `translateX(${activeBtn.offsetLeft}px)`;
+}
+
+function updateSettingsSlidingPill(targetBtn) {
+    const pill = document.getElementById('settings-seg-pill');
+    const btn = targetBtn || document.querySelector('#settings-seg-track .set-cat-btn.active');
+    if (!pill || !btn) return;
+
+    pill.style.width = `${btn.offsetWidth}px`;
+    pill.style.transform = `translateX(${btn.offsetLeft}px)`;
+}
+
+// Исправленный фильтр поиска по настройкам (прячет пустые карточки и секции, если внутри ничего не найдено)
+function filterSettingsView() {
+    const query = (document.getElementById('settings-search-input')?.value || '').trim().toLowerCase();
+    const activeCatBtn = document.querySelector('#settings-seg-track .set-cat-btn.active');
+    const currentCat = window.currentSettingsCat || (activeCatBtn?.getAttribute('onclick')?.match(/'([^']+)'/)?.[1] || 'all');
+
+    const groups = document.querySelectorAll('#tab-settings [data-set-group]');
+    groups.forEach(group => {
+        const groupCat = group.getAttribute('data-set-group');
+        const catMatches = (currentCat === 'all' || currentCat === groupCat);
+
+        if (!catMatches) {
+            group.classList.add('hidden');
+            return;
+        }
+
+        if (!query) {
+            group.classList.remove('hidden');
+            group.querySelectorAll('[data-search]').forEach(item => item.classList.remove('hidden'));
+            group.querySelectorAll('.glass-card').forEach(card => card.classList.remove('hidden'));
+            const routingGrid = group.querySelector('#settings-routing-grid');
+            if (routingGrid) routingGrid.classList.remove('hidden');
+            return;
+        }
+
+        // Проверяем отдельные карточки внутри группы (например, 2 колонки в верхней Bento-сетке)
+        const innerCards = group.classList.contains('glass-card') ? [group] : Array.from(group.querySelectorAll('.glass-card'));
+        let anyVisibleInGroup = false;
+
+        innerCards.forEach(card => {
+            const searchableItems = card.querySelectorAll('[data-search]');
+            let visibleInCard = 0;
+
+            searchableItems.forEach(item => {
+                const hay = (item.getAttribute('data-search') + ' ' + item.innerText).toLowerCase();
+                const match = hay.includes(query);
+                item.classList.toggle('hidden', !match);
+                if (match) visibleInCard++;
+            });
+
+            // Если в подсетке маршрутизации обе подкарточки скрыты — прячем саму сетку
+            const routingGrid = card.querySelector('#settings-routing-grid');
+            if (routingGrid) {
+                const visRouting = routingGrid.querySelectorAll('[data-search]:not(.hidden)').length;
+                routingGrid.classList.toggle('hidden', visRouting === 0);
+            }
+
+            card.classList.toggle('hidden', visibleInCard === 0);
+            if (visibleInCard > 0) anyVisibleInGroup = true;
+        });
+
+        group.classList.toggle('hidden', !anyVisibleInGroup);
+    });
+}
+
+// Надежное сохранение всех настроек + переключение CompactMode
+let settingsSaveToastTimer = null;
+function onSettingsChanged() {
+    const compact = document.getElementById('set-compact-mode')?.checked ?? false;
+    const focus = document.getElementById('set-focus-mode')?.checked ?? false;
+    const watchdog = document.getElementById('set-watchdog-ping')?.checked ?? false;
+
+    appState.settings.compactMode = compact;
+    appState.settings.focusMode = focus;
+    appState.settings.watchdogPingAutoRestart = watchdog;
+
+    document.body.classList.toggle('compact-mode', compact);
+
+    const payload = {
+        autoStart: document.getElementById('set-autostart')?.checked ?? false,
+        autoStartBypass: document.getElementById('set-autostart-bypass')?.checked ?? false,
+        startMinimized: document.getElementById('set-start-minimized')?.checked ?? false,
+        minimizeOnClose: document.getElementById('set-minimize-close')?.checked ?? true,
+        stopServicesOnExit: document.getElementById('set-stop-on-exit')?.checked ?? true,
+        notificationsEnabled: document.getElementById('set-notifications')?.checked ?? true,
+        alwaysOnTop: document.getElementById('set-always-on-top')?.checked ?? false,
+        soundEffectsEnabled: document.getElementById('set-sound-effects')?.checked ?? true,
+        skipSplashScreen: document.getElementById('set-skip-splash')?.checked ?? false,
+        compactMode: compact,
+        focusMode: focus,
+        hardwareAcceleration: document.getElementById('set-hw-accel')?.checked ?? true,
+        pingUrl: document.getElementById('set-ping-url')?.value?.trim() || 'https://dynamodb.eu-central-1.amazonaws.com',
+        statsUpdateInterval: appState.settings.statsUpdateInterval || 1,
+        autoRestartServices: document.getElementById('set-autorestart')?.checked ?? false,
+        watchdogPingAutoRestart: watchdog,
+        accentTheme: appState.settings.accentTheme || 'green',
+        hostsSourceIndex: appState.settings.hostsSourceIndex ?? 2
+    };
+
+    sendCmd('saveSettings', { settings: payload });
+
+    const toast = document.getElementById('settings-save-toast');
+    if (toast) {
+        toast.style.opacity = '1';
+        clearTimeout(settingsSaveToastTimer);
+        settingsSaveToastTimer = setTimeout(() => { toast.style.opacity = '0'; }, 1600);
+    }
+
+    setTimeout(() => {
+        updateModsSlidingPill();
+        updateSettingsSlidingPill();
+    }, 60);
+}
+
+// =========================================================================
+// 11. ИНИЦИАЛИЗАЦИЯ ПРИ ЗАГРУЗКЕ DOM
 // =========================================================================
 window.addEventListener('DOMContentLoaded', () => {
     runSplashSequence();
 
-    // Подключение приёма сообщений от Photino.NET и WebView2
     if (window.external && typeof window.external.receiveMessage === 'function') {
         window.external.receiveMessage(rawMsg => {
             try {
@@ -9946,6 +10189,31 @@ window.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Оборачиваем switchModsSubTab, чтобы капсула в Модификациях всегда плавно ездила
+    if (typeof window.switchModsSubTab === 'function') {
+        const origSwitchMods = window.switchModsSubTab;
+        window.switchModsSubTab = function (sub) {
+            origSwitchMods(sub);
+            requestAnimationFrame(() => updateModsSlidingPill());
+        };
+    }
+
+    // Оборачиваем setSettingsCat, чтобы фильтр категорий и поиск работали синхронно
+    if (typeof window.setSettingsCat === 'function') {
+        const origSetCat = window.setSettingsCat;
+        window.setSettingsCat = function (cat, btnEl) {
+            window.currentSettingsCat = cat;
+            origSetCat(cat, btnEl);
+            filterSettingsView();
+            requestAnimationFrame(() => updateSettingsSlidingPill(btnEl));
+        };
+    }
+
+    window.addEventListener('resize', () => {
+        updateModsSlidingPill();
+        updateSettingsSlidingPill();
+    });
+
     // Перетаскивание окна за шапку
     ['titlebar', 'wizard-titlebar'].forEach(id => {
         const bar = document.getElementById(id);
@@ -9958,15 +10226,14 @@ window.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Горячая клавиша Ctrl+K
+    // Глобальный перехват Ctrl+K (работает на любой раскладке клавиатуры RU/EN в фазе capture)
     window.addEventListener('keydown', e => {
-        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        if ((e.ctrlKey || e.metaKey) && (e.code === 'KeyK' || e.key === 'k' || e.key === 'K' || e.key === 'л' || e.key === 'Л')) {
             e.preventDefault();
-            const cmdModal = document.getElementById('cmd-palette-modal');
-            if (cmdModal && cmdModal.classList.contains('open')) closeCommandPalette();
-            else openCommandPalette();
+            e.stopPropagation();
+            toggleCommandPaletteModal();
         }
-    });
+    }, true);
 
     // Drag & Drop файлов
     const dropOverlay = document.getElementById('dropzone-overlay');

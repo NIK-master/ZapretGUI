@@ -18,10 +18,29 @@ namespace ZapretGUI
         [DllImport("user32.dll")]
         private static extern bool SetForegroundWindow(IntPtr hWnd);
 
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        private static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
+
+        [DllImport("user32.dll")]
+        private static extern uint GetDpiForWindow(IntPtr hwnd);
+
+        [DllImport("user32.dll")]
+        private static extern uint GetDpiForSystem();
+
         private const int SW_HIDE = 0;
         private const int SW_SHOWNORMAL = 1;
         private const int SW_SHOWMINIMIZED = 2;
         private const int SW_RESTORE = 9;
+
+        private const uint WM_SETICON = 0x0080;
+        private static readonly IntPtr ICON_SMALL = new(0);
+        private static readonly IntPtr ICON_BIG = new(1);
+
+        // Базовые логические размеры (как были в WPF)
+        private const int NormalLogicalWidth = 1100;
+        private const int NormalLogicalHeight = 760;
+        private const int CompactLogicalWidth = 850;
+        private const int CompactLogicalHeight = 520;
 
         public PhotinoWindow Window { get; }
         private readonly TrayIconManager _trayIconManager;
@@ -33,19 +52,23 @@ namespace ZapretGUI
 
         public MainWindow()
         {
+            // Убираем белую вспышку WebView2 при запуске (делаем фон #0A0A0A до загрузки HTML)
+            Environment.SetEnvironmentVariable("WEBVIEW2_DEFAULT_BACKGROUND_COLOR", "FF0A0A0A");
+
             var configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.json");
             _isFirstRun = !File.Exists(configPath);
 
             SettingsManager.Load();
             UIHelper.ApplyThemeColors();
 
-            int initW = SettingsManager.Current.CompactMode ? 850 : 1100;
-            int initH = SettingsManager.Current.CompactMode ? 520 : 760;
+            var (_, initIcoPath) = UIHelper.GetOrCreateAppIcon(false);
+            var initialSize = GetScaledWindowSize(SettingsManager.Current.CompactMode);
 
             Window = new PhotinoWindow()
                 .SetTitle("Zapret for ADHD")
+                .SetIconFile(initIcoPath)
                 .SetUseOsDefaultSize(false)
-                .SetSize(new Size(initW, initH))
+                .SetSize(initialSize)
                 .Center()
                 .SetChromeless(true)
                 .SetResizable(false)
@@ -62,6 +85,11 @@ namespace ZapretGUI
 
             Window.RegisterWindowCreatedHandler((sender, args) =>
             {
+                // Повторно применяем точный DPI-размер и центрирование после создания HWND
+                var exactSize = GetScaledWindowSize(SettingsManager.Current.CompactMode);
+                Window.SetSize(exactSize);
+                Window.Center();
+
                 RefreshAppIcon();
 
                 if (SettingsManager.Current.StartMinimized)
@@ -88,6 +116,33 @@ namespace ZapretGUI
             });
 
             _trayIconManager = new TrayIconManager(this);
+        }
+
+        private double GetDpiScale()
+        {
+            try
+            {
+                uint dpi = Window != null && Window.WindowHandle != IntPtr.Zero
+                    ? GetDpiForWindow(Window.WindowHandle)
+                    : GetDpiForSystem();
+
+                if (dpi >= 96)
+                    return dpi / 96.0;
+            }
+            catch { }
+
+            return 1.0;
+        }
+
+        private Size GetScaledWindowSize(bool isCompact)
+        {
+            double scale = GetDpiScale();
+            int baseW = isCompact ? CompactLogicalWidth : NormalLogicalWidth;
+            int baseH = isCompact ? CompactLogicalHeight : NormalLogicalHeight;
+
+            return new Size(
+                (int)Math.Round(baseW * scale),
+                (int)Math.Round(baseH * scale));
         }
 
         public void Run()
@@ -152,6 +207,17 @@ namespace ZapretGUI
                     isProgress = status.Contains("Скачивание:") || status.Contains("Скачано:")
                 }));
             await UpdateManager.RunUpdateWorkflowAsync(isManualCheck: false, stopServicesAction, progress);
+        }
+
+        public void SetTaskbarIcon(Icon icon)
+        {
+            if (WindowHandle == IntPtr.Zero) return;
+            try
+            {
+                SendMessage(WindowHandle, WM_SETICON, ICON_SMALL, icon.Handle);
+                SendMessage(WindowHandle, WM_SETICON, ICON_BIG, icon.Handle);
+            }
+            catch { }
         }
 
         public void MinimizeWindow()
@@ -284,37 +350,34 @@ namespace ZapretGUI
             }
         }
 
-        public async void AnimateWindowSize(bool isCompact)
+        public void AnimateWindowSize(bool isCompact)
         {
-            var targetWidth = isCompact ? 850 : 1100;
-            var targetHeight = isCompact ? 520 : 760;
-
-            var startSize = Window.Size;
-            var startLoc = Window.Location;
-
-            if (Math.Abs(startSize.Width - targetWidth) < 2 && Math.Abs(startSize.Height - targetHeight) < 2)
-                return;
-
-            const int steps = 14;
-            for (int i = 1; i <= steps; i++)
+            InvokeOnUI(() =>
             {
-                double t = (double)i / steps;
-                double ease = 1 - Math.Pow(1 - t, 3);
+                var targetSize = GetScaledWindowSize(isCompact);
+                var currentSize = Window.Size;
+                var currentLoc = Window.Location;
 
-                int curW = (int)Math.Round(startSize.Width + (targetWidth - startSize.Width) * ease);
-                int curH = (int)Math.Round(startSize.Height + (targetHeight - startSize.Height) * ease);
-
-                int curX = startLoc.X - (curW - startSize.Width) / 2;
-                int curY = startLoc.Y - (curH - startSize.Height) / 2;
-
-                InvokeOnUI(() =>
+                if (Math.Abs(currentSize.Width - targetSize.Width) < 2 &&
+                    Math.Abs(currentSize.Height - targetSize.Height) < 2)
                 {
-                    Window.SetSize(new Size(curW, curH));
-                    Window.SetLocation(new Point(curX, curY));
-                });
+                    return;
+                }
 
-                await Task.Delay(14);
-            }
+                int newX = currentLoc.X - (targetSize.Width - currentSize.Width) / 2;
+                int newY = currentLoc.Y - (targetSize.Height - currentSize.Height) / 2;
+
+                if (WindowHandle != IntPtr.Zero)
+                {
+                    var screen = Screen.FromHandle(WindowHandle).WorkingArea;
+                    newX = Math.Max(screen.Left, Math.Min(newX, screen.Right - targetSize.Width));
+                    newY = Math.Max(screen.Top, Math.Min(newY, screen.Bottom - targetSize.Height));
+                }
+
+                // Штатные методы PhotinoWindow корректно обновляют и рамку окна, и внутренний контрол WebView2
+                Window.SetSize(targetSize);
+                Window.SetLocation(new Point(newX, newY));
+            });
         }
 
         private string ExtractEmbeddedWebUI()
