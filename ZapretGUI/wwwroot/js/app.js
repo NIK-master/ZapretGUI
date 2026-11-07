@@ -1646,6 +1646,7 @@ let diagRadarAngle = 0;
 let diagRadarNodes = [];
 let diagHoveredNode = null;
 
+
 function initDiagnosticsRadarView() {
     const dcGrid = document.getElementById('diag-dc-grid');
     if (!dcGrid) return;
@@ -1779,20 +1780,21 @@ function updateRadarNodesFromReport(report) {
     }
 }
 
+let diagRadarLastTime = 0;
+
 function onDiagRadarMouseMove(e) {
     const canvas = document.getElementById('diag-radar-canvas');
     const tooltip = document.getElementById('diag-radar-tooltip');
     if (!canvas || !tooltip) return;
 
     const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    const mx = (e.clientX - rect.left) * scaleX;
-    const my = (e.clientY - rect.top) * scaleY;
+    // Координаты узлов теперь хранятся в чистых CSS-пикселях (логических)
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
 
     let found = null;
     for (const n of diagRadarNodes) {
-        if (n._px && Math.hypot(mx - n._px, my - n._py) < 22) {
+        if (n._px != null && Math.hypot(mx - n._px, my - n._py) < 22) {
             found = n;
             break;
         }
@@ -1806,8 +1808,8 @@ function onDiagRadarMouseMove(e) {
             <div class="text-[10px] text-[#888888] mb-1">${found.sub}</div>
             <div class="whitespace-pre-line text-[11px] text-[#E0E0E0]">${found.details}</div>
         `;
-        const leftPx = Math.min(rect.width - 180, Math.max(8, e.clientX - rect.left + 14));
-        const topPx = Math.min(rect.height - 90, Math.max(8, e.clientY - rect.top - 10));
+        const leftPx = Math.min(rect.width - 185, Math.max(8, mx + 14));
+        const topPx = Math.min(rect.height - 95, Math.max(8, my - 10));
         tooltip.style.left = `${leftPx}px`;
         tooltip.style.top = `${topPx}px`;
     } else {
@@ -1817,34 +1819,54 @@ function onDiagRadarMouseMove(e) {
 
 function startDiagRadarLoop() {
     if (diagRadarAnimId) return;
-    function frame() {
-        try { drawDiagRadarFrame(); } catch (e) { }
+    diagRadarLastTime = performance.now();
+
+    function frame(now) {
+        const dt = Math.min(0.05, Math.max(0.001, (now - diagRadarLastTime) / 1000));
+        diagRadarLastTime = now;
+        try { drawDiagRadarFrame(dt, now); } catch (e) { }
         diagRadarAnimId = requestAnimationFrame(frame);
     }
     diagRadarAnimId = requestAnimationFrame(frame);
 }
 
-function drawDiagRadarFrame() {
+function drawDiagRadarFrame(dt = 0.016, now = performance.now()) {
     const canvas = document.getElementById('diag-radar-canvas');
     if (!canvas || canvas.offsetParent === null) return;
 
-    const ctx = canvas.getContext('2d');
-    const w = canvas.width;
-    const h = canvas.height;
-    const cx = w / 2;
-    const cy = h / 2 + 6;
-    const maxR = Math.min(w * 0.42, h * 0.43);
+    // 1. Честный HiDPI-скейлинг под физические пиксели монитора
+    const rect = canvas.getBoundingClientRect();
+    const w = rect.width;
+    const h = rect.height;
+    if (w < 20 || h < 20) return;
 
+    const dpr = window.devicePixelRatio || 1;
+    const targetW = Math.round(w * dpr);
+    const targetH = Math.round(h * dpr);
+    if (canvas.width !== targetW || canvas.height !== targetH) {
+        canvas.width = targetW;
+        canvas.height = targetH;
+    }
+
+    const ctx = canvas.getContext('2d');
+    ctx.save();
+    ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, w, h);
+
+    // Округляем центр до .5px для идеально звонких однопиксельных линий
+    const cx = Math.floor(w / 2) + 0.5;
+    const cy = Math.floor(h / 2 + 6) + 0.5;
+    const maxR = Math.min(w * 0.42, h * 0.43);
 
     const accentHex = getComputedStyle(document.body).getPropertyValue('--accent-light').trim() || '#4CAF50';
     const isScanningNow = !document.getElementById('diag-progress-wrap')?.classList.contains('hidden');
 
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+    // 2. Сетка радара и кольца дальности
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.055)';
     ctx.lineWidth = 1;
     [0.35, 0.65, 0.95].forEach(rMult => {
         ctx.beginPath();
-        ctx.arc(cx, cy, maxR * rMult, 0, Math.PI * 2);
+        ctx.arc(cx, cy, Math.round(maxR * rMult), 0, Math.PI * 2);
         ctx.stroke();
     });
 
@@ -1855,18 +1877,41 @@ function drawDiagRadarFrame() {
     ctx.lineTo(cx, cy + maxR * 0.98);
     ctx.stroke();
 
-    // Сектор сканирующего луча (совместимый со всеми версиями Canvas)
-    diagRadarAngle = (diagRadarAngle + (isScanningNow ? 0.045 : 0.012)) % (Math.PI * 2);
+    // 3. Плавное вращение сканирующего луча (независимо от герцовки монитора: 60/144/240Hz)
+    // В обычном режиме: ~0.42 рад/сек (~15 сек на полный оборот), при сканировании: ~1.35 рад/сек
+    const angularSpeed = isScanningNow ? 1.35 : 0.42;
+    diagRadarAngle = (diagRadarAngle + angularSpeed * dt) % (Math.PI * 2);
+
+    // Мягкий градиентный шлейф луча из 6 сегментов + тонкая ведущая линия
+    const sweepArc = 0.52;
+    const slices = 6;
     ctx.save();
+    for (let s = 0; s < slices; s++) {
+        const a0 = diagRadarAngle - sweepArc + (s / slices) * sweepArc;
+        const a1 = diagRadarAngle - sweepArc + ((s + 1) / slices) * sweepArc + 0.005;
+        const alphaHex = isScanningNow
+            ? Math.round(((s + 1) / slices) * 36).toString(16).padStart(2, '0')
+            : Math.round(((s + 1) / slices) * 16).toString(16).padStart(2, '0');
+
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.arc(cx, cy, maxR * 0.98, a0, a1);
+        ctx.closePath();
+        ctx.fillStyle = accentHex.startsWith('#') ? (accentHex + alphaHex) : `rgba(76, 175, 80, ${isScanningNow ? 0.12 : 0.05})`;
+        ctx.fill();
+    }
+
+    // Ведущая стрелка луча
     ctx.beginPath();
     ctx.moveTo(cx, cy);
-    ctx.arc(cx, cy, maxR * 1.02, diagRadarAngle - 0.55, diagRadarAngle);
-    ctx.closePath();
-    ctx.fillStyle = isScanningNow ? 'rgba(76, 175, 80, 0.16)' : 'rgba(76, 175, 80, 0.06)';
-    ctx.fill();
+    ctx.lineTo(cx + Math.cos(diagRadarAngle) * maxR * 0.98, cy + Math.sin(diagRadarAngle) * maxR * 0.98);
+    ctx.strokeStyle = accentHex.startsWith('#') ? (accentHex + '66') : 'rgba(76, 175, 80, 0.4)';
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
     ctx.restore();
 
-    const pulseTime = performance.now() * 0.002;
+    // 4. Линии связи и спокойное движение пакетов (0.28 цикла в секунду вместо бешеного мелькания)
+    const pulseTime = now * 0.00028;
 
     diagRadarNodes.forEach((node, idx) => {
         const nx = cx + Math.cos(node.angle) * (maxR * 1.75 * node.radius);
@@ -1886,41 +1931,43 @@ function drawDiagRadarFrame() {
             ctx.setLineDash([4, 5]);
             ctx.strokeStyle = 'rgba(209, 52, 56, 0.35)';
         } else if (node.status === 'ok' || node.status === 'warn') {
-            ctx.strokeStyle = col + '66';
+            ctx.strokeStyle = col + '55';
         } else {
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
         }
-        ctx.lineWidth = diagHoveredNode === node ? 2.2 : 1.3;
+        ctx.lineWidth = diagHoveredNode === node ? 2.0 : 1.2;
         ctx.moveTo(cx, cy);
         ctx.lineTo(nx, ny);
         ctx.stroke();
         ctx.restore();
 
         if (node.status === 'ok' || node.status === 'warn' || isScanningNow) {
-            const p = (pulseTime + idx * 0.27) % 1;
+            const p = (pulseTime + idx * 0.19) % 1;
             const px = cx + (nx - cx) * p;
             const py = cy + (ny - cy) * p;
             ctx.fillStyle = col;
             ctx.beginPath();
-            ctx.arc(px, py, 2.6, 0, Math.PI * 2);
+            ctx.arc(px, py, 2.3, 0, Math.PI * 2);
             ctx.fill();
         }
     });
 
+    // 5. Центральный хаб YOU
     ctx.fillStyle = '#141418';
     ctx.strokeStyle = accentHex;
-    ctx.lineWidth = 2.2;
+    ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.arc(cx, cy, 18, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
 
     ctx.fillStyle = '#FFFFFF';
-    ctx.font = 'bold 9.5px Consolas, monospace';
+    ctx.font = '700 10px "Segoe UI", Consolas, monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('YOU', cx, cy);
+    ctx.fillText('YOU', cx, cy + 0.5);
 
+    // 6. Узлы Telegram DC и Discord
     diagRadarNodes.forEach(node => {
         const nx = node._px;
         const ny = node._py;
@@ -1928,46 +1975,48 @@ function drawDiagRadarFrame() {
 
         let col = '#52525B';
         let glow = 'transparent';
-        if (node.status === 'ok') { col = accentHex; glow = accentHex + '55'; }
-        else if (node.status === 'warn') { col = '#F59E0B'; glow = 'rgba(245, 158, 11, 0.35)'; }
+        if (node.status === 'ok') { col = accentHex; glow = accentHex + '44'; }
+        else if (node.status === 'warn') { col = '#F59E0B'; glow = 'rgba(245, 158, 11, 0.30)'; }
         else if (node.status === 'fail') { col = '#D13438'; glow = 'rgba(209, 52, 56, 0.25)'; }
-        else if (isScanningNow) { col = '#60A5FA'; glow = 'rgba(96, 165, 250, 0.3)'; }
+        else if (isScanningNow) { col = '#60A5FA'; glow = 'rgba(96, 165, 250, 0.28)'; }
 
         if (node.status === 'ok' || isHov) {
             ctx.fillStyle = glow;
             ctx.beginPath();
-            ctx.arc(nx, ny, isHov ? 19 : 15, 0, Math.PI * 2);
+            ctx.arc(nx, ny, isHov ? 18 : 14, 0, Math.PI * 2);
             ctx.fill();
         }
 
         ctx.fillStyle = '#121216';
         ctx.strokeStyle = col;
-        ctx.lineWidth = isHov ? 2.5 : 1.8;
+        ctx.lineWidth = isHov ? 2.2 : 1.6;
         ctx.beginPath();
-        ctx.arc(nx, ny, isHov ? 11 : 9, 0, Math.PI * 2);
+        ctx.arc(nx, ny, isHov ? 10.5 : 8.5, 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
 
         ctx.fillStyle = col;
         ctx.beginPath();
-        ctx.arc(nx, ny, node.status === 'fail' ? 2.5 : 4, 0, Math.PI * 2);
+        ctx.arc(nx, ny, node.status === 'fail' ? 2.5 : 3.6, 0, Math.PI * 2);
         ctx.fill();
 
-        ctx.font = 'bold 10.5px Consolas, monospace';
-        ctx.fillStyle = node.status === 'fail' ? '#888888' : '#FFFFFF';
+        ctx.font = '600 11px "Segoe UI", system-ui, sans-serif';
+        ctx.fillStyle = node.status === 'fail' ? '#999999' : '#FFFFFF';
         ctx.textAlign = 'center';
         ctx.fillText(node.label, nx, ny - 16);
 
         if (node.ping != null) {
-            ctx.font = '10px Consolas, monospace';
+            ctx.font = '600 10px Consolas, monospace';
             ctx.fillStyle = col;
             ctx.fillText(`${node.ping} мс`, nx, ny + 18);
         } else if (node.status === 'fail') {
-            ctx.font = '9.5px Consolas, monospace';
+            ctx.font = '600 9.5px Consolas, monospace';
             ctx.fillStyle = '#F87171';
             ctx.fillText('LOSS', nx, ny + 18);
         }
     });
+
+    ctx.restore();
 }
 
 // =========================================================================

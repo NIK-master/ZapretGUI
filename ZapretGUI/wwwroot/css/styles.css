@@ -47,8 +47,13 @@ body {
 /* Тонкая техническая сетка на фоне главной области */
 #main-container {
     background-color: var(--bg-content) !important;
-    background-image: radial-gradient(rgba(255, 255, 255, 0.11) 1.25px, transparent 1.25px) !important;
-    background-size: 20px 20px !important;
+    background-image: none !important;
+}
+
+#main-container:has(#tab-home.active) {
+    background-image: radial-gradient(rgba(255, 255, 255, 0.038) 1px, transparent 1px) !important;
+    background-size: 24px 24px !important;
+    background-position: 0 0 !important;
 }
 
 .glass-card {
@@ -147,13 +152,13 @@ body {
 .reactor-wrap.active .reactor-ring-outer {
     border-color: var(--accent-light);
     opacity: 0.55;
-    animation-duration: 10s;
+    animation-duration: 24s;
 }
 .reactor-wrap.active .reactor-ring-inner {
     border-color: rgba(255, 255, 255, 0.06);
     border-top-color: var(--accent-light);
     border-bottom-color: var(--accent-light);
-    animation-duration: 6s;
+    animation-duration: 16s;
 }
 
 @keyframes spinSlow {
@@ -170,21 +175,21 @@ body {
     border-radius: 9999px;
     background: radial-gradient(circle at 50% 30%, #1C1C1C, #101010);
     border: 3px solid #2A2A2A;
-    transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+    transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.3s ease, box-shadow 0.35s ease;
     cursor: pointer;
     z-index: 2;
 }
 .power-btn:hover {
-    transform: scale(1.03);
+    transform: scale(1.02);
     border-color: #484848;
 }
 .power-btn:active {
-    transform: scale(0.95);
+    transform: scale(0.97);
 }
 .power-btn.active {
     border-color: var(--accent-color);
     box-shadow: 0 0 40px var(--accent-glow), inset 0 0 18px rgba(16, 124, 16, 0.25);
-    animation: pulseGlow 2.2s infinite ease-in-out;
+    animation: pulseGlow 3.6s infinite ease-in-out; /* было 2.2s */
 }
 .power-btn.active .power-icon-glyph {
     color: var(--accent-light);
@@ -216,7 +221,7 @@ body {
 /* Переходы вкладок и модальных окон */
 .tab-view {
     display: none;
-    animation: slideUpFade 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    animation: slideUpFade 0.36s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 .tab-view.active {
     display: flex;
@@ -240,8 +245,15 @@ body {
 }
 
 @keyframes slideUpFade {
-    from { opacity: 0; transform: translateY(14px); }
-    to { opacity: 1; transform: translateY(0); }
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    /* Меньше амплитуда рывка (было 14px) */
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 .mod-card-enter {
@@ -258,12 +270,12 @@ body {
     border-radius: 8px;
     padding: 10px 14px;
     min-width: 132px;
-    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.25s ease;
     position: relative;
     overflow: hidden;
 }
 .server-ping-card:hover {
-    transform: scale(1.04);
+    transform: translateY(-2px); /* Вместо резкого scale(1.04) */
     border-color: #555555;
     z-index: 10;
 }
@@ -317,7 +329,7 @@ body {
 .dot-online {
     background-color: var(--accent-color);
     box-shadow: 0 0 8px var(--accent-color);
-    animation: breathe 2s infinite ease-in-out;
+    animation: breathe 3.2s infinite ease-in-out; /* было 2s */
 }
 .dot-offline {
     background-color: var(--danger-color);

@@ -5940,7 +5940,7 @@ namespace ZapretGUI.Core
 				<div class="flex items-center gap-2">
 					<span class="text-[#39FF14] font-mono font-bold text-sm">>_ ADHD ENGINE BOOTLOADER</span>
 				</div>
-				<button onclick="skipSplash()" class="text-xs font-mono text-zinc-500 hover:text-zinc-300 transition cursor-pointer">
+				<button onclick="if(window.skipSplash) skipSplash(); else document.getElementById('splash-overlay').style.display='none';" class="text-xs font-mono text-zinc-500 hover:text-zinc-300 transition cursor-pointer">	
 					[Пропустить Intro]
 				</button>
 			</div>
@@ -8754,7 +8754,10 @@ const SPLASH_LINES = [
 let splashSkipped = false;
 async function runSplashSequence() {
     const term = document.getElementById('splash-terminal');
-    if (!term) return;
+    if (!term) {
+        skipSplash();
+        return;
+    }
     for (let i = 0; i < SPLASH_LINES.length; i++) {
         if (splashSkipped) return;
         const line = SPLASH_LINES[i];
@@ -8778,7 +8781,7 @@ function skipSplash() {
     if (!el) return;
     el.style.opacity = '0';
     el.style.pointerEvents = 'none';
-    setTimeout(() => el.style.display = 'none', 450);
+    setTimeout(() => { el.style.display = 'none'; }, 450);
 }
 
 // =========================================================================
@@ -8788,7 +8791,7 @@ let wizardStep = 0;
 let wizardFinished = false;
 let lastWizProgressEl = null;
 let wizCurrentPct = 0;
-let wizDownloadPhase = 0; // 0: init, 1: Zapret, 2: TgWsProxy
+let wizDownloadPhase = 0;
 
 let wizAsciiTimer = null;
 let wizAsciiShape = 0;
@@ -8892,7 +8895,6 @@ function renderWizAsciiFrame() {
         if (depth <= 0.5) return;
         const ooz = 1 / depth;
 
-        // Точное соотношение 2:1 для компенсации высоты моноширинного шрифта
         const xp = Math.floor(W / 2 + 42 * ooz * x2);
         const yp = Math.floor(H / 2 - 21 * ooz * y2);
 
@@ -8921,25 +8923,13 @@ function renderWizAsciiFrame() {
             for (let phi = 0; phi < 6.28; phi += 0.045) {
                 const cosp = Math.cos(phi), sinp = Math.sin(phi);
                 const circleX = R2 + R1 * cost;
-                plotPoint(
-                    circleX * cosp,
-                    circleX * sinp,
-                    R1 * sint,
-                    cost * cosp,
-                    cost * sinp,
-                    sint
-                );
+                plotPoint(circleX * cosp, circleX * sinp, R1 * sint, cost * cosp, cost * sinp, sint);
             }
         }
     } else if (wizAsciiShape === 1) {
         const S = 1.95;
-        const verts = [
-            [0, S, 0], [0, -S, 0], [S, 0, 0], [-S, 0, 0], [0, 0, S], [0, 0, -S]
-        ];
-        const faces = [
-            [0, 4, 2], [0, 2, 5], [0, 5, 3], [0, 3, 4],
-            [1, 2, 4], [1, 5, 2], [1, 3, 5], [1, 4, 3]
-        ];
+        const verts = [[0, S, 0], [0, -S, 0], [S, 0, 0], [-S, 0, 0], [0, 0, S], [0, 0, -S]];
+        const faces = [[0, 4, 2], [0, 2, 5], [0, 5, 3], [0, 3, 4], [1, 2, 4], [1, 5, 2], [1, 3, 5], [1, 4, 3]];
         faces.forEach(([i0, i1, i2]) => {
             const v0 = verts[i0], v1 = verts[i1], v2 = verts[i2];
             const nx = (v0[0] + v1[0] + v2[0]) / 3;
@@ -9154,12 +9144,12 @@ function appendWizardLog(time, message, isProgress) {
             const rawPct = parseFloat(pctMatch[1]);
             if (bothCores) {
                 if (wizDownloadPhase <= 1) {
-                    setWizardProgress(15 + rawPct * 0.35); // 15% -> 50%
+                    setWizardProgress(15 + rawPct * 0.35);
                 } else {
-                    setWizardProgress(58 + rawPct * 0.38); // 58% -> 96%
+                    setWizardProgress(58 + rawPct * 0.38);
                 }
             } else {
-                setWizardProgress(15 + rawPct * 0.80); // 15% -> 95%
+                setWizardProgress(15 + rawPct * 0.80);
             }
         }
     }
@@ -9242,7 +9232,9 @@ function handleBackendEvent(type, data) {
                 udp: data.settings.gameFilterUdpRange || '1024-65535'
             };
 
-            initSettingsFromBackend(data);
+            if (typeof initSettingsFromBackend === 'function') {
+                initSettingsFromBackend(data);
+            }
             document.body.classList.toggle('compact-mode', !!data.settings.compactMode);
 
             if (data.settings.skipSplashScreen && !data.isFirstRun) {
@@ -9253,8 +9245,8 @@ function handleBackendEvent(type, data) {
             appState.listMods = data.listMods || [];
 
             initConfigsList(data.profiles || ['general.bat']);
-            renderModsView();
-            prepareDiagSkeletons();
+            if (typeof renderModsView === 'function') renderModsView();
+            if (typeof prepareDiagSkeletons === 'function') prepareDiagSkeletons();
             updateGameFilterBadge(data.gameFilterStatus, appState.gameFilter.mode !== 'disabled');
             updateRunningUI(data.zapretRunning, data.proxyRunning);
 
@@ -9291,7 +9283,7 @@ function handleBackendEvent(type, data) {
             break;
 
         case 'routingStatusUpdated':
-            updateRoutingStatusUI(data);
+            if (typeof updateRoutingStatusUI === 'function') updateRoutingStatusUI(data);
             document.getElementById('btn-update-ipset').innerHTML = '<span class="mdl-icon text-xs text-brand">&#xE149;</span><span>Обновить базу</span>';
             document.getElementById('btn-update-ipset').disabled = false;
             document.getElementById('btn-update-hosts').innerHTML = '<span class="mdl-icon text-xs">&#xE945;</span><span>Обновить</span>';
@@ -9307,31 +9299,31 @@ function handleBackendEvent(type, data) {
             appState.batMods = data.batMods || [];
             appState.listMods = data.listMods || [];
             initConfigsList(data.profiles || ['general.bat']);
-            renderModsView();
+            if (typeof renderModsView === 'function') renderModsView();
             break;
 
         case 'modIdGenerated':
             document.getElementById('new-mod-id').value = data.id;
-            updateModIdValidationUI(data.id, false, false);
+            if (typeof updateModIdValidationUI === 'function') updateModIdValidationUI(data.id, false, false);
             break;
 
         case 'modIdChecked':
-            updateModIdValidationUI(data.cleanId, data.isTaken, data.isEmpty);
+            if (typeof updateModIdValidationUI === 'function') updateModIdValidationUI(data.cleanId, data.isTaken, data.isEmpty);
             break;
 
         case 'modCreated':
-            closeCreateModModal();
+            if (typeof closeCreateModModal === 'function') closeCreateModModal();
             break;
 
         case 'modContentLoaded':
-            openEditorWithData(data);
+            if (typeof openEditorWithData === 'function') openEditorWithData(data);
             break;
 
         case 'batValidationResult':
             if (data.isValid) {
-                setEditorStatus('✓ Синтаксис корректен!', 'text-brand');
+                if (typeof setEditorStatus === 'function') setEditorStatus('✓ Синтаксис корректен!', 'text-brand');
             } else {
-                setEditorStatus('⚠ Ошибка в скрипте', 'text-[#F44336]');
+                if (typeof setEditorStatus === 'function') setEditorStatus('⚠ Ошибка в скрипте', 'text-[#F44336]');
                 showAlert('Проверка синтаксиса Zapret', data.errorMessage, true);
             }
             break;
@@ -9346,7 +9338,7 @@ function handleBackendEvent(type, data) {
             break;
 
         case 'modContentSaved':
-            closeEditorModal();
+            if (typeof closeEditorModal === 'function') closeEditorModal();
             break;
 
         case 'promptRestartZapret':
@@ -9367,7 +9359,8 @@ function handleBackendEvent(type, data) {
             break;
 
         case 'diagResult':
-            renderDiagnosticsReport(data);
+            if (typeof renderDiagnosticsReport === 'function') renderDiagnosticsReport(data);
+            updateRadarNodesFromReport(data);
             break;
 
         case 'log':
@@ -9747,7 +9740,7 @@ function updateGameFilterBadge(statusText, isEnabled) {
 }
 
 function openGameFilterModal() {
-    selectGfMode(appState.gameFilter.mode || 'disabled', true);
+    selectGfMode(appState.gameFilter.mode || 'disabled');
     document.getElementById('gf-tcp-input').value = appState.gameFilter.tcp || '1024-65535';
     document.getElementById('gf-udp-input').value = appState.gameFilter.udp || '1024-65535';
     document.getElementById('gf-modal').classList.add('open');
@@ -10245,7 +10238,7 @@ function executeCommandPaletteItem(idx) {
 function updateModsSlidingPill() {
     const pill = document.getElementById('mods-seg-pill');
     const activeBtn = document.querySelector('#mods-seg-track .mods-seg-btn.active') ||
-                      document.getElementById('mod-tab-' + (appState.modsSubTab || 'bat'));
+        document.getElementById('mod-tab-' + (appState.modsSubTab || 'bat'));
     if (!pill || !activeBtn) return;
 
     pill.style.width = `${activeBtn.offsetWidth}px`;
@@ -10261,7 +10254,6 @@ function updateSettingsSlidingPill(targetBtn) {
     pill.style.transform = `translateX(${btn.offsetLeft}px)`;
 }
 
-// Исправленный фильтр поиска по настройкам (прячет пустые карточки и секции, если внутри ничего не найдено)
 function filterSettingsView() {
     const query = (document.getElementById('settings-search-input')?.value || '').trim().toLowerCase();
     const activeCatBtn = document.querySelector('#settings-seg-track .set-cat-btn.active');
@@ -10286,7 +10278,6 @@ function filterSettingsView() {
             return;
         }
 
-        // Проверяем отдельные карточки внутри группы (например, 2 колонки в верхней Bento-сетке)
         const innerCards = group.classList.contains('glass-card') ? [group] : Array.from(group.querySelectorAll('.glass-card'));
         let anyVisibleInGroup = false;
 
@@ -10301,7 +10292,6 @@ function filterSettingsView() {
                 if (match) visibleInCard++;
             });
 
-            // Если в подсетке маршрутизации обе подкарточки скрыты — прячем саму сетку
             const routingGrid = card.querySelector('#settings-routing-grid');
             if (routingGrid) {
                 const visRouting = routingGrid.querySelectorAll('[data-search]:not(.hidden)').length;
@@ -10316,7 +10306,6 @@ function filterSettingsView() {
     });
 }
 
-// Надежное сохранение всех настроек + переключение CompactMode
 let settingsSaveToastTimer = null;
 function onSettingsChanged() {
     const compact = document.getElementById('set-compact-mode')?.checked ?? false;
@@ -10366,136 +10355,13 @@ function onSettingsChanged() {
 }
 
 // =========================================================================
-// 11. ИНИЦИАЛИЗАЦИЯ ПРИ ЗАГРУЗКЕ DOM
+// 11. ИНТЕРАКТИВНЫЙ РАДАР И ГРАФ СЕТИ (NODE GRAPH RADAR) ДЛЯ ДИАГНОСТИКИ
 // =========================================================================
-window.addEventListener('DOMContentLoaded', () => {
-    runSplashSequence();
-
-    if (window.external && typeof window.external.receiveMessage === 'function') {
-        window.external.receiveMessage(rawMsg => {
-            try {
-                const msg = typeof rawMsg === 'string' ? JSON.parse(rawMsg) : rawMsg;
-                if (msg && msg.type) {
-                    handleBackendEvent(msg.type, msg.data);
-                }
-            } catch (e) {
-                console.error('Ошибка Photino message:', e);
-            }
-        });
-    } else if (window.chrome && window.chrome.webview) {
-        window.chrome.webview.addEventListener('message', e => {
-            const msg = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
-            if (msg && msg.type) {
-                handleBackendEvent(msg.type, msg.data);
-            }
-        });
-    }
-
-    // Оборачиваем switchModsSubTab, чтобы капсула в Модификациях всегда плавно ездила
-    if (typeof window.switchModsSubTab === 'function') {
-        const origSwitchMods = window.switchModsSubTab;
-        window.switchModsSubTab = function (sub) {
-            origSwitchMods(sub);
-            requestAnimationFrame(() => updateModsSlidingPill());
-        };
-    }
-
-    // Оборачиваем setSettingsCat, чтобы фильтр категорий и поиск работали синхронно
-    if (typeof window.setSettingsCat === 'function') {
-        const origSetCat = window.setSettingsCat;
-        window.setSettingsCat = function (cat, btnEl) {
-            window.currentSettingsCat = cat;
-            origSetCat(cat, btnEl);
-            filterSettingsView();
-            requestAnimationFrame(() => updateSettingsSlidingPill(btnEl));
-        };
-    }
-
-    window.addEventListener('resize', () => {
-        updateModsSlidingPill();
-        updateSettingsSlidingPill();
-    });
-
-    // Перетаскивание окна за шапку
-    ['titlebar', 'wizard-titlebar'].forEach(id => {
-        const bar = document.getElementById(id);
-        if (bar) {
-            bar.addEventListener('mousedown', e => {
-                if (e.button === 0 && !e.target.closest('button') && !e.target.closest('input')) {
-                    sendCmd('windowDrag');
-                }
-            });
-        }
-    });
-
-    // Глобальный перехват Ctrl+K (работает на любой раскладке клавиатуры RU/EN в фазе capture)
-    window.addEventListener('keydown', e => {
-        if ((e.ctrlKey || e.metaKey) && (e.code === 'KeyK' || e.key === 'k' || e.key === 'K' || e.key === 'л' || e.key === 'Л')) {
-            e.preventDefault();
-            e.stopPropagation();
-            toggleCommandPaletteModal();
-        }
-    }, true);
-
-    // Drag & Drop файлов
-    const dropOverlay = document.getElementById('dropzone-overlay');
-    let dragCounter = 0;
-
-    window.addEventListener('dragenter', e => {
-        e.preventDefault();
-        dragCounter++;
-        if (dropOverlay) {
-            dropOverlay.classList.remove('hidden');
-            dropOverlay.classList.add('flex');
-        }
-    });
-
-    window.addEventListener('dragleave', e => {
-        e.preventDefault();
-        dragCounter--;
-        if (dragCounter <= 0) {
-            dragCounter = 0;
-            if (dropOverlay) {
-                dropOverlay.classList.add('hidden');
-                dropOverlay.classList.remove('flex');
-            }
-        }
-    });
-
-    window.addEventListener('dragover', e => e.preventDefault());
-
-    window.addEventListener('drop', e => {
-        e.preventDefault();
-        dragCounter = 0;
-        if (dropOverlay) {
-            dropOverlay.classList.add('hidden');
-            dropOverlay.classList.remove('flex');
-        }
-
-        const file = e.dataTransfer?.files?.[0];
-        if (!file) return;
-
-        const reader = new FileReader();
-        reader.onload = () => {
-            const base64 = String(reader.result).split(',')[1] || '';
-            sendCmd('importDroppedFile', { fileName: file.name, base64 });
-        };
-        reader.readAsDataURL(file);
-    });
-
-    drawChart();
-    sendCmd('init');
-});
-
-// =========================================================================
-// 12. ИНТЕРАКТИВНЫЙ РАДАР И ГРАФ СЕТИ (NODE GRAPH RADAR) ДЛЯ ДИАГНОСТИКИ
-// =========================================================================
-let diagViewMode = 'radar'; // 'radar' | 'table'
+let diagViewMode = 'radar';
 let diagRadarAnimId = null;
 let diagRadarAngle = 0;
 let diagRadarNodes = [];
 let diagHoveredNode = null;
-let diagLastReport = null;
 
 function initDiagnosticsRadarView() {
     const dcGrid = document.getElementById('diag-dc-grid');
@@ -10503,7 +10369,6 @@ function initDiagnosticsRadarView() {
     const matrixCard = dcGrid.closest('.glass-card');
     if (!matrixCard || document.getElementById('diag-radar-wrap')) return;
 
-    // Добавляем шапку с переключателем режима (Радар / Таблицы)
     const headerBar = document.createElement('div');
     headerBar.className = 'flex items-center justify-between pb-3 mb-3 border-b border-[#242424]';
     headerBar.innerHTML = `
@@ -10519,7 +10384,6 @@ function initDiagnosticsRadarView() {
         </div>
     `;
 
-    // Создаём контейнер радара
     const radarWrap = document.createElement('div');
     radarWrap.id = 'diag-radar-wrap';
     radarWrap.className = 'relative w-full h-[300px] rounded-xl bg-[#08080A] border border-[#222226] overflow-hidden flex items-center justify-center';
@@ -10533,7 +10397,6 @@ function initDiagnosticsRadarView() {
         <div id="diag-radar-tooltip" class="hidden absolute pointer-events-none bg-[#121216]/95 border border-[#33333A] rounded-lg px-3 py-2 text-xs font-mono text-white shadow-2xl z-20"></div>
     `;
 
-    // Оборачиваем старые таблицы в контейнер, чтобы их можно было переключать
     const tablesContainer = document.createElement('div');
     tablesContainer.id = 'diag-tables-wrap';
     tablesContainer.className = 'space-y-4 hidden';
@@ -10546,11 +10409,13 @@ function initDiagnosticsRadarView() {
     matrixCard.appendChild(tablesContainer);
 
     const canvas = document.getElementById('diag-radar-canvas');
-    canvas.addEventListener('mousemove', onDiagRadarMouseMove);
-    canvas.addEventListener('mouseleave', () => {
-        diagHoveredNode = null;
-        document.getElementById('diag-radar-tooltip')?.classList.add('hidden');
-    });
+    if (canvas) {
+        canvas.addEventListener('mousemove', onDiagRadarMouseMove);
+        canvas.addEventListener('mouseleave', () => {
+            diagHoveredNode = null;
+            document.getElementById('diag-radar-tooltip')?.classList.add('hidden');
+        });
+    }
 
     buildDefaultRadarNodes();
     startDiagRadarLoop();
@@ -10577,7 +10442,6 @@ function setDiagViewMode(mode) {
 }
 
 function buildDefaultRadarNodes() {
-    // 5 кластеров Telegram DC + 4 узла Discord вокруг центрального узла
     diagRadarNodes = [
         { id: 'dc1', label: 'TG DC 1', sub: '149.154.175.50 (US)', angle: -2.45, radius: 0.78, status: 'idle', ping: null, details: 'Ожидание сканирования...' },
         { id: 'dc2', label: 'TG DC 2', sub: '149.154.167.51 (NL)', angle: -1.80, radius: 0.62, status: 'idle', ping: null, details: 'Ожидание сканирования...' },
@@ -10592,10 +10456,9 @@ function buildDefaultRadarNodes() {
 }
 
 function updateRadarNodesFromReport(report) {
-    diagLastReport = report;
+    if (!report) return;
     if (!diagRadarNodes.length) buildDefaultRadarNodes();
 
-    // Обновляем кластеры Telegram DC 1..5
     for (let dcId = 1; dcId <= 5; dcId++) {
         const node = diagRadarNodes.find(n => n.id === 'dc' + dcId);
         if (!node) continue;
@@ -10603,22 +10466,16 @@ function updateRadarNodesFromReport(report) {
         const ports = (report.dcResults || []).filter(r => r.dcId === dcId);
         const okPorts = ports.filter(p => p.ok);
 
-        if (ports.length === 0) {
-            node.status = 'idle';
-        } else if (okPorts.length === ports.length) {
-            node.status = 'ok';
-        } else if (okPorts.length > 0) {
-            node.status = 'warn';
-        } else {
-            node.status = 'fail';
-        }
+        if (ports.length === 0) node.status = 'idle';
+        else if (okPorts.length === ports.length) node.status = 'ok';
+        else if (okPorts.length > 0) node.status = 'warn';
+        else node.status = 'fail';
 
         const lats = okPorts.filter(p => p.latencyMs != null).map(p => p.latencyMs);
         node.ping = lats.length > 0 ? Math.round(Math.min(...lats)) : null;
         node.details = ports.map(p => `:${p.port} → ${p.ok ? Math.round(p.latencyMs) + ' мс ✓' : 'Блок ✕'}`).join('\n');
     }
 
-    // Обновляем узлы Discord
     const dsMap = { 'Gateway': 'ds_gw', 'Media': 'ds_med', 'API': 'ds_api' };
     (report.discordPing || []).forEach(d => {
         const node = diagRadarNodes.find(n => n.id === dsMap[d.label]);
@@ -10677,9 +10534,8 @@ function onDiagRadarMouseMove(e) {
 
 function startDiagRadarLoop() {
     if (diagRadarAnimId) return;
-
     function frame() {
-        drawDiagRadarFrame();
+        try { drawDiagRadarFrame(); } catch (e) { }
         diagRadarAnimId = requestAnimationFrame(frame);
     }
     diagRadarAnimId = requestAnimationFrame(frame);
@@ -10701,7 +10557,6 @@ function drawDiagRadarFrame() {
     const accentHex = getComputedStyle(document.body).getPropertyValue('--accent-light').trim() || '#4CAF50';
     const isScanningNow = !document.getElementById('diag-progress-wrap')?.classList.contains('hidden');
 
-    // 1. Фоновые концентрические кольца радара и оси
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
     ctx.lineWidth = 1;
     [0.35, 0.65, 0.95].forEach(rMult => {
@@ -10717,23 +10572,20 @@ function drawDiagRadarFrame() {
     ctx.lineTo(cx, cy + maxR * 0.98);
     ctx.stroke();
 
-    // 2. Вращающийся луч радара
+    // Сектор сканирующего луча (совместимый со всеми версиями Canvas)
     diagRadarAngle = (diagRadarAngle + (isScanningNow ? 0.045 : 0.012)) % (Math.PI * 2);
-    const sweepGrad = ctx.createConicGradient(diagRadarAngle - 0.7, cx, cy);
-    sweepGrad.addColorStop(0, 'rgba(76, 175, 80, 0)');
-    sweepGrad.addColorStop(0.12, isScanningNow ? 'rgba(76, 175, 80, 0.22)' : 'rgba(76, 175, 80, 0.08)');
-    sweepGrad.addColorStop(0.13, 'rgba(76, 175, 80, 0)');
-
-    ctx.fillStyle = sweepGrad;
+    ctx.save();
     ctx.beginPath();
-    ctx.arc(cx, cy, maxR * 1.02, 0, Math.PI * 2);
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, maxR * 1.02, diagRadarAngle - 0.55, diagRadarAngle);
+    ctx.closePath();
+    ctx.fillStyle = isScanningNow ? 'rgba(76, 175, 80, 0.16)' : 'rgba(76, 175, 80, 0.06)';
     ctx.fill();
+    ctx.restore();
 
     const pulseTime = performance.now() * 0.002;
 
-    // 3. Линии связи (Node Graph Edges) и бегущие пакеты
     diagRadarNodes.forEach((node, idx) => {
-        // Растягиваем по горизонтали для широкого холста
         const nx = cx + Math.cos(node.angle) * (maxR * 1.75 * node.radius);
         const ny = cy + Math.sin(node.angle) * (maxR * 0.92 * node.radius);
         node._px = nx;
@@ -10761,7 +10613,6 @@ function drawDiagRadarFrame() {
         ctx.stroke();
         ctx.restore();
 
-        // Анимированный пакет данных по живому маршруту
         if (node.status === 'ok' || node.status === 'warn' || isScanningNow) {
             const p = (pulseTime + idx * 0.27) % 1;
             const px = cx + (nx - cx) * p;
@@ -10773,7 +10624,6 @@ function drawDiagRadarFrame() {
         }
     });
 
-    // 4. Центральное ядро (LOCAL PC)
     ctx.fillStyle = '#141418';
     ctx.strokeStyle = accentHex;
     ctx.lineWidth = 2.2;
@@ -10788,7 +10638,6 @@ function drawDiagRadarFrame() {
     ctx.textBaseline = 'middle';
     ctx.fillText('YOU', cx, cy);
 
-    // 5. Узлы дата-центров (Nodes)
     diagRadarNodes.forEach(node => {
         const nx = node._px;
         const ny = node._py;
@@ -10816,13 +10665,11 @@ function drawDiagRadarFrame() {
         ctx.fill();
         ctx.stroke();
 
-        // Внутренняя точка узла
         ctx.fillStyle = col;
         ctx.beginPath();
         ctx.arc(nx, ny, node.status === 'fail' ? 2.5 : 4, 0, Math.PI * 2);
         ctx.fill();
 
-        // Подпись узла и пинг
         ctx.font = 'bold 10.5px Consolas, monospace';
         ctx.fillStyle = node.status === 'fail' ? '#888888' : '#FFFFFF';
         ctx.textAlign = 'center';
@@ -10840,29 +10687,149 @@ function drawDiagRadarFrame() {
     });
 }
 
-// Подключаем радар при загрузке и перехватываем рендер отчёта диагностики
+// =========================================================================
+// 12. ИНИЦИАЛИЗАЦИЯ ПРИ ЗАГРУЗКЕ DOM
+// =========================================================================
 window.addEventListener('DOMContentLoaded', () => {
+    // 1. Сразу запускаем матричный терминал загрузки (и ставим страховочный таймер)
+    runSplashSequence().catch(() => skipSplash());
     setTimeout(() => {
+        if (!splashSkipped) skipSplash();
+    }, 6500);
+
+    // 2. Подключаем мост Photino.NET / WebView2
+    if (window.external && typeof window.external.receiveMessage === 'function') {
+        window.external.receiveMessage(rawMsg => {
+            try {
+                const msg = typeof rawMsg === 'string' ? JSON.parse(rawMsg) : rawMsg;
+                if (msg && msg.type) {
+                    handleBackendEvent(msg.type, msg.data);
+                }
+            } catch (e) {
+                console.error('Ошибка Photino message:', e);
+            }
+        });
+    } else if (window.chrome && window.chrome.webview) {
+        window.chrome.webview.addEventListener('message', e => {
+            try {
+                const msg = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
+                if (msg && msg.type) {
+                    handleBackendEvent(msg.type, msg.data);
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        });
+    }
+
+    // 3. Оборачиваем вкладки Модов, Настроек и Диагностику
+    if (typeof window.switchModsSubTab === 'function') {
+        const origSwitchMods = window.switchModsSubTab;
+        window.switchModsSubTab = function (sub) {
+            origSwitchMods(sub);
+            requestAnimationFrame(() => updateModsSlidingPill());
+        };
+    }
+
+    if (typeof window.setSettingsCat === 'function') {
+        const origSetCat = window.setSettingsCat;
+        window.setSettingsCat = function (cat, btnEl) {
+            window.currentSettingsCat = cat;
+            origSetCat(cat, btnEl);
+            filterSettingsView();
+            requestAnimationFrame(() => updateSettingsSlidingPill(btnEl));
+        };
+    }
+
+    if (typeof window.runDiagnostics === 'function') {
+        const origRunDiag = window.runDiagnostics;
+        window.runDiagnostics = function () {
+            buildDefaultRadarNodes();
+            origRunDiag();
+        };
+    }
+
+    try {
         initDiagnosticsRadarView();
+    } catch (e) {
+        console.error('Radar init error:', e);
+    }
 
-        if (typeof window.renderDiagnosticsReport === 'function') {
-            const origRenderDiag = window.renderDiagnosticsReport;
-            window.renderDiagnosticsReport = function (report) {
-                origRenderDiag(report);
-                updateRadarNodesFromReport(report);
-            };
+    window.addEventListener('resize', () => {
+        updateModsSlidingPill();
+        updateSettingsSlidingPill();
+    });
+
+    // 4. Перетаскивание окна за шапку
+    ['titlebar', 'wizard-titlebar'].forEach(id => {
+        const bar = document.getElementById(id);
+        if (bar) {
+            bar.addEventListener('mousedown', e => {
+                if (e.button === 0 && !e.target.closest('button') && !e.target.closest('input')) {
+                    sendCmd('windowDrag');
+                }
+            });
+        }
+    });
+
+    // 5. Глобальный перехват Ctrl+K
+    window.addEventListener('keydown', e => {
+        if ((e.ctrlKey || e.metaKey) && (e.code === 'KeyK' || e.key === 'k' || e.key === 'K' || e.key === 'л' || e.key === 'Л')) {
+            e.preventDefault();
+            e.stopPropagation();
+            toggleCommandPaletteModal();
+        }
+    }, true);
+
+    // 6. Drag & Drop файлов
+    const dropOverlay = document.getElementById('dropzone-overlay');
+    let dragCounter = 0;
+
+    window.addEventListener('dragenter', e => {
+        e.preventDefault();
+        dragCounter++;
+        if (dropOverlay) {
+            dropOverlay.classList.remove('hidden');
+            dropOverlay.classList.add('flex');
+        }
+    });
+
+    window.addEventListener('dragleave', e => {
+        e.preventDefault();
+        dragCounter--;
+        if (dragCounter <= 0) {
+            dragCounter = 0;
+            if (dropOverlay) {
+                dropOverlay.classList.add('hidden');
+                dropOverlay.classList.remove('flex');
+            }
+        }
+    });
+
+    window.addEventListener('dragover', e => e.preventDefault());
+
+    window.addEventListener('drop', e => {
+        e.preventDefault();
+        dragCounter = 0;
+        if (dropOverlay) {
+            dropOverlay.classList.add('hidden');
+            dropOverlay.classList.remove('flex');
         }
 
-        if (typeof window.runDiagnostics === 'function') {
-            const origRunDiag = window.runDiagnostics;
-            window.runDiagnostics = function () {
-                buildDefaultRadarNodes();
-                origRunDiag();
-            };
-        }
-    }, 80);
+        const file = e.dataTransfer?.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = () => {
+            const base64 = String(reader.result).split(',')[1] || '';
+            sendCmd('importDroppedFile', { fileName: file.name, base64 });
+        };
+        reader.readAsDataURL(file);
+    });
+
+    drawChart();
+    sendCmd('init');
 });
-```[:]
 
 ////////////////////////////////////////////////////////////////////////////////
 // ФАЙЛ: wwwroot\js\diagnostics.js
