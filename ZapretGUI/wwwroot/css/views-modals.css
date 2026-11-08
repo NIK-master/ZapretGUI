@@ -1,0 +1,455 @@
+/* =========================================================
+   ВКЛАДКА МОДИФИКАЦИЙ И РЕДАКТОР CODE STUDIO
+   ========================================================= */
+.mods-seg-btn {
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #888888;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    cursor: pointer;
+}
+.mods-seg-btn:hover {
+    color: #E0E0E0;
+    background: rgba(255, 255, 255, 0.03);
+}
+.mods-seg-btn.active {
+    color: #FFFFFF;
+}
+
+.mod-workshop-card {
+    position: relative;
+    background: #161616;
+    border: 1px solid #262626;
+    border-radius: 12px;
+    padding: 16px;
+    transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    overflow: hidden;
+    opacity: 0;
+    animation: modCardReveal 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.mod-workshop-card:hover {
+    transform: translateY(-2px);
+    border-color: #3A3A3A;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+.mod-workshop-card.is-active {
+    background: linear-gradient(135deg, var(--accent-soft) 0%, #151815 100%) !important;
+    border-color: var(--accent-color) !important;
+    box-shadow: 0 0 20px var(--accent-soft) !important;
+}
+.mod-workshop-card::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: transparent;
+    transition: background 0.25s ease;
+}
+.mod-workshop-card.is-active::before {
+    background: var(--accent-light);
+    box-shadow: 0 0 10px var(--accent-light);
+}
+
+@keyframes modCardReveal {
+    from { opacity: 0; transform: translateY(10px) scale(0.99); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.mod-action-pill {
+    padding: 5px 10px;
+    border-radius: 6px;
+    background: #1F1F1F;
+    border: 1px solid #2C2C2C;
+    font-size: 11.5px;
+    font-weight: 500;
+    color: #AAAAAA;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    transition: all 0.15s ease;
+    cursor: pointer;
+}
+.mod-action-pill:hover {
+    background: #292929;
+    border-color: #444444;
+    color: #FFFFFF;
+}
+.mod-action-pill.danger:hover {
+    background: rgba(209, 52, 56, 0.15);
+    border-color: #D13438;
+    color: #F44336;
+}
+
+.editor-tool-btn {
+    background: #1E1E1E;
+    color: #D4D4D8;
+    border: 1px solid #2E2E2E;
+    border-radius: 6px;
+    padding: 4px 9px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.editor-tool-btn:hover {
+    background: #2A2A2A;
+    border-color: #4A4A4A;
+    color: white;
+}
+
+.editor-code-layer {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    padding: 10px;
+    margin: 0;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace;
+    font-size: 13px;
+    line-height: 1.45;
+    tab-size: 4;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow: auto;
+    border: none;
+}
+#editor-highlight-layer {
+    color: #E4E4E7;
+    z-index: 1;
+}
+.editor-textarea-input {
+    color: transparent !important;
+    background: transparent !important;
+    caret-color: #FFFFFF;
+    z-index: 2;
+}
+.editor-textarea-input::selection {
+    background: rgba(76, 175, 80, 0.28);
+    color: transparent;
+}
+
+.syn-comment { color: #6B7280; font-style: italic; }
+.syn-exe { color: #4ADE80; font-weight: 700; }
+.syn-flag { color: #60A5FA; }
+.syn-new { color: #C084FC; font-weight: 700; }
+.syn-var { color: #FBBF24; font-weight: 600; }
+.syn-string { color: #86EFAC; }
+.syn-num { color: #2DD4BF; }
+.syn-caret { color: #F472B6; font-weight: 700; }
+.syn-cmd { color: #38BDF8; font-weight: 600; }
+.syn-domain { color: #A7F3D0; }
+.syn-ip { color: #60A5FA; }
+.syn-warn { color: #F59E0B; text-decoration: underline wavy #F59E0B; }
+
+/* =========================================================
+   ВКЛАДКА ДИАГНОСТИКИ
+   ========================================================= */
+.diag-step-pill {
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: #161616;
+    border: 1px solid #262626;
+    font-size: 11px;
+    font-weight: 600;
+    color: #666666;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.25s ease;
+}
+.diag-step-pill.active {
+    background: linear-gradient(135deg, var(--accent-soft) 0%, #151815 100%) !important;
+    border-color: var(--accent-color) !important;
+    color: #FFFFFF;
+    box-shadow: 0 0 20px var(--accent-soft) !important;
+}
+.diag-step-pill.done {
+    background: #1A241A;
+    border-color: #263826;
+    color: var(--accent-light);
+}
+
+.dc-cluster-card {
+    background: #161616;
+    border: 1px solid #262626;
+    border-radius: 10px;
+    padding: 10px 12px;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 8px;
+}
+.dc-cluster-card:hover {
+    border-color: #3E3E3E;
+    transform: translateY(-1px);
+}
+
+.port-badge-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 7px;
+    border-radius: 6px;
+    background: #101010;
+    border: 1px solid #202020;
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-size: 11px;
+}
+
+.diag-probe-card {
+    background: #161616;
+    border: 1px solid #262626;
+    border-radius: 10px;
+    padding: 10px 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    transition: border-color 0.2s ease;
+}
+.diag-probe-card:hover {
+    border-color: #383838;
+}
+
+.shimmer-box {
+    position: relative;
+    overflow: hidden;
+    background: #222222;
+}
+.shimmer-box::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -150%;
+    width: 150%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent);
+    animation: shimmerAnim 1.3s infinite;
+}
+@keyframes shimmerAnim {
+    100% { left: 150%; }
+}
+
+.easter-spin {
+    animation: easterRotate 0.55s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes easterRotate {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.easter-fly {
+    animation: easterFlyPlane 0.75s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes easterFlyPlane {
+    0% { transform: translate(0, 0); opacity: 1; }
+    45% { transform: translate(90px, -90px); opacity: 0; }
+    50% { transform: translate(-45px, 45px); opacity: 0; }
+    100% { transform: translate(0, 0); opacity: 1; }
+}
+
+/* =========================================================
+   ВКЛАДКА НАСТРОЕК И 3D-ОРБИТА КРИСТАЛЛОВ
+   ========================================================= */
+.setting-item-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: #131313;
+    border: 1px solid #222222;
+    transition: all 0.18s ease;
+    cursor: pointer;
+}
+.setting-item-row:hover {
+    background: #1B1B1B;
+    border-color: #333333;
+}
+
+.setting-icon-box {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: #1D1D1D;
+    border: 1px solid #2C2C2C;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #999999;
+    flex-shrink: 0;
+    transition: all 0.2s ease;
+}
+.setting-icon-box .mdl-icon {
+    color: #999999 !important;
+    transition: color 0.2s ease;
+}
+.setting-item-row:hover .setting-icon-box {
+    color: #FFFFFF;
+    border-color: #3E3E3E;
+}
+.setting-item-row:hover .setting-icon-box .mdl-icon {
+    color: #FFFFFF !important;
+}
+
+.routing-subcard {
+    background: #131313;
+    border: 1px solid #232323;
+    border-radius: 12px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 10px;
+    transition: border-color 0.2s ease;
+}
+.routing-subcard:hover {
+    border-color: #363636;
+}
+
+.ping-preset-chip {
+    padding: 3px 8px;
+    border-radius: 6px;
+    background: #1C1C1C;
+    border: 1px solid #2C2C2C;
+    font-size: 10.5px;
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    color: #999999;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+.ping-preset-chip:hover {
+    background: #262626;
+    color: #FFFFFF;
+    border-color: #444444;
+}
+
+.gem-field-wrap {
+    position: relative;
+    width: 100%;
+    height: 108px;
+    border-radius: 12px;
+    background: radial-gradient(ellipse at 50% 15%, var(--accent-soft) 0%, transparent 68%), linear-gradient(180deg, #09090C 0%, #101014 100%);
+    border: 1px solid #282828;
+    box-shadow: inset 0 4px 16px rgba(0, 0, 0, 0.85);
+    overflow: hidden;
+    transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+.gem-field-wrap:hover {
+    border-color: #3E3E3E;
+}
+
+.gem-field-canvas {
+    width: 100%;
+    height: 108px;
+    display: block;
+    cursor: grab;
+}
+.gem-field-canvas:active {
+    cursor: grabbing;
+}
+
+.gem-nav-btn {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 26px;
+    height: 44px;
+    border-radius: 8px;
+    background: rgba(22, 22, 26, 0.78);
+    border: 1px solid #2E2E34;
+    color: #AAAAAA;
+    font-size: 18px;
+    font-weight: bold;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 5;
+    transition: all 0.18s ease;
+    backdrop-filter: blur(4px);
+}
+.gem-nav-btn:hover {
+    background: #242429;
+    border-color: var(--accent-light);
+    color: #FFFFFF;
+    box-shadow: 0 0 12px var(--accent-soft);
+}
+.gem-nav-btn:active {
+    transform: translateY(-50%) scale(0.93);
+}
+
+.gem-active-label {
+    width: 176px;
+    text-align: center;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+/* =========================================================
+   ПОЛНАЯ АДАПТАЦИЯ МИНИМАЛИСТИЧНОГО РЕЖИМА (850x520)
+   ========================================================= */
+body.compact-mode #main-container {
+    padding: 14px 18px;
+}
+body.compact-mode #mods-cat-desc {
+    display: none;
+}
+body.compact-mode .mod-workshop-card {
+    padding: 12px 14px;
+}
+body.compact-mode #diag-dc-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+body.compact-mode #diag-probes-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+body.compact-mode #settings-bento-top,
+body.compact-mode #settings-routing-grid {
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+}
+body.compact-mode #sidebar {
+    width: 60px !important;
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+}
+body.compact-mode #sidebar nav {
+    width: 100% !important;
+}
+body.compact-mode #sidebar .nav-btn {
+    justify-content: center;
+    padding-left: 0;
+    padding-right: 0;
+}
+body.compact-mode #sidebar .nav-btn span:not(.mdl-icon),
+body.compact-mode #sidebar #sidebar-footer {
+    display: none;
+}
+body.compact-mode #tab-home > div:first-child,
+body.compact-mode #home-logs-panel {
+    display: none !important;
+}
+body.compact-mode #tab-home {
+    justify-content: center !important;
+}
+body.compact-mode .reactor-wrap {
+    width: 196px;
+    height: 196px;
+}
+body.compact-mode .power-btn {
+    width: 160px;
+    height: 160px;
+}

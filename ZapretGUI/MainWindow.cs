@@ -170,26 +170,61 @@ namespace ZapretGUI
         public void Run()
         {
             var baseDir = AppDomain.CurrentDomain.BaseDirectory;
-            var devWebRoot = Path.GetFullPath(Path.Combine(baseDir, @"..\..\..\wwwroot\index.html"));
-            var localWebRoot = Path.Combine(baseDir, "wwwroot", "index.html");
+            var devWebRootDir = Path.GetFullPath(Path.Combine(baseDir, @"..\..\..\wwwroot"));
+            var localWebRootDir = Path.Combine(baseDir, "wwwroot");
 
-            string htmlPath;
-            if (File.Exists(devWebRoot))
+            string webRootDir;
+            if (File.Exists(Path.Combine(devWebRootDir, "index.html")))
             {
-                htmlPath = devWebRoot;
+                webRootDir = devWebRootDir;
             }
-            else if (File.Exists(localWebRoot))
+            else if (File.Exists(Path.Combine(localWebRootDir, "index.html")))
             {
-                htmlPath = localWebRoot;
+                webRootDir = localWebRootDir;
             }
             else
             {
-                var webRootDir = ExtractEmbeddedWebUI();
-                htmlPath = Path.Combine(webRootDir, "index.html");
+                webRootDir = ExtractEmbeddedWebUI();
             }
 
+            string htmlPath = BuildBundledHtmlIfNeeded(webRootDir);
             Window.Load(htmlPath);
             Window.WaitForClose();
+        }
+
+        private static string BuildBundledHtmlIfNeeded(string webRootDir)
+        {
+            var indexPath = Path.Combine(webRootDir, "index.html");
+            if (!File.Exists(indexPath)) return indexPath;
+
+            try
+            {
+                var html = File.ReadAllText(indexPath);
+                if (!html.Contains("<!-- @include "))
+                    return indexPath;
+
+                var partialsDir = Path.Combine(webRootDir, "partials");
+                if (Directory.Exists(partialsDir))
+                {
+                    foreach (var file in Directory.GetFiles(partialsDir, "*.html"))
+                    {
+                        var fileName = Path.GetFileName(file);
+                        var token = $"<!-- @include partials/{fileName} -->";
+                        if (html.Contains(token))
+                        {
+                            html = html.Replace(token, File.ReadAllText(file));
+                        }
+                    }
+                }
+
+                var bundledPath = Path.Combine(webRootDir, "index.bundled.html");
+                File.WriteAllText(bundledPath, html, System.Text.Encoding.UTF8);
+                return bundledPath;
+            }
+            catch
+            {
+                return indexPath;
+            }
         }
 
         private async Task InitializeAppAsync()

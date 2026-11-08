@@ -1,0 +1,475 @@
+<!-- ВКЛАДКА 4: НАСТРОЙКИ (SETTINGSVIEW — BENTO GRID v4.1) -->
+<section id="tab-settings" class="tab-view flex-col gap-3.5 pb-6">
+
+	<div class="flex flex-wrap items-center justify-between gap-3 shrink-0">
+		<div>
+			<div class="flex items-center gap-3">
+				<h2 class="text-2xl font-bold text-white">Настройки системы</h2>
+				<span id="settings-save-toast" class="px-2.5 py-0.5 rounded-full bg-[#0F240F] border border-[#107C10] font-mono text-[11px] text-brand font-semibold opacity-0 transition-opacity duration-300 pointer-events-none">
+					✓ Сохранено
+				</span>
+			</div>
+			<p class="text-xs text-[#888888] mt-0.5">Персонализация интерфейса, автозапуск, списки маршрутизации и сервисные утилиты.</p>
+		</div>
+
+		<div class="flex items-center gap-2">
+			<div class="relative flex items-center">
+				<span class="mdl-icon text-[11px] text-[#666666] absolute left-2.5 pointer-events-none">&#xE721;</span>
+				<input id="settings-search-input" type="text" oninput="filterSettingsView()" placeholder="Найти параметр..." class="bg-[#161616] border border-[#2A2A2A] focus:border-[#107C10] rounded-lg pl-7 pr-3 py-1.5 text-xs text-white focus:outline-none w-48 transition select-text">
+			</div>
+			<button onclick="sendCmd('openFolder', { folder: 'zapret' })" class="px-3 py-1.5 rounded-lg bg-[#181818] hover:bg-[#222222] border border-[#2A2A2A] hover:border-[#3E3E3E] text-xs font-semibold text-[#CCCCCC] hover:text-white flex items-center gap-1.5 transition cursor-pointer" title="Открыть папку ZapretFiles">
+				<span class="mdl-icon text-xs text-brand">&#xE8B7;</span>
+				<span>Файлы ядра</span>
+			</button>
+		</div>
+	</div>
+
+	<div id="settings-seg-track" class="relative flex items-center gap-1 bg-[#161616] border border-[#262626] rounded-xl p-1 shrink-0 overflow-x-auto">
+		<div id="settings-seg-pill" class="seg-sliding-pill"></div>
+
+		<button onclick="setSettingsCat('all', this)" class="set-cat-btn mods-seg-btn active relative z-10">
+			<span class="mdl-icon text-xs">&#xF0E2;</span>
+			<span>Все разделы</span>
+		</button>
+		<button onclick="setSettingsCat('sys', this)" class="set-cat-btn mods-seg-btn relative z-10">
+			<span class="mdl-icon text-xs">&#xE713;</span>
+			<span>Система и Вид</span>
+		</button>
+		<button onclick="setSettingsCat('net', this)" class="set-cat-btn mods-seg-btn relative z-10">
+			<span class="mdl-icon text-xs">&#xE774;</span>
+			<span>Сеть и Маршруты</span>
+		</button>
+		<button onclick="setSettingsCat('core', this)" class="set-cat-btn mods-seg-btn relative z-10">
+			<span class="mdl-icon text-xs">&#xE895;</span>
+			<span>Ядра и Конфиг</span>
+		</button>
+	</div>
+
+	<!-- РЯД 1: СИСТЕМНЫЕ НАСТРОЙКИ + ВИЗУАЛЬНЫЕ ЭФФЕКТЫ -->
+	<div id="settings-bento-top" data-set-group="sys" class="grid grid-cols-2 gap-3.5">
+
+		<!-- КАРТОЧКА 1: СИСТЕМА И ТРЕЙ -->
+		<div class="glass-card rounded-xl p-4 flex flex-col gap-2">
+			<div class="flex items-center justify-between mb-1">
+				<div class="flex items-center gap-2 text-sm font-bold text-white">
+					<span class="mdl-icon text-sm text-brand">&#xE713;</span>
+					<span>Интеграция и поведение</span>
+				</div>
+				<span class="text-[10px] font-mono text-[#666666] uppercase">Система</span>
+			</div>
+
+			<label class="setting-item-row" data-search="автозагрузка windows реестр старт запуск">
+				<div class="flex items-center gap-3 overflow-hidden">
+					<div class="setting-icon-box">
+						<span class="mdl-icon text-sm">&#xE7E8;</span>
+					</div>
+					<div>
+						<div class="text-xs font-bold text-white">Автозагрузка с Windows</div>
+						<div class="text-[11px] text-[#888888]">Запускать программу при входе в систему</div>
+					</div>
+				</div>
+				<input id="set-autostart" type="checkbox" onchange="onSettingsChanged()" class="cyber-toggle">
+			</label>
+
+			<label class="setting-item-row" data-search="автозапуск обхода при старте включать автоматически">
+				<div class="flex items-center gap-3 overflow-hidden">
+					<div class="setting-icon-box">
+						<span class="mdl-icon text-sm">&#xE790;</span>
+					</div>
+					<div>
+						<div class="text-xs font-bold text-white">Автозапуск обхода при старте</div>
+						<div class="text-[11px] text-[#888888]">Сразу включать выбранные модули при открытии</div>
+					</div>
+				</div>
+				<input id="set-autostart-bypass" type="checkbox" onchange="onSettingsChanged()" class="cyber-toggle">
+			</label>
+
+			<label class="setting-item-row" data-search="запускать свернутым трей фон">
+				<div class="flex items-center gap-3 overflow-hidden">
+					<div class="setting-icon-box">
+						<span class="mdl-icon text-sm">&#xE740;</span>
+					</div>
+					<div>
+						<div class="text-xs font-bold text-white">Запускать свернутым</div>
+						<div class="text-[11px] text-[#888888]">Прятать окно в системный трей при старте</div>
+					</div>
+				</div>
+				<input id="set-start-minimized" type="checkbox" onchange="onSettingsChanged()" class="cyber-toggle">
+			</label>
+
+			<label class="setting-item-row" data-search="сворачивать при закрытии крестик трей">
+				<div class="flex items-center gap-3 overflow-hidden">
+					<div class="setting-icon-box">
+						<span class="mdl-icon text-sm">&#xE8BB;</span>
+					</div>
+					<div>
+						<div class="text-xs font-bold text-white">Сворачивать вместо закрытия</div>
+						<div class="text-[11px] text-[#888888]">Кнопка [✕] прячет программу в фоновый трей</div>
+					</div>
+				</div>
+				<input id="set-minimize-close" type="checkbox" onchange="onSettingsChanged()" class="cyber-toggle">
+			</label>
+
+			<label class="setting-item-row" data-search="останавливать службы при выходе закрытии выгружать">
+				<div class="flex items-center gap-3 overflow-hidden">
+					<div class="setting-icon-box">
+						<span class="mdl-icon text-sm">&#xE71A;</span>
+					</div>
+					<div>
+						<div class="text-xs font-bold text-white">Останавливать службы при выходе</div>
+						<div class="text-[11px] text-[#888888]">Завершать winws и прокси при полном закрытии</div>
+					</div>
+				</div>
+				<input id="set-stop-on-exit" type="checkbox" onchange="onSettingsChanged()" class="cyber-toggle">
+			</label>
+
+			<label class="setting-item-row" data-search="уведомления windows тихий режим всплывающие">
+				<div class="flex items-center gap-3 overflow-hidden">
+					<div class="setting-icon-box">
+						<span class="mdl-icon text-sm">&#xEA8F;</span>
+					</div>
+					<div>
+						<div class="text-xs font-bold text-white">Системные уведомления</div>
+						<div class="text-[11px] text-[#888888]">Сообщать о статусе служб в области уведомлений</div>
+					</div>
+				</div>
+				<input id="set-notifications" type="checkbox" onchange="onSettingsChanged()" class="cyber-toggle">
+			</label>
+
+			<label class="setting-item-row" data-search="поверх всех окон закрепить topmost">
+				<div class="flex items-center gap-3 overflow-hidden">
+					<div class="setting-icon-box">
+						<span class="mdl-icon text-sm">&#xE718;</span>
+					</div>
+					<div>
+						<div class="text-xs font-bold text-white">Поверх всех окон</div>
+						<div class="text-[11px] text-[#888888]">Закрепить панель управления поверх других программ</div>
+					</div>
+				</div>
+				<input id="set-always-on-top" type="checkbox" onchange="onSettingsChanged()" class="cyber-toggle">
+			</label>
+		</div>
+
+		<!-- КАРТОЧКА 2: ВИЗУАЛЬНЫЕ ЭФФЕКТЫ, ЗВУК И ПАЛИТРА -->
+		<div class="glass-card rounded-xl p-4 flex flex-col gap-2">
+			<div class="flex items-center justify-between mb-1">
+				<div class="flex items-center gap-2 text-sm font-bold text-white">
+					<span class="mdl-icon text-sm text-brand">&#xE890;</span>
+					<span>Интерфейс, звук и тема</span>
+				</div>
+				<span class="text-[10px] font-mono text-[#666666] uppercase">Внешний вид</span>
+			</div>
+
+			<div class="setting-item-row cursor-default flex-col !items-stretch gap-2.5" data-search="акцентный цвет тема палитра неоновый зеленый синий фиолетовый янтарь розовый морганит кварц">
+				<div class="flex items-center justify-between gap-2">
+					<div class="flex items-center gap-3 overflow-hidden">
+						<div class="setting-icon-box">
+							<span class="mdl-icon text-sm">&#xE790;</span>
+						</div>
+						<div>
+							<div class="text-xs font-bold text-white">Акцентный цвет интерфейса</div>
+							<div class="text-[11px] text-[#888888]">Листайте камешки в 3D-пространстве (стрелки, клик или колесико)</div>
+						</div>
+					</div>
+					<span class="gem-active-label px-2.5 py-0.5 rounded-md bg-[#1A1A1A] border border-[#2E2E2E] font-mono text-[11px] font-bold text-brand shrink-0">Изумруд</span>
+				</div>
+				<div class="gem-field-wrap">
+					<button type="button" onclick="cycleAccentGem(-1)" class="gem-nav-btn left-2" title="Предыдущий камень">‹</button>
+					<canvas class="gem-field-canvas" width="460" height="92"></canvas>
+					<button type="button" onclick="cycleAccentGem(1)" class="gem-nav-btn right-2" title="Следующий камень">›</button>
+				</div>
+			</div>
+
+			<label class="setting-item-row" data-search="звуковые эффекты клики звук аудио">
+				<div class="flex items-center gap-3 overflow-hidden">
+					<div class="setting-icon-box">
+						<span class="mdl-icon text-sm">&#xE767;</span>
+					</div>
+					<div>
+						<div class="text-xs font-bold text-white">Звуковые эффекты интерфейса</div>
+						<div class="text-[11px] text-[#888888]">Тактильные звуки кликов и успешного запуска</div>
+					</div>
+				</div>
+				<input id="set-sound-effects" type="checkbox" onchange="onSettingsChanged()" class="cyber-toggle">
+			</label>
+
+			<label class="setting-item-row" data-search="пропускать заставку интро терминал старт">
+				<div class="flex items-center gap-3 overflow-hidden">
+					<div class="setting-icon-box">
+						<span class="mdl-icon text-sm">&#xE756;</span>
+					</div>
+					<div>
+						<div class="text-xs font-bold text-white">Пропускать загрузочное интро</div>
+						<div class="text-[11px] text-[#888888]">Сразу открывать главную панель без терминала</div>
+					</div>
+				</div>
+				<input id="set-skip-splash" type="checkbox" onchange="onSettingsChanged()" class="cyber-toggle">
+			</label>
+
+			<label class="setting-item-row" data-search="минималистичный интерфейс компактный размер окно">
+				<div class="flex items-center gap-3 overflow-hidden">
+					<div class="setting-icon-box">
+						<span class="mdl-icon text-sm">&#xE73F;</span>
+					</div>
+					<div>
+						<div class="text-xs font-bold text-white">Минималистичный режим</div>
+						<div class="text-[11px] text-[#888888]">Уменьшить окно (850×520) и скрыть лишние блоки</div>
+					</div>
+				</div>
+				<input id="set-compact-mode" type="checkbox" onchange="onSettingsChanged()" class="cyber-toggle">
+			</label>
+
+			<label class="setting-item-row" data-search="режим фокусировки без глитчей тряска">
+				<div class="flex items-center gap-3 overflow-hidden">
+					<div class="setting-icon-box">
+						<span class="mdl-icon text-sm">&#xE7B3;</span>
+					</div>
+					<div>
+						<div class="text-xs font-bold text-white">Режим фокусировки</div>
+						<div class="text-[11px] text-[#888888]">Отключить тряску экрана при ошибках запуска</div>
+					</div>
+				</div>
+				<input id="set-focus-mode" type="checkbox" onchange="onSettingsChanged()" class="cyber-toggle">
+			</label>
+
+			<label class="setting-item-row" data-search="аппаратное ускорение gpu видеокарта рендер">
+				<div class="flex items-center gap-3 overflow-hidden">
+					<div class="setting-icon-box">
+						<span class="mdl-icon text-sm">&#xE950;</span>
+					</div>
+					<div>
+						<div class="text-xs font-bold text-white">Аппаратное ускорение (GPU)</div>
+						<div class="text-[11px] text-[#888888]">Отрисовка интерфейса силами видеокарты</div>
+					</div>
+				</div>
+				<input id="set-hw-accel" type="checkbox" onchange="onSettingsChanged()" class="cyber-toggle">
+			</label>
+		</div>
+	</div>
+
+	<!-- РЯД 2: МАРШРУТИЗАЦИЯ IPSET, HOSTS И СЕРВИСНЫЕ УТИЛИТЫ -->
+	<div data-set-group="net" class="glass-card rounded-xl p-4 space-y-3">
+		<div class="flex items-center justify-between">
+			<div class="flex items-center gap-2 text-sm font-bold text-white">
+				<span class="mdl-icon text-sm text-brand">&#xE8B7;</span>
+				<span>Базы маршрутизации (IPSet, Hosts и Сервисные инструменты)</span>
+			</div>
+			<span class="text-[10px] font-mono text-[#666666] uppercase">Обход блокировок</span>
+		</div>
+
+		<div id="settings-routing-grid" class="grid grid-cols-2 gap-3">
+			<div class="routing-subcard" data-search="ipset фильтрация по подсетям база ip flowseal">
+				<div>
+					<div class="flex items-center justify-between gap-2 mb-1">
+						<span class="text-xs font-bold text-white">Фильтрация подсетей (IPSet)</span>
+						<span id="badge-ipset-status" class="px-2 py-0.5 rounded bg-[#1E293B] text-[#60A5FA] font-mono text-[10px] font-semibold">Проверка...</span>
+					</div>
+					<p class="text-[11px] text-[#888888] leading-relaxed">
+						Управление базой заблокированных IP-адресов (<code class="text-[#CCCCCC]">ipset-all.txt</code>) из репозитория Flowseal.
+					</p>
+				</div>
+
+				<div class="flex flex-wrap items-center gap-2 pt-1">
+					<div onclick="openIpSetSelector()" class="flex-1 min-w-[170px] bg-[#1C1C1C] hover:bg-[#242424] border border-[#2E2E2E] rounded-lg px-3 py-1.5 flex items-center justify-between cursor-pointer transition">
+						<div>
+							<div class="text-[10px] text-[#777777]">Режим фильтрации:</div>
+							<div id="txt-selected-ipset" class="text-xs font-semibold text-white">По списку (Loaded)</div>
+						</div>
+						<span class="mdl-icon text-[#888888] text-[10px] ml-2">&#xE70D;</span>
+					</div>
+
+					<button id="btn-update-ipset" onclick="updateIpSetFromWeb()" class="px-3.5 py-2.5 rounded-lg bg-[#222222] hover:bg-[#2A2A2A] border border-[#333333] text-xs font-semibold text-white transition cursor-pointer flex items-center gap-1.5 shrink-0">
+						<span class="mdl-icon text-xs text-brand">&#xE149;</span>
+						<span>Обновить базу</span>
+					</button>
+				</div>
+			</div>
+
+			<div class="routing-subcard" data-search="hosts системный файл chatgpt spotify ai claude gemini v3nilla">
+				<div>
+					<div class="flex items-center justify-between gap-2 mb-1">
+						<span class="text-xs font-bold text-white">Файл Hosts (ChatGPT, AI, Spotify)</span>
+						<span id="badge-hosts-status" class="px-2 py-0.5 rounded bg-[#1A2E1A] text-[#4ADE80] font-mono text-[10px] font-semibold">Проверка...</span>
+					</div>
+					<p class="text-[11px] text-[#888888] leading-relaxed">
+						Безопасное внедрение обходных IP в системный <code class="text-[#CCCCCC]">hosts</code> с сохранением ваших личных записей.
+					</p>
+				</div>
+
+				<div class="flex flex-wrap items-center gap-2 pt-1">
+					<div onclick="openHostsSourceSelector()" class="flex-1 min-w-[170px] bg-[#1C1C1C] hover:bg-[#242424] border border-[#2E2E2E] rounded-lg px-3 py-1.5 flex items-center justify-between cursor-pointer transition">
+						<div class="overflow-hidden pr-1">
+							<div class="text-[10px] text-[#777777]">Источник списка:</div>
+							<div id="txt-selected-hosts" class="text-xs font-semibold text-white truncate">Flowseal + V3nilla</div>
+						</div>
+						<span class="mdl-icon text-[#888888] text-[10px] ml-1 shrink-0">&#xE70D;</span>
+					</div>
+
+					<button id="btn-update-hosts" onclick="updateSystemHosts()" class="px-3.5 py-2.5 rounded-lg btn-brand text-xs font-semibold cursor-pointer flex items-center gap-1.5 shrink-0">
+						<span class="mdl-icon text-xs">&#xE945;</span>
+						<span>Обновить</span>
+					</button>
+					<button onclick="promptClearHosts()" class="px-2.5 py-2.5 rounded-lg bg-[#222222] hover:bg-[#2A1215] border border-[#333333] hover:border-[#D13438] text-xs font-semibold text-[#BBBBBB] hover:text-[#F44336] transition cursor-pointer shrink-0" title="Удалить записи Zapret из файла hosts">
+						<span class="mdl-icon text-xs">&#xE74D;</span>
+					</button>
+				</div>
+			</div>
+		</div>
+
+		<div class="grid grid-cols-2 gap-3 pt-1">
+			<div class="setting-item-row cursor-default" data-search="telegram прокси подключить socks5 1080">
+				<div class="flex items-center gap-3 overflow-hidden">
+					<div class="setting-icon-box">
+						<span class="mdl-icon text-sm">&#xE709;</span>
+					</div>
+					<div>
+						<div class="text-xs font-bold text-white">Быстрая настройка Telegram</div>
+						<div class="text-[11px] text-[#888888]">Добавить локальный прокси 127.0.0.1:1080 в 1 клик</div>
+					</div>
+				</div>
+				<button onclick="sendCmd('connectTelegramProxy')" class="px-3 py-1.5 rounded-lg bg-[#1E293B] hover:bg-[#28374E] border border-[#3B82F6]/40 text-xs font-semibold text-[#60A5FA] transition cursor-pointer shrink-0">
+					Подключить в TG
+				</button>
+			</div>
+
+			<div class="setting-item-row cursor-default" data-search="выгрузить драйвер windivert античит vanguard faceit">
+				<div class="flex items-center gap-3 overflow-hidden">
+					<div class="setting-icon-box">
+						<span class="mdl-icon text-sm">&#xEA18;</span>
+					</div>
+					<div>
+						<div class="text-xs font-bold text-white">Выгрузка драйвера WinDivert</div>
+						<div class="text-[11px] text-[#888888]">Полная остановка драйвера для античитов и игр</div>
+					</div>
+				</div>
+				<button onclick="sendCmd('unloadWinDivert')" class="px-3 py-1.5 rounded-lg bg-[#222222] hover:bg-[#2E2210] border border-[#333333] hover:border-[#F59E0B] text-xs font-semibold text-[#CCCCCC] hover:text-[#FBBF24] transition cursor-pointer shrink-0">
+					Выгрузить драйвер
+				</button>
+			</div>
+		</div>
+	</div>
+
+	<!-- РЯД 3: МОНИТОРИНГ СЕТИ И ПАРАМЕТРЫ ПИНГА -->
+	<div data-set-group="net" class="glass-card rounded-xl p-4 space-y-2.5">
+		<div class="flex items-center justify-between">
+			<div class="flex items-center gap-2 text-sm font-bold text-white">
+				<span class="mdl-icon text-sm text-brand">&#xE774;</span>
+				<span>Мониторинг сети и проверка пинга</span>
+			</div>
+			<span class="text-[10px] font-mono text-[#666666] uppercase">Телеметрия</span>
+		</div>
+
+		<div class="setting-item-row cursor-default flex-wrap" data-search="адрес сервера для пинга url aws frankfurt cloudflare">
+			<div class="flex items-center gap-3">
+				<div class="setting-icon-box">
+					<span class="mdl-icon text-sm">&#xE916;</span>
+				</div>
+				<div>
+					<div class="text-xs font-bold text-white">Целевой узел для замера пинга</div>
+					<div class="flex items-center gap-1.5 mt-1 flex-wrap">
+						<span class="text-[10px] text-[#777777]">Быстрый выбор:</span>
+						<button onclick="setPingUrlPreset('https://dynamodb.eu-central-1.amazonaws.com')" class="ping-preset-chip">AWS Frankfurt</button>
+						<button onclick="setPingUrlPreset('https://1.1.1.1')" class="ping-preset-chip">Cloudflare 1.1.1.1</button>
+						<button onclick="setPingUrlPreset('https://discord.com')" class="ping-preset-chip">Discord</button>
+					</div>
+				</div>
+			</div>
+
+			<input id="set-ping-url" type="text" onchange="onSettingsChanged()" class="w-64 bg-[#1C1C1C] border border-[#333333] rounded-lg px-3 py-1.5 text-xs font-mono text-white focus:outline-none focus:border-[#107C10] select-text">
+		</div>
+
+		<div class="grid grid-cols-3 gap-2.5">
+			<div onclick="openIntervalSelector()" class="setting-item-row" data-search="интервал обновления статистики скорость график">
+				<div class="flex items-center gap-3 overflow-hidden">
+					<div class="setting-icon-box">
+						<span class="mdl-icon text-sm">&#xE9D9;</span>
+					</div>
+					<div>
+						<div class="text-xs font-bold text-white">Опрос трафика</div>
+						<div class="text-[11px] text-[#888888]">Частота графика</div>
+					</div>
+				</div>
+				<div class="bg-[#1C1C1C] border border-[#333333] rounded-lg px-2.5 py-1.5 flex items-center gap-1.5 shrink-0">
+					<span id="txt-selected-interval" class="text-xs font-semibold text-white">1 сек.</span>
+					<span class="mdl-icon text-[#888888] text-[10px]">&#xE70D;</span>
+				</div>
+			</div>
+
+			<label class="setting-item-row" data-search="авто-перезапуск при обрыве восстановление сети">
+				<div class="flex items-center gap-3 overflow-hidden">
+					<div class="setting-icon-box">
+						<span class="mdl-icon text-sm">&#xE777;</span>
+					</div>
+					<div>
+						<div class="text-xs font-bold text-white">Рестарт при возврате сети</div>
+						<div class="text-[11px] text-[#888888]">После обрыва Wi-Fi/LAN</div>
+					</div>
+				</div>
+				<input id="set-autorestart" type="checkbox" onchange="onSettingsChanged()" class="cyber-toggle">
+			</label>
+
+			<label class="setting-item-row" data-search="вотчдог пинг авто-перезапуск при потере связи">
+				<div class="flex items-center gap-3 overflow-hidden">
+					<div class="setting-icon-box">
+						<span class="mdl-icon text-sm">&#xE945;</span>
+					</div>
+					<div>
+						<div class="text-xs font-bold text-white">Ping-Watchdog</div>
+						<div class="text-[11px] text-[#888888]">Рестарт при потере пинга</div>
+					</div>
+				</div>
+				<input id="set-watchdog-ping" type="checkbox" onchange="onSettingsChanged()" class="cyber-toggle">
+			</label>
+		</div>
+	</div>
+
+	<!-- РЯД 4: ЦЕНТР ОБНОВЛЕНИЙ, БЭКАПЫ КОНФИГА И СБРОС -->
+	<div data-set-group="core" class="glass-card rounded-xl p-4 flex flex-col gap-3">
+		<div class="flex flex-wrap items-center justify-between gap-3">
+			<div class="flex items-center gap-3">
+				<div class="w-10 h-10 rounded-xl bg-[#107C10]/15 border border-[#107C10]/50 flex items-center justify-center text-brand shrink-0">
+					<span class="mdl-icon text-lg">&#xE895;</span>
+				</div>
+				<div>
+					<div class="text-sm font-bold text-white flex items-center gap-2">
+						<span>Zapret for ADHD</span>
+						<span class="app-ver-text px-2 py-0.2 rounded bg-[#222222] border border-[#333333] font-mono text-[11px] text-brand">v4.1</span>
+					</div>
+					<div class="flex flex-wrap items-center gap-3 mt-1 text-[11px] font-mono text-[#888888]">
+						<span>
+							Ядро Zapret: <b id="txt-core-zapret-ver" class="text-white">...</b>
+						</span>
+						<span>•</span>
+						<span>
+							Ядро TgWsProxy: <b id="txt-core-proxy-ver" class="text-white">...</b>
+						</span>
+					</div>
+				</div>
+			</div>
+
+			<div class="flex flex-wrap items-center gap-2">
+				<button id="btn-check-updates" onclick="checkUpdatesManual()" class="px-4 py-2 rounded-lg btn-brand text-xs font-bold cursor-pointer flex items-center gap-1.5 shadow">
+					<span class="mdl-icon text-xs">&#xE149;</span>
+					<span>Проверить обновления</span>
+				</button>
+				<button onclick="sendCmd('exportConfigBackup')" class="px-3 py-2 rounded-lg bg-[#202020] hover:bg-[#2A2A2A] border border-[#333333] text-xs font-semibold text-[#CCCCCC] hover:text-white transition cursor-pointer flex items-center gap-1.5" title="Сохранить настройки в файл">
+					<span class="mdl-icon text-xs text-brand">&#xE78C;</span>
+					<span>Экспорт конфига</span>
+				</button>
+				<button onclick="sendCmd('importConfigBackup')" class="px-3 py-2 rounded-lg bg-[#202020] hover:bg-[#2A2A2A] border border-[#333333] text-xs font-semibold text-[#CCCCCC] hover:text-white transition cursor-pointer flex items-center gap-1.5" title="Загрузить настройки из файла">
+					<span class="mdl-icon text-xs text-[#60A5FA]">&#xE8B5;</span>
+					<span>Импорт</span>
+				</button>
+				<button onclick="sendCmd('openUrl', { url: 'https://github.com/NIK-master/ZapretGUI' })" class="px-3 py-2 rounded-lg bg-[#202020] hover:bg-[#2A2A2A] border border-[#333333] text-xs font-semibold text-[#CCCCCC] hover:text-white transition cursor-pointer flex items-center gap-1.5">
+					<span class="mdl-icon text-xs">&#xE71B;</span>
+					<span>GitHub</span>
+				</button>
+				<button onclick="promptResetSettings()" class="px-3 py-2 rounded-lg bg-[#2A1215] hover:bg-[#3B181C] border border-[#5C242A] text-xs font-semibold text-[#F44336] transition cursor-pointer flex items-center gap-1.5" title="Сбросить все настройки по умолчанию">
+					<span class="mdl-icon text-xs">&#xE74D;</span>
+					<span>Сброс</span>
+				</button>
+			</div>
+		</div>
+	</div>
+
+</section>

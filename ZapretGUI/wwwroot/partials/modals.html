@@ -1,0 +1,334 @@
+<!-- ОВЕРЛЕЙ 1: НАСТРОЙКА КОНФИГА ZAPRET -->
+<div id="config-modal" onclick="if(event.target===this) closeConfigModal()" class="modal-overlay fixed inset-0 bg-black/75 backdrop-blur-sm z-40 flex items-center justify-center p-4">
+	<div class="modal-box bg-[#141414] border border-[#2A2A2A] rounded-xl w-[550px] p-5 shadow-2xl flex flex-col max-h-[85vh]">
+		<div class="flex items-center justify-between mb-4">
+			<div class="flex items-center gap-3">
+				<div class="w-8 h-8 rounded-lg bg-[#107C10]/20 border border-[#107C10] flex items-center justify-center text-brand">
+					<span class="mdl-icon text-sm">&#xE713;</span>
+				</div>
+				<div>
+					<div class="text-xs text-[#888888]">Стратегии обхода DPI</div>
+					<div class="text-base font-bold text-white">Выбор и тестирование конфига</div>
+				</div>
+			</div>
+			<button onclick="closeConfigModal()" class="text-[#888888] hover:text-white text-lg px-2 cursor-pointer">✕</button>
+		</div>
+
+		<div class="mb-4 px-3 py-2 rounded-lg bg-[#1A1A1A] border border-[#262626] flex items-center justify-between text-xs">
+			<span class="text-[#AAAAAA]">Активный профиль:</span>
+			<span id="modal-active-profile" class="font-mono font-bold text-brand">general.bat</span>
+		</div>
+
+		<div class="flex items-center justify-between mb-2.5">
+			<span class="text-xs font-semibold text-[#AAAAAA]">Доступные профили (.bat)</span>
+			<span id="modal-configs-count" class="text-xs font-mono font-semibold bg-[#0F240F] border border-[#107C10]/60 text-brand px-2.5 py-0.5 rounded-md">0 конфигов</span>
+		</div>
+
+		<div id="profile-cards-list" class="flex-1 overflow-y-auto space-y-2 pr-1 max-h-[290px] mb-4"></div>
+
+		<button id="btn-start-scan" onclick="toggleSmartScan()" class="w-full py-3 rounded-lg bg-[#1E1E1E] hover:bg-[#262626] border border-[#333333] hover:border-[#107C10] text-xs font-bold text-white transition flex items-center justify-center gap-2 cursor-pointer">
+			<span id="scan-btn-icon" class="mdl-icon text-sm text-brand">&#xE721;</span>
+			<span id="scan-btn-text">Запустить авто-подбор (Smart DPI Scan)</span>
+		</button>
+	</div>
+</div>
+
+<!-- ОВЕРЛЕЙ 2: ИГРОВОЙ ФИЛЬТР (GAME FILTER) -->
+<div id="gf-modal" onclick="if(event.target===this) closeGameFilterModal()" class="modal-overlay fixed inset-0 bg-black/75 backdrop-blur-sm z-40 flex items-center justify-center p-4">
+	<div class="modal-box bg-[#141414] border border-[#2A2A2A] rounded-xl w-[490px] p-5 shadow-2xl flex flex-col">
+		<div class="flex items-center justify-between mb-4">
+			<div class="flex items-center gap-3">
+				<div class="w-8 h-8 rounded-lg bg-[#107C10]/20 border border-[#107C10] flex items-center justify-center text-brand">
+					<span class="mdl-icon text-sm">&#xE7FC;</span>
+				</div>
+				<div>
+					<div class="text-xs text-[#888888]">Маршрутизация игровых портов</div>
+					<div class="text-base font-bold text-white">Настройка Game Filter</div>
+				</div>
+			</div>
+			<button onclick="closeGameFilterModal()" class="text-[#888888] hover:text-white text-lg px-2 cursor-pointer">✕</button>
+		</div>
+
+		<div class="text-xs font-semibold text-[#CCCCCC] mb-2">Режим перехвата трафика игр:</div>
+
+		<div id="gf-modes-list" class="space-y-2 mb-4">
+			<div onclick="selectGfMode('disabled')" data-mode="disabled" class="gf-mode-card p-3 rounded-lg border border-[#262626] bg-[#181818] hover:bg-[#222222] cursor-pointer flex items-center justify-between transition">
+				<div>
+					<div class="text-xs font-bold text-white">Отключен</div>
+					<div class="text-[11px] text-[#888888]">По умолчанию — фильтрация игровых портов выключена (порт 12)</div>
+				</div>
+				<span class="gf-check text-sm font-bold text-[#555555]">→</span>
+			</div>
+			<div onclick="selectGfMode('all')" data-mode="all" class="gf-mode-card p-3 rounded-lg border border-[#262626] bg-[#181818] hover:bg-[#222222] cursor-pointer flex items-center justify-between transition">
+				<div>
+					<div class="text-xs font-bold text-brand">TCP и UDP (Рекомендуется)</div>
+					<div class="text-[11px] text-[#888888]">Полный обход для большинства онлайн-игр и игровых лаунчеров</div>
+				</div>
+				<span class="gf-check text-sm font-bold text-[#555555]">→</span>
+			</div>
+			<div onclick="selectGfMode('tcp')" data-mode="tcp" class="gf-mode-card p-3 rounded-lg border border-[#262626] bg-[#181818] hover:bg-[#222222] cursor-pointer flex items-center justify-between transition">
+				<div>
+					<div class="text-xs font-bold text-white">Только TCP</div>
+					<div class="text-[11px] text-[#888888]">Перехват только TCP-соединений игровых серверов</div>
+				</div>
+				<span class="gf-check text-sm font-bold text-[#555555]">→</span>
+			</div>
+			<div onclick="selectGfMode('udp')" data-mode="udp" class="gf-mode-card p-3 rounded-lg border border-[#262626] bg-[#181818] hover:bg-[#222222] cursor-pointer flex items-center justify-between transition">
+				<div>
+					<div class="text-xs font-bold text-white">Только UDP</div>
+					<div class="text-[11px] text-[#888888]">Перехват только UDP-трафика (голосовые чаты и динамичные шутеры)</div>
+				</div>
+				<span class="gf-check text-sm font-bold text-[#555555]">→</span>
+			</div>
+		</div>
+
+		<div class="grid grid-cols-2 gap-3 mb-4">
+			<div>
+				<label class="text-xs text-[#A0A0A0] block mb-1">Диапазон TCP портов:</label>
+				<input id="gf-tcp-input" type="text" value="1024-65535" class="w-full bg-[#222222] border border-[#333333] rounded-lg px-3 py-1.5 text-xs font-mono text-white focus:outline-none focus:border-[#107C10] select-text">
+			</div>
+			<div>
+				<label class="text-xs text-[#A0A0A0] block mb-1">Диапазон UDP портов:</label>
+				<input id="gf-udp-input" type="text" value="1024-65535" class="w-full bg-[#222222] border border-[#333333] rounded-lg px-3 py-1.5 text-xs font-mono text-white focus:outline-none focus:border-[#107C10] select-text">
+			</div>
+		</div>
+
+		<div class="flex items-center justify-between pt-2">
+			<button onclick="resetGfPorts()" class="px-3 py-1.5 rounded-md border border-[#333333] text-xs text-[#888888] hover:text-white transition cursor-pointer">
+				Сбросить (1024-65535)
+			</button>
+			<div class="flex items-center gap-2">
+				<button onclick="closeGameFilterModal()" class="px-4 py-1.5 rounded-md border border-[#333333] text-xs text-[#A0A0A0] hover:bg-[#222222] transition cursor-pointer">
+					Отмена
+				</button>
+				<button onclick="saveGameFilter()" class="px-4 py-1.5 rounded-md btn-brand text-xs font-semibold cursor-pointer">
+					Применить
+				</button>
+			</div>
+		</div>
+	</div>
+</div>
+
+<!-- ОВЕРЛЕЙ 3: СОЗДАНИЕ НОВОГО МОДА -->
+<div id="create-mod-modal" onclick="if(event.target===this) closeCreateModModal()" class="modal-overlay fixed inset-0 bg-black/75 backdrop-blur-sm z-40 flex items-center justify-center p-4">
+	<div class="modal-box bg-[#141414] border border-[#2A2A2A] rounded-xl w-[430px] p-5 shadow-2xl">
+		<h3 class="text-base font-bold text-white mb-3">Создать новый мод</h3>
+
+		<label class="text-xs text-[#A0A0A0] block mb-1">Отображаемое имя:</label>
+		<input id="new-mod-name" type="text" oninput="onNewModNameInput()" class="w-full bg-[#222222] border border-[#333333] rounded-lg px-3 py-1.5 text-xs text-white mb-2.5 focus:outline-none focus:border-[#107C10] select-text">
+
+		<div class="flex justify-between items-center mb-1">
+			<span class="text-xs text-[#A0A0A0]">Уникальный ID (папка, англ.):</span>
+			<span id="new-mod-id-status" class="text-[11px] font-mono text-brand">✓ ID свободен</span>
+		</div>
+		<div class="flex gap-2 mb-2.5">
+			<input id="new-mod-id" type="text" oninput="onNewModIdInput()" class="flex-1 bg-[#222222] border border-[#333333] rounded-lg px-3 py-1.5 text-xs font-mono text-white focus:outline-none focus:border-[#107C10] select-text">
+			<button onclick="regenerateModId()" class="editor-tool-btn px-3" title="Сгенерировать уникальный ID">
+				<span class="mdl-icon text-xs">&#xE149;</span>
+			</button>
+		</div>
+
+		<label class="text-xs text-[#A0A0A0] block mb-1">Автор:</label>
+		<input id="new-mod-author" type="text" class="w-full bg-[#222222] border border-[#333333] rounded-lg px-3 py-1.5 text-xs text-white mb-2.5 focus:outline-none focus:border-[#107C10] select-text">
+
+		<label class="text-xs text-[#A0A0A0] block mb-1">Описание:</label>
+		<input id="new-mod-desc" type="text" class="w-full bg-[#222222] border border-[#333333] rounded-lg px-3 py-1.5 text-xs text-white mb-4 focus:outline-none focus:border-[#107C10] select-text">
+
+		<div class="flex justify-end gap-2">
+			<button onclick="closeCreateModModal()" class="px-4 py-1.5 rounded-md border border-[#333333] text-xs text-[#A0A0A0] hover:bg-[#222222] transition cursor-pointer">Отмена</button>
+			<button id="btn-confirm-create-mod" onclick="confirmCreateMod()" class="px-4 py-1.5 rounded-md btn-brand text-xs font-semibold cursor-pointer">Создать</button>
+		</div>
+	</div>
+</div>
+
+<!-- ОВЕРЛЕЙ 4: СТУДИЯ РЕДАКТИРОВАНИЯ МОДА (CODE STUDIO) -->
+<div id="editor-modal" class="modal-overlay fixed inset-0 bg-black/80 backdrop-blur-sm z-40 flex items-center justify-center p-4">
+	<div class="modal-box bg-[#141414] border border-[#2A2A2A] rounded-xl w-full max-w-[840px] h-[640px] p-4 shadow-2xl flex flex-col">
+		<div class="flex items-center justify-between mb-2.5 shrink-0">
+			<div class="flex items-center gap-2.5">
+				<div class="w-7 h-7 rounded-md bg-[#107C10]/20 border border-[#107C10] flex items-center justify-center text-brand">
+					<span class="mdl-icon text-xs">&#xE70F;</span>
+				</div>
+				<div>
+					<div id="editor-title" class="text-sm font-bold text-white">Редактор мода</div>
+					<div id="editor-subtitle" class="text-[11px] font-mono text-[#888888]">ID: mod_folder • strategy.bat</div>
+				</div>
+			</div>
+			<button onclick="toggleEditorMetaPanel()" class="editor-tool-btn">
+				<span class="mdl-icon text-xs">&#xE713;</span>
+				<span>Свойства мода</span>
+			</button>
+		</div>
+
+		<div id="editor-meta-panel" class="bg-[#181818] border border-[#282828] rounded-lg p-2.5 mb-2 shrink-0">
+			<div class="grid grid-cols-12 gap-2.5 mb-2">
+				<div class="col-span-6">
+					<label class="text-[11px] text-[#A0A0A0] block mb-0.5">Название мода:</label>
+					<input id="edit-mod-name" type="text" class="w-full bg-[#222222] border border-[#333333] rounded px-2.5 py-1 text-xs text-white select-text">
+				</div>
+				<div class="col-span-4">
+					<label class="text-[11px] text-[#A0A0A0] block mb-0.5">Автор:</label>
+					<input id="edit-mod-author" type="text" class="w-full bg-[#222222] border border-[#333333] rounded px-2.5 py-1 text-xs text-white select-text">
+				</div>
+				<div class="col-span-2">
+					<label class="text-[11px] text-[#A0A0A0] block mb-0.5">Версия:</label>
+					<input id="edit-mod-version" type="text" class="w-full bg-[#222222] border border-[#333333] rounded px-2.5 py-1 text-xs font-mono text-white select-text">
+				</div>
+			</div>
+			<div>
+				<label class="text-[11px] text-[#A0A0A0] block mb-0.5">Описание:</label>
+				<input id="edit-mod-desc" type="text" class="w-full bg-[#222222] border border-[#333333] rounded px-2.5 py-1 text-xs text-white select-text">
+			</div>
+		</div>
+
+		<div class="bg-[#18181B] border border-[#27272A] rounded-lg p-1.5 mb-2 flex items-center justify-between shrink-0 flex-wrap gap-1">
+			<div class="flex items-center gap-1 flex-wrap">
+				<button onclick="document.execCommand('undo')" class="editor-tool-btn" title="Отменить (Ctrl+Z)">
+					<span class="mdl-icon text-xs">&#xE7A7;</span>
+				</button>
+				<button onclick="document.execCommand('redo')" class="editor-tool-btn" title="Повторить (Ctrl+Y)">
+					<span class="mdl-icon text-xs">&#xE7A6;</span>
+				</button>
+				<span class="w-[1px] h-4 bg-[#2E2E34] mx-1"></span>
+				<button onclick="toggleEditorSearch()" class="editor-tool-btn" title="Поиск и замена (Ctrl+F)">
+					<span class="mdl-icon text-[11px]">&#xE721;</span>
+					<span>Поиск</span>
+				</button>
+				<button id="btn-word-wrap" onclick="toggleEditorWordWrap()" class="editor-tool-btn">Перенос: Вкл</button>
+				<span class="w-[1px] h-4 bg-[#2E2E34] mx-1"></span>
+
+				<div id="editor-bat-tools" class="flex items-center gap-1">
+					<button onclick="commentCurrentLine()" class="editor-tool-btn font-mono">:: Коммент</button>
+					<button onclick="validateCurrentBat()" class="editor-tool-btn text-brand">
+						<span class="mdl-icon text-[11px]">&#xE73E;</span>
+						<span>Проверить синтаксис</span>
+					</button>
+				</div>
+
+				<div id="editor-list-tools" class="hidden items-center gap-1">
+					<button onclick="cleanDomainsList()" class="editor-tool-btn text-brand">
+						<span class="mdl-icon text-[11px]">&#xE894;</span>
+						<span>Очистить дубли и URL (A-Z)</span>
+					</button>
+				</div>
+			</div>
+
+			<div class="flex items-center gap-1">
+				<button onclick="changeEditorFontSize(-1)" class="editor-tool-btn font-mono font-bold">A-</button>
+				<button onclick="changeEditorFontSize(1)" class="editor-tool-btn font-mono font-bold">A+</button>
+			</div>
+		</div>
+
+		<div id="editor-search-panel" class="bg-[#162216] border border-[#107C10] rounded-lg p-2 mb-2 hidden items-center gap-2 shrink-0">
+			<input id="editor-find-input" type="text" placeholder="Найти текст..." class="flex-1 bg-[#222222] border border-[#333333] rounded px-2.5 py-1 text-xs font-mono text-white select-text">
+			<input id="editor-replace-input" type="text" placeholder="Заменить на..." class="flex-1 bg-[#222222] border border-[#333333] rounded px-2.5 py-1 text-xs font-mono text-white select-text">
+			<button onclick="editorFindNext()" class="editor-tool-btn">Найти далее</button>
+			<button onclick="editorReplaceAll()" class="editor-tool-btn">Заменить всё</button>
+			<button onclick="toggleEditorSearch()" class="editor-tool-btn">✕</button>
+		</div>
+
+		<div id="editor-snippets-bar" class="flex items-center gap-1 overflow-x-auto pb-1 mb-1.5 shrink-0">
+			<span class="text-[11px] text-[#71717A] mr-1">Вставка:</span>
+			<button onclick="insertSnippet('&quot;%BIN%winws.exe&quot; ')" class="editor-tool-btn font-mono">winws.exe</button>
+			<button onclick="insertSnippet('--new ^\n')" class="editor-tool-btn font-mono">--new ^</button>
+			<button onclick="insertSnippet('--filter-tcp=80,443 ')" class="editor-tool-btn font-mono">--filter-tcp</button>
+			<button onclick="insertSnippet('--filter-udp=443,50000-50100 ')" class="editor-tool-btn font-mono">--filter-udp</button>
+			<button onclick="insertSnippet('--hostlist=&quot;%LISTS%list-general.txt&quot; ')" class="editor-tool-btn font-mono">--hostlist</button>
+			<button onclick="insertSnippet('--dpi-desync=fake,split2 ')" class="editor-tool-btn font-mono">--dpi-desync</button>
+			<button onclick="insertSnippet('%BIN%')" class="editor-tool-btn font-mono">%BIN%</button>
+			<button onclick="insertSnippet('%LISTS%')" class="editor-tool-btn font-mono">%LISTS%</button>
+		</div>
+
+		<div class="flex-1 bg-[#0C0C0C] border border-[#2A2A2A] rounded-lg overflow-hidden flex relative">
+			<div id="editor-line-numbers" class="w-11 bg-[#121216] border-r border-[#222226] py-2.5 px-2 text-right font-mono text-[13px] text-[#52525B] overflow-hidden select-none leading-[1.45] shrink-0">1</div>
+			<div class="flex-1 relative overflow-hidden">
+				<pre id="editor-highlight-layer" aria-hidden="true" class="editor-code-layer pointer-events-none select-none m-0"></pre>
+				<textarea id="editor-textarea"
+						  oninput="onEditorTextInput()"
+						  onscroll="syncEditorScroll()"
+						  onclick="updateEditorCursorPos()"
+						  onkeyup="updateEditorCursorPos()"
+						  onkeydown="onEditorKeyDown(event)"
+						  spellcheck="false"
+						  class="editor-code-layer editor-textarea-input focus:outline-none resize-none select-text"></textarea>
+			</div>
+		</div>
+
+		<div class="flex items-center justify-between mt-2.5 pt-1 shrink-0">
+			<div class="flex items-center gap-4 text-xs font-mono text-[#888888]">
+				<span id="editor-cursor-pos">Стр: 1, Столб: 1</span>
+				<span id="editor-stats-info">Строк: 1</span>
+				<span id="editor-status-msg" class="text-[#4ADE80] truncate max-w-[260px]"></span>
+			</div>
+			<div class="flex items-center gap-2">
+				<button onclick="closeEditorModal()" class="px-4 py-1.5 rounded-md border border-[#333333] text-xs text-[#A0A0A0] hover:bg-[#222222] transition cursor-pointer">Отмена</button>
+				<button onclick="saveEditorChanges(false)" class="px-4 py-1.5 rounded-md btn-brand text-xs font-semibold cursor-pointer">Сохранить мод</button>
+			</div>
+		</div>
+	</div>
+</div>
+
+<!-- ОВЕРЛЕЙ 5: ФИРМЕННОЕ МЕНЮ ВЫБОРА ОПЦИЙ НАСТРОЕК -->
+<div id="selection-modal" onclick="if(event.target===this) closeSelectionModal()" class="modal-overlay fixed inset-0 bg-black/75 backdrop-blur-sm z-40 flex items-center justify-center p-4">
+	<div class="modal-box bg-[#141414] border border-[#2A2A2A] rounded-xl w-[480px] p-5 shadow-2xl">
+		<div class="flex items-center justify-between mb-4">
+			<div class="flex items-center gap-3">
+				<div class="w-8 h-8 rounded-lg bg-[#107C10]/20 border border-[#107C10] flex items-center justify-center text-brand">
+					<span class="mdl-icon text-sm">&#xE713;</span>
+				</div>
+				<div>
+					<div id="sel-modal-sub" class="text-xs text-[#888888]">Параметры</div>
+					<div id="sel-modal-title" class="text-base font-bold text-white">Выберите вариант</div>
+				</div>
+			</div>
+			<button onclick="closeSelectionModal()" class="text-[#888888] hover:text-white text-lg px-2 cursor-pointer">✕</button>
+		</div>
+		<div id="sel-modal-list" class="space-y-2"></div>
+	</div>
+</div>
+
+<!-- ОВЕРЛЕЙ 6: УНИВЕРСАЛЬНОЕ ОКНО ПОДТВЕРЖДЕНИЯ И УВЕДОМЛЕНИЙ -->
+<div id="confirm-modal" class="modal-overlay fixed inset-0 bg-black/75 backdrop-blur-sm z-[95] flex items-center justify-center p-4">
+	<div class="modal-box bg-[#141414] border border-[#2A2A2A] rounded-xl w-[430px] p-5 shadow-2xl">
+		<h3 id="confirm-title" class="text-base font-bold text-white mb-2">Подтверждение</h3>
+		<p id="confirm-msg" class="text-xs text-[#CCCCCC] leading-relaxed whitespace-pre-line mb-5"></p>
+		<div class="flex justify-end gap-2">
+			<button id="confirm-cancel-btn" onclick="closeConfirmModal(false)" class="px-4 py-1.5 rounded-md border border-[#333333] text-xs text-[#A0A0A0] hover:bg-[#222222] transition cursor-pointer">
+				Отмена
+			</button>
+			<button id="confirm-ok-btn" onclick="closeConfirmModal(true)" class="px-4 py-1.5 rounded-md btn-brand text-xs font-semibold cursor-pointer">
+				ОК
+			</button>
+		</div>
+	</div>
+</div>
+
+<!-- ОВЕРЛЕЙ 7: ПАЛИТРА БЫСТРЫХ КОМАНД (CTRL + K) -->
+<div id="cmd-palette-modal" onclick="if(event.target===this) closeCommandPalette()" class="modal-overlay fixed inset-0 bg-black/75 backdrop-blur-sm z-[98] flex items-start justify-center pt-20 p-4">
+	<div class="modal-box bg-[#141414] border border-[#2E2E2E] rounded-xl w-[520px] shadow-2xl overflow-hidden flex flex-col">
+		<div class="flex items-center px-3.5 py-2.5 border-b border-[#242424] bg-[#101010]">
+			<span class="mdl-icon text-sm text-brand mr-2.5">&#xE721;</span>
+			<input id="cmd-palette-input"
+				   type="text"
+				   oninput="renderCommandPaletteList()"
+				   onkeydown="onCommandPaletteKeyDown(event)"
+				   placeholder="Введите команду, вкладку или имя .bat профиля..."
+				   class="flex-1 bg-transparent text-xs text-white focus:outline-none select-text font-mono">
+			<kbd onclick="closeCommandPalette()" class="px-1.5 py-0.5 rounded bg-[#1C1C1C] hover:bg-[#2A2A2A] border border-[#333333] text-[10px] font-mono text-[#777777] cursor-pointer">ESC</kbd>
+		</div>
+		<div id="cmd-palette-list" class="max-h-[310px] overflow-y-auto p-1.5 space-y-1"></div>
+		<div class="px-3.5 py-1.5 bg-[#101010] border-t border-[#222222] flex items-center justify-between text-[10px] font-mono text-[#666666]">
+			<span>↑↓ Навигация • Enter / Клик — Выполнить</span>
+			<span>Zapret Command Center</span>
+		</div>
+	</div>
+</div>
+
+<!-- ОВЕРЛЕЙ 8: ЗОНА DRAG & DROP ИМПОРТА МОДОВ -->
+<div id="dropzone-overlay" class="fixed inset-3 rounded-2xl bg-[#0A160A]/90 backdrop-blur-md border-2 border-dashed border-[#4CAF50] z-[99] hidden flex-col items-center justify-center pointer-events-none">
+	<div class="w-16 h-16 rounded-2xl bg-[#107C10]/25 border border-[#4CAF50] flex items-center justify-center text-brand mb-3 shadow-lg">
+		<span class="mdl-icon text-3xl">&#xE8B5;</span>
+	</div>
+	<div class="text-lg font-bold text-white">Отпустите файл для мгновенного импорта мода</div>
+	<div class="text-xs font-mono text-brand mt-1">Поддерживаются: .zip, .netfix-mod, .bat (стратегии) и .txt (списки доменов)</div>
+</div>
