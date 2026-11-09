@@ -296,5 +296,46 @@ namespace ZapretGUI.Core
                 return (false, ex.Message);
             }
         }
+        public async Task<(bool added, string modId)> AddCustomDomainToBypassAsync(string domain)
+        {
+            InitializeFolders();
+            const string customModId = "user_custom_sites";
+            var modDir = Path.Combine(_listsPath, customModId);
+            Directory.CreateDirectory(modDir);
+
+            var jsonPath = Path.Combine(modDir, "mod.json");
+            if (!File.Exists(jsonPath))
+            {
+                var meta = new ModMetaData
+                {
+                    UniqueId = customModId,
+                    Name = "Мои сайты (Быстрый фикс)",
+                    Author = "Вы",
+                    Version = "1.0",
+                    Description = "Домены, добавленные через Умный анализатор блокировок в 1 клик.",
+                    IsBatStrategy = false
+                };
+                await File.WriteAllTextAsync(jsonPath, JsonSerializer.Serialize(meta, _jsonOptions));
+            }
+
+            var listPath = Path.Combine(modDir, "list.txt");
+            var existing = File.Exists(listPath)
+                ? (await File.ReadAllLinesAsync(listPath)).Select(l => l.Trim().ToLowerInvariant()).Where(l => l.Length > 0).ToHashSet()
+                : new HashSet<string>();
+
+            string cleanDomain = domain.Trim().ToLowerInvariant();
+            bool isNew = existing.Add(cleanDomain);
+
+            await File.WriteAllLinesAsync(listPath, existing.OrderBy(x => x));
+
+            if (!SettingsManager.Current.ActiveListMods.Contains(customModId))
+            {
+                SettingsManager.Current.ActiveListMods.Add(customModId);
+                SettingsManager.Save();
+            }
+
+            await ApplyListModsAsync();
+            return (isNew, customModId);
+        }
     }
 }

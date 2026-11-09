@@ -119,6 +119,9 @@ function handleBackendEvent(type, data) {
         case 'modsUpdated':
             appState.batMods = data.batMods || [];
             appState.listMods = data.listMods || [];
+            if (data.selectedProfile) {
+                appState.selectedProfile = data.selectedProfile;
+            }
             initConfigsList(data.profiles || ['general.bat']);
             if (typeof renderModsView === 'function') renderModsView();
             break;
@@ -299,6 +302,14 @@ function handleBackendEvent(type, data) {
 
         case 'toggleCommandPalette':
             toggleCommandPaletteModal();
+            break;
+
+        case 'siteAnalyzed':
+            if (typeof renderSiteAnalyzeResult === 'function') renderSiteAnalyzeResult(data);
+            break;
+
+        case 'siteAnalyzeError':
+            if (typeof renderSiteAnalyzeError === 'function') renderSiteAnalyzeError(data.error);
             break;
     }
 }

@@ -466,6 +466,72 @@ namespace ZapretGUI.Core
                 case "importConfigBackup":
                     await HandleImportConfigBackupAsync();
                     break;
+
+                case "analyzeSite":
+                    var targetSite = root.GetProperty("url").GetString() ?? "";
+                    try
+                    {
+                        var siteRes = await DiagnosticsEngine.AnalyzeCustomSiteAsync(targetSite);
+                        SendEvent("siteAnalyzed", siteRes);
+                    }
+                    catch (Exception ex)
+                    {
+                        SendEvent("siteAnalyzeError", new { error = ex.Message });
+                    }
+                    break;
+
+                case "quickFixAddDomain":
+                    var domToAdd = root.GetProperty("domain").GetString() ?? "";
+                    try
+                    {
+                        _isInternalFileOp = true;
+                        var (added, modId) = await _modManager.AddCustomDomainToBypassAsync(domToAdd);
+                        await BroadcastModsAndProfilesAsync();
+                        AudioHelper.PlaySuccess();
+
+                        if (BypassController.Current.Zapret.IsRunning)
+                        {
+                            await BypassController.Current.RestartServicesAsync(SettingsManager.Current.SelectedProfileName);
+                            BroadcastBypassState();
+                        }
+
+                        SendEvent("alert", new
+                        {
+                            title = "Домен добавлен в обход",
+                            message = $"Домен «{domToAdd}» добавлен в активный список «Мои сайты» и внедрен в list-general.txt!\n{(BypassController.Current.Zapret.IsRunning ? "Служба Zapret была автоматически перезапущена." : "Теперь включите обход на Главной вкладке.")}",
+                            isError = false
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        SendEvent("alert", new { title = "Ошибка", message = ex.Message, isError = true });
+                    }
+                    finally
+                    {
+                        _isInternalFileOp = false;
+                    }
+                    break;
+
+                case "quickFixAddHost":
+                    var hostDom = root.GetProperty("domain").GetString() ?? "";
+                    var hostIp = root.GetProperty("ip").GetString() ?? "";
+                    try
+                    {
+                        await ServiceToolsManager.AddSingleHostEntryAsync(hostDom, hostIp);
+                        SendEvent("routingStatusUpdated", GetRoutingStatusObj());
+                        AudioHelper.PlaySuccess();
+                        SendEvent("alert", new
+                        {
+                            title = "Чистый IP прописан в Hosts",
+                            message = $"Связка «{hostIp} {hostDom}» успешно добавлена в системный файл hosts, а DNS-кэш Windows очищен!",
+                            isError = false
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        SendEvent("alert", new { title = "Ошибка записи в Hosts", message = ex.Message, isError = true });
+                    }
+                    break;
             }
         }
 
@@ -729,12 +795,26 @@ namespace ZapretGUI.Core
                                      "\"%BIN%winws.exe\" --wf-tcp=80,443 --wf-udp=443,50000-50100 ^\r\n" +
                                      "--filter-udp=443 --hostlist=\"%LISTS%list-general.txt\" --dpi-desync=fake --dpi-desync-repeats=6 ^\r\n" +
                                      "--new ^\r\n" +
-                                     "--filter-tcp=80,443 --hostlist=\"%LISTS%list-general.txt\" --dpi-desync=fake,split2\r\n";
+                                     "--filter-tcp=80,443 --hostlist=\"%LISTS%list-general.txt\" --dpi-desync=fake,split2 --dpi-desync-fooling=md5sig\r\n";
                     await File.WriteAllTextAsync(Path.Combine(modFolderPath, "strategy.bat"), defaultBat);
+
+                    // Сразу активируем созданную стратегию и выбираем её как профиль
+                    if (!SettingsManager.Current.ActiveBatMods.Contains(id))
+                        SettingsManager.Current.ActiveBatMods.Add(id);
+
+                    await _modManager.SyncActiveBatModsAsync();
+                    SettingsManager.Current.SelectedProfileName = $"mod_{id}.bat";
+                    SettingsManager.Save();
+                    SendEvent("profileSelected", new { profile = SettingsManager.Current.SelectedProfileName });
                 }
                 else
                 {
                     await File.WriteAllTextAsync(Path.Combine(modFolderPath, "list.txt"), "");
+                    if (!SettingsManager.Current.ActiveListMods.Contains(id))
+                        SettingsManager.Current.ActiveListMods.Add(id);
+
+                    await _modManager.ApplyListModsAsync();
+                    SettingsManager.Save();
                 }
 
                 SendEvent("modCreated", new { id, isBat });
@@ -774,9 +854,20 @@ namespace ZapretGUI.Core
                 }
 
                 if (isBat)
+                {
                     await _modManager.SyncActiveBatModsAsync();
+                    var modProfileFile = $"mod_{id}.bat";
+                    if (!nowActive && string.Equals(SettingsManager.Current.SelectedProfileName, modProfileFile, StringComparison.OrdinalIgnoreCase))
+                    {
+                        var fallback = GetBatProfiles().FirstOrDefault() ?? "general.bat";
+                        SettingsManager.Current.SelectedProfileName = fallback;
+                        SendEvent("profileSelected", new { profile = fallback });
+                    }
+                }
                 else
+                {
                     await _modManager.ApplyListModsAsync();
+                }
 
                 SettingsManager.Save();
                 await BroadcastModsAndProfilesAsync();
@@ -844,9 +935,16 @@ namespace ZapretGUI.Core
                 {
                     if (isBat) await _modManager.SyncActiveBatModsAsync();
                     else await _modManager.ApplyListModsAsync();
-                    SettingsManager.Save();
                 }
 
+                if (isBat && string.Equals(SettingsManager.Current.SelectedProfileName, $"mod_{id}.bat", StringComparison.OrdinalIgnoreCase))
+                {
+                    var fallback = GetBatProfiles().FirstOrDefault() ?? "general.bat";
+                    SettingsManager.Current.SelectedProfileName = fallback;
+                    SendEvent("profileSelected", new { profile = fallback });
+                }
+
+                SettingsManager.Save();
                 await BroadcastModsAndProfilesAsync();
 
                 if (wasActiveList && BypassController.Current.Zapret.IsRunning)
@@ -944,8 +1042,17 @@ namespace ZapretGUI.Core
                 await File.WriteAllTextAsync(Path.Combine(modFolder, "mod.json"), JsonSerializer.Serialize(meta, new JsonSerializerOptions { WriteIndented = true }));
                 await File.WriteAllTextAsync(Path.Combine(modFolder, fileName), content);
 
-                if (isBat) await _modManager.SyncActiveBatModsAsync();
-                else await _modManager.ApplyListModsAsync();
+                if (isBat)
+                {
+                    if (!SettingsManager.Current.ActiveBatMods.Contains(id))
+                        SettingsManager.Current.ActiveBatMods.Add(id);
+
+                    await _modManager.SyncActiveBatModsAsync();
+                    SettingsManager.Current.SelectedProfileName = $"mod_{id}.bat";
+                    SendEvent("profileSelected", new { profile = SettingsManager.Current.SelectedProfileName });
+                }
+                else
+                    await _modManager.ApplyListModsAsync();
 
                 SettingsManager.Save();
                 SendEvent("modContentSaved", new { id });

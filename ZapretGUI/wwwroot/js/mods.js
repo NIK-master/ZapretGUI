@@ -1,7 +1,116 @@
 // =========================================================================
-// ЛОГИКА ВКЛАДКИ 2: МОДИФИКАЦИИ (MODSVIEW + CODE STUDIO)
+// ЛОГИКА ВКЛАДКИ 2: МОДИФИКАЦИИ (MODSVIEW + CODE STUDIO + STRATEGY LEGO)
 // =========================================================================
 let modsLayoutMode = 'grid'; // 'grid' (2 колонки) или 'list' (1 колонка)
+let editorViewMode = 'code'; // 'code' или 'visual'
+
+// Интерактивный словарь-переводчик флагов и переменных winws.exe
+const WINWS_FLAG_DICT = {
+    '--wf-tcp': {
+        badge: 'Перехват WinDivert',
+        desc: 'Указывает драйверу ядра WinDivert, какие TCP-порты нужно перехватывать для модификации трафика (обычно 80, 443 и игровые порты).'
+    },
+    '--wf-udp': {
+        badge: 'Перехват WinDivert',
+        desc: 'Указывает драйверу WinDivert, какие UDP-порты перехватывать (443 для YouTube QUIC, 50000–50100 для голосовых чатов Discord).'
+    },
+    '--filter-tcp': {
+        badge: 'Фильтр профиля',
+        desc: 'Применяет текущую стратегию обхода только к указанным TCP-портам внутри данного блока (до следующего флага --new).'
+    },
+    '--filter-udp': {
+        badge: 'Фильтр профиля',
+        desc: 'Применяет текущую стратегию обхода только к указанным UDP-портам (например, 443 для протокола QUIC или диапозон портов звонков).'
+    },
+    '--hostlist': {
+        badge: 'Белый список',
+        desc: 'Путь к текстовому файлу со списком доменов (например, list-general.txt). Стратегия сработает ТОЛЬКО для сайтов из этого файла.'
+    },
+    '--hostlist-exclude': {
+        badge: 'Исключения доменов',
+        desc: 'Список доменов, которые нужно принудительно исключить из обработки обхода (чтобы не ломать российские сайты и банки).'
+    },
+    '--ipset': {
+        badge: 'База IP-подсетей',
+        desc: 'Путь к файлу со списком IP-адресов и подсетей (ipset-all.txt). Применяет обход на уровне IP, даже если домен не виден.'
+    },
+    '--ipset-exclude': {
+        badge: 'Исключения IP',
+        desc: 'Список IP-адресов и подсетей, трафик к которым не должен модифицироваться.'
+    },
+    '--dpi-desync': {
+        badge: 'Ядро DPI-обхода',
+        desc: 'Главный метод обмана ТСПУ: "fake" отправляет ложный пакет перед настоящим, "split2" режет пакет на части, "disorder2" меняет порядок сегментов, "multisplit" шинкует пакет на множество мелких кусков.'
+    },
+    '--dpi-desync-fooling': {
+        badge: 'Маскировка фейка',
+        desc: 'Способ сделать так, чтобы ТСПУ провайдера проверил фейковый пакет, а сам целевой сервер (YouTube/Discord) его проигнорировал. Популярные методы: "md5sig" (TCP MD5 опция), "badseq" (сдвиг Sequence) и "badsum".'
+    },
+    '--dpi-desync-repeats': {
+        badge: 'Повторы отправки',
+        desc: 'Сколько раз подряд продублировать отправку фейкового пакета (обычно от 4 до 11). Повышает шанс пробития агрессивного ТСПУ на UDP/QUIC.'
+    },
+    '--dpi-desync-autottl': {
+        badge: 'Авто-TTL',
+        desc: 'Автоматически вычисляет количество узлов (хопов) до сервера и ставит такой TTL, чтобы фейк дошел до ТСПУ провайдера, но сгорел по пути к сайту.'
+    },
+    '--dpi-desync-ttl': {
+        badge: 'Жесткий TTL',
+        desc: 'Фиксированное время жизни (Time-To-Live) для фейковых пакетов. Если число слишком маленькое — фейк не долетит до DPI, если большое — долетит до сервера и вызовет ошибку.'
+    },
+    '--dpi-desync-fake-tls': {
+        badge: 'Payload TLS',
+        desc: 'Бинарный файл (.bin) с поддельным заголовком TLS ClientHello, который отправляется провайдеру в качестве приманки.'
+    },
+    '--dpi-desync-fake-quic': {
+        badge: 'Payload QUIC',
+        desc: 'Бинарный файл (.bin) с поддельным заголовком QUIC Initial для пробития замедления видеопотока YouTube по протоколу UDP.'
+    },
+    '--dpi-desync-fake-unknown-udp': {
+        badge: 'Payload UDP',
+        desc: 'Поддельный пакет для обхода блокировки нестандартных UDP-протоколов (звонки в Discord, голосовые чаты в играх).'
+    },
+    '--dpi-desync-cutoff': {
+        badge: 'Лимит пакетов',
+        desc: 'Ограничивает работу десинхронизации только первыми N пакетами соединения (например, d3 или n2), чтобы не нагружать процессор после установки связи.'
+    },
+    '--dpi-desync-split-pos': {
+        badge: 'Точка разреза',
+        desc: 'Задает точную позицию байта (или метку sniext / midsld), в которой пакет будет разрезан на части.'
+    },
+    '--dpi-desync-split-seqovl': {
+        badge: 'Перекрытие Sequence',
+        desc: 'Специальная техника наложения TCP-сегментов друг на друга (Sequence Overlap), которую ТСПУ и целевой сервер собирают по-разному.'
+    },
+    '--dpi-desync-any-protocol': {
+        badge: 'Все протоколы',
+        desc: 'Применяет десинхронизацию ко всем пакетам на порту, даже если winws не распознал в них TLS, HTTP или QUIC.'
+    },
+    '--new': {
+        badge: 'Разделитель стратегий',
+        desc: 'Завершает настройку текущего правила и начинает новый независимый профиль фильтрации для других портов или списков внутри одного процесса winws.exe.'
+    },
+    '%bin%': {
+        badge: 'Системная переменная',
+        desc: 'Автоматически заменяется на путь к папке ZapretFiles\\bin\\, где лежат исполняемый файл winws.exe и бинарные фейки (.bin).'
+    },
+    '%lists%': {
+        badge: 'Системная переменная',
+        desc: 'Автоматически заменяется на путь к папке ZapretFiles\\lists\\, где хранятся списки доменов и подсетей.'
+    },
+    '%gamefilter%': {
+        badge: 'Игровой фильтр',
+        desc: 'Динамическая переменная: подставляет выбранный в настройках диапазон игровых портов (например, 1024-65535) или порт-заглушку 12, если фильтр выключен.'
+    },
+    '%gamefiltertcp%': {
+        badge: 'Игровой фильтр TCP',
+        desc: 'Подставляет диапазон TCP-портов из настроек Игрового фильтра.'
+    },
+    '%gamefilterudp%': {
+        badge: 'Игровой фильтр UDP',
+        desc: 'Подставляет диапазон UDP-портов из настроек Игрового фильтра.'
+    }
+};
 
 function setModsLayout(mode) {
     sendCmd('playClick');
@@ -147,15 +256,22 @@ function buildModCardHtml(mod, isBat, index = 0) {
     const delayMs = Math.min(index * 40, 240);
     const typeGlyph = isBat ? '&#xE756;' : '&#xE774;';
     const fileBadge = isBat ? `mod_${mod.id}.bat` : `${mod.id}/list.txt`;
-    const statusText = mod.isActive ? 'Активен' : 'Отключен';
+    const isCurrentSelectedProf = isBat && mod.isActive && (appState.selectedProfile || '').toLowerCase() === fileBadge.toLowerCase();
+    const statusText = mod.isActive ? (isCurrentSelectedProf ? 'Выбран ★' : 'Активен') : 'Отключен';
     const statusCls = mod.isActive ? 'text-brand font-semibold' : 'text-[#777777]';
     const iconBoxCls = mod.isActive
         ? 'bg-[#107C10]/20 border-[#107C10] text-brand'
         : 'bg-[#202020] border-[#2E2E2E] text-[#888888]';
 
+    const selectProfileBtn = isBat && mod.isActive
+        ? `<button onclick="selectProfile('${fileBadge}')" class="mod-action-pill ${isCurrentSelectedProf ? '!border-[#107C10] !text-brand' : ''}" title="Сделать текущим профилем запуска Zapret">
+               <span class="mdl-icon text-[11px]">${isCurrentSelectedProf ? '&#xE73E;' : '&#xE768;'}</span>
+               <span>${isCurrentSelectedProf ? 'Выбран' : 'Выбрать'}</span>
+           </button>`
+        : '';
+
     return `
     <div style="animation-delay: ${delayMs}ms" class="mod-workshop-card ${mod.isActive ? 'is-active' : ''} flex flex-col justify-between gap-3">
-        <!-- Верхняя часть: Иконка, Название, Технический ID и Тумблер -->
         <div class="flex items-start justify-between gap-3">
             <div class="flex items-start gap-3 overflow-hidden">
                 <div class="w-10 h-10 rounded-xl border ${iconBoxCls} flex items-center justify-center shrink-0 mt-0.5 transition-colors">
@@ -174,23 +290,21 @@ function buildModCardHtml(mod, isBat, index = 0) {
                 </div>
             </div>
 
-            <!-- Тумблер включения -->
             <div class="flex items-center gap-2 shrink-0">
                 <span class="text-[11px] ${statusCls}">${statusText}</span>
                 <input type="checkbox" ${mod.isActive ? 'checked' : ''} onchange="toggleMod('${mod.id}', ${isBat}, '${safeName}')" class="cyber-toggle" title="Включить / отключить мод">
             </div>
         </div>
 
-        <!-- Описание мода -->
         <div class="text-xs text-[#A8A8A8] leading-relaxed line-clamp-2 min-h-[32px]">
             ${mod.meta.description || 'Описание не указано.'}
         </div>
 
-        <!-- Нижняя панель инструментов карточки -->
         <div class="flex items-center justify-between pt-2.5 border-t border-[#242424]">
             <span class="text-[10px] font-mono text-[#555555]">ID: ${mod.id}</span>
 
             <div class="flex items-center gap-1.5">
+                ${selectProfileBtn}
                 <button onclick="openModEditor('${mod.id}', ${isBat})" class="mod-action-pill" title="Открыть в Code Studio">
                     <span class="mdl-icon text-[11px]">&#xE70F;</span>
                     <span>Код</span>
@@ -341,8 +455,7 @@ function highlightSingleBatLine(rawLine) {
         let cls = '';
 
         if (token.startsWith('"')) {
-            // Внутри кавычек тоже подсветим переменные %BIN% и %LISTS%
-            const inner = escapeSyntaxHtml(token).replace(/(%[a-zA-Z0-9_~]+%)/g, '<span class="syn-var">$1</span>');
+            const inner = escapeSyntaxHtml(token).replace(/(%[a-zA-Z0-9_~]+%)/g, '<span class="syn-var" data-token="$1">$1</span>');
             result += `<span class="syn-string">${inner}</span>`;
             lastIndex = tokenRegex.lastIndex;
             continue;
@@ -362,7 +475,7 @@ function highlightSingleBatLine(rawLine) {
             cls = 'syn-cmd';
         }
 
-        result += `<span class="${cls}">${escapeSyntaxHtml(token)}</span>`;
+        result += `<span class="${cls}" data-token="${escapeSyntaxHtml(lower)}">${escapeSyntaxHtml(token)}</span>`;
         lastIndex = tokenRegex.lastIndex;
     }
 
@@ -379,11 +492,9 @@ function highlightSingleListLine(rawLine) {
         return `<span class="syn-comment">${escapeSyntaxHtml(rawLine)}</span>`;
     }
     if (/^https?:\/\//i.test(trimmed) || trimmed.includes('/')) {
-        // Если это IP/подсеть CIDR (например 203.0.113.113/32)
         if (/^\d{1,3}(\.\d{1,3}){3}(\/\d{1,2})?$/.test(trimmed)) {
             return `<span class="syn-ip">${escapeSyntaxHtml(rawLine)}</span>`;
         }
-        // Если вставили грязный URL с https:// или путями — подсветим волнистой линией
         return `<span class="syn-warn" title="Нажмите «Очистить дубли и URL», чтобы оставить чистый домен">${escapeSyntaxHtml(rawLine)}</span>`;
     }
     if (/^\d{1,3}(\.\d{1,3}){3}$/.test(trimmed)) {
@@ -402,8 +513,143 @@ function updateEditorSyntaxHighlight() {
     const isBat = appState.editingMod.isBat;
 
     const htmlLines = lines.map(line => isBat ? highlightSingleBatLine(line) : highlightSingleListLine(line));
-    // Добавляем пробел в конец, чтобы при пустой последней строке после \n высота pre совпадала с textarea
     hl.innerHTML = htmlLines.join('\n') + '\n ';
+}
+
+// =========================================================================
+// ЖИВОЙ ПЕРЕВОДЧИК ФЛАГОВ WINWS ПО НАВЕДЕНИЮ МЫШИ В CODE STUDIO
+// =========================================================================
+function onEditorMouseMove(e) {
+    if (!appState.editingMod.isBat) {
+        hideWinwsFlagTooltip();
+        return;
+    }
+
+    const hl = document.getElementById('editor-highlight-layer');
+    const wrap = document.getElementById('editor-canvas-wrap');
+    if (!hl || !wrap) return;
+
+    // Временно прячем прозрачный textarea для хита по подсвеченному спану в <pre>
+    const ta = document.getElementById('editor-textarea');
+    ta.style.pointerEvents = 'none';
+    const elemUnder = document.elementFromPoint(e.clientX, e.clientY);
+    ta.style.pointerEvents = 'auto';
+
+    if (elemUnder && elemUnder.hasAttribute('data-token')) {
+        const rawToken = (elemUnder.getAttribute('data-token') || '').toLowerCase();
+        const info = WINWS_FLAG_DICT[rawToken];
+        if (info) {
+            const wrapRect = wrap.getBoundingClientRect();
+            const spanRect = elemUnder.getBoundingClientRect();
+            showWinwsFlagTooltip(rawToken, info, spanRect.left - wrapRect.left, spanRect.top - wrapRect.top);
+            return;
+        }
+    }
+
+    hideWinwsFlagTooltip();
+}
+
+function showWinwsFlagTooltip(tokenName, info, relX, relY) {
+    const tip = document.getElementById('winws-flag-tooltip');
+    const wrap = document.getElementById('editor-canvas-wrap');
+    if (!tip || !wrap) return;
+
+    document.getElementById('wft-flag-name').innerText = tokenName;
+    document.getElementById('wft-flag-badge').innerText = info.badge;
+    document.getElementById('wft-flag-desc').innerText = info.desc;
+
+    tip.classList.remove('hidden');
+
+    const wrapW = wrap.clientWidth;
+    const tipW = tip.offsetWidth || 340;
+    const tipH = tip.offsetHeight || 85;
+
+    const left = Math.max(10, Math.min(relX, wrapW - tipW - 12));
+    const top = relY > tipH + 16 ? (relY - tipH - 8) : (relY + 24);
+
+    tip.style.left = `${left}px`;
+    tip.style.top = `${top}px`;
+}
+
+function hideWinwsFlagTooltip() {
+    document.getElementById('winws-flag-tooltip')?.classList.add('hidden');
+}
+
+// =========================================================================
+// ВИЗУАЛЬНЫЙ КОНСТРУКТОР СТРАТЕГИЙ («STRATEGY LEGO»)
+// =========================================================================
+function switchEditorViewMode(mode) {
+    editorViewMode = mode;
+    const codeContainer = document.getElementById('editor-code-view-container');
+    const visualContainer = document.getElementById('editor-visual-builder');
+    const btnCode = document.getElementById('btn-ed-mode-code');
+    const btnVis = document.getElementById('btn-ed-mode-visual');
+
+    if (mode === 'visual' && appState.editingMod.isBat) {
+        codeContainer?.classList.add('hidden');
+        visualContainer?.classList.remove('hidden');
+        visualContainer?.classList.add('flex');
+        if (btnCode) btnCode.className = 'px-3 py-1 rounded-md text-[#888888] hover:text-white text-xs font-semibold transition cursor-pointer flex items-center gap-1.5';
+        if (btnVis) btnVis.className = 'px-3 py-1 rounded-md bg-[#26262A] text-white text-xs font-semibold transition cursor-pointer flex items-center gap-1.5';
+        updateLegoPreview();
+    } else {
+        visualContainer?.classList.add('hidden');
+        visualContainer?.classList.remove('flex');
+        codeContainer?.classList.remove('hidden');
+        if (btnCode) btnCode.className = 'px-3 py-1 rounded-md bg-[#26262A] text-white text-xs font-semibold transition cursor-pointer flex items-center gap-1.5';
+        if (btnVis) btnVis.className = 'px-3 py-1 rounded-md text-[#888888] hover:text-white text-xs font-semibold transition cursor-pointer flex items-center gap-1.5';
+    }
+}
+
+function updateLegoPreview() {
+    const tcpDesync = document.getElementById('lego-tcp-desync')?.value || 'fake,split2';
+    const fooling = document.getElementById('lego-fooling')?.value || 'md5sig';
+    const quicEnabled = document.getElementById('lego-quic-enabled')?.checked ?? true;
+    const repeats = document.getElementById('lego-repeats')?.value || '6';
+    const discordUdp = document.getElementById('lego-discord-udp')?.checked ?? true;
+    const useGf = document.getElementById('lego-game-filter')?.checked ?? true;
+
+    const wfTcp = useGf ? '80,443,%GameFilterTCP%' : '80,443';
+    let wfUdpParts = ['443'];
+    if (discordUdp) wfUdpParts.push('50000-50100');
+    if (useGf) wfUdpParts.push('%GameFilterUDP%');
+    const wfUdp = wfUdpParts.join(',');
+
+    const blocks = [];
+
+    if (quicEnabled) {
+        blocks.push(`--filter-udp=443 --hostlist="%LISTS%list-general.txt" --dpi-desync=fake --dpi-desync-repeats=${repeats}`);
+    }
+
+    if (discordUdp) {
+        const udpPorts = useGf ? '50000-50100,%GameFilterUDP%' : '50000-50100';
+        blocks.push(`--filter-udp=${udpPorts} --dpi-desync=fake --dpi-desync-any-protocol --dpi-desync-cutoff=d3 --dpi-desync-repeats=${repeats}`);
+    }
+
+    const foolPart = fooling === 'none'
+        ? '--dpi-desync-autottl=2'
+        : `--dpi-desync-fooling=${fooling}`;
+
+    const tcpPorts = useGf ? '80,443,%GameFilterTCP%' : '80,443';
+    blocks.push(`--filter-tcp=${tcpPorts} --hostlist="%LISTS%list-general.txt" --dpi-desync=${tcpDesync} --dpi-desync-repeats=${repeats} ${foolPart}`);
+
+    const header = `:: Сгенерировано в Визуальном конструкторе Zapret for ADHD\r\n"%BIN%winws.exe" --wf-tcp=${wfTcp} --wf-udp=${wfUdp} ^\r\n`;
+    const body = blocks.join(' ^\r\n--new ^\r\n');
+
+    const previewEl = document.getElementById('lego-code-preview');
+    if (previewEl) previewEl.textContent = header + body;
+}
+
+function applyLegoToCodeEditor() {
+    updateLegoPreview();
+    const code = document.getElementById('lego-code-preview')?.textContent || '';
+    if (!code) return;
+
+    const ta = document.getElementById('editor-textarea');
+    ta.value = code;
+    onEditorTextInput();
+    switchEditorViewMode('code');
+    setEditorStatus('✓ Схема из конструктора перенесена в код!', 'text-brand');
 }
 
 function openEditorWithData(data) {
@@ -418,19 +664,23 @@ function openEditorWithData(data) {
     document.getElementById('edit-mod-version').value = data.meta.version || '1.0';
     document.getElementById('edit-mod-desc').value = data.meta.description || '';
 
+    document.getElementById('editor-mode-tabs')?.classList.toggle('hidden', !data.isBat);
     document.getElementById('editor-bat-tools').className = data.isBat ? 'flex items-center gap-1' : 'hidden';
     document.getElementById('editor-snippets-bar').className = data.isBat ? 'flex items-center gap-1 overflow-x-auto pb-1 mb-1.5 shrink-0' : 'hidden';
     document.getElementById('editor-list-tools').className = data.isBat ? 'hidden' : 'flex items-center gap-1';
 
+    switchEditorViewMode('code');
+
     const ta = document.getElementById('editor-textarea');
     ta.value = data.content || '';
     onEditorTextInput();
-    setEditorStatus('Готов к работе', 'text-[#4ADE80]');
+    setEditorStatus('Наведите курсор на любой флаг для перевода', 'text-[#4ADE80]');
     document.getElementById('editor-modal').classList.add('open');
 }
 
 function closeEditorModal() {
     sendCmd('playClick');
+    hideWinwsFlagTooltip();
     document.getElementById('editor-modal').classList.remove('open');
 }
 
@@ -644,6 +894,12 @@ function setEditorStatus(msg, colorCls) {
 
 function saveEditorChanges(bypassWarning = false) {
     sendCmd('playClick');
+    if (editorViewMode === 'visual' && appState.editingMod.isBat) {
+        updateLegoPreview();
+        const gen = document.getElementById('lego-code-preview')?.textContent || '';
+        if (gen) document.getElementById('editor-textarea').value = gen;
+    }
+
     sendCmd('saveModContent', {
         id: appState.editingMod.id,
         isBat: appState.editingMod.isBat,

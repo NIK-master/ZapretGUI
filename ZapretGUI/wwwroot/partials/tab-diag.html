@@ -28,6 +28,40 @@
 		</div>
 	</div>
 
+	<!-- НОВЫЙ МОДУЛЬ: УМНЫЙ АНАЛИЗАТОР КОНКРЕТНОГО САЙТА (ПОЧИНИТЬ САЙТ В 1 КЛИК) -->
+	<div class="glass-card rounded-xl p-3.5 flex flex-col gap-2.5">
+		<div class="flex flex-wrap items-center justify-between gap-2">
+			<div class="flex items-center gap-2">
+				<span class="mdl-icon text-sm text-brand">&#xE774;</span>
+				<span class="text-xs font-bold text-white uppercase tracking-wider">Починить конкретный сайт (Экспресс-анализатор DNS + TLS SNI)</span>
+			</div>
+			<div class="flex items-center gap-1.5 text-[10px] font-mono text-[#777777]">
+				<span>Быстрый тест:</span>
+				<button onclick="quickFillSiteCheck('youtube.com')" class="ping-preset-chip">youtube.com</button>
+				<button onclick="quickFillSiteCheck('rutracker.org')" class="ping-preset-chip">rutracker.org</button>
+				<button onclick="quickFillSiteCheck('ntc.party')" class="ping-preset-chip">ntc.party</button>
+			</div>
+		</div>
+
+		<div class="flex items-center gap-2">
+			<div class="relative flex-1 flex items-center">
+				<span class="mdl-icon text-xs text-[#666666] absolute left-3 pointer-events-none">&#xE721;</span>
+				<input id="site-check-input"
+					   type="text"
+					   onkeydown="if(event.key==='Enter') runCustomSiteCheck()"
+					   placeholder="Вставьте ссылку или домен неработающего сайта (например: https://example.com)..."
+					   class="w-full bg-[#101010] border border-[#2A2A2A] focus:border-[#107C10] rounded-lg pl-8 pr-3 py-2 text-xs font-mono text-white focus:outline-none transition select-text">
+			</div>
+			<button id="btn-site-check" onclick="runCustomSiteCheck()" class="px-4 py-2 rounded-lg bg-[#202020] hover:bg-[#2A2A2A] border border-[#363636] hover:border-[#107C10] text-xs font-bold text-white transition cursor-pointer flex items-center gap-2 shrink-0">
+				<span id="site-check-icon" class="mdl-icon text-xs text-brand">&#xE945;</span>
+				<span id="site-check-btn-txt">Проверить сайт</span>
+			</button>
+		</div>
+
+		<!-- Карточка вердикта по сайту с кнопками починки в 1 клик -->
+		<div id="site-check-result-box" class="hidden rounded-lg border p-3 transition-all"></div>
+	</div>
+
 	<div id="diag-progress-wrap" class="glass-card rounded-xl p-3 flex-col gap-2.5 hidden">
 		<div class="flex items-center justify-between text-xs">
 			<span id="diag-step-label" class="font-semibold text-white">Инициализация сканера...</span>
@@ -37,24 +71,12 @@
 			<div id="diag-progress-bar" class="h-full bg-[#107C10] transition-all duration-300" style="width: 0%"></div>
 		</div>
 		<div class="flex flex-wrap items-center gap-1.5 pt-0.5">
-			<span id="dstep-0" class="diag-step-pill">
-				<span class="mdl-icon text-[10px]">&#xE713;</span>Процессы
-			</span>
-			<span id="dstep-1" class="diag-step-pill">
-				<span class="mdl-icon text-[10px]">&#xE709;</span>Telegram DC
-			</span>
-			<span id="dstep-2" class="diag-step-pill">
-				<span class="mdl-icon text-[10px]">&#xE774;</span>DNS Spoof
-			</span>
-			<span id="dstep-3" class="diag-step-pill">
-				<span class="mdl-icon text-[10px]">&#xEA18;</span>DPI / SNI
-			</span>
-			<span id="dstep-4" class="diag-step-pill">
-				<span class="mdl-icon text-[10px]">&#xE896;</span>ТСПУ Медиа
-			</span>
-			<span id="dstep-5" class="diag-step-pill">
-				<span class="mdl-icon text-[10px]">&#xE7FC;</span>Discord
-			</span>
+			<span id="dstep-0" class="diag-step-pill"><span class="mdl-icon text-[10px]">&#xE713;</span>Процессы</span>
+			<span id="dstep-1" class="diag-step-pill"><span class="mdl-icon text-[10px]">&#xE709;</span>Telegram DC</span>
+			<span id="dstep-2" class="diag-step-pill"><span class="mdl-icon text-[10px]">&#xE774;</span>DNS Spoof</span>
+			<span id="dstep-3" class="diag-step-pill"><span class="mdl-icon text-[10px]">&#xEA18;</span>DPI / SNI</span>
+			<span id="dstep-4" class="diag-step-pill"><span class="mdl-icon text-[10px]">&#xE896;</span>ТСПУ Медиа</span>
+			<span id="dstep-5" class="diag-step-pill"><span class="mdl-icon text-[10px]">&#xE7FC;</span>Discord</span>
 		</div>
 	</div>
 

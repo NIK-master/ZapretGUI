@@ -375,5 +375,21 @@ namespace ZapretGUI.Core
                 ? $"Драйвер WinDivert успешно остановлен и выгружен из ядра (служб остановлено: {stopped}), DNS-кэш очищен."
                 : "Все процессы обхода остановлены, активных служб WinDivert в памяти не обнаружено. DNS-кэш очищен.";
         }
+        public static async Task AddSingleHostEntryAsync(string domain, string ip)
+        {
+            if (string.IsNullOrWhiteSpace(domain) || string.IsNullOrWhiteSpace(ip))
+                throw new Exception("Некорректный домен или IP-адрес.");
+
+            var existingContent = File.Exists(SystemHostsPath) ? await File.ReadAllTextAsync(SystemHostsPath) : "";
+            var lines = existingContent.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None).ToList();
+
+            string rule = $"{ip.Trim()} {domain.Trim().ToLowerInvariant()}";
+            if (!lines.Any(l => l.Trim().Equals(rule, StringComparison.OrdinalIgnoreCase)))
+            {
+                lines.Add(rule);
+                await File.WriteAllTextAsync(SystemHostsPath, string.Join("\r\n", lines).TrimEnd() + "\r\n", new UTF8Encoding(false));
+                FlushDnsCache();
+            }
+        }
     }
 }

@@ -98,4 +98,18 @@ namespace ZapretGUI.Core
         public List<string> Recommendations { get; set; } = new();
         public List<DiscordPingResult> DiscordPing { get; set; } = new();
     }
+
+    public class SiteCheckResult
+    {
+        public string Domain { get; set; } = "";
+        public string CleanIp { get; set; } = "";
+        public bool DnsSpoofed { get; set; }
+        public bool TcpOk { get; set; }
+        public double LatencyMs { get; set; }
+        public string TlsTargetSni { get; set; } = "";
+        public string TlsNeutralSni { get; set; } = "";
+        public string VerdictType { get; set; } = "ok"; // ok, sni_block, dns_spoof, ip_block, offline
+        public string VerdictTitle { get; set; } = "";
+        public string VerdictDetail { get; set; } = "";
+    }
 }

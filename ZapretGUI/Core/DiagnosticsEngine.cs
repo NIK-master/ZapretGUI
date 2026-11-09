@@ -502,5 +502,81 @@ namespace ZapretGUI.Core
             Step(1.0, "Готово ✓");
             return report;
         }
+        public static async Task<SiteCheckResult> AnalyzeCustomSiteAsync(string rawInput)
+        {
+            var clean = (rawInput ?? "").Trim().ToLowerInvariant();
+            if (clean.StartsWith("http://")) clean = clean.Substring(7);
+            else if (clean.StartsWith("https://")) clean = clean.Substring(8);
+            if (clean.StartsWith("www.")) clean = clean.Substring(4);
+
+            var slashIdx = clean.IndexOf('/');
+            if (slashIdx > 0) clean = clean.Substring(0, slashIdx);
+            var colonIdx = clean.IndexOf(':');
+            if (colonIdx > 0) clean = clean.Substring(0, colonIdx);
+
+            if (string.IsNullOrWhiteSpace(clean) || !clean.Contains('.'))
+                throw new Exception("Введите корректный домен или ссылку (например: youtube.com или rutracker.org).");
+
+            var res = new SiteCheckResult { Domain = clean };
+
+            // 1. Проверяем DNS (системный vs 1.1.1.1)
+            var dns = await CheckDnsAsync(clean);
+            res.DnsSpoofed = dns.Spoofed;
+            res.CleanIp = dns.DohIps.FirstOrDefault() ?? dns.SystemIps.FirstOrDefault() ?? "";
+
+            if (string.IsNullOrEmpty(res.CleanIp))
+            {
+                res.VerdictType = "offline";
+                res.VerdictTitle = "Домен не найден в DNS";
+                res.VerdictDetail = $"Не удалось разрешить IP-адрес для «{clean}» даже через независимый DNS 1.1.1.1. Проверьте правильность написания адреса.";
+                return res;
+            }
+
+            // 2. Проверяем прямое TCP-соединение на 443 порт чистого IP
+            var (tcpOk, latMs, _) = await TcpConnectAsync(res.CleanIp, 443, 3.5);
+            res.TcpOk = tcpOk;
+            res.LatencyMs = Math.Round(latMs);
+
+            if (!tcpOk)
+            {
+                res.VerdictType = "ip_block";
+                res.VerdictTitle = $"Жесткая блокировка по IP ({res.CleanIp})";
+                res.VerdictDetail = "Провайдер или ТСПУ полностью отбрасывает пакеты к IP-адресу сервера (Blackhole / фильтрация маршрута). Обход заголовков Zapret здесь бессилен — поможет только туннелирование (VPN / Прокси / WARP).";
+                return res;
+            }
+
+            // 3. Проверяем TLS Handshake с целевым SNI и нейтральным SNI
+            res.TlsTargetSni = await TlsHandshakeAsync(res.CleanIp, clean, 4.0);
+            res.TlsNeutralSni = await TlsHandshakeAsync(res.CleanIp, "example.com", 4.0);
+
+            bool sniBlocked = (res.TlsTargetSni is "rst" or "timeout") && res.TlsNeutralSni != "rst";
+
+            if (res.DnsSpoofed && sniBlocked)
+            {
+                res.VerdictType = "sni_block";
+                res.VerdictTitle = "Комбинированная блокировка (DNS + TLS SNI)";
+                res.VerdictDetail = $"Провайдер подменяет DNS и режет соединение по SNI «{clean}». Добавьте домен в список обхода Zapret и пропишите чистый IP ({res.CleanIp}) в Hosts.";
+            }
+            else if (res.DnsSpoofed)
+            {
+                res.VerdictType = "dns_spoof";
+                res.VerdictTitle = $"Обнаружена подмена DNS (Чистый IP: {res.CleanIp})";
+                res.VerdictDetail = $"Системный DNS возвращает неверный или заглушечный адрес, но сам сервер {res.CleanIp} открыт ({res.LatencyMs} мс). Пропишите чистый IP в системный файл Hosts в 1 клик!";
+            }
+            else if (sniBlocked || res.TlsTargetSni != "ok")
+            {
+                res.VerdictType = "sni_block";
+                res.VerdictTitle = $"Сброс по TLS SNI (ТСПУ / DPI блокировка)";
+                res.VerdictDetail = $"TCP-соединение до {res.CleanIp} проходит ({res.LatencyMs} мс), но оборудование провайдера разрывает TLS-рукопожатие при виде заголовка «{clean}». Добавьте этот домен в белый список обхода Zapret!";
+            }
+            else
+            {
+                res.VerdictType = "ok";
+                res.VerdictTitle = $"Сайт «{clean}» полностью доступен ({res.LatencyMs} мс)";
+                res.VerdictDetail = $"DNS чистый ({res.CleanIp}), TCP и защищенное TLS-рукопожатие проходят без вмешательства ТСПУ.";
+            }
+
+            return res;
+        }
     }
 }
