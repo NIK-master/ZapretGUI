@@ -169,13 +169,12 @@ function syncReactor3DThemeAndState() {
 
     const isRunning = !!appState.isRunning;
     const accentHex = getThemeHexNumber();
-    const idleHex = 0x3A3A42; // Строгий нейтрально-серый цвет при выключенном обходе
-    const targetHex = isRunning ? accentHex : idleHex;
+    const idleHex = 0x3A3A42;
 
-    reactor3D.coloredMaterials.forEach(item => {
-        item.mat.color.setHex(targetHex);
-        item.mat.opacity = isRunning ? item.onOp : item.offOp;
-    });
+    reactor3D.targetColorObj = new THREE.Color(isRunning ? accentHex : idleHex);
+    reactor3D.isRunningState = isRunning;
+
+    reactor3D.pulseVelocity = isRunning ? 0.085 : -0.055;
 }
 
 function feedReactor3DTraffic(rxMbps, txMbps) {
@@ -192,14 +191,37 @@ function animateReactor3D() {
     if (homeTab && !homeTab.classList.contains('active')) return;
 
     const isRunning = !!appState.isRunning;
+    if (!reactor3D.targetColorObj) {
+        reactor3D.targetColorObj = new THREE.Color(isRunning ? getThemeHexNumber() : 0x3A3A42);
+    }
+
+    // 1. Плавный переход цвета (Color Lerp) и прозрачности (Opacity Lerp) всех колец и маячков
+    reactor3D.coloredMaterials.forEach(item => {
+        item.mat.color.lerp(reactor3D.targetColorObj, 0.075);
+        const targetOp = isRunning ? item.onOp : item.offOp;
+        item.mat.opacity += (targetOp - item.mat.opacity) * 0.08;
+    });
+
+    // 2. Плавная физика масштаба (упругий импульс при включении/выключении)
+    reactor3D.pulseScale = (reactor3D.pulseScale || 1.0) + (reactor3D.pulseVelocity || 0);
+    reactor3D.pulseVelocity = ((reactor3D.pulseVelocity || 0) + (1.0 - reactor3D.pulseScale) * 0.14) * 0.82;
+
+    const sOuter = reactor3D.pulseScale;
+    const sMid = 1.0 + (reactor3D.pulseScale - 1.0) * 1.35;
+    const sInner = 1.0 + (reactor3D.pulseScale - 1.0) * 1.7;
+
+    reactor3D.gimbalOuter.scale.set(sOuter, sOuter, sOuter);
+    reactor3D.gimbalMid.scale.set(sMid, sMid, sMid);
+    reactor3D.gimbalInner.scale.set(sInner, sInner, sInner);
+
+    // 3. Плавный разгон и затухание скорости вращения
     reactor3D.trafficBoost += (reactor3D.targetBoost - reactor3D.trafficBoost) * 0.08;
     reactor3D.targetBoost *= 0.94;
 
-    // В выключенном режиме медленное плавное вращение, во включенном — бодрое + ускорение от трафика
-    const speed = isRunning ? (0.016 + reactor3D.trafficBoost * 0.016) : 0.0035;
+    const targetSpeed = isRunning ? (0.017 + reactor3D.trafficBoost * 0.016) : 0.003;
+    reactor3D.currentSpeed = (reactor3D.currentSpeed || 0.003) + (targetSpeed - (reactor3D.currentSpeed || 0.003)) * 0.05;
+    const speed = reactor3D.currentSpeed;
 
-    // Вращение каждой группы вокруг своей собственной оси Z (видно благодаря сегментам и маячкам)
-    // плюс плавное 3D-покачивание плоскостей кардана
     reactor3D.gimbalOuter.rotation.z += speed * 0.9;
     reactor3D.gimbalOuter.rotation.x += (0.32 + reactor3D.mouseY - reactor3D.gimbalOuter.rotation.x) * 0.06;
     reactor3D.gimbalOuter.rotation.y += (-0.22 + reactor3D.mouseX - reactor3D.gimbalOuter.rotation.y) * 0.06;
@@ -215,7 +237,6 @@ function animateReactor3D() {
 
     reactor3D.renderer.render(reactor3D.scene, reactor3D.camera);
 }
-
 function refreshCardsTiltEffect() {
     if (typeof VanillaTilt === 'undefined') return;
     if (appState?.settings?.focusMode) return;

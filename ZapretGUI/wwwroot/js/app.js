@@ -185,6 +185,7 @@ function handleBackendEvent(type, data) {
         case 'diagResult':
             if (typeof renderDiagnosticsReport === 'function') renderDiagnosticsReport(data);
             if (typeof updateRadarNodesFromReport === 'function') updateRadarNodesFromReport(data);
+            if (typeof syncGlobe3DWithDiagReport === 'function') syncGlobe3DWithDiagReport(data);
             break;
 
         case 'log':
@@ -427,6 +428,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
     try {
         if (typeof initReactor3D === 'function') initReactor3D();
+        if (typeof initGems3DShowcase === 'function') initGems3DShowcase();
         if (typeof refreshCardsTiltEffect === 'function') refreshCardsTiltEffect();
     } catch (e) {
         console.error('3D init error:', e);
@@ -434,8 +436,9 @@ window.addEventListener('DOMContentLoaded', () => {
 
     try {
         if (typeof initDiagnosticsRadarView === 'function') initDiagnosticsRadarView();
+        if (typeof injectGlobe3DViewButton === 'function') injectGlobe3DViewButton();
     } catch (e) {
-        console.error('Radar init error:', e);
+        console.error('Radar/Globe init error:', e);
     }
 
     window.addEventListener('resize', () => {
@@ -536,6 +539,7 @@ function onSettingsChanged() {
     document.body.classList.toggle('compact-mode', compact);
     if (typeof renderModsView === 'function') renderModsView();
     if (typeof syncReactor3DThemeAndState === 'function') syncReactor3DThemeAndState();
+    if (typeof syncGems3DWithActiveTheme === 'function') syncGems3DWithActiveTheme(appState.settings.accentTheme);
 
     const payload = {
         autoStart: document.getElementById('set-autostart')?.checked ?? false,

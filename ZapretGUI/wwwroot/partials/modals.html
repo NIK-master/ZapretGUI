@@ -368,33 +368,46 @@
 
 			</div>
 
-			<!-- 3D-СИМУЛЯТОР ПРОБИТИЯ ТСПУ (WEBGL PACKET TUNNEL) -->
-			<div class="bg-[#0B0B0F] border border-[#26262E] rounded-xl p-2.5 flex flex-col gap-1">
-				<div class="flex items-center justify-between text-[10.5px] font-mono">
+			<!-- УВЕЛИЧЕННАЯ 3D-ЛАБОРАТОРИЯ ПАКЕТОВ (WEBGL PACKET TUNNEL 2.0) -->
+			<div class="bg-[#0B0B10] border border-[#282832] rounded-xl p-2.5 flex flex-col gap-1.5 shadow-inner">
+				<div class="flex items-center justify-between text-[11px] font-mono px-1">
 					<div class="flex items-center gap-2">
-						<span class="w-2 h-2 rounded-full bg-[#4CAF50]"></span>
-						<span class="text-[#CCCCCC] font-bold">3D-СИМУЛЯЦИЯ ПАКЕТОВ:</span>
-						<span id="lego-sim-caption" class="text-brand">Фейк-приманка + Разрез на 2 части</span>
+						<span class="w-2 h-2 rounded-full dot-online"></span>
+						<span class="text-white font-bold">3D-ЛАБОРАТОРИЯ ПАКЕТОВ:</span>
+						<span id="lego-sim-caption" class="text-brand font-semibold">Фейк-приманка • Разрез на 2 сегмента</span>
 					</div>
-					<div class="flex items-center gap-3 text-[#777777]">
-						<span><b class="text-[#F59E0B]">□</b> Фейк</span>
-						<span><b class="text-[#EF4444]">║</b> Щит ТСПУ</span>
-						<span><b class="text-brand">◆</b> Сервер</span>
+					<div class="flex items-center gap-3 text-[10.5px] text-[#999999]">
+						<span>
+							<b class="text-[#F59E0B]">◆</b> Фейк-приманка
+						</span>
+						<span>
+							<b class="text-[#EF4444]">⬡</b> Фильтр ТСПУ
+						</span>
+						<span>
+							<b class="text-brand">■</b> Реальные сегменты
+						</span>
 					</div>
 				</div>
-				<div id="lego-3d-sim-canvas-wrap" class="w-full h-[82px] rounded-lg overflow-hidden relative bg-[#08080B]"></div>
+
+				<div class="relative w-full h-[145px] rounded-lg overflow-hidden bg-gradient-to-b from-[#07070A] to-[#0D0D14] border border-[#1E1E26]">
+					<div id="lego-3d-sim-canvas-wrap" class="w-full h-full"></div>
+					<!-- Подписи узлов поверх 3D-сцены -->
+					<span class="absolute left-3 bottom-1.5 text-[9.5px] font-mono text-[#60A5FA] pointer-events-none">ВАШ ПК (WINWS)</span>
+					<span class="absolute left-1/2 -translate-x-1/2 bottom-1.5 text-[9.5px] font-mono text-[#EF4444] pointer-events-none">ЩИТ ТСПУ / DPI</span>
+					<span class="absolute right-3 bottom-1.5 text-[9.5px] font-mono text-brand pointer-events-none">СЕРВЕР (YOUTUBE / DISCORD)</span>
+				</div>
 			</div>
 
-			<!-- Живое превью сгенерированного кода для winws.exe -->
-			<div class="bg-[#0A0A0D] border border-[#28282E] rounded-xl p-3 flex flex-col gap-2">
+			<!-- Компактное превью сгенерированного кода для winws.exe -->
+			<div class="bg-[#0A0A0D] border border-[#28282E] rounded-xl p-2.5 flex flex-col gap-1.5">
 				<div class="flex items-center justify-between">
-					<span class="text-[11px] font-mono text-[#888888]">СГЕНЕРИРОВАННАЯ СТРАТЕГИЯ WINWS.EXE:</span>
+					<span class="text-[10.5px] font-mono text-[#888888]">ИТОГОВЫЙ КОД СТРАТЕГИИ (.BAT):</span>
 					<button onclick="applyLegoToCodeEditor()" class="px-3 py-1 rounded-md btn-brand text-xs font-bold cursor-pointer flex items-center gap-1.5 shadow">
 						<span class="mdl-icon text-[10px]">&#xE73E;</span>
 						<span>Перенести в редактор кода →</span>
 					</button>
 				</div>
-				<pre id="lego-code-preview" class="font-mono text-[11.5px] text-[#4ADE80] whitespace-pre-wrap leading-relaxed max-h-[125px] overflow-y-auto select-text m-0"></pre>
+				<pre id="lego-code-preview" class="font-mono text-[11px] text-[#4ADE80] whitespace-pre-wrap leading-snug max-h-[58px] overflow-y-auto select-text m-0"></pre>
 			</div>
 		</div>
 

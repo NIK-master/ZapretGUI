@@ -162,6 +162,7 @@ namespace ZapretGUI
         public MainWindow()
         {
             Environment.SetEnvironmentVariable("WEBVIEW2_DEFAULT_BACKGROUND_COLOR", "FF0A0A0A");
+            Environment.SetEnvironmentVariable("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "--disable-pinch --force-device-scale-factor=1");
 
             var configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.json");
             _isFirstRun = !File.Exists(configPath);
@@ -6426,6 +6427,8 @@ namespace ZapretGUI.Core
 	<script src="js/palette.js"></script>
 	<script src="js/radar.js"></script>
 	<script src="js/reactor3d.js"></script>
+	<script src="js/packet-sim3d.js"></script>
+	<script src="js/globe3d.js"></script>
 	<script src="js/app.js"></script>
 </body>
 </html>
@@ -7475,6 +7478,8 @@ body.compact-mode #editor-modal {
         font-size: 10.5px !important;
         line-height: 1.3 !important;
     }
+    body.compact-mode #lego-3d-sim-canvas-wrap { height: 92px !important; }
+
 
 ////////////////////////////////////////////////////////////////////////////////
 // ФАЙЛ: wwwroot\js\app.js
@@ -7667,6 +7672,7 @@ function handleBackendEvent(type, data) {
         case 'diagResult':
             if (typeof renderDiagnosticsReport === 'function') renderDiagnosticsReport(data);
             if (typeof updateRadarNodesFromReport === 'function') updateRadarNodesFromReport(data);
+            if (typeof syncGlobe3DWithDiagReport === 'function') syncGlobe3DWithDiagReport(data);
             break;
 
         case 'log':
@@ -7780,6 +7786,7 @@ function handleBackendEvent(type, data) {
             document.getElementById('txt-main-profile').innerText = data.profile;
             document.getElementById('modal-active-profile').innerText = data.profile;
             renderConfigCards();
+            if (typeof renderModsView === 'function') renderModsView();
             break;
 
         case 'toggleCommandPalette':
@@ -7915,8 +7922,9 @@ window.addEventListener('DOMContentLoaded', () => {
 
     try {
         if (typeof initDiagnosticsRadarView === 'function') initDiagnosticsRadarView();
+        if (typeof injectGlobe3DViewButton === 'function') injectGlobe3DViewButton();
     } catch (e) {
-        console.error('Radar init error:', e);
+        console.error('Radar/Globe init error:', e);
     }
 
     window.addEventListener('resize', () => {
@@ -7943,6 +7951,12 @@ window.addEventListener('DOMContentLoaded', () => {
             toggleCommandPaletteModal();
         }
     }, true);
+
+    window.addEventListener('wheel', e => {
+        if (e.ctrlKey) {
+            e.preventDefault();
+        }
+    }, { passive: false });
 
     const dropOverlay = document.getElementById('dropzone-overlay');
     let dragCounter = 0;
@@ -7988,6 +8002,7 @@ window.addEventListener('DOMContentLoaded', () => {
         };
         reader.readAsDataURL(file);
     });
+
 
     drawChart();
     sendCmd('init');
@@ -8722,6 +8737,299 @@ function onDiscordEmojiClick() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// ФАЙЛ: wwwroot\js\globe3d.js
+////////////////////////////////////////////////////////////////////////////////
+
+// =========================================================================
+// МОДУЛЬ: 3D ГОЛОГРАФИЧЕСКИЙ ГЛОБУС МАРШРУТИЗАЦИИ В ДИАГНОСТИКЕ (THREE.JS)
+// Файл: wwwroot/js/globe3d.js
+// =========================================================================
+
+let diagGlobe = {
+    initialized: false,
+    scene: null,
+    camera: null,
+    renderer: null,
+    globeGroup: null,
+    arcsGroup: null,
+    pulses: [],
+    isDragging: false,
+    prevX: 0,
+    prevY: 0,
+    rotY: -0.6,
+    rotX: 0.35
+};
+
+// Перевод широты/долготы в 3D-координаты на сфере
+function latLonToVec3(lat, lon, radius) {
+    const phi = (90 - lat) * (Math.PI / 180);
+    const theta = (lon + 180) * (Math.PI / 180);
+    return new THREE.Vector3(
+        -radius * Math.sin(phi) * Math.cos(theta),
+        radius * Math.cos(phi),
+        radius * Math.sin(phi) * Math.sin(theta)
+    );
+}
+
+const GLOBE_NODES = [
+    { id: 'user', name: 'Ваш ПК',      lat: 55.75, lon: 37.61, isOrigin: true },
+    { id: 'dc2',  name: 'NL (DC 2/4)', lat: 52.37, lon: 4.89,  ok: true },
+    { id: 'dc1',  name: 'US (DC 1/3)', lat: 25.76, lon: -80.19, ok: true },
+    { id: 'dc5',  name: 'SG (DC 5)',   lat: 1.35,  lon: 103.82, ok: true },
+    { id: 'ds',   name: 'DE (Discord)',lat: 50.11, lon: 8.68,  ok: true }
+];
+
+function injectGlobe3DViewButton() {
+    const btnRadar = document.getElementById('btn-diag-view-radar');
+    if (!btnRadar || document.getElementById('btn-diag-view-globe')) return;
+
+    const track = btnRadar.parentElement;
+    const btnGlobe = document.createElement('button');
+    btnGlobe.id = 'btn-diag-view-globe';
+    btnGlobe.className = 'px-2.5 py-1 rounded-md text-xs font-semibold text-[#888888] hover:text-white transition cursor-pointer flex items-center gap-1.5';
+    btnGlobe.innerHTML = `<span class="mdl-icon text-[11px] text-[#60A5FA]">&#xE774;</span><span>3D Глобус</span>`;
+    btnGlobe.onclick = () => switchDiagViewWithGlobe('globe');
+    track.appendChild(btnGlobe);
+
+    // Создаем контейнер под 3D-глобус рядом с радаром
+    const radarWrap = document.getElementById('diag-radar-wrap');
+    if (radarWrap && !document.getElementById('diag-globe3d-wrap')) {
+        const globeWrap = document.createElement('div');
+        globeWrap.id = 'diag-globe3d-wrap';
+        globeWrap.className = 'glass-card rounded-xl p-4 hidden flex-col items-center justify-center relative overflow-hidden';
+        globeWrap.innerHTML = `
+            <div class="w-full flex items-center justify-between mb-2 z-10">
+                <div class="flex items-center gap-2">
+                    <span class="mdl-icon text-xs text-brand">&#xE774;</span>
+                    <span class="text-xs font-bold text-white uppercase tracking-wider">3D-Голограмма межконтинентальных узлов (Telegram DC & Discord)</span>
+                </div>
+                <span class="text-[11px] font-mono text-[#888888]">Зажмите ЛКМ для вращения глобуса</span>
+            </div>
+            <div id="diag-globe3d-canvas-host" class="w-full h-[310px] flex items-center justify-center cursor-grab active:cursor-grabbing"></div>
+            <div class="w-full flex flex-wrap items-center justify-between text-[11px] font-mono text-[#999999] mt-1 pt-2 border-t border-[#222226] z-10">
+                <span>📍 Точка старта: Москва / РФ</span>
+                <div class="flex items-center gap-4">
+                    <span><b class="text-[#60A5FA]">●</b> Ваш узел</span>
+                    <span><b class="text-brand">―●</b> Канал открыт (OK)</span>
+                    <span><b class="text-[#EF4444]">―✕</b> Блокировка / Таймаут</span>
+                </div>
+            </div>
+        `;
+        radarWrap.parentNode.insertBefore(globeWrap, radarWrap.nextSibling);
+    }
+
+    // Перехватываем стандартный переключатель setDiagViewMode, чтобы он скрывал 3D-глобус при возврате
+    if (typeof window.setDiagViewMode === 'function') {
+        const origSetMode = window.setDiagViewMode;
+        window.setDiagViewMode = function (mode) {
+            document.getElementById('diag-globe3d-wrap')?.classList.add('hidden');
+            document.getElementById('diag-globe3d-wrap')?.classList.remove('flex');
+            const gBtn = document.getElementById('btn-diag-view-globe');
+            if (gBtn) gBtn.className = 'px-2.5 py-1 rounded-md text-xs font-semibold text-[#888888] hover:text-white transition cursor-pointer flex items-center gap-1.5';
+            origSetMode(mode);
+        };
+    }
+}
+
+function switchDiagViewWithGlobe(mode) {
+    if (mode !== 'globe') {
+        if (typeof setDiagViewMode === 'function') setDiagViewMode(mode);
+        return;
+    }
+
+    // Скрываем карточки и 2D-радар, показываем 3D-глобус
+    const radarWrap = document.getElementById('diag-radar-wrap');
+    const dcCard = document.getElementById('diag-dc-grid')?.closest('.glass-card');
+    const globeWrap = document.getElementById('diag-globe3d-wrap');
+
+    if (radarWrap) { radarWrap.classList.add('hidden'); radarWrap.classList.remove('flex'); }
+    if (dcCard) dcCard.classList.add('hidden');
+    if (globeWrap) { globeWrap.classList.remove('hidden'); globeWrap.classList.add('flex'); }
+
+    ['btn-diag-view-cards', 'btn-diag-view-radar'].forEach(id => {
+        const b = document.getElementById(id);
+        if (b) b.className = 'px-2.5 py-1 rounded-md text-xs font-semibold text-[#888888] hover:text-white transition cursor-pointer flex items-center gap-1.5';
+    });
+    const gBtn = document.getElementById('btn-diag-view-globe');
+    if (gBtn) gBtn.className = 'px-2.5 py-1 rounded-md bg-[#262626] text-white text-xs font-semibold transition cursor-pointer flex items-center gap-1.5';
+
+    requestAnimationFrame(() => {
+        initDiagGlobe3D();
+        rebuildGlobe3DArcs();
+    });
+}
+
+function initDiagGlobe3D() {
+    if (diagGlobe.initialized) return;
+    if (typeof THREE === 'undefined') return;
+
+    const host = document.getElementById('diag-globe3d-canvas-host');
+    if (!host) return;
+
+    const w = host.clientWidth || 720;
+    const h = host.clientHeight || 310;
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(40, w / h, 0.1, 100);
+    camera.position.z = 5.4;
+
+    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+    renderer.setSize(w, h);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    host.innerHTML = '';
+    host.appendChild(renderer.domElement);
+
+    const globeGroup = new THREE.Group();
+    scene.add(globeGroup);
+
+    // 1. Темное ядро планеты
+    const coreGeo = new THREE.SphereGeometry(1.62, 32, 32);
+    const coreMat = new THREE.MeshBasicMaterial({ color: 0x0B0F17, transparent: true, opacity: 0.92 });
+    globeGroup.add(new THREE.Mesh(coreGeo, coreMat));
+
+    // 2. Голографическая сетка параллелей и меридианов
+    const wireGeo = new THREE.SphereGeometry(1.64, 24, 18);
+    const wireMat = new THREE.MeshBasicMaterial({ color: 0x223042, wireframe: true, transparent: true, opacity: 0.45 });
+    globeGroup.add(new THREE.Mesh(wireGeo, wireMat));
+
+    // 3. Внешнее атмосферное кольцо
+    const ringGeo = new THREE.RingGeometry(1.78, 1.80, 64);
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0x3B82F6, transparent: true, opacity: 0.22, side: THREE.DoubleSide });
+    scene.add(new THREE.Mesh(ringGeo, ringMat));
+
+    const arcsGroup = new THREE.Group();
+    globeGroup.add(arcsGroup);
+
+    // Вращение мышкой (Drag to Rotate)
+    host.addEventListener('mousedown', e => {
+        diagGlobe.isDragging = true;
+        diagGlobe.prevX = e.clientX;
+        diagGlobe.prevY = e.clientY;
+    });
+    window.addEventListener('mouseup', () => { diagGlobe.isDragging = false; });
+    window.addEventListener('mousemove', e => {
+        if (!diagGlobe.isDragging) return;
+        const dx = e.clientX - diagGlobe.prevX;
+        const dy = e.clientY - diagGlobe.prevY;
+        diagGlobe.prevX = e.clientX;
+        diagGlobe.prevY = e.clientY;
+        diagGlobe.rotY += dx * 0.008;
+        diagGlobe.rotX = Math.max(-1.1, Math.min(1.1, diagGlobe.rotX + dy * 0.008));
+    });
+
+    Object.assign(diagGlobe, {
+        initialized: true,
+        scene,
+        camera,
+        renderer,
+        globeGroup,
+        arcsGroup
+    });
+
+    rebuildGlobe3DArcs();
+    animateDiagGlobe3D();
+}
+
+function rebuildGlobe3DArcs() {
+    if (!diagGlobe.initialized) return;
+
+    while (diagGlobe.arcsGroup.children.length > 0) {
+        const ch = diagGlobe.arcsGroup.children[0];
+        diagGlobe.arcsGroup.remove(ch);
+    }
+    diagGlobe.pulses = [];
+
+    const radius = 1.65;
+    const originPos = latLonToVec3(GLOBE_NODES[0].lat, GLOBE_NODES[0].lon, radius);
+
+    // Маяк пользователя
+    const userDot = new THREE.Mesh(
+        new THREE.SphereGeometry(0.055, 12, 12),
+        new THREE.MeshBasicMaterial({ color: 0x60A5FA })
+    );
+    userDot.position.copy(originPos);
+    diagGlobe.arcsGroup.add(userDot);
+
+    const accentHex = typeof getThemeHexNumber === 'function' ? getThemeHexNumber() : 0x4CAF50;
+
+    for (let i = 1; i < GLOBE_NODES.length; i++) {
+        const node = GLOBE_NODES[i];
+        const targetPos = latLonToVec3(node.lat, node.lon, radius);
+        const colorHex = node.ok ? accentHex : 0xEF4444;
+
+        // Маяк дата-центра
+        const dcDot = new THREE.Mesh(
+            new THREE.SphereGeometry(0.05, 12, 12),
+            new THREE.MeshBasicMaterial({ color: colorHex })
+        );
+        dcDot.position.copy(targetPos);
+        diagGlobe.arcsGroup.add(dcDot);
+
+        // Дуга маршрута над поверхностью Земли
+        const midPos = originPos.clone().add(targetPos).multiplyScalar(0.5).normalize().multiplyScalar(radius + 0.48);
+        const curve = new THREE.QuadraticBezierCurve3(originPos, midPos, targetPos);
+        const points = curve.getPoints(36);
+        const lineGeo = new THREE.BufferGeometry().setFromPoints(points);
+        const lineMat = new THREE.LineBasicMaterial({ color: colorHex, transparent: true, opacity: 0.65 });
+        diagGlobe.arcsGroup.add(new THREE.Line(lineGeo, lineMat));
+
+        // Бегущий световой импульс по дуге
+        const pulseMesh = new THREE.Mesh(
+            new THREE.SphereGeometry(0.036, 8, 8),
+            new THREE.MeshBasicMaterial({ color: 0xFFFFFF })
+        );
+        diagGlobe.arcsGroup.add(pulseMesh);
+        diagGlobe.pulses.push({
+            mesh: pulseMesh,
+            curve,
+            t: Math.random(),
+            speed: node.ok ? 0.012 : 0.004
+        });
+    }
+}
+
+function syncGlobe3DWithDiagReport(report) {
+    if (!report) return;
+    const dcs = report.dcResults || [];
+    const ds = report.discordPing || [];
+
+    const dc13 = dcs.filter(x => x.dcId === 1 || x.dcId === 3);
+    const dc24 = dcs.filter(x => x.dcId === 2 || x.dcId === 4);
+    const dc5 = dcs.filter(x => x.dcId === 5);
+
+    if (dc24.length) GLOBE_NODES[1].ok = dc24.some(x => x.ok);
+    if (dc13.length) GLOBE_NODES[2].ok = dc13.some(x => x.ok);
+    if (dc5.length)  GLOBE_NODES[3].ok = dc5.some(x => x.ok);
+    if (ds.length)   GLOBE_NODES[4].ok = ds.some(x => x.ok);
+
+    rebuildGlobe3DArcs();
+}
+
+function animateDiagGlobe3D() {
+    requestAnimationFrame(animateDiagGlobe3D);
+    if (!diagGlobe.initialized) return;
+
+    const wrap = document.getElementById('diag-globe3d-wrap');
+    if (!wrap || wrap.classList.contains('hidden')) return;
+
+    if (!diagGlobe.isDragging) {
+        diagGlobe.rotY += 0.003;
+    }
+
+    diagGlobe.globeGroup.rotation.y += (diagGlobe.rotY - diagGlobe.globeGroup.rotation.y) * 0.1;
+    diagGlobe.globeGroup.rotation.x += (diagGlobe.rotX - diagGlobe.globeGroup.rotation.x) * 0.1;
+
+    diagGlobe.pulses.forEach(p => {
+        p.t += p.speed;
+        if (p.t > 1) p.t = 0;
+        const pos = p.curve.getPoint(p.t);
+        p.mesh.position.copy(pos);
+    });
+
+    diagGlobe.renderer.render(diagGlobe.scene, diagGlobe.camera);
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // ФАЙЛ: wwwroot\js\home-configs.js
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -8949,9 +9257,13 @@ function renderConfigCards() {
 
 function selectProfile(profileName) {
     appState.selectedProfile = profileName;
-    document.getElementById('txt-main-profile').innerText = profileName;
-    document.getElementById('modal-active-profile').innerText = profileName;
+    const mainProfEl = document.getElementById('txt-main-profile');
+    const modalProfEl = document.getElementById('modal-active-profile');
+    if (mainProfEl) mainProfEl.innerText = profileName;
+    if (modalProfEl) modalProfEl.innerText = profileName;
+
     renderConfigCards();
+    if (typeof renderModsView === 'function') renderModsView();
     sendCmd('selectProfile', { profile: profileName });
 }
 
@@ -9849,6 +10161,10 @@ function switchEditorViewMode(mode) {
         if (btnCode) btnCode.className = 'px-3 py-1 rounded-md text-[#888888] hover:text-white text-xs font-semibold transition cursor-pointer flex items-center gap-1.5';
         if (btnVis) btnVis.className = 'px-3 py-1 rounded-md bg-[#26262A] text-white text-xs font-semibold transition cursor-pointer flex items-center gap-1.5';
         updateLegoPreview();
+        requestAnimationFrame(() => {
+            if (typeof initPacketSim3D === 'function') initPacketSim3D();
+            if (typeof updatePacketSimConfig === 'function') updatePacketSimConfig();
+        });
     } else {
         visualContainer?.classList.add('hidden');
         visualContainer?.classList.remove('flex');
@@ -9895,6 +10211,7 @@ function updateLegoPreview() {
 
     const previewEl = document.getElementById('lego-code-preview');
     if (previewEl) previewEl.textContent = header + body;
+    if (typeof updatePacketSimConfig === 'function') updatePacketSimConfig();
 }
 
 function applyLegoToCodeEditor() {
@@ -10173,6 +10490,345 @@ function saveEditorChanges(bypassWarning = false) {
         content: document.getElementById('editor-textarea').value,
         bypassWarning
     });
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// ФАЙЛ: wwwroot\js\packet-sim3d.js
+////////////////////////////////////////////////////////////////////////////////
+
+// =========================================================================
+// МОДУЛЬ: 3D ЛАБОРАТОРИЯ ПРОБИТИЯ ТСПУ 2.0 (СВЕТ, СЕТКА И ВЗРЫВЫ ФЕЙКОВ)
+// Файл: wwwroot/js/packet-sim3d.js
+// =========================================================================
+
+let packetSim = {
+    initialized: false,
+    scene: null,
+    camera: null,
+    renderer: null,
+    dpiScannerRing: null,
+    dpiCoreLaser: null,
+    serverNode: null,
+    clientNode: null,
+    packets: [],
+    sparks: [],
+    spawnTimer: 0,
+    config: {
+        mode: 'fake,split2',
+        fooling: 'md5sig',
+        quic: true,
+        repeats: 6
+    }
+};
+
+function initPacketSim3D() {
+    if (packetSim.initialized) return;
+    if (typeof THREE === 'undefined') return;
+    if (appState?.settings?.hardwareAcceleration === false) return;
+
+    const host = document.getElementById('lego-3d-sim-canvas-wrap');
+    if (!host) return;
+
+    try {
+        const w = host.clientWidth || 780;
+        const h = host.clientHeight || 148;
+
+        const scene = new THREE.Scene();
+        // Изометрический кинематографичный ракурс сверху-сбоку
+        const camera = new THREE.PerspectiveCamera(34, w / h, 0.1, 100);
+        camera.position.set(0, 2.35, 7.2);
+        camera.lookAt(0, -0.1, 0);
+
+        const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'high-performance' });
+        renderer.setSize(w, h);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+        host.innerHTML = '';
+        host.appendChild(renderer.domElement);
+
+        // Освещение для объемных 3D-граней пакетов
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.65);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1.1);
+        dirLight.position.set(3, 6, 5);
+        scene.add(dirLight);
+
+        // 1. Перспективная кибер-сетка пола
+        const grid = new THREE.GridHelper(11, 22, 0x2A2A35, 0x181820);
+        grid.position.y = -0.75;
+        scene.add(grid);
+
+        // 2. Светящаяся магистральная линия передачи данных
+        const beamGeo = new THREE.CylinderGeometry(0.025, 0.025, 8.2, 8);
+        beamGeo.rotateZ(Math.PI / 2);
+        const beamMat = new THREE.MeshBasicMaterial({ color: 0x334155, transparent: true, opacity: 0.6 });
+        const beamMesh = new THREE.Mesh(beamGeo, beamMat);
+        beamMesh.position.set(0, 0, 0);
+        scene.add(beamMesh);
+
+        // 3. Портал Клиента (Отправитель — слева, x = -4.0)
+        const cliGroup = new THREE.Group();
+        cliGroup.position.set(-4.0, 0, 0);
+        const cliRing = new THREE.Mesh(
+            new THREE.TorusGeometry(0.52, 0.04, 12, 32),
+            new THREE.MeshBasicMaterial({ color: 0x60A5FA })
+        );
+        cliRing.rotation.y = Math.PI / 2;
+        cliGroup.add(cliRing);
+        scene.add(cliGroup);
+
+        // 4. Лазерный Щит ТСПУ / DPI (Посередине, x = 0)
+        const dpiGroup = new THREE.Group();
+        dpiGroup.position.set(0, 0, 0);
+
+        // Внешнее зубчатое кольцо сканера РКН/ТСПУ
+        const scannerRing = new THREE.Mesh(
+            new THREE.TorusGeometry(0.92, 0.035, 10, 6),
+            new THREE.MeshBasicMaterial({ color: 0xEF4444, wireframe: false })
+        );
+        scannerRing.rotation.y = Math.PI / 2;
+        dpiGroup.add(scannerRing);
+
+        // Полупрозрачное красное силовое поле внутри кольца
+        const laserDisc = new THREE.Mesh(
+            new THREE.CircleGeometry(0.88, 24),
+            new THREE.MeshBasicMaterial({ color: 0xEF4444, transparent: true, opacity: 0.18, side: THREE.DoubleSide })
+        );
+        laserDisc.rotation.y = Math.PI / 2;
+        dpiGroup.add(laserDisc);
+        scene.add(dpiGroup);
+
+        // 5. Ядро Целевого Сервера (YouTube / Discord — справа, x = 4.0)
+        const srvGroup = new THREE.Group();
+        srvGroup.position.set(4.0, 0, 0);
+        const srvCore = new THREE.Mesh(
+            new THREE.OctahedronGeometry(0.55, 0),
+            new THREE.MeshStandardMaterial({
+                color: 0x4CAF50,
+                emissive: 0x107C10,
+                emissiveIntensity: 0.5,
+                roughness: 0.2,
+                metalness: 0.5
+            })
+        );
+        const srvWire = new THREE.Mesh(
+            new THREE.OctahedronGeometry(0.72, 1),
+            new THREE.MeshBasicMaterial({ color: 0x4ADE80, wireframe: true, transparent: true, opacity: 0.35 })
+        );
+        srvGroup.add(srvCore);
+        srvGroup.add(srvWire);
+        scene.add(srvGroup);
+
+        Object.assign(packetSim, {
+            initialized: true,
+            scene,
+            camera,
+            renderer,
+            dpiScannerRing: scannerRing,
+            dpiCoreLaser: laserDisc,
+            serverNode: srvGroup,
+            clientNode: cliGroup
+        });
+
+        updatePacketSimConfig();
+        spawnSimPacketWave();
+        animatePacketSim3D();
+    } catch (e) {
+        console.warn('PacketSim3D error:', e);
+    }
+}
+
+// Взрыв искр при сгорании фейк-пакета после обмана ТСПУ
+function createFakeExplosionSparks(pos, hexColor) {
+    for (let i = 0; i < 10; i++) {
+        const sparkGeo = new THREE.BoxGeometry(0.09, 0.09, 0.09);
+        const sparkMat = new THREE.MeshBasicMaterial({ color: hexColor, transparent: true, opacity: 1 });
+        const spark = new THREE.Mesh(sparkGeo, sparkMat);
+        spark.position.copy(pos);
+        packetSim.scene.add(spark);
+
+        packetSim.sparks.push({
+            mesh: spark,
+            vx: (Math.random() - 0.2) * 0.08,
+            vy: (Math.random() - 0.5) * 0.12,
+            vz: (Math.random() - 0.5) * 0.12
+        });
+    }
+}
+
+function updatePacketSimConfig() {
+    const mode = document.getElementById('lego-tcp-desync')?.value || 'fake,split2';
+    const fooling = document.getElementById('lego-fooling')?.value || 'md5sig';
+    const quic = document.getElementById('lego-quic-enabled')?.checked ?? true;
+    const repeats = parseInt(document.getElementById('lego-repeats')?.value || '6', 10);
+
+    packetSim.config = { mode, fooling, quic, repeats };
+
+    const lbl = document.getElementById('lego-sim-caption');
+    if (lbl) {
+        const parts = [];
+        if (mode.includes('fake')) parts.push(`Фейк-приманка (${fooling === 'none' ? 'Auto-TTL' : fooling})`);
+        if (mode.includes('multisplit')) parts.push('Шинковка на 4 части');
+        else if (mode.includes('disorder')) parts.push('Обратный порядок (Disorder)');
+        else if (mode.includes('split')) parts.push('Разрез на 2 сегмента (Split)');
+        else if (mode.includes('syndata')) parts.push('SYN-Data пакет');
+        lbl.innerText = parts.join(' • ');
+    }
+}
+
+function spawnSimPacketWave() {
+    if (!packetSim.initialized) return;
+
+    const { mode } = packetSim.config;
+    const accentHex = typeof getThemeHexNumber === 'function' ? getThemeHexNumber() : 0x4CAF50;
+
+    // 1. Если включен fake — выпускаем яркую оранжевую капсулу-приманку впереди пакета
+    if (mode.includes('fake')) {
+        const fakeGeo = new THREE.OctahedronGeometry(0.28, 0);
+        const fakeMat = new THREE.MeshStandardMaterial({
+            color: 0xF59E0B,
+            emissive: 0xD97706,
+            emissiveIntensity: 0.7,
+            roughness: 0.3
+        });
+        const fakeMesh = new THREE.Mesh(fakeGeo, fakeMat);
+        fakeMesh.position.set(-3.4, 0, 0);
+        packetSim.scene.add(fakeMesh);
+
+        packetSim.packets.push({
+            mesh: fakeMesh,
+            isFake: true,
+            speed: 0.062
+        });
+    }
+
+    // 2. Выпускаем реальные сегменты пакета данных
+    let segmentsCount = 1;
+    if (mode.includes('multisplit')) segmentsCount = 4;
+    else if (mode.includes('split') || mode.includes('disorder')) segmentsCount = 2;
+
+    const isDisorder = mode.includes('disorder');
+
+    for (let i = 0; i < segmentsCount; i++) {
+        const w = Math.max(0.18, 0.56 / segmentsCount);
+        const segGeo = new THREE.BoxGeometry(w, 0.36, 0.36);
+        const segColor = i % 2 === 0 ? accentHex : 0x38BDF8;
+        const segMat = new THREE.MeshStandardMaterial({
+            color: segColor,
+            emissive: segColor,
+            emissiveIntensity: 0.35,
+            roughness: 0.25,
+            metalness: 0.4
+        });
+        const segMesh = new THREE.Mesh(segGeo, segMat);
+        segMesh.position.set(-3.85 - i * (w + 0.18), 0, 0);
+        packetSim.scene.add(segMesh);
+
+        packetSim.packets.push({
+            mesh: segMesh,
+            isFake: false,
+            segIndex: i,
+            totalSegs: segmentsCount,
+            isDisorder,
+            speed: 0.056
+        });
+    }
+}
+
+function animatePacketSim3D() {
+    requestAnimationFrame(animatePacketSim3D);
+    if (!packetSim.initialized) return;
+
+    const modal = document.getElementById('editor-modal');
+    const vis = document.getElementById('editor-visual-builder');
+    if (!modal || !modal.classList.contains('open') || !vis || vis.classList.contains('hidden')) {
+        return;
+    }
+
+    const host = document.getElementById('lego-3d-sim-canvas-wrap');
+    if (host && host.clientWidth > 100) {
+        const w = host.clientWidth;
+        const h = host.clientHeight || 148;
+        if (Math.abs(packetSim.renderer.domElement.width / (window.devicePixelRatio || 1) - w) > 5 ||
+            Math.abs(packetSim.renderer.domElement.height / (window.devicePixelRatio || 1) - h) > 5) {
+            packetSim.renderer.setSize(w, h);
+            packetSim.camera.aspect = w / h;
+            packetSim.camera.updateProjectionMatrix();
+        }
+    }
+
+    packetSim.spawnTimer++;
+    if (packetSim.spawnTimer > 62) {
+        packetSim.spawnTimer = 0;
+        spawnSimPacketWave();
+    }
+
+    packetSim.dpiScannerRing.rotation.z -= 0.025;
+    packetSim.serverNode.rotation.y += 0.022;
+    packetSim.clientNode.rotation.x += 0.02;
+
+    // Движение пакетов
+    for (let i = packetSim.packets.length - 1; i >= 0; i--) {
+        const p = packetSim.packets[i];
+        p.mesh.position.x += p.speed;
+        p.mesh.rotation.x += 0.035;
+        p.mesh.rotation.y += 0.025;
+
+        if (p.isFake) {
+            // Когда фейк проходит щит ТСПУ (x > 0.25) — он отвлекает сканер и взрывается искрами
+            if (p.mesh.position.x >= 0.45) {
+                createFakeExplosionSparks(p.mesh.position, 0xF59E0B);
+                packetSim.dpiCoreLaser.material.opacity = 0.42; // вспышка щита
+                packetSim.scene.remove(p.mesh);
+                p.mesh.geometry.dispose();
+                p.mesh.material.dispose();
+                packetSim.packets.splice(i, 1);
+                continue;
+            }
+        } else {
+            // Реальные сегменты: расходятся по орбитам вокруг лазера ТСПУ
+            if (p.totalSegs > 1 && p.mesh.position.x > -1.8 && p.mesh.position.x < 1.8) {
+                const dir = (p.segIndex % 2 === 0 ? 1 : -1);
+                const angle = (p.mesh.position.x + 1.8) * 1.1;
+                const amp = 0.42 * dir * (p.isDisorder ? -1 : 1);
+                p.mesh.position.y = Math.sin(angle) * amp;
+                p.mesh.position.z = Math.cos(angle) * (amp * 0.5);
+            } else {
+                p.mesh.position.y *= 0.85;
+                p.mesh.position.z *= 0.85;
+            }
+
+            if (p.mesh.position.x >= 3.7) {
+                packetSim.serverNode.scale.set(1.22, 1.22, 1.22);
+                packetSim.scene.remove(p.mesh);
+                p.mesh.geometry.dispose();
+                p.mesh.material.dispose();
+                packetSim.packets.splice(i, 1);
+                continue;
+            }
+        }
+    }
+
+    // Анимация разлетающихся искр от сгоревшего фейка
+    for (let i = packetSim.sparks.length - 1; i >= 0; i--) {
+        const sp = packetSim.sparks[i];
+        sp.mesh.position.x += sp.vx;
+        sp.mesh.position.y += sp.vy;
+        sp.mesh.position.z += sp.vz;
+        sp.mesh.scale.multiplyScalar(0.89);
+        sp.mesh.material.opacity *= 0.88;
+
+        if (sp.mesh.material.opacity < 0.06) {
+            packetSim.scene.remove(sp.mesh);
+            sp.mesh.geometry.dispose();
+            sp.mesh.material.dispose();
+            packetSim.sparks.splice(i, 1);
+        }
+    }
+
+    packetSim.dpiCoreLaser.material.opacity += (0.14 - packetSim.dpiCoreLaser.material.opacity) * 0.1;
+    packetSim.serverNode.scale.lerp(new THREE.Vector3(1, 1, 1), 0.12);
+    packetSim.renderer.render(packetSim.scene, packetSim.camera);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -12392,16 +13048,46 @@ function appendWizardLog(time, message, isProgress) {
 
 			</div>
 
-			<!-- Живое превью сгенерированного кода для winws.exe -->
-			<div class="bg-[#0A0A0D] border border-[#28282E] rounded-xl p-3 flex flex-col gap-2">
+			<!-- УВЕЛИЧЕННАЯ 3D-ЛАБОРАТОРИЯ ПАКЕТОВ (WEBGL PACKET TUNNEL 2.0) -->
+			<div class="bg-[#0B0B10] border border-[#282832] rounded-xl p-2.5 flex flex-col gap-1.5 shadow-inner">
+				<div class="flex items-center justify-between text-[11px] font-mono px-1">
+					<div class="flex items-center gap-2">
+						<span class="w-2 h-2 rounded-full dot-online"></span>
+						<span class="text-white font-bold">3D-ЛАБОРАТОРИЯ ПАКЕТОВ:</span>
+						<span id="lego-sim-caption" class="text-brand font-semibold">Фейк-приманка • Разрез на 2 сегмента</span>
+					</div>
+					<div class="flex items-center gap-3 text-[10.5px] text-[#999999]">
+						<span>
+							<b class="text-[#F59E0B]">◆</b> Фейк-приманка
+						</span>
+						<span>
+							<b class="text-[#EF4444]">⬡</b> Фильтр ТСПУ
+						</span>
+						<span>
+							<b class="text-brand">■</b> Реальные сегменты
+						</span>
+					</div>
+				</div>
+
+				<div class="relative w-full h-[145px] rounded-lg overflow-hidden bg-gradient-to-b from-[#07070A] to-[#0D0D14] border border-[#1E1E26]">
+					<div id="lego-3d-sim-canvas-wrap" class="w-full h-full"></div>
+					<!-- Подписи узлов поверх 3D-сцены -->
+					<span class="absolute left-3 bottom-1.5 text-[9.5px] font-mono text-[#60A5FA] pointer-events-none">ВАШ ПК (WINWS)</span>
+					<span class="absolute left-1/2 -translate-x-1/2 bottom-1.5 text-[9.5px] font-mono text-[#EF4444] pointer-events-none">ЩИТ ТСПУ / DPI</span>
+					<span class="absolute right-3 bottom-1.5 text-[9.5px] font-mono text-brand pointer-events-none">СЕРВЕР (YOUTUBE / DISCORD)</span>
+				</div>
+			</div>
+
+			<!-- Компактное превью сгенерированного кода для winws.exe -->
+			<div class="bg-[#0A0A0D] border border-[#28282E] rounded-xl p-2.5 flex flex-col gap-1.5">
 				<div class="flex items-center justify-between">
-					<span class="text-[11px] font-mono text-[#888888]">СГЕНЕРИРОВАННАЯ СТРАТЕГИЯ WINWS.EXE:</span>
+					<span class="text-[10.5px] font-mono text-[#888888]">ИТОГОВЫЙ КОД СТРАТЕГИИ (.BAT):</span>
 					<button onclick="applyLegoToCodeEditor()" class="px-3 py-1 rounded-md btn-brand text-xs font-bold cursor-pointer flex items-center gap-1.5 shadow">
 						<span class="mdl-icon text-[10px]">&#xE73E;</span>
 						<span>Перенести в редактор кода →</span>
 					</button>
 				</div>
-				<pre id="lego-code-preview" class="font-mono text-[11.5px] text-[#4ADE80] whitespace-pre-wrap leading-relaxed max-h-[125px] overflow-y-auto select-text m-0"></pre>
+				<pre id="lego-code-preview" class="font-mono text-[11px] text-[#4ADE80] whitespace-pre-wrap leading-snug max-h-[58px] overflow-y-auto select-text m-0"></pre>
 			</div>
 		</div>
 
