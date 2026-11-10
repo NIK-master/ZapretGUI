@@ -181,3 +181,19 @@
     0%, 100% { box-shadow: 0 0 25px var(--accent-glow), inset 0 0 12px rgba(16, 124, 16, 0.2); }
     50% { box-shadow: 0 0 55px var(--accent-glow), inset 0 0 24px rgba(16, 124, 16, 0.35); }
 }
+/* =========================================================
+   WEBGL 3D-ГИРОСКОП ВОКРУГ КНОПКИ ЗАПУСКА (THREE.JS)
+   ========================================================= */
+.reactor-webgl-canvas {
+    position: absolute;
+    inset: -7px;
+    width: calc(100% + 14px) !important;
+    height: calc(100% + 14px) !important;
+    pointer-events: none;
+    z-index: 1;
+}
+
+.reactor-wrap.webgl-ready .reactor-ring-outer,
+.reactor-wrap.webgl-ready .reactor-ring-inner {
+    opacity: 0 !important;
+}

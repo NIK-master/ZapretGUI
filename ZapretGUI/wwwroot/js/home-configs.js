@@ -155,6 +155,7 @@ function updateRunningUI(zapretRunning, proxyRunning) {
 
     document.getElementById('dot-zapret').className = `w-2 h-2 rounded-full ${zapretRunning ? 'dot-online' : 'dot-offline'}`;
     document.getElementById('dot-proxy').className = `w-2 h-2 rounded-full ${proxyRunning ? 'dot-online' : 'dot-offline'}`;
+    if (typeof syncReactor3DThemeAndState === 'function') syncReactor3DThemeAndState();
 }
 
 // =========================================================================
@@ -335,6 +336,7 @@ function updateChart(rxMbps, txMbps) {
     }
 
     drawChart();
+    if (typeof feedReactor3DTraffic === 'function') feedReactor3DTraffic(rxMbps, txMbps);
 }
 
 function onChartMouseMove(e) {

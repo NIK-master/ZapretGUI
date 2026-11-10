@@ -6591,12 +6591,17 @@ body {
 
 .modal-overlay {
     opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.2s ease;
+    visibility: hidden;
+    pointer-events: none !important;
+    transition: opacity 0.2s ease, visibility 0.2s ease;
+}
+.modal-overlay:not(.open) * {
+    pointer-events: none !important;
 }
 .modal-overlay.open {
     opacity: 1;
-    pointer-events: auto;
+    visibility: visible;
+    pointer-events: auto !important;
 }
 .modal-box {
     transform: scale(0.95) translateY(10px);
@@ -7402,6 +7407,56 @@ body.compact-mode .power-btn {
 .lego-select:focus {
     border-color: var(--accent-color);
 }
+/* =========================================================
+   АДАПТАЦИЯ CODE STUDIO ПОД МИНИМАЛИСТИЧНЫЙ РЕЖИМ (850x520)
+   ========================================================= */
+#editor-modal .modal-box {
+    max-height: calc(100vh - 24px);
+}
+
+body.compact-mode #editor-modal {
+    padding: 8px !important;
+}
+
+    body.compact-mode #editor-modal .modal-box {
+        height: calc(100vh - 16px) !important;
+        max-width: 100% !important;
+        padding: 10px 12px !important;
+    }
+
+    body.compact-mode #editor-modal #editor-subtitle {
+        display: none;
+    }
+
+    body.compact-mode #editor-modal #editor-snippets-bar {
+        margin-bottom: 4px !important;
+        padding-bottom: 2px !important;
+    }
+
+    body.compact-mode #editor-modal .editor-tool-btn {
+        padding: 2px 7px;
+        font-size: 11px;
+    }
+
+    body.compact-mode #editor-modal #editor-visual-builder {
+        gap: 8px !important;
+    }
+
+    body.compact-mode #editor-modal .lego-card {
+        padding: 8px 10px !important;
+        gap: 4px !important;
+    }
+
+    body.compact-mode #editor-modal .lego-select {
+        padding: 4px 8px !important;
+        font-size: 11px !important;
+    }
+
+    body.compact-mode #editor-modal #lego-code-preview {
+        max-height: 68px !important;
+        font-size: 10.5px !important;
+        line-height: 1.3 !important;
+    }
 
 ////////////////////////////////////////////////////////////////////////////////
 // ФАЙЛ: wwwroot\js\app.js
@@ -7912,6 +7967,112 @@ window.addEventListener('DOMContentLoaded', () => {
     drawChart();
     sendCmd('init');
 });
+
+// =========================================================================
+// 4. СОХРАНЕНИЕ НАСТРОЕК, МИНИМАЛИСТИЧНЫЙ РЕЖИМ И ПОИСК ПО НАСТРОЙКАМ
+// =========================================================================
+let settingsSaveToastTimer = null;
+
+function onSettingsChanged() {
+    const compact = document.getElementById('set-compact-mode')?.checked ?? false;
+    const focus = document.getElementById('set-focus-mode')?.checked ?? false;
+    const watchdog = document.getElementById('set-watchdog-ping')?.checked ?? false;
+
+    appState.settings.compactMode = compact;
+    appState.settings.focusMode = focus;
+    appState.settings.watchdogPingAutoRestart = watchdog;
+
+    document.body.classList.toggle('compact-mode', compact);
+    if (typeof renderModsView === 'function') renderModsView();
+
+    const payload = {
+        autoStart: document.getElementById('set-autostart')?.checked ?? false,
+        autoStartBypass: document.getElementById('set-autostart-bypass')?.checked ?? false,
+        startMinimized: document.getElementById('set-start-minimized')?.checked ?? false,
+        minimizeOnClose: document.getElementById('set-minimize-close')?.checked ?? true,
+        stopServicesOnExit: document.getElementById('set-stop-on-exit')?.checked ?? true,
+        notificationsEnabled: document.getElementById('set-notifications')?.checked ?? true,
+        alwaysOnTop: document.getElementById('set-always-on-top')?.checked ?? false,
+        soundEffectsEnabled: document.getElementById('set-sound-effects')?.checked ?? true,
+        skipSplashScreen: document.getElementById('set-skip-splash')?.checked ?? false,
+        compactMode: compact,
+        focusMode: focus,
+        hardwareAcceleration: document.getElementById('set-hw-accel')?.checked ?? true,
+        pingUrl: document.getElementById('set-ping-url')?.value?.trim() || 'https://dynamodb.eu-central-1.amazonaws.com',
+        statsUpdateInterval: appState.settings.statsUpdateInterval || 1,
+        autoRestartServices: document.getElementById('set-autorestart')?.checked ?? false,
+        watchdogPingAutoRestart: watchdog,
+        accentTheme: appState.settings.accentTheme || 'green',
+        hostsSourceIndex: appState.settings.hostsSourceIndex ?? 2
+    };
+
+    sendCmd('saveSettings', { settings: payload });
+
+    const toast = document.getElementById('settings-save-toast');
+    if (toast) {
+        toast.style.opacity = '1';
+        clearTimeout(settingsSaveToastTimer);
+        settingsSaveToastTimer = setTimeout(() => { toast.style.opacity = '0'; }, 1600);
+    }
+
+    setTimeout(() => {
+        updateModsSlidingPill();
+        updateSettingsSlidingPill();
+        drawChart();
+    }, 80);
+}
+
+function filterSettingsView() {
+    const query = (document.getElementById('settings-search-input')?.value || '').trim().toLowerCase();
+    const activeCatBtn = document.querySelector('#settings-seg-track .set-cat-btn.active');
+    const currentCat = window.currentSettingsCat || (activeCatBtn?.getAttribute('onclick')?.match(/'([^']+)'/)?.[1] || 'all');
+
+    const groups = document.querySelectorAll('#tab-settings [data-set-group]');
+    groups.forEach(group => {
+        const groupCat = group.getAttribute('data-set-group');
+        const catMatches = (currentCat === 'all' || currentCat === groupCat);
+
+        if (!catMatches) {
+            group.classList.add('hidden');
+            return;
+        }
+
+        if (!query) {
+            group.classList.remove('hidden');
+            group.querySelectorAll('[data-search]').forEach(item => item.classList.remove('hidden'));
+            group.querySelectorAll('.glass-card').forEach(card => card.classList.remove('hidden'));
+            const routingGrid = group.querySelector('#settings-routing-grid');
+            if (routingGrid) routingGrid.classList.remove('hidden');
+            return;
+        }
+
+        const innerCards = group.classList.contains('glass-card') ? [group] : Array.from(group.querySelectorAll('.glass-card'));
+        let anyVisibleInGroup = false;
+
+        innerCards.forEach(card => {
+            const searchableItems = card.querySelectorAll('[data-search]');
+            let visibleInCard = 0;
+
+            searchableItems.forEach(item => {
+                const hay = (item.getAttribute('data-search') + ' ' + item.innerText).toLowerCase();
+                const match = hay.includes(query);
+                item.classList.toggle('hidden', !match);
+                if (match) visibleInCard++;
+            });
+
+            const routingGrid = card.querySelector('#settings-routing-grid');
+            if (routingGrid) {
+                const visRouting = routingGrid.querySelectorAll('[data-search]:not(.hidden)').length;
+                routingGrid.classList.toggle('hidden', visRouting === 0);
+            }
+
+            card.classList.toggle('hidden', visibleInCard === 0);
+            if (visibleInCard > 0) anyVisibleInGroup = true;
+        });
+
+        group.classList.toggle('hidden', !anyVisibleInGroup);
+    });
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 // ФАЙЛ: wwwroot\js\diagnostics.js
@@ -9350,10 +9511,10 @@ function buildModCardHtml(mod, isBat, index = 0) {
                         <span class="font-bold text-[15px] text-white truncate">${mod.meta.name}</span>
                         <span class="px-1.5 py-0.5 rounded bg-[#222222] border border-[#333333] text-[#AAAAAA] font-mono text-[10px]">v${mod.meta.version || '1.0'}</span>
                     </div>
-                    <div class="flex items-center gap-2 mt-1 text-[11px] font-mono text-[#777777] truncate">
-                        <span>${fileBadge}</span>
-                        <span>•</span>
-                        <span class="text-[#999999]">Автор: ${mod.meta.author || 'Аноним'}</span>
+                    <div class="flex items-center gap-2 mt-1 text-[11px] font-mono text-[#777777] min-w-0 w-full">
+                        <span class="shrink-0 max-w-[50%] truncate" title="${fileBadge}">${fileBadge}</span>
+                        <span class="shrink-0">•</span>
+                        <span class="text-[#999999] truncate flex-1 min-w-0" title="Автор: ${mod.meta.author || 'Аноним'}">Автор: ${mod.meta.author || 'Аноним'}</span>
                     </div>
                 </div>
             </div>
@@ -9588,20 +9749,20 @@ function updateEditorSyntaxHighlight() {
 // ЖИВОЙ ПЕРЕВОДЧИК ФЛАГОВ WINWS ПО НАВЕДЕНИЮ МЫШИ В CODE STUDIO
 // =========================================================================
 function onEditorMouseMove(e) {
-    if (!appState.editingMod.isBat) {
+    const modal = document.getElementById('editor-modal');
+    if (!appState.editingMod.isBat || !modal || !modal.classList.contains('open')) {
         hideWinwsFlagTooltip();
         return;
     }
 
     const hl = document.getElementById('editor-highlight-layer');
     const wrap = document.getElementById('editor-canvas-wrap');
-    if (!hl || !wrap) return;
-
-    // Временно прячем прозрачный textarea для хита по подсвеченному спану в <pre>
     const ta = document.getElementById('editor-textarea');
+    if (!hl || !wrap || !ta) return;
+
     ta.style.pointerEvents = 'none';
     const elemUnder = document.elementFromPoint(e.clientX, e.clientY);
-    ta.style.pointerEvents = 'auto';
+    ta.style.pointerEvents = '';
 
     if (elemUnder && elemUnder.hasAttribute('data-token')) {
         const rawToken = (elemUnder.getAttribute('data-token') || '').toLowerCase();
@@ -9749,6 +9910,11 @@ function openEditorWithData(data) {
 function closeEditorModal() {
     sendCmd('playClick');
     hideWinwsFlagTooltip();
+    const ta = document.getElementById('editor-textarea');
+    if (ta) {
+        ta.style.pointerEvents = '';
+        ta.blur();
+    }
     document.getElementById('editor-modal').classList.remove('open');
 }
 
@@ -9957,7 +10123,8 @@ function editorReplaceAll() {
 function setEditorStatus(msg, colorCls) {
     const el = document.getElementById('editor-status-msg');
     el.innerText = msg;
-    el.className = `truncate max-w-[260px] ${colorCls}`;
+    el.title = msg; 
+    el.className = `truncate flex-1 min-w-0 ${colorCls}`;
 }
 
 function saveEditorChanges(bypassWarning = false) {
@@ -12204,12 +12371,13 @@ function appendWizardLog(time, message, isProgress) {
 		</div>
 
 		<div class="flex items-center justify-between mt-2.5 pt-1 shrink-0">
-			<div class="flex items-center gap-4 text-xs font-mono text-[#888888]">
-				<span id="editor-cursor-pos">Стр: 1, Столб: 1</span>
-				<span id="editor-stats-info">Строк: 1</span>
-				<span id="editor-status-msg" class="text-[#4ADE80] truncate max-w-[260px]"></span>
+			<div class="flex items-center gap-4 text-xs font-mono text-[#888888] flex-1 min-w-0 pr-4">
+				<span id="editor-cursor-pos" class="shrink-0">Стр: 1, Столб: 1</span>
+				<span id="editor-stats-info" class="shrink-0">Строк: 1</span>
+				<span id="editor-status-msg" class="text-[#4ADE80] truncate flex-1 min-w-0" title=""></span>
 			</div>
-			<div class="flex items-center gap-2">
+
+			<div class="flex items-center gap-2 shrink-0">
 				<button onclick="closeEditorModal()" class="px-4 py-1.5 rounded-md border border-[#333333] text-xs text-[#A0A0A0] hover:bg-[#222222] transition cursor-pointer">Отмена</button>
 				<button onclick="saveEditorChanges(false)" class="px-4 py-1.5 rounded-md btn-brand text-xs font-semibold cursor-pointer">Сохранить мод</button>
 			</div>

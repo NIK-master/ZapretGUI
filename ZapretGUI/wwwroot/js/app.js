@@ -425,6 +425,13 @@ window.addEventListener('DOMContentLoaded', () => {
     }
 
     try {
+        if (typeof initReactor3D === 'function') initReactor3D();
+        if (typeof refreshCardsTiltEffect === 'function') refreshCardsTiltEffect();
+    } catch (e) {
+        console.error('3D init error:', e);
+    }
+
+    try {
         if (typeof initDiagnosticsRadarView === 'function') initDiagnosticsRadarView();
     } catch (e) {
         console.error('Radar init error:', e);
@@ -520,6 +527,7 @@ function onSettingsChanged() {
 
     document.body.classList.toggle('compact-mode', compact);
     if (typeof renderModsView === 'function') renderModsView();
+    if (typeof syncReactor3DThemeAndState === 'function') syncReactor3DThemeAndState();
 
     const payload = {
         autoStart: document.getElementById('set-autostart')?.checked ?? false,
