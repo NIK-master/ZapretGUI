@@ -592,6 +592,10 @@ function switchEditorViewMode(mode) {
         if (btnCode) btnCode.className = 'px-3 py-1 rounded-md text-[#888888] hover:text-white text-xs font-semibold transition cursor-pointer flex items-center gap-1.5';
         if (btnVis) btnVis.className = 'px-3 py-1 rounded-md bg-[#26262A] text-white text-xs font-semibold transition cursor-pointer flex items-center gap-1.5';
         updateLegoPreview();
+        requestAnimationFrame(() => {
+            if (typeof initPacketSim3D === 'function') initPacketSim3D();
+            if (typeof updatePacketSimConfig === 'function') updatePacketSimConfig();
+        });
     } else {
         visualContainer?.classList.add('hidden');
         visualContainer?.classList.remove('flex');
@@ -638,6 +642,7 @@ function updateLegoPreview() {
 
     const previewEl = document.getElementById('lego-code-preview');
     if (previewEl) previewEl.textContent = header + body;
+    if (typeof updatePacketSimConfig === 'function') updatePacketSimConfig();
 }
 
 function applyLegoToCodeEditor() {
