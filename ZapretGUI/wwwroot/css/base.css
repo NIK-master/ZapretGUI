@@ -157,12 +157,17 @@ body {
 
 .modal-overlay {
     opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.2s ease;
+    visibility: hidden;
+    pointer-events: none !important;
+    transition: opacity 0.2s ease, visibility 0.2s ease;
+}
+.modal-overlay:not(.open) * {
+    pointer-events: none !important;
 }
 .modal-overlay.open {
     opacity: 1;
-    pointer-events: auto;
+    visibility: visible;
+    pointer-events: auto !important;
 }
 .modal-box {
     transform: scale(0.95) translateY(10px);

@@ -503,3 +503,109 @@ window.addEventListener('DOMContentLoaded', () => {
     drawChart();
     sendCmd('init');
 });
+
+// =========================================================================
+// 4. СОХРАНЕНИЕ НАСТРОЕК, МИНИМАЛИСТИЧНЫЙ РЕЖИМ И ПОИСК ПО НАСТРОЙКАМ
+// =========================================================================
+let settingsSaveToastTimer = null;
+
+function onSettingsChanged() {
+    const compact = document.getElementById('set-compact-mode')?.checked ?? false;
+    const focus = document.getElementById('set-focus-mode')?.checked ?? false;
+    const watchdog = document.getElementById('set-watchdog-ping')?.checked ?? false;
+
+    appState.settings.compactMode = compact;
+    appState.settings.focusMode = focus;
+    appState.settings.watchdogPingAutoRestart = watchdog;
+
+    document.body.classList.toggle('compact-mode', compact);
+    if (typeof renderModsView === 'function') renderModsView();
+
+    const payload = {
+        autoStart: document.getElementById('set-autostart')?.checked ?? false,
+        autoStartBypass: document.getElementById('set-autostart-bypass')?.checked ?? false,
+        startMinimized: document.getElementById('set-start-minimized')?.checked ?? false,
+        minimizeOnClose: document.getElementById('set-minimize-close')?.checked ?? true,
+        stopServicesOnExit: document.getElementById('set-stop-on-exit')?.checked ?? true,
+        notificationsEnabled: document.getElementById('set-notifications')?.checked ?? true,
+        alwaysOnTop: document.getElementById('set-always-on-top')?.checked ?? false,
+        soundEffectsEnabled: document.getElementById('set-sound-effects')?.checked ?? true,
+        skipSplashScreen: document.getElementById('set-skip-splash')?.checked ?? false,
+        compactMode: compact,
+        focusMode: focus,
+        hardwareAcceleration: document.getElementById('set-hw-accel')?.checked ?? true,
+        pingUrl: document.getElementById('set-ping-url')?.value?.trim() || 'https://dynamodb.eu-central-1.amazonaws.com',
+        statsUpdateInterval: appState.settings.statsUpdateInterval || 1,
+        autoRestartServices: document.getElementById('set-autorestart')?.checked ?? false,
+        watchdogPingAutoRestart: watchdog,
+        accentTheme: appState.settings.accentTheme || 'green',
+        hostsSourceIndex: appState.settings.hostsSourceIndex ?? 2
+    };
+
+    sendCmd('saveSettings', { settings: payload });
+
+    const toast = document.getElementById('settings-save-toast');
+    if (toast) {
+        toast.style.opacity = '1';
+        clearTimeout(settingsSaveToastTimer);
+        settingsSaveToastTimer = setTimeout(() => { toast.style.opacity = '0'; }, 1600);
+    }
+
+    setTimeout(() => {
+        updateModsSlidingPill();
+        updateSettingsSlidingPill();
+        drawChart();
+    }, 80);
+}
+
+function filterSettingsView() {
+    const query = (document.getElementById('settings-search-input')?.value || '').trim().toLowerCase();
+    const activeCatBtn = document.querySelector('#settings-seg-track .set-cat-btn.active');
+    const currentCat = window.currentSettingsCat || (activeCatBtn?.getAttribute('onclick')?.match(/'([^']+)'/)?.[1] || 'all');
+
+    const groups = document.querySelectorAll('#tab-settings [data-set-group]');
+    groups.forEach(group => {
+        const groupCat = group.getAttribute('data-set-group');
+        const catMatches = (currentCat === 'all' || currentCat === groupCat);
+
+        if (!catMatches) {
+            group.classList.add('hidden');
+            return;
+        }
+
+        if (!query) {
+            group.classList.remove('hidden');
+            group.querySelectorAll('[data-search]').forEach(item => item.classList.remove('hidden'));
+            group.querySelectorAll('.glass-card').forEach(card => card.classList.remove('hidden'));
+            const routingGrid = group.querySelector('#settings-routing-grid');
+            if (routingGrid) routingGrid.classList.remove('hidden');
+            return;
+        }
+
+        const innerCards = group.classList.contains('glass-card') ? [group] : Array.from(group.querySelectorAll('.glass-card'));
+        let anyVisibleInGroup = false;
+
+        innerCards.forEach(card => {
+            const searchableItems = card.querySelectorAll('[data-search]');
+            let visibleInCard = 0;
+
+            searchableItems.forEach(item => {
+                const hay = (item.getAttribute('data-search') + ' ' + item.innerText).toLowerCase();
+                const match = hay.includes(query);
+                item.classList.toggle('hidden', !match);
+                if (match) visibleInCard++;
+            });
+
+            const routingGrid = card.querySelector('#settings-routing-grid');
+            if (routingGrid) {
+                const visRouting = routingGrid.querySelectorAll('[data-search]:not(.hidden)').length;
+                routingGrid.classList.toggle('hidden', visRouting === 0);
+            }
+
+            card.classList.toggle('hidden', visibleInCard === 0);
+            if (visibleInCard > 0) anyVisibleInGroup = true;
+        });
+
+        group.classList.toggle('hidden', !anyVisibleInGroup);
+    });
+}

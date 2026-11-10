@@ -282,10 +282,10 @@ function buildModCardHtml(mod, isBat, index = 0) {
                         <span class="font-bold text-[15px] text-white truncate">${mod.meta.name}</span>
                         <span class="px-1.5 py-0.5 rounded bg-[#222222] border border-[#333333] text-[#AAAAAA] font-mono text-[10px]">v${mod.meta.version || '1.0'}</span>
                     </div>
-                    <div class="flex items-center gap-2 mt-1 text-[11px] font-mono text-[#777777] truncate">
-                        <span>${fileBadge}</span>
-                        <span>•</span>
-                        <span class="text-[#999999]">Автор: ${mod.meta.author || 'Аноним'}</span>
+                    <div class="flex items-center gap-2 mt-1 text-[11px] font-mono text-[#777777] min-w-0 w-full">
+                        <span class="shrink-0 max-w-[50%] truncate" title="${fileBadge}">${fileBadge}</span>
+                        <span class="shrink-0">•</span>
+                        <span class="text-[#999999] truncate flex-1 min-w-0" title="Автор: ${mod.meta.author || 'Аноним'}">Автор: ${mod.meta.author || 'Аноним'}</span>
                     </div>
                 </div>
             </div>
@@ -520,20 +520,20 @@ function updateEditorSyntaxHighlight() {
 // ЖИВОЙ ПЕРЕВОДЧИК ФЛАГОВ WINWS ПО НАВЕДЕНИЮ МЫШИ В CODE STUDIO
 // =========================================================================
 function onEditorMouseMove(e) {
-    if (!appState.editingMod.isBat) {
+    const modal = document.getElementById('editor-modal');
+    if (!appState.editingMod.isBat || !modal || !modal.classList.contains('open')) {
         hideWinwsFlagTooltip();
         return;
     }
 
     const hl = document.getElementById('editor-highlight-layer');
     const wrap = document.getElementById('editor-canvas-wrap');
-    if (!hl || !wrap) return;
-
-    // Временно прячем прозрачный textarea для хита по подсвеченному спану в <pre>
     const ta = document.getElementById('editor-textarea');
+    if (!hl || !wrap || !ta) return;
+
     ta.style.pointerEvents = 'none';
     const elemUnder = document.elementFromPoint(e.clientX, e.clientY);
-    ta.style.pointerEvents = 'auto';
+    ta.style.pointerEvents = '';
 
     if (elemUnder && elemUnder.hasAttribute('data-token')) {
         const rawToken = (elemUnder.getAttribute('data-token') || '').toLowerCase();
@@ -681,6 +681,11 @@ function openEditorWithData(data) {
 function closeEditorModal() {
     sendCmd('playClick');
     hideWinwsFlagTooltip();
+    const ta = document.getElementById('editor-textarea');
+    if (ta) {
+        ta.style.pointerEvents = '';
+        ta.blur();
+    }
     document.getElementById('editor-modal').classList.remove('open');
 }
 
@@ -889,7 +894,8 @@ function editorReplaceAll() {
 function setEditorStatus(msg, colorCls) {
     const el = document.getElementById('editor-status-msg');
     el.innerText = msg;
-    el.className = `truncate max-w-[260px] ${colorCls}`;
+    el.title = msg; 
+    el.className = `truncate flex-1 min-w-0 ${colorCls}`;
 }
 
 function saveEditorChanges(bypassWarning = false) {

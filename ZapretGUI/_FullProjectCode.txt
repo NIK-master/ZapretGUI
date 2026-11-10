@@ -5044,12 +5044,26 @@ namespace ZapretGUI.Core
                                      "\"%BIN%winws.exe\" --wf-tcp=80,443 --wf-udp=443,50000-50100 ^\r\n" +
                                      "--filter-udp=443 --hostlist=\"%LISTS%list-general.txt\" --dpi-desync=fake --dpi-desync-repeats=6 ^\r\n" +
                                      "--new ^\r\n" +
-                                     "--filter-tcp=80,443 --hostlist=\"%LISTS%list-general.txt\" --dpi-desync=fake,split2\r\n";
+                                     "--filter-tcp=80,443 --hostlist=\"%LISTS%list-general.txt\" --dpi-desync=fake,split2 --dpi-desync-fooling=md5sig\r\n";
                     await File.WriteAllTextAsync(Path.Combine(modFolderPath, "strategy.bat"), defaultBat);
+
+                    // Сразу активируем созданную стратегию и выбираем её как профиль
+                    if (!SettingsManager.Current.ActiveBatMods.Contains(id))
+                        SettingsManager.Current.ActiveBatMods.Add(id);
+
+                    await _modManager.SyncActiveBatModsAsync();
+                    SettingsManager.Current.SelectedProfileName = $"mod_{id}.bat";
+                    SettingsManager.Save();
+                    SendEvent("profileSelected", new { profile = SettingsManager.Current.SelectedProfileName });
                 }
                 else
                 {
                     await File.WriteAllTextAsync(Path.Combine(modFolderPath, "list.txt"), "");
+                    if (!SettingsManager.Current.ActiveListMods.Contains(id))
+                        SettingsManager.Current.ActiveListMods.Add(id);
+
+                    await _modManager.ApplyListModsAsync();
+                    SettingsManager.Save();
                 }
 
                 SendEvent("modCreated", new { id, isBat });
@@ -5089,9 +5103,20 @@ namespace ZapretGUI.Core
                 }
 
                 if (isBat)
+                {
                     await _modManager.SyncActiveBatModsAsync();
+                    var modProfileFile = $"mod_{id}.bat";
+                    if (!nowActive && string.Equals(SettingsManager.Current.SelectedProfileName, modProfileFile, StringComparison.OrdinalIgnoreCase))
+                    {
+                        var fallback = GetBatProfiles().FirstOrDefault() ?? "general.bat";
+                        SettingsManager.Current.SelectedProfileName = fallback;
+                        SendEvent("profileSelected", new { profile = fallback });
+                    }
+                }
                 else
+                {
                     await _modManager.ApplyListModsAsync();
+                }
 
                 SettingsManager.Save();
                 await BroadcastModsAndProfilesAsync();
@@ -5159,9 +5184,16 @@ namespace ZapretGUI.Core
                 {
                     if (isBat) await _modManager.SyncActiveBatModsAsync();
                     else await _modManager.ApplyListModsAsync();
-                    SettingsManager.Save();
                 }
 
+                if (isBat && string.Equals(SettingsManager.Current.SelectedProfileName, $"mod_{id}.bat", StringComparison.OrdinalIgnoreCase))
+                {
+                    var fallback = GetBatProfiles().FirstOrDefault() ?? "general.bat";
+                    SettingsManager.Current.SelectedProfileName = fallback;
+                    SendEvent("profileSelected", new { profile = fallback });
+                }
+
+                SettingsManager.Save();
                 await BroadcastModsAndProfilesAsync();
 
                 if (wasActiveList && BypassController.Current.Zapret.IsRunning)
@@ -5259,8 +5291,17 @@ namespace ZapretGUI.Core
                 await File.WriteAllTextAsync(Path.Combine(modFolder, "mod.json"), JsonSerializer.Serialize(meta, new JsonSerializerOptions { WriteIndented = true }));
                 await File.WriteAllTextAsync(Path.Combine(modFolder, fileName), content);
 
-                if (isBat) await _modManager.SyncActiveBatModsAsync();
-                else await _modManager.ApplyListModsAsync();
+                if (isBat)
+                {
+                    if (!SettingsManager.Current.ActiveBatMods.Contains(id))
+                        SettingsManager.Current.ActiveBatMods.Add(id);
+
+                    await _modManager.SyncActiveBatModsAsync();
+                    SettingsManager.Current.SelectedProfileName = $"mod_{id}.bat";
+                    SendEvent("profileSelected", new { profile = SettingsManager.Current.SelectedProfileName });
+                }
+                else
+                    await _modManager.ApplyListModsAsync();
 
                 SettingsManager.Save();
                 SendEvent("modContentSaved", new { id });
@@ -7487,6 +7528,9 @@ function handleBackendEvent(type, data) {
         case 'modsUpdated':
             appState.batMods = data.batMods || [];
             appState.listMods = data.listMods || [];
+            if (data.selectedProfile) {
+                appState.selectedProfile = data.selectedProfile;
+            }
             initConfigsList(data.profiles || ['general.bat']);
             if (typeof renderModsView === 'function') renderModsView();
             break;
@@ -9280,11 +9324,19 @@ function buildModCardHtml(mod, isBat, index = 0) {
     const delayMs = Math.min(index * 40, 240);
     const typeGlyph = isBat ? '&#xE756;' : '&#xE774;';
     const fileBadge = isBat ? `mod_${mod.id}.bat` : `${mod.id}/list.txt`;
-    const statusText = mod.isActive ? 'Активен' : 'Отключен';
+    const isCurrentSelectedProf = isBat && mod.isActive && (appState.selectedProfile || '').toLowerCase() === fileBadge.toLowerCase();
+    const statusText = mod.isActive ? (isCurrentSelectedProf ? 'Выбран ★' : 'Активен') : 'Отключен';
     const statusCls = mod.isActive ? 'text-brand font-semibold' : 'text-[#777777]';
     const iconBoxCls = mod.isActive
         ? 'bg-[#107C10]/20 border-[#107C10] text-brand'
         : 'bg-[#202020] border-[#2E2E2E] text-[#888888]';
+
+    const selectProfileBtn = isBat && mod.isActive
+        ? `<button onclick="selectProfile('${fileBadge}')" class="mod-action-pill ${isCurrentSelectedProf ? '!border-[#107C10] !text-brand' : ''}" title="Сделать текущим профилем запуска Zapret">
+               <span class="mdl-icon text-[11px]">${isCurrentSelectedProf ? '&#xE73E;' : '&#xE768;'}</span>
+               <span>${isCurrentSelectedProf ? 'Выбран' : 'Выбрать'}</span>
+           </button>`
+        : '';
 
     return `
     <div style="animation-delay: ${delayMs}ms" class="mod-workshop-card ${mod.isActive ? 'is-active' : ''} flex flex-col justify-between gap-3">
@@ -9320,6 +9372,7 @@ function buildModCardHtml(mod, isBat, index = 0) {
             <span class="text-[10px] font-mono text-[#555555]">ID: ${mod.id}</span>
 
             <div class="flex items-center gap-1.5">
+                ${selectProfileBtn}
                 <button onclick="openModEditor('${mod.id}', ${isBat})" class="mod-action-pill" title="Открыть в Code Studio">
                     <span class="mdl-icon text-[11px]">&#xE70F;</span>
                     <span>Код</span>
@@ -9633,7 +9686,7 @@ function updateLegoPreview() {
     const blocks = [];
 
     if (quicEnabled) {
-        blocks.push(`--filter-udp=443 --hostlist="%LISTS%list-general.txt" --dpi-desync=fake --dpi-desync-repeats=${repeats} --dpi-desync-fake-quic="%BIN%quic_initial_www_google_com.bin"`);
+        blocks.push(`--filter-udp=443 --hostlist="%LISTS%list-general.txt" --dpi-desync=fake --dpi-desync-repeats=${repeats}`);
     }
 
     if (discordUdp) {
@@ -9646,7 +9699,7 @@ function updateLegoPreview() {
         : `--dpi-desync-fooling=${fooling}`;
 
     const tcpPorts = useGf ? '80,443,%GameFilterTCP%' : '80,443';
-    blocks.push(`--filter-tcp=${tcpPorts} --hostlist="%LISTS%list-general.txt" --dpi-desync=${tcpDesync} --dpi-desync-repeats=${repeats} ${foolPart} --dpi-desync-fake-tls="%BIN%tls_clienthello_www_google_com.bin"`);
+    blocks.push(`--filter-tcp=${tcpPorts} --hostlist="%LISTS%list-general.txt" --dpi-desync=${tcpDesync} --dpi-desync-repeats=${repeats} ${foolPart}`);
 
     const header = `:: Сгенерировано в Визуальном конструкторе Zapret for ADHD\r\n"%BIN%winws.exe" --wf-tcp=${wfTcp} --wf-udp=${wfUdp} ^\r\n`;
     const body = blocks.join(' ^\r\n--new ^\r\n');

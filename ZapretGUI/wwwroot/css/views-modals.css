@@ -488,3 +488,53 @@ body.compact-mode .power-btn {
 .lego-select:focus {
     border-color: var(--accent-color);
 }
+/* =========================================================
+   АДАПТАЦИЯ CODE STUDIO ПОД МИНИМАЛИСТИЧНЫЙ РЕЖИМ (850x520)
+   ========================================================= */
+#editor-modal .modal-box {
+    max-height: calc(100vh - 24px);
+}
+
+body.compact-mode #editor-modal {
+    padding: 8px !important;
+}
+
+    body.compact-mode #editor-modal .modal-box {
+        height: calc(100vh - 16px) !important;
+        max-width: 100% !important;
+        padding: 10px 12px !important;
+    }
+
+    body.compact-mode #editor-modal #editor-subtitle {
+        display: none;
+    }
+
+    body.compact-mode #editor-modal #editor-snippets-bar {
+        margin-bottom: 4px !important;
+        padding-bottom: 2px !important;
+    }
+
+    body.compact-mode #editor-modal .editor-tool-btn {
+        padding: 2px 7px;
+        font-size: 11px;
+    }
+
+    body.compact-mode #editor-modal #editor-visual-builder {
+        gap: 8px !important;
+    }
+
+    body.compact-mode #editor-modal .lego-card {
+        padding: 8px 10px !important;
+        gap: 4px !important;
+    }
+
+    body.compact-mode #editor-modal .lego-select {
+        padding: 4px 8px !important;
+        font-size: 11px !important;
+    }
+
+    body.compact-mode #editor-modal #lego-code-preview {
+        max-height: 68px !important;
+        font-size: 10.5px !important;
+        line-height: 1.3 !important;
+    }
