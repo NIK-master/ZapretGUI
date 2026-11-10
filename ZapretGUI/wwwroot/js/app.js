@@ -298,6 +298,7 @@ function handleBackendEvent(type, data) {
             document.getElementById('txt-main-profile').innerText = data.profile;
             document.getElementById('modal-active-profile').innerText = data.profile;
             renderConfigCards();
+            if (typeof renderModsView === 'function') renderModsView();
             break;
 
         case 'toggleCommandPalette':
@@ -462,6 +463,12 @@ window.addEventListener('DOMContentLoaded', () => {
         }
     }, true);
 
+    window.addEventListener('wheel', e => {
+        if (e.ctrlKey) {
+            e.preventDefault();
+        }
+    }, { passive: false });
+
     const dropOverlay = document.getElementById('dropzone-overlay');
     let dragCounter = 0;
 
@@ -506,6 +513,7 @@ window.addEventListener('DOMContentLoaded', () => {
         };
         reader.readAsDataURL(file);
     });
+
 
     drawChart();
     sendCmd('init');

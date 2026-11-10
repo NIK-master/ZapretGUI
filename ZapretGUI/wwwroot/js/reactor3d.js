@@ -1,5 +1,5 @@
 // =========================================================================
-// МОДУЛЬ: 3D WEBGL РЕАКТОР (THREE.JS) + 3D TILT КАРТОЧЕК
+// МОДУЛЬ: 3D WEBGL РЕАКТОР 2.0 (КАРДАНОВЫ ДУГИ С МАЯЧКАМИ) + 3D TILT
 // Файл: wwwroot/js/reactor3d.js
 // =========================================================================
 
@@ -8,11 +8,11 @@ let reactor3D = {
     scene: null,
     camera: null,
     renderer: null,
-    ringOuter: null,
-    ringMid: null,
-    ringInner: null,
-    coreWire: null,
+    gimbalOuter: null,
+    gimbalMid: null,
+    gimbalInner: null,
     particles: null,
+    coloredMaterials: [],
     trafficBoost: 0,
     targetBoost: 0,
     mouseX: 0,
@@ -24,6 +24,38 @@ function getThemeHexNumber() {
     return parseInt(raw.replace('#', ''), 16) || 0x4CAF50;
 }
 
+// Создает технологичное прерывистое кольцо из дуг и ярких узелков-маячков,
+// чтобы вращение было отчетливо видно под любым углом
+function createSegmentedTechRing(radius, tubeThickness, segmentsCount, arcRatio, markerSize, matRing, matMarker) {
+    const group = new THREE.Group();
+    const stepAngle = (Math.PI * 2) / segmentsCount;
+    const arcLength = stepAngle * arcRatio;
+
+    for (let i = 0; i < segmentsCount; i++) {
+        const startAngle = i * stepAngle;
+
+        // Дуга сегмента
+        const arcGeo = new THREE.TorusGeometry(radius, tubeThickness, 10, 28, arcLength);
+        const arcMesh = new THREE.Mesh(arcGeo, matRing);
+        arcMesh.rotation.z = startAngle;
+        group.add(arcMesh);
+
+        // Светящийся узелок-маячок в начале каждого сегмента
+        if (markerSize > 0) {
+            const dotGeo = new THREE.SphereGeometry(markerSize, 10, 10);
+            const dotMesh = new THREE.Mesh(dotGeo, matMarker);
+            dotMesh.position.set(
+                Math.cos(startAngle) * radius,
+                Math.sin(startAngle) * radius,
+                0
+            );
+            group.add(dotMesh);
+        }
+    }
+
+    return group;
+}
+
 function initReactor3D() {
     if (reactor3D.initialized) return;
     if (typeof THREE === 'undefined') return;
@@ -31,19 +63,16 @@ function initReactor3D() {
     const container = document.getElementById('reactor-container');
     if (!container) return;
 
-    // Если аппаратное ускорение отключено в настройках — оставляем CSS-кольца
     if (appState?.settings?.hardwareAcceleration === false) return;
 
     try {
-        const width = 240;
-        const height = 240;
-
+        const size = 246;
         const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
-        camera.position.z = 5.6;
+        const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
+        camera.position.z = 6.0;
 
         const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'high-performance' });
-        renderer.setSize(width, height);
+        renderer.setSize(size, size);
         renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
         renderer.domElement.id = 'reactor-webgl-canvas';
         renderer.domElement.className = 'reactor-webgl-canvas';
@@ -51,56 +80,57 @@ function initReactor3D() {
         container.insertBefore(renderer.domElement, container.firstChild);
         container.classList.add('webgl-ready');
 
-        const accentHex = getThemeHexNumber();
+        const idleHex = 0x3A3A42;
 
-        // 1. Внешнее карданово кольцо
-        const geoOuter = new THREE.TorusGeometry(2.08, 0.022, 16, 90);
-        const matOuter = new THREE.MeshBasicMaterial({ color: 0x3A3A40, transparent: true, opacity: 0.65 });
-        const ringOuter = new THREE.Mesh(geoOuter, matOuter);
-        ringOuter.rotation.x = 0.55;
-        scene.add(ringOuter);
+        // Материалы (все хранятся в массиве и строго переключаются между Серым и Акцентным)
+        const matOuterRing = new THREE.MeshBasicMaterial({ color: idleHex, transparent: true, opacity: 0.55 });
+        const matOuterDots = new THREE.MeshBasicMaterial({ color: idleHex, transparent: true, opacity: 0.85 });
 
-        // 2. Среднее энергетическое кольцо (наклонное)
-        const geoMid = new THREE.TorusGeometry(1.92, 0.028, 16, 80);
-        const matMid = new THREE.MeshBasicMaterial({ color: accentHex, wireframe: true, transparent: true, opacity: 0.25 });
-        const ringMid = new THREE.Mesh(geoMid, matMid);
-        ringMid.rotation.y = 0.75;
-        scene.add(ringMid);
+        const matMidRing = new THREE.MeshBasicMaterial({ color: idleHex, transparent: true, opacity: 0.45 });
+        const matMidDots = new THREE.MeshBasicMaterial({ color: idleHex, transparent: true, opacity: 0.80 });
 
-        // 3. Внутреннее скоростное кольцо
-        const geoInner = new THREE.TorusGeometry(1.78, 0.018, 12, 64);
-        const matInner = new THREE.MeshBasicMaterial({ color: accentHex, transparent: true, opacity: 0.35 });
-        const ringInner = new THREE.Mesh(geoInner, matInner);
-        ringInner.rotation.x = -0.65;
-        scene.add(ringInner);
+        const matInnerRing = new THREE.MeshBasicMaterial({ color: idleHex, transparent: true, opacity: 0.40 });
+        const matInnerDots = new THREE.MeshBasicMaterial({ color: idleHex, transparent: true, opacity: 0.75 });
 
-        // 4. Геодезическая каркасная сфера вокруг кнопки
-        const geoCore = new THREE.IcosahedronGeometry(1.98, 1);
-        const matCore = new THREE.MeshBasicMaterial({ color: accentHex, wireframe: true, transparent: true, opacity: 0.08 });
-        const coreWire = new THREE.Mesh(geoCore, matCore);
-        scene.add(coreWire);
+        const matParticles = new THREE.PointsMaterial({ color: idleHex, size: 0.055, transparent: true, opacity: 0.35 });
 
-        // 5. Орбитальное облако частиц вокруг реактора
-        const pCount = 42;
+        // 1. Внешний контур (4 длинные дуги + 4 маячка) — обрамляет кнопку снаружи
+        const gimbalOuter = createSegmentedTechRing(2.14, 0.022, 4, 0.68, 0.048, matOuterRing, matOuterDots);
+        gimbalOuter.rotation.x = 0.32;
+        gimbalOuter.rotation.y = -0.22;
+        scene.add(gimbalOuter);
+
+        // 2. Средний гироскоп (6 пунктирных дуг + 6 маячков под углом)
+        const gimbalMid = createSegmentedTechRing(1.98, 0.018, 6, 0.55, 0.038, matMidRing, matMidDots);
+        gimbalMid.rotation.x = -0.48;
+        gimbalMid.rotation.y = 0.42;
+        scene.add(gimbalMid);
+
+        // 3. Внутреннее скоростное кольцо (8 коротких импульсов)
+        const gimbalInner = createSegmentedTechRing(1.84, 0.015, 8, 0.45, 0.030, matInnerRing, matInnerDots);
+        gimbalInner.rotation.x = 0.52;
+        gimbalInner.rotation.y = 0.35;
+        scene.add(gimbalInner);
+
+        // 4. Кольцо орбитальных частиц вокруг реактора
+        const pCount = 36;
         const pPositions = new Float32Array(pCount * 3);
         for (let i = 0; i < pCount; i++) {
             const angle = (i / pCount) * Math.PI * 2;
-            const radius = 2.02 + (Math.random() - 0.5) * 0.28;
-            pPositions[i * 3] = Math.cos(angle) * radius;
-            pPositions[i * 3 + 1] = Math.sin(angle) * radius;
-            pPositions[i * 3 + 2] = (Math.random() - 0.5) * 0.6;
+            const r = 2.24 + (i % 2 === 0 ? 0.05 : -0.05);
+            pPositions[i * 3] = Math.cos(angle) * r;
+            pPositions[i * 3 + 1] = Math.sin(angle) * r;
+            pPositions[i * 3 + 2] = ((i % 3) - 1) * 0.15;
         }
         const pGeo = new THREE.BufferGeometry();
         pGeo.setAttribute('position', new THREE.BufferAttribute(pPositions, 3));
-        const pMat = new THREE.PointsMaterial({ color: accentHex, size: 0.06, transparent: true, opacity: 0.45 });
-        const particles = new THREE.Points(pGeo, pMat);
+        const particles = new THREE.Points(pGeo, matParticles);
         scene.add(particles);
 
-        // Реакция на движение мыши (легкий параллакс гироскопа)
         container.addEventListener('mousemove', (e) => {
             const r = container.getBoundingClientRect();
-            reactor3D.mouseX = ((e.clientX - r.left) / r.width - 0.5) * 0.6;
-            reactor3D.mouseY = ((e.clientY - r.top) / r.height - 0.5) * 0.6;
+            reactor3D.mouseX = ((e.clientX - r.left) / r.width - 0.5) * 0.55;
+            reactor3D.mouseY = ((e.clientY - r.top) / r.height - 0.5) * 0.55;
         });
         container.addEventListener('mouseleave', () => {
             reactor3D.mouseX = 0;
@@ -112,11 +142,19 @@ function initReactor3D() {
             scene,
             camera,
             renderer,
-            ringOuter,
-            ringMid,
-            ringInner,
-            coreWire,
-            particles
+            gimbalOuter,
+            gimbalMid,
+            gimbalInner,
+            particles,
+            coloredMaterials: [
+                { mat: matOuterRing, onOp: 0.85, offOp: 0.38 },
+                { mat: matOuterDots, onOp: 1.00, offOp: 0.55 },
+                { mat: matMidRing, onOp: 0.65, offOp: 0.28 },
+                { mat: matMidDots, onOp: 0.95, offOp: 0.45 },
+                { mat: matInnerRing, onOp: 0.55, offOp: 0.22 },
+                { mat: matInnerDots, onOp: 0.90, offOp: 0.40 },
+                { mat: matParticles, onOp: 0.75, offOp: 0.20 }
+            ]
         });
 
         syncReactor3DThemeAndState();
@@ -131,28 +169,18 @@ function syncReactor3DThemeAndState() {
 
     const isRunning = !!appState.isRunning;
     const accentHex = getThemeHexNumber();
-    const idleHex = 0x3F3F46;
+    const idleHex = 0x3A3A42; // Строгий нейтрально-серый цвет при выключенном обходе
+    const targetHex = isRunning ? accentHex : idleHex;
 
-    reactor3D.ringOuter.material.color.setHex(isRunning ? accentHex : idleHex);
-    reactor3D.ringOuter.material.opacity = isRunning ? 0.85 : 0.40;
-
-    reactor3D.ringMid.material.color.setHex(accentHex);
-    reactor3D.ringMid.material.opacity = isRunning ? 0.50 : 0.14;
-
-    reactor3D.ringInner.material.color.setHex(isRunning ? accentHex : idleHex);
-    reactor3D.ringInner.material.opacity = isRunning ? 0.70 : 0.25;
-
-    reactor3D.coreWire.material.color.setHex(accentHex);
-    reactor3D.coreWire.material.opacity = isRunning ? 0.16 : 0.05;
-
-    reactor3D.particles.material.color.setHex(accentHex);
-    reactor3D.particles.material.opacity = isRunning ? 0.80 : 0.25;
+    reactor3D.coloredMaterials.forEach(item => {
+        item.mat.color.setHex(targetHex);
+        item.mat.opacity = isRunning ? item.onOp : item.offOp;
+    });
 }
 
 function feedReactor3DTraffic(rxMbps, txMbps) {
     if (!reactor3D.initialized) return;
     const total = (rxMbps || 0) + (txMbps || 0);
-    // Плавный буст скорости вращения от сетевой активности (до +3.5x)
     reactor3D.targetBoost = Math.min(3.5, total * 0.12);
 }
 
@@ -160,35 +188,34 @@ function animateReactor3D() {
     requestAnimationFrame(animateReactor3D);
     if (!reactor3D.initialized) return;
 
-    // Не рендерим впустую, если открыта не Главная вкладка
     const homeTab = document.getElementById('tab-home');
     if (homeTab && !homeTab.classList.contains('active')) return;
 
     const isRunning = !!appState.isRunning;
     reactor3D.trafficBoost += (reactor3D.targetBoost - reactor3D.trafficBoost) * 0.08;
-    reactor3D.targetBoost *= 0.95;
+    reactor3D.targetBoost *= 0.94;
 
-    const baseSpeed = isRunning ? (0.018 + reactor3D.trafficBoost * 0.015) : 0.004;
+    // В выключенном режиме медленное плавное вращение, во включенном — бодрое + ускорение от трафика
+    const speed = isRunning ? (0.016 + reactor3D.trafficBoost * 0.016) : 0.0035;
 
-    reactor3D.ringOuter.rotation.z += baseSpeed * 0.8;
-    reactor3D.ringOuter.rotation.x += (0.55 + reactor3D.mouseY - reactor3D.ringOuter.rotation.x) * 0.06;
-    reactor3D.ringOuter.rotation.y += (reactor3D.mouseX - reactor3D.ringOuter.rotation.y) * 0.06;
+    // Вращение каждой группы вокруг своей собственной оси Z (видно благодаря сегментам и маячкам)
+    // плюс плавное 3D-покачивание плоскостей кардана
+    reactor3D.gimbalOuter.rotation.z += speed * 0.9;
+    reactor3D.gimbalOuter.rotation.x += (0.32 + reactor3D.mouseY - reactor3D.gimbalOuter.rotation.x) * 0.06;
+    reactor3D.gimbalOuter.rotation.y += (-0.22 + reactor3D.mouseX - reactor3D.gimbalOuter.rotation.y) * 0.06;
 
-    reactor3D.ringMid.rotation.x -= baseSpeed * 1.15;
-    reactor3D.ringMid.rotation.y += baseSpeed * 0.65;
+    reactor3D.gimbalMid.rotation.z -= speed * 1.35;
+    reactor3D.gimbalMid.rotation.x = -0.48 + Math.sin(Date.now() * 0.0012) * 0.18;
+    reactor3D.gimbalMid.rotation.y = 0.42 + Math.cos(Date.now() * 0.0010) * 0.18;
 
-    reactor3D.ringInner.rotation.z -= baseSpeed * 1.5;
-    reactor3D.ringInner.rotation.y -= baseSpeed * 0.4;
+    reactor3D.gimbalInner.rotation.z += speed * 1.85;
+    reactor3D.gimbalInner.rotation.x = 0.52 + Math.cos(Date.now() * 0.0015) * 0.22;
 
-    reactor3D.coreWire.rotation.y += baseSpeed * 0.35;
-    reactor3D.coreWire.rotation.x += baseSpeed * 0.2;
-
-    reactor3D.particles.rotation.z += baseSpeed * 0.5;
+    reactor3D.particles.rotation.z -= speed * 0.45;
 
     reactor3D.renderer.render(reactor3D.scene, reactor3D.camera);
 }
 
-// Инициализация легкого 3D-наклона (Vanilla-Tilt) для карточек на Главной
 function refreshCardsTiltEffect() {
     if (typeof VanillaTilt === 'undefined') return;
     if (appState?.settings?.focusMode) return;

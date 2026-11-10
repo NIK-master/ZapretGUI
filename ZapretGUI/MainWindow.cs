@@ -71,6 +71,7 @@ namespace ZapretGUI
         public MainWindow()
         {
             Environment.SetEnvironmentVariable("WEBVIEW2_DEFAULT_BACKGROUND_COLOR", "FF0A0A0A");
+            Environment.SetEnvironmentVariable("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "--disable-pinch --force-device-scale-factor=1");
 
             var configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.json");
             _isFirstRun = !File.Exists(configPath);

@@ -222,9 +222,13 @@ function renderConfigCards() {
 
 function selectProfile(profileName) {
     appState.selectedProfile = profileName;
-    document.getElementById('txt-main-profile').innerText = profileName;
-    document.getElementById('modal-active-profile').innerText = profileName;
+    const mainProfEl = document.getElementById('txt-main-profile');
+    const modalProfEl = document.getElementById('modal-active-profile');
+    if (mainProfEl) mainProfEl.innerText = profileName;
+    if (modalProfEl) modalProfEl.innerText = profileName;
+
     renderConfigCards();
+    if (typeof renderModsView === 'function') renderModsView();
     sendCmd('selectProfile', { profile: profileName });
 }
 
