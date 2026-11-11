@@ -241,16 +241,6 @@ function initDiagGlobe3D() {
 
     canvasEl.addEventListener('pointerup', stopGlobeDrag);
     canvasEl.addEventListener('pointercancel', stopGlobeDrag);
-    window.addEventListener('mouseup', () => { diagGlobe.isDragging = false; });
-    window.addEventListener('mousemove', e => {
-        if (!diagGlobe.isDragging) return;
-        const dx = e.clientX - diagGlobe.prevX;
-        const dy = e.clientY - diagGlobe.prevY;
-        diagGlobe.prevX = e.clientX;
-        diagGlobe.prevY = e.clientY;
-        diagGlobe.rotY += dx * 0.008;
-        diagGlobe.rotX = Math.max(-1.1, Math.min(1.1, diagGlobe.rotX + dy * 0.008));
-    });
 
     Object.assign(diagGlobe, {
         initialized: true,

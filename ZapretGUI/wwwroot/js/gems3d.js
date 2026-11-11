@@ -1,250 +1,436 @@
 // =========================================================================
-// МОДУЛЬ: 3D WEBGL КАРУСЕЛЬ ГРАНЕНЫХ КРИСТАЛЛОВ ТЕМ (THREE.JS)
+// МОДУЛЬ: СТИЛИЗОВАННЫЕ ЮВЕЛИРНЫЕ 3D-САМОЦВЕТЫ (СЕРДЕЧКО, ДРУЗА, БРИЛЛИАНТ)
 // Файл: wwwroot/js/gems3d.js
 // =========================================================================
 
-let gems3D = {
-    initialized: false,
-    scene: null,
-    camera: null,
-    renderer: null,
-    crystalGroups: [],
-    currentAngle: 0,
-    targetAngle: 0,
-    isDragging: false,
-    dragStartX: 0,
-    dragMoved: 0
-};
+let gems3DInstances = [];
+let gems3DLoopStarted = false;
 
-const GEMS_3D_DATA = [
-    { id: 'green',  name: 'Изумруд (Green)',   color: 0x4CAF50, emissive: 0x107C10, scaleY: 1.35 },
-    { id: 'blue',   name: 'Сапфир (Blue)',     color: 0x60A5FA, emissive: 0x0078D7, scaleY: 1.25 },
-    { id: 'purple', name: 'Аметист (Purple)',  color: 0xA78BFA, emissive: 0x7C3AED, scaleY: 1.40 },
-    { id: 'amber',  name: 'Янтарь (Amber)',    color: 0xFBBF24, emissive: 0xD97706, scaleY: 1.20 },
-    { id: 'pink',   name: 'Кварц (Pink)',      color: 0xF472B6, emissive: 0xDB2777, scaleY: 1.30 }
+const GEMS_3D_CONFIG = [
+    { id: 'green', title: 'Изумруд', eng: 'EMERALD', color: 0x10B981, deep: 0x064E3B, edge: 0x6EE7B7, shape: 'emerald' },
+    { id: 'blue', title: 'Сапфир', eng: 'SAPPHIRE', color: 0x3B82F6, deep: 0x1E3A8A, edge: 0x93C5FD, shape: 'sapphire' },
+    { id: 'purple', title: 'Аметист', eng: 'AMETHYST', color: 0x9333EA, deep: 0x3B0764, edge: 0xD8B4FE, shape: 'amethyst' },
+    { id: 'amber', title: 'Топаз', eng: 'TOPAZ', color: 0xF59E0B, deep: 0x78350F, edge: 0xFDE68A, shape: 'topaz' },
+    { id: 'pink', title: 'Морганит', eng: 'MORGANITE', color: 0xEC4899, deep: 0x831843, edge: 0xFBCFE8, shape: 'morganite' }
 ];
 
+// Создает один заостренный шестигранный кристалл кварца (для друзы Аметиста)
+function createQuartzSpire(radius, height) {
+    const pts = [
+        new THREE.Vector2(0.001, -height * 0.5),
+        new THREE.Vector2(radius * 0.85, -height * 0.42),
+        new THREE.Vector2(radius, height * 0.18),
+        new THREE.Vector2(0.001, height * 0.55)
+    ];
+    return new THREE.LatheGeometry(pts, 6);
+}
+
+// Строит стилизованную 3D-модель каждого драгоценного камня
+function buildStylizedGemMesh(gem, bodyMat, coreMat, edgeMat) {
+    const root = new THREE.Group();
+
+    function addPart(geom, pos = [0, 0, 0], rot = [0, 0, 0], scale = [1, 1, 1]) {
+        const mesh = new THREE.Mesh(geom, bodyMat);
+        mesh.position.set(...pos);
+        mesh.rotation.set(...rot);
+        mesh.scale.set(...scale);
+        root.add(mesh);
+
+        // Внутреннее светящееся ядро для эффекта глубины самоцвета
+        const inner = new THREE.Mesh(geom, coreMat);
+        inner.position.set(...pos);
+        inner.rotation.set(...rot);
+        inner.scale.set(scale[0] * 0.55, scale[1] * 0.55, scale[2] * 0.55);
+        root.add(inner);
+
+        // Четкая ювелирная подводка граней
+        const edgesGeo = new THREE.EdgesGeometry(geom, 10);
+        const edges = new THREE.LineSegments(edgesGeo, edgeMat);
+        edges.position.set(...pos);
+        edges.rotation.set(...rot);
+        edges.scale.set(scale[0] * 1.008, scale[1] * 1.008, scale[2] * 1.008);
+        root.add(edges);
+    }
+
+    switch (gem.shape) {
+        case 'morganite': {
+            // НАСТОЯЩЕЕ ГРАНЕНОЕ 3D-СЕРДЕЧКО (Heart-Cut Gem)
+            const x = 0, y = 0;
+            const heartShape = new THREE.Shape();
+            heartShape.moveTo(x, y + 0.22);
+            heartShape.bezierCurveTo(x, y + 0.25, x - 0.08, y + 0.48, x - 0.34, y + 0.48);
+            heartShape.bezierCurveTo(x - 0.68, y + 0.48, x - 0.68, y + 0.02, x - 0.68, y + 0.02);
+            heartShape.bezierCurveTo(x - 0.68, y - 0.25, x - 0.35, y - 0.52, x, y - 0.78);
+            heartShape.bezierCurveTo(x + 0.35, y - 0.52, x + 0.68, y - 0.25, x + 0.68, y + 0.02);
+            heartShape.bezierCurveTo(x + 0.68, y + 0.02, x + 0.68, y + 0.48, x + 0.34, y + 0.48);
+            heartShape.bezierCurveTo(x + 0.08, y + 0.48, x, y + 0.25, x, y + 0.22);
+
+            const geom = new THREE.ExtrudeGeometry(heartShape, {
+                depth: 0.14,
+                bevelEnabled: true,
+                bevelSegments: 1, // 1 сегмент дает острые ювелирные грани вместо круглого мыла!
+                steps: 1,
+                bevelSize: 0.16,
+                bevelThickness: 0.18,
+                curveSegments: 5  // Делает контур сердца граненым, как у кристалла
+            });
+            geom.center();
+            addPart(geom, [0, 0.02, 0], [0, 0, 0], [0.78, 0.78, 0.85]);
+            break;
+        }
+
+        case 'topaz': {
+            // КЛАССИЧЕСКАЯ БРИЛЛИАНТОВАЯ ОГРАНКА (Плоская площадка сверху + корона + острый низ)
+            const pts = [
+                new THREE.Vector2(0.001, -0.58), // Острый шип снизу (калетта)
+                new THREE.Vector2(0.62, 0.14),  // Широкий поясок (рундист)
+                new THREE.Vector2(0.36, 0.44),  // Скошенная корона сверху
+                new THREE.Vector2(0.001, 0.44)   // Плоская верхняя площадка (table)
+            ];
+            const geom = new THREE.LatheGeometry(pts, 8);
+            geom.center();
+            addPart(geom, [0, 0.02, 0]);
+            break;
+        }
+
+        case 'emerald': {
+            // СТУПЕНЧАТАЯ ИЗУМРУДНАЯ ОГРАНКА (Octagonal Step-Cut со скошенными фасками сверху и снизу)
+            const pts = [
+                new THREE.Vector2(0.001, -0.56),
+                new THREE.Vector2(0.26, -0.56),
+                new THREE.Vector2(0.46, -0.34),
+                new THREE.Vector2(0.46, 0.34),
+                new THREE.Vector2(0.26, 0.56),
+                new THREE.Vector2(0.001, 0.56)
+            ];
+            const geom = new THREE.LatheGeometry(pts, 8);
+            geom.scale(0.88, 1.0, 0.68); // Прямоугольный изумрудный профиль
+            geom.rotateY(Math.PI / 8);   // Поворачиваем плоской широкой гранью вперед
+            geom.center();
+            addPart(geom, [0, 0.02, 0]);
+            break;
+        }
+
+        case 'sapphire': {
+            // КОРОЛЕВСКИЙ КРИСТАЛЛ САПФИРА (Двойная ступенчатая пирамида с пояском)
+            const pts = [
+                new THREE.Vector2(0.001, -0.68), // Нижнее острие
+                new THREE.Vector2(0.44, -0.16), // Нижний ярус граней
+                new THREE.Vector2(0.50, 0.00), // Центральный поясок
+                new THREE.Vector2(0.44, 0.16), // Верхний ярус граней
+                new THREE.Vector2(0.001, 0.68)  // Верхнее острие
+            ];
+            const geom = new THREE.LatheGeometry(pts, 6);
+            geom.scale(0.88, 1.0, 0.72);
+            geom.center();
+            addPart(geom, [0, 0.02, 0]);
+            break;
+        }
+
+        case 'amethyst':
+        default: {
+            // НАСТОЯЩАЯ ДРУЗА АМЕТИСТА (Кластер из 3 сросшихся кристаллов кварца!)
+            const mainSpire = createQuartzSpire(0.30, 1.08);
+            const leftSpire = createQuartzSpire(0.22, 0.78);
+            const rightSpire = createQuartzSpire(0.20, 0.72);
+
+            addPart(mainSpire, [0.00, 0.04, 0.04], [0.05, 0.3, -0.04]);
+            addPart(leftSpire, [-0.24, -0.10, -0.04], [0.12, 0.8, 0.48]);
+            addPart(rightSpire, [0.24, -0.12, -0.02], [-0.10, 0.2, -0.52]);
+            break;
+        }
+    }
+
+    return root;
+}
+
+function createGemInstanceForWrap(wrap) {
+    if (!wrap || wrap._gems3dMounted) return;
+
+    const oldCanvas = wrap.querySelector('canvas');
+    if (!oldCanvas) return;
+
+    wrap._gems3dMounted = true;
+
+    const w = Math.max(wrap.clientWidth, 440);
+    const h = Math.max(wrap.clientHeight, 108);
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(29, w / h, 0.1, 100);
+    camera.position.set(0, 0.38, 6.2);
+    camera.lookAt(0, -0.06, 0);
+
+    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'high-performance' });
+    renderer.setSize(w, h);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.domElement.className = 'gem-field-canvas';
+    renderer.domElement.style.width = '100%';
+    renderer.domElement.style.height = '108px';
+    renderer.domElement.style.display = 'block';
+
+    oldCanvas.style.display = 'none';
+    wrap.insertBefore(renderer.domElement, oldCanvas);
+
+    const labelsContainer = document.createElement('div');
+    labelsContainer.className = 'absolute inset-0 pointer-events-none overflow-hidden';
+    labelsContainer.style.zIndex = '4';
+    wrap.appendChild(labelsContainer);
+
+    // Ювелирный студийный свет: глубокие тени + контрастные грани без пересвета
+    scene.add(new THREE.AmbientLight(0xffffff, 0.30));
+
+    const keyLight = new THREE.DirectionalLight(0xffffff, 0.90);
+    keyLight.position.set(3.5, 5.5, 5.0);
+    scene.add(keyLight);
+
+    const fillLight = new THREE.DirectionalLight(0x94A3B8, 0.45);
+    fillLight.position.set(-4.5, -2.0, 2.0);
+    scene.add(fillLight);
+
+    const crystalGroups = [];
+    const step = (Math.PI * 2) / GEMS_3D_CONFIG.length;
+
+    GEMS_3D_CONFIG.forEach((gem, idx) => {
+        // Внешняя полупрозрачная оболочка самоцвета
+        const bodyMat = new THREE.MeshPhongMaterial({
+            color: gem.color,
+            emissive: gem.deep,
+            emissiveIntensity: 0.35,
+            specular: 0xFFFFFF,
+            shininess: 95,
+            flatShading: true,
+            transparent: true,
+            opacity: 0.88
+        });
+
+        // Внутреннее ядро для глубины камня
+        const coreMat = new THREE.MeshBasicMaterial({
+            color: gem.edge,
+            transparent: true,
+            opacity: 0.35
+        });
+
+        // Четкая подсветка ювелирных граней
+        const edgesMat = new THREE.LineBasicMaterial({
+            color: gem.edge,
+            transparent: true,
+            opacity: 0.75
+        });
+
+        const group = buildStylizedGemMesh(gem, bodyMat, coreMat, edgesMat);
+
+        const labelEl = document.createElement('div');
+        labelEl.innerText = gem.title;
+        labelsContainer.appendChild(labelEl);
+
+        scene.add(group);
+        crystalGroups.push({
+            data: gem,
+            index: idx,
+            baseAngle: idx * step,
+            group,
+            bodyMat,
+            coreMat,
+            edgesMat,
+            labelEl
+        });
+    });
+
+    const instance = {
+        wrapEl: wrap,
+        scene,
+        camera,
+        renderer,
+        crystalGroups,
+        currentAngle: 0,
+        targetAngle: 0,
+        isDragging: false,
+        dragStartX: 0,
+        dragMoved: 0
+    };
+
+    const glCanvas = renderer.domElement;
+    glCanvas.style.touchAction = 'none';
+
+    glCanvas.addEventListener('pointerdown', e => {
+        instance.isDragging = true;
+        instance.dragStartX = e.clientX;
+        instance.dragMoved = 0;
+        try { glCanvas.setPointerCapture(e.pointerId); } catch { }
+    });
+
+    glCanvas.addEventListener('pointermove', e => {
+        if (!instance.isDragging) return;
+        const dx = e.clientX - instance.dragStartX;
+        instance.dragStartX = e.clientX;
+        instance.dragMoved += Math.abs(dx);
+        instance.targetAngle += dx * 0.011;
+    });
+
+    glCanvas.addEventListener('pointerup', e => {
+        if (!instance.isDragging) return;
+        instance.isDragging = false;
+        try { glCanvas.releasePointerCapture(e.pointerId); } catch { }
+
+        if (instance.dragMoved < 6) {
+            const rect = glCanvas.getBoundingClientRect();
+            const relX = (e.clientX - rect.left) / rect.width;
+            if (relX < 0.38) triggerGemStep(-1);
+            else if (relX > 0.62) triggerGemStep(1);
+        } else {
+            const stepAngle = (Math.PI * 2) / GEMS_3D_CONFIG.length;
+            const rawIdx = Math.round(-instance.targetAngle / stepAngle);
+            const normIdx = ((rawIdx % GEMS_3D_CONFIG.length) + GEMS_3D_CONFIG.length) % GEMS_3D_CONFIG.length;
+            const chosen = GEMS_3D_CONFIG[normIdx];
+            if (chosen) applyGemSelectionEverywhere(chosen.id);
+        }
+    });
+
+    glCanvas.addEventListener('wheel', e => {
+        e.preventDefault();
+        triggerGemStep(e.deltaY > 0 ? 1 : -1);
+    }, { passive: false });
+
+    gems3DInstances.push(instance);
+}
+
+function triggerGemStep(dir) {
+    const curTheme = (appState?.settings?.accentTheme || 'green');
+    const norm = (curTheme === 'crimson' || curTheme === 'cyan') ? 'pink' : curTheme;
+    const idx = Math.max(0, GEMS_3D_CONFIG.findIndex(g => g.id === norm));
+    const nextIdx = (idx + dir + GEMS_3D_CONFIG.length) % GEMS_3D_CONFIG.length;
+    applyGemSelectionEverywhere(GEMS_3D_CONFIG[nextIdx].id);
+}
+
+function applyGemSelectionEverywhere(themeId) {
+    if (typeof window.selectAccentTheme === 'function') {
+        window.selectAccentTheme(themeId);
+    }
+    if (typeof window.selectWizTheme === 'function') {
+        try { window.selectWizTheme(themeId); } catch { }
+    }
+    syncGems3DWithActiveTheme(themeId, false);
+}
+
 function initGems3DShowcase() {
-    if (gems3D.initialized) return;
     if (typeof THREE === 'undefined') return;
     if (appState?.settings?.hardwareAcceleration === false) return;
 
-    const oldCanvas = document.getElementById('gem-field-canvas');
-    if (!oldCanvas || !oldCanvas.parentElement) return;
+    const wraps = document.querySelectorAll('.gem-field-wrap');
+    wraps.forEach(w => createGemInstanceForWrap(w));
 
-    const wrap = oldCanvas.parentElement;
-    const w = wrap.clientWidth || 440;
-    const h = wrap.clientHeight || 108;
+    ['selectAccentTheme', 'selectWizTheme'].forEach(fnName => {
+        if (typeof window[fnName] === 'function' && !window['_' + fnName + '_hooked']) {
+            const origFn = window[fnName];
+            window['_' + fnName + '_hooked'] = true;
+            window[fnName] = function (themeName, skipSave = false) {
+                origFn(themeName, skipSave);
+                syncGems3DWithActiveTheme(themeName, false);
+                if (typeof syncReactor3DThemeAndState === 'function') syncReactor3DThemeAndState();
+            };
+        }
+    });
 
-    try {
-        const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(35, w / h, 0.1, 100);
-        camera.position.set(0, 0.35, 6.2);
-        camera.lookAt(0, 0, 0);
+    syncGems3DWithActiveTheme(appState?.settings?.accentTheme || 'green', true);
 
-        const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'high-performance' });
-        renderer.setSize(w, h);
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-        renderer.domElement.className = 'gem-field-canvas';
-
-        // Прячем старый 2D-холст и ставим на его место WebGL-сцену
-        oldCanvas.style.display = 'none';
-        wrap.insertBefore(renderer.domElement, oldCanvas);
-
-        // Освещение для ярких граней кристаллов
-        scene.add(new THREE.AmbientLight(0xffffff, 0.65));
-
-        const keyLight = new THREE.PointLight(0xffffff, 1.6, 20);
-        keyLight.position.set(3, 4, 5);
-        scene.add(keyLight);
-
-        const rimLight = new THREE.PointLight(0x60A5FA, 1.0, 15);
-        rimLight.position.set(-4, -2, 3);
-        scene.add(rimLight);
-
-        const crystalGroups = [];
-        const step = (Math.PI * 2) / GEMS_3D_DATA.length;
-
-        GEMS_3D_DATA.forEach((gem, idx) => {
-            const group = new THREE.Group();
-
-            // 1. Граненое тело кристалла (Low-Poly FlatShading)
-            const bodyGeo = new THREE.OctahedronGeometry(0.62, 0);
-            bodyGeo.scale(0.82, gem.scaleY, 0.82);
-            const bodyMat = new THREE.MeshStandardMaterial({
-                color: gem.color,
-                emissive: gem.emissive,
-                emissiveIntensity: 0.42,
-                roughness: 0.15,
-                metalness: 0.35,
-                flatShading: true,
-                transparent: true,
-                opacity: 0.92
-            });
-            const bodyMesh = new THREE.Mesh(bodyGeo, bodyMat);
-            group.add(bodyMesh);
-
-            // 2. Внешняя голографическая оправа граней
-            const wireGeo = new THREE.OctahedronGeometry(0.66, 0);
-            wireGeo.scale(0.84, gem.scaleY, 0.84);
-            const wireMat = new THREE.MeshBasicMaterial({
-                color: 0xffffff,
-                wireframe: true,
-                transparent: true,
-                opacity: 0.25
-            });
-            const wireMesh = new THREE.Mesh(wireGeo, wireMat);
-            group.add(wireMesh);
-
-            // 3. Орбитальное кольцо вокруг активного кристалла
-            const haloGeo = new THREE.TorusGeometry(0.82, 0.018, 8, 36);
-            const haloMat = new THREE.MeshBasicMaterial({
-                color: gem.color,
-                transparent: true,
-                opacity: 0
-            });
-            const haloMesh = new THREE.Mesh(haloGeo, haloMat);
-            haloMesh.rotation.x = Math.PI / 2.3;
-            group.add(haloMesh);
-
-            scene.add(group);
-            crystalGroups.push({
-                data: gem,
-                index: idx,
-                baseAngle: idx * step,
-                group,
-                bodyMesh,
-                wireMesh,
-                haloMesh,
-                bodyMat,
-                wireMat,
-                haloMat
-            });
-        });
-
-        // Интерактив: перетаскивание, клик по кристаллу и колесико мыши
-        const glCanvas = renderer.domElement;
-        glCanvas.addEventListener('pointerdown', e => {
-            gems3D.isDragging = true;
-            gems3D.dragStartX = e.clientX;
-            gems3D.dragMoved = 0;
-            try { glCanvas.setPointerCapture(e.pointerId); } catch { }
-        });
-
-        glCanvas.addEventListener('pointermove', e => {
-            if (!gems3D.isDragging) return;
-            const dx = e.clientX - gems3D.dragStartX;
-            gems3D.dragStartX = e.clientX;
-            gems3D.dragMoved += Math.abs(dx);
-            gems3D.targetAngle += dx * 0.011;
-        });
-
-        glCanvas.addEventListener('pointerup', e => {
-            if (!gems3D.isDragging) return;
-            gems3D.isDragging = false;
-            try { glCanvas.releasePointerCapture(e.pointerId); } catch { }
-
-            if (gems3D.dragMoved < 6) {
-                // Клик по левой или правой части сцены прокручивает к соседнему кристаллу
-                const rect = glCanvas.getBoundingClientRect();
-                const relX = (e.clientX - rect.left) / rect.width;
-                if (relX < 0.36) cycleGemTheme(-1);
-                else if (relX > 0.64) cycleGemTheme(1);
-            } else {
-                snapGems3DToNearest();
-            }
-        });
-
-        glCanvas.addEventListener('wheel', e => {
-            e.preventDefault();
-            cycleGemTheme(e.deltaY > 0 ? 1 : -1);
-        }, { passive: false });
-
-        Object.assign(gems3D, {
-            initialized: true,
-            scene,
-            camera,
-            renderer,
-            crystalGroups
-        });
-
-        syncGems3DWithActiveTheme(appState?.settings?.accentTheme || 'green', true);
+    if (!gems3DLoopStarted) {
+        gems3DLoopStarted = true;
         animateGems3D();
-    } catch (err) {
-        console.warn('Gems3D fallback to 2D:', err);
     }
+}
+
+function resizeGems3DIfNeeded() {
+    gems3DInstances.forEach(inst => {
+        const w = inst.wrapEl.clientWidth;
+        const h = inst.wrapEl.clientHeight || 108;
+        if (w > 60 && h > 40) {
+            const dpr = Math.min(window.devicePixelRatio || 1, 2);
+            if (Math.abs(inst.renderer.domElement.width / dpr - w) > 2) {
+                inst.renderer.setSize(w, h);
+                inst.camera.aspect = w / h;
+                inst.camera.updateProjectionMatrix();
+            }
+        }
+    });
 }
 
 function syncGems3DWithActiveTheme(themeId, instant = false) {
-    if (!gems3D.initialized) return;
     const norm = (themeId === 'crimson' || themeId === 'cyan') ? 'pink' : (themeId || 'green');
-    const idx = GEMS_3D_DATA.findIndex(g => g.id === norm);
+    const idx = GEMS_3D_CONFIG.findIndex(g => g.id === norm);
     if (idx < 0) return;
 
-    const step = (Math.PI * 2) / GEMS_3D_DATA.length;
+    const step = (Math.PI * 2) / GEMS_3D_CONFIG.length;
     const desired = -idx * step;
 
-    // Выбираем кратчайший путь поворота по кругу
-    let diff = (desired - gems3D.targetAngle) % (Math.PI * 2);
-    if (diff > Math.PI) diff -= Math.PI * 2;
-    if (diff < -Math.PI) diff += Math.PI * 2;
+    gems3DInstances.forEach(inst => {
+        let diff = (desired - inst.targetAngle) % (Math.PI * 2);
+        if (diff > Math.PI) diff -= Math.PI * 2;
+        if (diff < -Math.PI) diff += Math.PI * 2;
 
-    gems3D.targetAngle += diff;
-    if (instant) gems3D.currentAngle = gems3D.targetAngle;
-}
-
-function snapGems3DToNearest() {
-    const step = (Math.PI * 2) / GEMS_3D_DATA.length;
-    const rawIdx = Math.round(-gems3D.targetAngle / step);
-    const normIdx = ((rawIdx % GEMS_3D_DATA.length) + GEMS_3D_DATA.length) % GEMS_3D_DATA.length;
-    const chosen = GEMS_3D_DATA[normIdx];
-    if (chosen && typeof selectAccentTheme === 'function') {
-        selectAccentTheme(chosen.id);
-    }
+        inst.targetAngle += diff;
+        if (instant) inst.currentAngle = inst.targetAngle;
+    });
 }
 
 function animateGems3D() {
     requestAnimationFrame(animateGems3D);
-    if (!gems3D.initialized) return;
 
-    const setTab = document.getElementById('tab-settings');
-    if (setTab && !setTab.classList.contains('active')) return;
+    const radiusX = 2.30;
+    const radiusZ = 1.25;
+    const now = performance.now();
 
-    const wrap = gems3D.renderer.domElement.parentElement;
-    if (wrap && wrap.clientWidth > 100) {
-        const w = wrap.clientWidth;
-        const h = wrap.clientHeight || 108;
-        if (Math.abs(gems3D.renderer.domElement.width / (window.devicePixelRatio || 1) - w) > 4) {
-            gems3D.renderer.setSize(w, h);
-            gems3D.camera.aspect = w / h;
-            gems3D.camera.updateProjectionMatrix();
+    gems3DInstances.forEach(inst => {
+        const w = inst.wrapEl.clientWidth;
+        const h = inst.wrapEl.clientHeight || 108;
+        if (w < 40) return;
+
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        if (Math.abs(inst.renderer.domElement.width / dpr - w) > 2) {
+            inst.renderer.setSize(w, h);
+            inst.camera.aspect = w / h;
+            inst.camera.updateProjectionMatrix();
         }
-    }
 
-    gems3D.currentAngle += (gems3D.targetAngle - gems3D.currentAngle) * 0.12;
+        inst.currentAngle += (inst.targetAngle - inst.currentAngle) * 0.12;
 
-    const radiusX = 2.35;
-    const radiusZ = 1.15;
+        inst.crystalGroups.forEach(item => {
+            const a = item.baseAngle + inst.currentAngle;
+            const x = Math.sin(a) * radiusX;
+            const z = Math.cos(a) * radiusZ;
+            const depthNorm = (z + radiusZ) / (radiusZ * 2);
+            const isFront = depthNorm > 0.92;
 
-    gems3D.crystalGroups.forEach(item => {
-        const a = item.baseAngle + gems3D.currentAngle;
-        const x = Math.sin(a) * radiusX;
-        const z = Math.cos(a) * radiusZ;
-        const depthNorm = (z + radiusZ) / (radiusZ * 2); // 1 спереди, 0 сзади
+            const bobY = Math.sin(now * 0.0025 + item.index) * 0.04 + 0.14;
+            item.group.position.set(x, bobY, z);
 
-        item.group.position.set(x, Math.sin(Date.now() * 0.0025 + item.index) * 0.06, z);
+            const s = 0.45 + depthNorm * 0.52;
+            item.group.scale.set(s, s, s);
 
-        const s = 0.55 + depthNorm * 0.52;
-        item.group.scale.set(s, s, s);
+            // Плавное ювелирное вращение
+            item.group.rotation.y += 0.011 + depthNorm * 0.011;
+            item.group.rotation.x = 0.18 + Math.sin(now * 0.0015 + item.index) * 0.08;
 
-        item.bodyMesh.rotation.y += 0.012 + depthNorm * 0.012;
-        item.wireMesh.rotation.y = item.bodyMesh.rotation.y;
-        item.haloMesh.rotation.z -= 0.025;
+            item.bodyMat.opacity = 0.28 + depthNorm * 0.62;
+            item.coreMat.opacity = 0.12 + depthNorm * 0.30;
+            item.edgesMat.opacity = isFront ? 0.90 : 0.25;
 
-        item.bodyMat.opacity = 0.35 + depthNorm * 0.62;
-        item.wireMat.opacity = depthNorm > 0.85 ? 0.38 : 0.08;
-        item.haloMat.opacity = depthNorm > 0.92 ? 0.65 : 0;
+            const labelPos3D = new THREE.Vector3(x, -0.46, z);
+            labelPos3D.project(inst.camera);
+            const screenX = (labelPos3D.x * 0.5 + 0.5) * w;
+            const screenY = (-(labelPos3D.y * 0.5) + 0.5) * h;
+
+            item.labelEl.style.left = `${screenX}px`;
+            item.labelEl.style.top = `${Math.min(h - 13, screenY)}px`;
+            item.labelEl.style.opacity = String(0.38 + depthNorm * 0.62);
+            item.labelEl.style.transform = `translate(-50%, -50%) scale(${0.82 + depthNorm * 0.22})`;
+
+            if (isFront) {
+                item.labelEl.className = 'absolute px-2.5 py-0.5 rounded-md bg-[#141418] border border-[var(--accent-light)] text-white font-mono text-[11px] font-bold shadow whitespace-nowrap';
+            } else {
+                item.labelEl.className = 'absolute px-1.5 py-0.2 rounded bg-[#0E0E12]/80 border border-[#26262E] text-[#888888] font-mono text-[10px] whitespace-nowrap';
+            }
+        });
+
+        inst.renderer.render(inst.scene, inst.camera);
     });
-
-    gems3D.renderer.render(gems3D.scene, gems3D.camera);
 }

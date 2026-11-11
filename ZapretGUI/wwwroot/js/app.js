@@ -362,6 +362,8 @@ function switchTab(tabId, btnEl) {
         requestAnimationFrame(() => {
             const activeSetBtn = document.querySelector('.set-cat-btn.active');
             if (activeSetBtn) updateSettingsSlidingPill(activeSetBtn);
+            if (typeof initGems3DShowcase === 'function') initGems3DShowcase();
+            if (typeof resizeGems3DIfNeeded === 'function') resizeGems3DIfNeeded();
         });
     }
 }
