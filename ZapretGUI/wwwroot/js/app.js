@@ -431,6 +431,7 @@ window.addEventListener('DOMContentLoaded', () => {
     try {
         if (typeof initReactor3D === 'function') initReactor3D();
         if (typeof initGems3DShowcase === 'function') initGems3DShowcase();
+        if (typeof initZappy3DMascot === 'function') initZappy3DMascot();
         if (typeof refreshCardsTiltEffect === 'function') refreshCardsTiltEffect();
     } catch (e) {
         console.error('3D init error:', e);
