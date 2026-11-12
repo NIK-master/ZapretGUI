@@ -13224,32 +13224,33 @@ function appendWizardLog(time, message, isProgress) {
 ////////////////////////////////////////////////////////////////////////////////
 
 // =========================================================================
-// МОДУЛЬ: 3D КИБЕР-МАСКОТ "ZAPPY" (ПАРЯЩИЙ РОБО-КОТИК С LED-МОРДОЧКОЙ)
+// МОДУЛЬ: 8-BIT VOXEL 3D МАСКОТ "ZAPPY" (ВСТРОЕННЫЙ В ГЛАВНЫЙ ЭКРАН)
 // Файл: wwwroot/js/zappy3d.js
 // =========================================================================
 
 let zappy3D = {
     initialized: false,
-    minimized: false,
     scene: null,
     camera: null,
     renderer: null,
-    catGroup: null,
+    voxelGroup: null,
     headGroup: null,
-    leftEar: null,
-    rightEar: null,
+    earsGroup: null,
+    tailGroup: null,
     leftPaw: null,
     rightPaw: null,
-    haloRing: null,
-    cookieMesh: null,
-    faceCanvas: null,
-    faceCtx: null,
-    faceTex: null,
-    accentMats: [],
-    // Физика и эмоции
-    mood: 'normal', // normal, happy, dizzy, eating, sleepy, Love
+    eyeMeshes: [],
+    happyEyeMeshes: [],
+    sleepEyeMeshes: [],
+    dizzyEyeMeshes: [],
+    mouthMesh: null,
+    cheekMeshes: [],
+    accentMaterials: [],
+    cookieGroup: null,
+    // Состояния и физика
+    mood: 'normal', // normal, happy, dizzy, eating
     moodTimer: 0,
-    blinkTimer: 120,
+    blinkTimer: 100,
     isBlinking: false,
     mouseX: 0,
     mouseY: 0,
@@ -13263,26 +13264,32 @@ let zappy3D = {
     dragLastX: 0,
     dragAccum: 0,
     cookieAnim: 0,
-    speechTimer: null
+    petsCount: 0
 };
 
-const ZAPPY_PHRASES_CLICK = [
-    'Мур-р! Обход стабилен! ⚡',
-    'Кусь за пакеты ТСПУ! 🐾',
-    'Пинг в норме, полёт отличный!',
-    'Почеши за ушком ещё раз! ^ω^',
-    'РКН не пройдёт, я слежу! 🛡',
-    'Обожаю, когда ты кликаешь! ✨'
+const ZAPPY_VOXEL_PHRASES_IDLE = [
+    'Жду пакетов... Мур-р 🐾',
+    'Слежу за пингом в 8-бит!',
+    'Нажми на меня или дай печеньку!',
+    'Воксельный щит готов к работе ⚡'
 ];
 
-const ZAPPY_PHRASES_COOKIE = [
-    'Ням! Заблокированный пакет съеден! 🍪',
-    'Вкуснотища! Давай ещё байтов!',
-    'Хрум-хрум... ТСПУ подавился! 😋',
-    'Энергия кристаллов +100%! ⚡'
+const ZAPPY_VOXEL_PHRASES_PET = [
+    'МУР-Р! +100 к антистрессу! ^ω^',
+    'Кусь за DPI! Пакеты летят! ⚡',
+    'Воксельное мурчание активировано!',
+    'Почеши за пиксельным ушком ещё!',
+    'РКН не пройдет мимо моих лапок! 🛡'
 ];
 
-function getZappyThemeHex() {
+const ZAPPY_VOXEL_PHRASES_COOKIE = [
+    'ХРУМ! 8-битный пакет ТСПУ съеден! 🍪',
+    'Ням-ням! Вкусные зашифрованные байты!',
+    'Печенька усвоена! Пинг снижен! 😋',
+    'Энергия воксельного ядра 100%! ✨'
+];
+
+function getZappyThemeColor() {
     const raw = getComputedStyle(document.body).getPropertyValue('--accent-light').trim() || '#4CAF50';
     return {
         str: raw,
@@ -13295,372 +13302,263 @@ function initZappy3DMascot() {
     if (typeof THREE === 'undefined') return;
     if (appState?.settings?.hardwareAcceleration === false) return;
 
-    // Создаем плавающий док маскота в правом нижнем углу
-    const host = document.createElement('div');
-    host.id = 'zappy-mascot-dock';
-    host.className = 'fixed bottom-3 right-3 z-40 select-none flex flex-col items-end pointer-events-none transition-all duration-300';
-    host.innerHTML = `
-        <!-- Облачко диалога Зэппи -->
-        <div id="zappy-speech-bubble" class="mb-1 mr-2 px-3 py-1.5 rounded-xl bg-[#141418]/95 border border-[var(--accent-light)] text-[11px] font-mono font-bold text-white shadow-lg opacity-0 translate-y-2 transition-all duration-200 pointer-events-none whitespace-nowrap">
-            Привет! Я Зэппи ^ω^
+    // Находим колонку с кнопкой запуска на Главном экране (#tab-home)
+    const reactorContainer = document.getElementById('reactor-container');
+    const homeTab = document.getElementById('tab-home');
+    if (!reactorContainer && !homeTab) return;
+
+    // Удаляем старый плавающий док, если он остался
+    const oldFloating = document.getElementById('zappy-mascot-dock');
+    if (oldFloating) oldFloating.remove();
+
+    // Находим левую колонку (где лежит реактор) или создаем слот прямо под ним
+    const leftCol = reactorContainer ? reactorContainer.parentElement : homeTab;
+    if (!leftCol) return;
+
+    // Делаем так, чтобы в компактном режиме маскот не теснил кнопку
+    const card = document.createElement('div');
+    card.id = 'zappy-home-card';
+    card.className = 'glass-card rounded-xl p-2.5 mt-3 w-full max-w-[260px] flex items-center gap-2.5 relative overflow-hidden select-none transition-all';
+    card.innerHTML = `
+        <!-- Левая часть: 3D Воксельная сцена с котиком -->
+        <div id="zappy-voxel-stage" class="relative w-[86px] h-[86px] rounded-lg bg-[#0D0D12] border border-[#25252E] flex items-center justify-center shrink-0 cursor-grab active:cursor-grabbing overflow-hidden" title="ЛКМ — погладить, Зажать и потянуть — покрутить 8-битного Зэппи!">
+            <div class="absolute inset-1 rounded-full bg-[var(--accent-soft)] blur-md opacity-60 pointer-events-none"></div>
         </div>
 
-        <!-- Основная карточка-капсула с 3D-котиком -->
-        <div id="zappy-stage-box" class="relative w-[132px] h-[132px] rounded-2xl bg-[#101014]/85 border border-[#282830] hover:border-[#3E3E4A] shadow-2xl backdrop-blur-md flex items-center justify-center pointer-events-auto transition-all duration-300 overflow-visible">
-            <!-- Фоновое свечение под тему -->
-            <div class="absolute inset-2 rounded-full bg-[var(--accent-soft)] blur-xl pointer-events-none opacity-60"></div>
-
-            <!-- Холст Three.js -->
-            <div id="zappy-canvas-wrap" class="w-full h-full cursor-grab active:cursor-grabbing relative z-10" title="Кликни, чтобы погладить Зэппи, или покрути мышкой!"></div>
-
-            <!-- Панель мини-кнопок (Кормить печенькой и Свернуть) -->
-            <div class="absolute -top-2 -left-2 flex items-center gap-1 z-20">
-                <button onclick="feedZappyCookie()" class="w-6 h-6 rounded-lg bg-[#1A1A20] hover:bg-[#262630] border border-[#32323C] text-[12px] flex items-center justify-center shadow cursor-pointer transition transform hover:scale-110 active:scale-95" title="Угостить Зэппи сетевой печенькой">
-                    🍪
-                </button>
-                <button onclick="toggleZappyMinimize()" class="w-6 h-6 rounded-lg bg-[#1A1A20] hover:bg-[#262630] border border-[#32323C] text-[#999999] hover:text-white text-[10px] font-bold flex items-center justify-center shadow cursor-pointer transition" title="Свернуть/развернуть маскота">
-                    —
-                </button>
+        <!-- Правая часть: Статус, реплика и кнопки взаимодействия -->
+        <div class="flex flex-col justify-between flex-1 min-w-0 h-[86px] py-0.5">
+            <div class="flex items-center justify-between gap-1">
+                <div class="flex items-center gap-1.5">
+                    <span id="zappy-home-dot" class="w-2 h-2 rounded-full dot-offline"></span>
+                    <span class="text-[11px] font-mono font-bold text-white tracking-wide">ZAPPY 8-BIT</span>
+                </div>
+                <span id="zappy-lvl-badge" class="px-1.5 py-0.2 rounded bg-[#1A1A22] border border-[#2C2C38] text-[9.5px] font-mono text-brand">LVL 1</span>
             </div>
 
-            <!-- Статус-индикатор котика снизу -->
-            <div class="absolute bottom-1.5 px-2 py-0.2 rounded-full bg-[#0B0B0E]/90 border border-[#24242C] text-[9.5px] font-mono text-[#AAAAAA] flex items-center gap-1.5 pointer-events-none z-20">
-                <span id="zappy-status-dot" class="w-1.5 h-1.5 rounded-full bg-[#888888]"></span>
-                <span id="zappy-status-txt">Zappy AI</span>
+            <!-- Диалоговая строка котика -->
+            <div id="zappy-home-speech" class="text-[10.5px] font-mono text-[#BBBBBB] leading-tight line-clamp-2 bg-[#121217] border border-[#22222A] rounded px-2 py-1">
+                Жду команд... Погладь меня! ^ω^
+            </div>
+
+            <!-- Кнопки действий -->
+            <div class="flex items-center gap-1.5">
+                <button onclick="petZappyMascot()" class="flex-1 py-1 px-2 rounded bg-[#1D1D24] hover:bg-[#282832] border border-[#2E2E3A] text-[10px] font-mono font-semibold text-[#E0E0E0] hover:text-white flex items-center justify-center gap-1 cursor-pointer transition active:scale-95">
+                    <span>🐾</span><span>Гладить</span>
+                </button>
+                <button onclick="feedZappyCookie()" class="flex-1 py-1 px-2 rounded bg-[#1D1D24] hover:bg-[#282832] border border-[#2E2E3A] text-[10px] font-mono font-semibold text-[#E0E0E0] hover:text-white flex items-center justify-center gap-1 cursor-pointer transition active:scale-95" title="Скормить перехваченный пакет данных">
+                    <span>🍪</span><span>Пакет</span>
+                </button>
             </div>
         </div>
-
-        <!-- Мини-кнопка возврата, когда Зэппи свёрнут -->
-        <button id="zappy-restore-pill" onclick="toggleZappyMinimize()" class="hidden px-3 py-1.5 rounded-full bg-[#16161C] hover:bg-[#202028] border border-[var(--accent-light)] text-xs font-mono font-bold text-white shadow-lg items-center gap-2 pointer-events-auto cursor-pointer transition transform hover:scale-105">
-            <span>🐱 Зэппи</span>
-        </button>
     `;
-    document.body.appendChild(host);
 
-    const wrap = document.getElementById('zappy-canvas-wrap');
-    const size = 132;
+    leftCol.appendChild(card);
+
+    // Прячем карточку маскота в компактном режиме (850x520), чтобы не нарушать минимализм
+    const styleEl = document.createElement('style');
+    styleEl.textContent = `body.compact-mode #zappy-home-card { display: none !important; }`;
+    document.head.appendChild(styleEl);
+
+    const stage = document.getElementById('zappy-voxel-stage');
+    const size = 86;
 
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 100);
-    camera.position.set(0, 0.15, 4.6);
+    const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 100);
+    camera.position.set(0, 0.35, 6.2);
     camera.lookAt(0, 0.05, 0);
 
     const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'high-performance' });
     renderer.setSize(size, size);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-    wrap.appendChild(renderer.domElement);
+    renderer.domElement.className = 'relative z-10 block';
+    stage.appendChild(renderer.domElement);
 
-    // Освещение
-    scene.add(new THREE.AmbientLight(0xffffff, 0.65));
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1.3);
-    dirLight.position.set(3, 5, 4);
+    // Освещение для четких 8-битных кубических граней
+    scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.15);
+    dirLight.position.set(4, 7, 5);
     scene.add(dirLight);
 
-    const backLight = new THREE.PointLight(0xffffff, 0.8, 10);
-    backLight.position.set(-3, 2, -2);
+    const backLight = new THREE.DirectionalLight(0x94A3B8, 0.5);
+    backLight.position.set(-4, -2, -3);
     scene.add(backLight);
 
-    // Динамическая текстура для LED-мордочки (256x128)
-    const faceCanvas = document.createElement('canvas');
-    faceCanvas.width = 256;
-    faceCanvas.height = 128;
-    const faceCtx = faceCanvas.getContext('2d');
-    const faceTex = new THREE.CanvasTexture(faceCanvas);
-
-    const theme = getZappyThemeHex();
-
-    // Группа всего котика
-    const catGroup = new THREE.Group();
-    scene.add(catGroup);
-
-    // Группа головы + тела (капсула дрона)
-    const headGroup = new THREE.Group();
-    catGroup.add(headGroup);
-
-    // 1. Корпус-голова (матоватая тёмная кибер-сфера, сплюснутая под милого котика)
-    const bodyGeo = new THREE.SphereGeometry(0.92, 32, 24);
-    bodyGeo.scale(1.12, 0.92, 0.95);
-    const bodyMat = new THREE.MeshStandardMaterial({
-        color: 0x1E1E26,
-        roughness: 0.28,
-        metalness: 0.35
-    });
-    headGroup.add(new THREE.Mesh(bodyGeo, bodyMat));
-
-    // 2. Боковые наушники-щечки в цвет темы
-    const accentMat = new THREE.MeshStandardMaterial({
-        color: theme.num,
-        emissive: theme.num,
-        emissiveIntensity: 0.45,
-        roughness: 0.2,
-        metalness: 0.3
-    });
-    zappy3D.accentMats.push(accentMat);
-
-    const cheekGeo = new THREE.CylinderGeometry(0.24, 0.24, 0.12, 20);
-    cheekGeo.rotateZ(Math.PI / 2);
-    const leftCheek = new THREE.Mesh(cheekGeo, accentMat);
-    leftCheek.position.set(-1.0, -0.04, 0);
-    headGroup.add(leftCheek);
-
-    const rightCheek = new THREE.Mesh(cheekGeo, accentMat);
-    rightCheek.position.set(1.0, -0.04, 0);
-    headGroup.add(rightCheek);
-
-    // 3. Стеклянный экран-визор спереди, на котором рисуется LED-мордочка
-    const visorGeo = new THREE.SphereGeometry(0.935, 32, 24, -Math.PI * 0.35, Math.PI * 0.70, Math.PI * 0.28, Math.PI * 0.46);
-    visorGeo.scale(1.12, 0.92, 0.96);
-    visorGeo.rotateY(-Math.PI / 2); // Поворачиваем сектор сферы лицом к камере (+Z)
-
-    const visorMat = new THREE.MeshBasicMaterial({
-        map: faceTex
-    });
-    const visorMesh = new THREE.Mesh(visorGeo, visorMat);
-    headGroup.add(visorMesh);
-
-    // 4. Кошачьи ушки на макушке (с неоновыми внутренними треугольниками)
-    function createCatEar(isLeft) {
-        const earGroup = new THREE.Group();
-
-        const outerGeo = new THREE.ConeGeometry(0.34, 0.62, 4);
-        outerGeo.rotateY(Math.PI / 4);
-        outerGeo.scale(1.0, 1.0, 0.55);
-        const outerMesh = new THREE.Mesh(outerGeo, bodyMat);
-        earGroup.add(outerMesh);
-
-        const innerGeo = new THREE.ConeGeometry(0.20, 0.42, 4);
-        innerGeo.rotateY(Math.PI / 4);
-        innerGeo.scale(1.0, 1.0, 0.35);
-        const innerMesh = new THREE.Mesh(innerGeo, accentMat);
-        innerMesh.position.set(0, -0.03, 0.08);
-        earGroup.add(innerMesh);
-
-        const sign = isLeft ? -1 : 1;
-        earGroup.position.set(sign * 0.58, 0.82, 0.05);
-        earGroup.rotation.z = -sign * 0.36;
-        earGroup.rotation.x = 0.08;
-        return earGroup;
-    }
-
-    const leftEar = createCatEar(true);
-    const rightEar = createCatEar(false);
-    headGroup.add(leftEar);
-    headGroup.add(rightEar);
-
-    // 5. Парящие лапки-капельки
-    const pawGeo = new THREE.SphereGeometry(0.20, 16, 16);
-    pawGeo.scale(1.1, 0.85, 1.2);
-    const leftPaw = new THREE.Mesh(pawGeo, bodyMat);
-    leftPaw.position.set(-0.62, -0.82, 0.45);
-    catGroup.add(leftPaw);
-
-    const rightPaw = new THREE.Mesh(pawGeo, bodyMat);
-    rightPaw.position.set(0.62, -0.82, 0.45);
-    catGroup.add(rightPaw);
-
-    // 6. Нижнее энергетическое кольцо левитации
-    const haloGeo = new THREE.TorusGeometry(0.72, 0.025, 10, 40);
-    haloGeo.rotateX(Math.PI / 2);
-    const haloMat = new THREE.MeshBasicMaterial({
-        color: theme.num,
-        transparent: true,
-        opacity: 0.45
-    });
-    zappy3D.accentMats.push(haloMat);
-    const haloRing = new THREE.Mesh(haloGeo, haloMat);
-    haloRing.position.y = -1.08;
-    catGroup.add(haloRing);
-
-    // 7. 3D-печенька (пакет данных), которая прилетает при кормлении
-    const cookieGeo = new THREE.OctahedronGeometry(0.22, 0);
-    const cookieMat = new THREE.MeshStandardMaterial({
-        color: 0xFBBF24,
-        emissive: 0xD97706,
-        emissiveIntensity: 0.5,
-        flatShading: true
-    });
-    const cookieMesh = new THREE.Mesh(cookieGeo, cookieMat);
-    cookieMesh.visible = false;
-    scene.add(cookieMesh);
+    buildVoxelCatModel(scene);
+    setupZappyInteractions(stage);
 
     Object.assign(zappy3D, {
         initialized: true,
         scene,
         camera,
-        renderer,
-        catGroup,
-        headGroup,
-        leftEar,
-        rightEar,
-        leftPaw,
-        rightPaw,
-        haloRing,
-        cookieMesh,
-        faceCanvas,
-        faceCtx,
-        faceTex
+        renderer
     });
 
-    setupZappyInteractions(renderer.domElement);
-    drawZappyFace(0, 0);
     animateZappy3D();
 }
 
-function drawZappyFace(lookX, lookY) {
-    const ctx = zappy3D.faceCtx;
-    if (!ctx) return;
+// Собирает 3D-воксельного 8-битного котика из кубиков!
+function buildVoxelCatModel(scene) {
+    const theme = getZappyThemeColor();
+    const u = 0.16; // Размер одного 3D-вокселя (кубика)
 
-    const w = 256, h = 128;
-    ctx.fillStyle = '#08080C';
-    ctx.fillRect(0, 0, w, h);
+    const matDarkBody = new THREE.MeshLambertMaterial({ color: 0x22222B });
+    const matBelly = new THREE.MeshLambertMaterial({ color: 0x323240 });
+    const matVisor = new THREE.MeshBasicMaterial({ color: 0x09090D });
+    const matPink = new THREE.MeshBasicMaterial({ color: 0xF472B6 });
+    const matAccent = new THREE.MeshLambertMaterial({
+        color: theme.num,
+        emissive: theme.num,
+        emissiveIntensity: 0.45
+    });
+    const matGlowEye = new THREE.MeshBasicMaterial({ color: theme.num });
 
-    // Легкая сканлайн-сетка экрана
-    ctx.fillStyle = 'rgba(255,255,255,0.025)';
-    for (let y = 0; y < h; y += 4) {
-        ctx.fillRect(0, y, w, 1);
+    zappy3D.accentMaterials = [matAccent, matGlowEye];
+
+    // Вспомогательная функция создания воксельного блока (w, h, d в вокселях)
+    function makeBox(w, h, d, mat, x, y, z) {
+        const geo = new THREE.BoxGeometry(w * u, h * u, d * u);
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.set(x * u, y * u, z * u);
+        return mesh;
     }
 
-    const theme = getZappyThemeHex();
-    const isRunning = !!appState?.isRunning;
-    const mainColor = isRunning ? theme.str : '#94A3B8';
+    const voxelGroup = new THREE.Group();
+    scene.add(voxelGroup);
 
-    ctx.strokeStyle = mainColor;
-    ctx.fillStyle = mainColor;
-    ctx.shadowColor = mainColor;
-    ctx.shadowBlur = 12;
-    ctx.lineWidth = 6;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
+    const headGroup = new THREE.Group();
+    voxelGroup.add(headGroup);
 
-    const ox = Math.max(-18, Math.min(18, lookX * 22));
-    const oy = Math.max(-10, Math.min(10, lookY * 14));
+    // 1. ГОЛОВА-КОРПУС (8-битный ступенчатый куб со скругленными воксельными углами)
+    headGroup.add(makeBox(9, 7, 7, matDarkBody, 0, 1.0, 0));     // Центральное ядро головы
+    headGroup.add(makeBox(7, 8, 6, matDarkBody, 0, 1.0, 0));     // Верхняя/нижняя ступенька
+    headGroup.add(makeBox(10, 5, 5, matDarkBody, 0, 1.0, 0));    // Боковые щёчки
+    headGroup.add(makeBox(5, 2.5, 4, matBelly, 0, -3.2, 0.3));   // Воксельное пузико снизу
 
-    const leftEyeX = 82 + ox;
-    const rightEyeX = 174 + ox;
-    const eyeY = 56 + oy;
+    // Боковые 8-битные наушники (светятся в цвет темы)
+    headGroup.add(makeBox(1, 3, 3, matAccent, -5.2, 1.0, 0));
+    headGroup.add(makeBox(1, 3, 3, matAccent, 5.2, 1.0, 0));
 
-    const mood = zappy3D.mood;
+    // 2. ЭКРАН-МОРДОЧКА СПЕРЕДИ
+    headGroup.add(makeBox(7.6, 5.2, 0.6, matVisor, 0, 1.0, 3.4));
 
-    if (mood === 'happy') {
-        // Радостные дуги ^ ω ^
-        [leftEyeX, rightEyeX].forEach(ex => {
-            ctx.beginPath();
-            ctx.moveTo(ex - 18, eyeY + 6);
-            ctx.quadraticCurveTo(ex, eyeY - 18, ex + 18, eyeY + 6);
-            ctx.stroke();
-        });
-        // Ротик ω
-        drawCatMouthW(ctx, 128 + ox * 0.6, eyeY + 22, 14);
-    } else if (mood === 'dizzy') {
-        // Спиральки @ _ @
-        [leftEyeX, rightEyeX].forEach(ex => {
-            ctx.beginPath();
-            for (let a = 0; a < Math.PI * 3.5; a += 0.25) {
-                const r = a * 1.9;
-                const px = ex + Math.cos(a + performance.now() * 0.015) * r;
-                const py = eyeY + Math.sin(a + performance.now() * 0.015) * r;
-                if (a === 0) ctx.moveTo(px, py);
-                else ctx.lineTo(px, py);
-            }
-            ctx.stroke();
-        });
-        // Волнистый ротик
-        ctx.beginPath();
-        ctx.arc(128 + ox * 0.5, eyeY + 26, 8, 0, Math.PI * 2);
-        ctx.stroke();
-    } else if (mood === 'eating') {
-        // Блестящие глаза и открытый ротик O ω O
-        [leftEyeX, rightEyeX].forEach(ex => {
-            ctx.beginPath();
-            ctx.arc(ex, eyeY, 15, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = '#FFFFFF';
-            ctx.beginPath();
-            ctx.arc(ex - 5, eyeY - 5, 4, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = mainColor;
-        });
-        // Открытый ротик чавканья
-        const mouthOpen = 6 + Math.abs(Math.sin(performance.now() * 0.025)) * 10;
-        ctx.beginPath();
-        ctx.ellipse(128 + ox * 0.6, eyeY + 24, 12, mouthOpen, 0, 0, Math.PI * 2);
-        ctx.fill();
-    } else if (!isRunning && mood === 'normal') {
-        // Сонно-спокойный режим, когда обход выключен (- ω -)
-        [leftEyeX, rightEyeX].forEach(ex => {
-            ctx.beginPath();
-            ctx.moveTo(ex - 16, eyeY);
-            ctx.lineTo(ex + 16, eyeY);
-            ctx.stroke();
-        });
-        drawCatMouthW(ctx, 128 + ox * 0.5, eyeY + 20, 11);
-    } else {
-        // Стандартные живые овальные глазки с бликами
-        if (zappy3D.isBlinking) {
-            [leftEyeX, rightEyeX].forEach(ex => {
-                ctx.beginPath();
-                ctx.moveTo(ex - 16, eyeY);
-                ctx.lineTo(ex + 16, eyeY);
-                ctx.stroke();
-            });
-        } else {
-            [leftEyeX, rightEyeX].forEach(ex => {
-                ctx.beginPath();
-                ctx.roundRect(ex - 13, eyeY - 16, 26, 32, 12);
-                ctx.fill();
+    // 3. ПИКСЕЛЬНЫЕ ГЛАЗКИ И МИМИКА НА ЭКРАНЕ (переключаются по состояниям)
+    const eyeZ = 3.78;
+    // Обычные 8-битные глаза (вертикальные пиксели + белый блик)
+    const eyeL = makeBox(1.3, 2.2, 0.2, matGlowEye, -2.1, 1.4, eyeZ);
+    const eyeR = makeBox(1.3, 2.2, 0.2, matGlowEye, 2.1, 1.4, eyeZ);
+    headGroup.add(eyeL, eyeR);
+    zappy3D.eyeMeshes = [eyeL, eyeR];
 
-                // Белый блик в глазах
-                ctx.shadowBlur = 0;
-                ctx.fillStyle = '#FFFFFF';
-                ctx.beginPath();
-                ctx.arc(ex - 4, eyeY - 6, 4.5, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.fillStyle = mainColor;
-                ctx.shadowBlur = 12;
-            });
-        }
-        drawCatMouthW(ctx, 128 + ox * 0.6, eyeY + 22, 12);
-    }
+    // Радостные 8-битные глаза-уголки (^ ^) из 3 кубиков каждый
+    const happyGroupL = new THREE.Group();
+    happyGroupL.add(
+        makeBox(0.7, 0.7, 0.2, matGlowEye, -2.7, 1.2, eyeZ),
+        makeBox(0.7, 0.7, 0.2, matGlowEye, -2.1, 1.9, eyeZ),
+        makeBox(0.7, 0.7, 0.2, matGlowEye, -1.5, 1.2, eyeZ)
+    );
+    const happyGroupR = new THREE.Group();
+    happyGroupR.add(
+        makeBox(0.7, 0.7, 0.2, matGlowEye, 1.5, 1.2, eyeZ),
+        makeBox(0.7, 0.7, 0.2, matGlowEye, 2.1, 1.9, eyeZ),
+        makeBox(0.7, 0.7, 0.2, matGlowEye, 2.7, 1.2, eyeZ)
+    );
+    happyGroupL.visible = false;
+    happyGroupR.visible = false;
+    headGroup.add(happyGroupL, happyGroupR);
+    zappy3D.happyEyeMeshes = [happyGroupL, happyGroupR];
 
-    // Розовые румяные щечки при радости
-    if (mood === 'happy' || mood === 'eating') {
-        ctx.shadowBlur = 0;
-        ctx.fillStyle = 'rgba(244, 114, 182, 0.45)';
-        ctx.beginPath();
-        ctx.ellipse(leftEyeX - 22, eyeY + 16, 10, 5, 0, 0, Math.PI * 2);
-        ctx.ellipse(rightEyeX + 22, eyeY + 16, 10, 5, 0, 0, Math.PI * 2);
-        ctx.fill();
-    }
+    // Сонные / моргающие глаза (- -)
+    const sleepL = makeBox(2.0, 0.6, 0.2, matGlowEye, -2.1, 1.3, eyeZ);
+    const sleepR = makeBox(2.0, 0.6, 0.2, matGlowEye, 2.1, 1.3, eyeZ);
+    sleepL.visible = false;
+    sleepR.visible = false;
+    headGroup.add(sleepL, sleepR);
+    zappy3D.sleepEyeMeshes = [sleepL, sleepR];
 
-    zappy3D.faceTex.needsUpdate = true;
+    // Головокружение (X X)
+    const dizzyL = new THREE.Group();
+    dizzyL.add(
+        makeBox(0.6, 0.6, 0.2, matGlowEye, -2.6, 1.9, eyeZ),
+        makeBox(0.6, 0.6, 0.2, matGlowEye, -1.6, 1.9, eyeZ),
+        makeBox(0.7, 0.7, 0.2, matGlowEye, -2.1, 1.3, eyeZ),
+        makeBox(0.6, 0.6, 0.2, matGlowEye, -2.6, 0.7, eyeZ),
+        makeBox(0.6, 0.6, 0.2, matGlowEye, -1.6, 0.7, eyeZ)
+    );
+    const dizzyR = dizzyL.clone();
+    dizzyR.position.x = 4.2 * u;
+    dizzyL.visible = false;
+    dizzyR.visible = false;
+    headGroup.add(dizzyL, dizzyR);
+    zappy3D.dizzyEyeMeshes = [dizzyL, dizzyR];
+
+    // Пиксельный кошачий носик/ротик и розовые румяные щечки
+    const mouthMesh = makeBox(1.4, 0.55, 0.2, matGlowEye, 0, 0.0, eyeZ);
+    headGroup.add(mouthMesh);
+    zappy3D.mouthMesh = mouthMesh;
+
+    const cheekL = makeBox(1.1, 0.6, 0.2, matPink, -3.1, 0.2, eyeZ);
+    const cheekR = makeBox(1.1, 0.6, 0.2, matPink, 3.1, 0.2, eyeZ);
+    headGroup.add(cheekL, cheekR);
+    zappy3D.cheekMeshes = [cheekL, cheekR];
+
+    // 4. СТУПЕНЧАТЫЕ 8-БИТНЫЕ УШКИ НА МАКУШКЕ
+    const earsGroup = new THREE.Group();
+    [-3.0, 3.0].forEach(ex => {
+        // Пирамидка уха из 3 слоев вокселей
+        earsGroup.add(makeBox(3.0, 1.0, 2.2, matDarkBody, ex, 5.2, 0));
+        earsGroup.add(makeBox(2.0, 1.0, 1.8, matDarkBody, ex, 6.2, 0));
+        earsGroup.add(makeBox(1.0, 1.0, 1.2, matAccent, ex, 7.2, 0)); // Светящийся кончик уха!
+        earsGroup.add(makeBox(1.4, 1.4, 0.5, matAccent, ex, 5.6, 0.95)); // Внутренняя часть ушка
+    });
+    headGroup.add(earsGroup);
+
+    // 5. ВОКСЕЛЬНЫЕ ЛАПКИ И ХВОСТИК ИЗ КУБИКОВ
+    const leftPaw = new THREE.Group();
+    leftPaw.add(makeBox(2.2, 1.6, 2.6, matDarkBody, -2.8, -4.4, 1.2));
+    leftPaw.add(makeBox(1.4, 0.6, 0.6, matAccent, -2.8, -4.7, 2.4)); // Светящиеся подушечки лап
+    voxelGroup.add(leftPaw);
+
+    const rightPaw = new THREE.Group();
+    rightPaw.add(makeBox(2.2, 1.6, 2.6, matDarkBody, 2.8, -4.4, 1.2));
+    rightPaw.add(makeBox(1.4, 0.6, 0.6, matAccent, 2.8, -4.7, 2.4));
+    voxelGroup.add(rightPaw);
+
+    // Ступенчатый 8-битный хвост сзади
+    const tailGroup = new THREE.Group();
+    tailGroup.add(
+        makeBox(1.2, 1.2, 1.5, matDarkBody, 0, -2.8, -3.6),
+        makeBox(1.2, 1.8, 1.2, matDarkBody, 0, -1.8, -4.6),
+        makeBox(1.2, 1.8, 1.2, matAccent, 0, -0.2, -5.2)
+    );
+    voxelGroup.add(tailGroup);
+
+    // 6. 8-БИТНАЯ ПЕЧЕНЬКА-ПАКЕТ (прилетает при нажатии на кнопку 🍪)
+    const cookieGroup = new THREE.Group();
+    const matCookie = new THREE.MeshLambertMaterial({ color: 0xF59E0B });
+    const matChoco = new THREE.MeshBasicMaterial({ color: 0x451A03 });
+    cookieGroup.add(makeBox(2.2, 2.2, 0.8, matCookie, 0, 0, 0));
+    cookieGroup.add(makeBox(0.6, 0.6, 1.0, matChoco, -0.5, 0.5, 0));
+    cookieGroup.add(makeBox(0.6, 0.6, 1.0, matChoco, 0.5, -0.4, 0));
+    cookieGroup.visible = false;
+    scene.add(cookieGroup);
+
+    Object.assign(zappy3D, {
+        voxelGroup,
+        headGroup,
+        earsGroup,
+        tailGroup,
+        leftPaw,
+        rightPaw,
+        cookieGroup
+    });
 }
 
-function drawCatMouthW(ctx, cx, cy, size) {
-    ctx.lineWidth = 4.5;
-    ctx.beginPath();
-    ctx.arc(cx - size * 0.55, cy, size * 0.55, 0.1, Math.PI - 0.1);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(cx + size * 0.55, cy, size * 0.55, 0.1, Math.PI - 0.1);
-    ctx.stroke();
+function setZappySpeechText(text) {
+    const el = document.getElementById('zappy-home-speech');
+    if (el) el.innerText = text;
 }
 
-function showZappySpeech(text, duration = 2600) {
-    const bubble = document.getElementById('zappy-speech-bubble');
-    if (!bubble) return;
-
-    bubble.innerText = text;
-    bubble.style.opacity = '1';
-    bubble.style.transform = 'translateY(0)';
-
-    clearTimeout(zappy3D.speechTimer);
-    zappy3D.speechTimer = setTimeout(() => {
-        bubble.style.opacity = '0';
-        bubble.style.transform = 'translateY(8px)';
-    }, duration);
-}
-
-function setupZappyInteractions(canvasEl) {
+function setupZappyInteractions(stageEl) {
     window.addEventListener('mousemove', e => {
         const nx = (e.clientX / window.innerWidth) * 2 - 1;
         const ny = (e.clientY / window.innerHeight) * 2 - 1;
@@ -13670,178 +13568,179 @@ function setupZappyInteractions(canvasEl) {
         if (zappy3D.isDragging) {
             const dx = e.clientX - zappy3D.dragLastX;
             zappy3D.dragLastX = e.clientX;
-            zappy3D.spinVelY = dx * 0.025;
+            zappy3D.spinVelY = dx * 0.03;
             zappy3D.rotY += zappy3D.spinVelY;
             zappy3D.dragAccum += Math.abs(dx);
 
-            // Если сильно раскрутили котика — у него кружится голова!
-            if (zappy3D.dragAccum > 260 && zappy3D.mood !== 'dizzy') {
+            if (zappy3D.dragAccum > 220 && zappy3D.mood !== 'dizzy') {
                 zappy3D.mood = 'dizzy';
-                zappy3D.moodTimer = 150;
-                showZappySpeech('Уи-и-и! Голова кругом @_@');
+                zappy3D.moodTimer = 140;
+                setZappySpeechText('Уи-и-и! Мои воксели кружатся! X_X');
             }
         }
     });
 
-    canvasEl.addEventListener('pointerdown', e => {
+    stageEl.addEventListener('pointerdown', e => {
         zappy3D.isDragging = true;
         zappy3D.dragLastX = e.clientX;
         zappy3D.dragAccum = 0;
-        try { canvasEl.setPointerCapture(e.pointerId); } catch { }
+        try { stageEl.setPointerCapture(e.pointerId); } catch { }
     });
 
-    canvasEl.addEventListener('pointerup', e => {
+    stageEl.addEventListener('pointerup', e => {
         if (!zappy3D.isDragging) return;
         zappy3D.isDragging = false;
-        try { canvasEl.releasePointerCapture(e.pointerId); } catch { }
+        try { stageEl.releasePointerCapture(e.pointerId); } catch { }
 
-        // Если это был клик (поглаживание)
-        if (zappy3D.dragAccum < 12) {
+        if (zappy3D.dragAccum < 10) {
             petZappyMascot();
         }
     });
 }
 
-function petZappyMascot() {
-    zappy3D.mood = 'happy';
-    zappy3D.moodTimer = 110;
-    zappy3D.jumpVel = 0.12;
-    zappy3D.squash = 1.28; // Пружинный сквиш при клике
-    zappy3D.spinVelY = 0.24; // Радостный пируэт
+function bumpZappyLevel() {
+    zappy3D.petsCount++;
+    const lvl = 1 + Math.floor(zappy3D.petsCount / 5);
+    const badge = document.getElementById('zappy-lvl-badge');
+    if (badge) badge.innerText = `LVL ${lvl}`;
+}
 
-    const phrase = ZAPPY_PHRASES_CLICK[Math.floor(Math.random() * ZAPPY_PHRASES_CLICK.length)];
-    showZappySpeech(phrase);
+function petZappyMascot() {
+    if (!zappy3D.initialized) return;
+    zappy3D.mood = 'happy';
+    zappy3D.moodTimer = 100;
+    zappy3D.jumpVel = 0.14;
+    zappy3D.squash = 1.25;
+    zappy3D.spinVelY = 0.22;
+    bumpZappyLevel();
+
+    const phrase = ZAPPY_VOXEL_PHRASES_PET[Math.floor(Math.random() * ZAPPY_VOXEL_PHRASES_PET.length)];
+    setZappySpeechText(phrase);
 }
 
 function feedZappyCookie() {
     if (!zappy3D.initialized) return;
     zappy3D.cookieAnim = 1.0;
-    zappy3D.cookieMesh.visible = true;
+    zappy3D.cookieGroup.visible = true;
     zappy3D.mood = 'eating';
-    zappy3D.moodTimer = 120;
-    zappy3D.jumpVel = 0.09;
+    zappy3D.moodTimer = 110;
+    zappy3D.jumpVel = 0.11;
+    bumpZappyLevel();
 
-    const phrase = ZAPPY_PHRASES_COOKIE[Math.floor(Math.random() * ZAPPY_PHRASES_COOKIE.length)];
-    showZappySpeech(phrase);
+    const phrase = ZAPPY_VOXEL_PHRASES_COOKIE[Math.floor(Math.random() * ZAPPY_VOXEL_PHRASES_COOKIE.length)];
+    setZappySpeechText(phrase);
 }
 
-function toggleZappyMinimize() {
-    zappy3D.minimized = !zappy3D.minimized;
-    const stage = document.getElementById('zappy-stage-box');
-    const pill = document.getElementById('zappy-restore-pill');
-    const bubble = document.getElementById('zappy-speech-bubble');
+function updateVoxelFaceVisibility(isRunning) {
+    const mood = zappy3D.mood;
+    const showHappy = (mood === 'happy' || mood === 'eating');
+    const showDizzy = (mood === 'dizzy');
+    const showSleep = (!showHappy && !showDizzy && (!isRunning || zappy3D.isBlinking));
+    const showNormal = (!showHappy && !showDizzy && !showSleep);
 
-    if (zappy3D.minimized) {
-        if (stage) stage.classList.add('hidden');
-        if (bubble) bubble.style.opacity = '0';
-        if (pill) {
-            pill.classList.remove('hidden');
-            pill.classList.add('flex');
+    zappy3D.eyeMeshes.forEach(m => m.visible = showNormal);
+    zappy3D.happyEyeMeshes.forEach(m => m.visible = showHappy);
+    zappy3D.sleepEyeMeshes.forEach(m => m.visible = showSleep);
+    zappy3D.dizzyEyeMeshes.forEach(m => m.visible = showDizzy);
+
+    // Открываем ротик при поедании печеньки
+    if (zappy3D.mouthMesh) {
+        if (mood === 'eating') {
+            const openScale = 1.2 + Math.abs(Math.sin(performance.now() * 0.03)) * 2.2;
+            zappy3D.mouthMesh.scale.set(1.2, openScale, 1);
+        } else {
+            zappy3D.mouthMesh.scale.set(1, 1, 1);
         }
-    } else {
-        if (stage) stage.classList.remove('hidden');
-        if (pill) {
-            pill.classList.add('hidden');
-            pill.classList.remove('flex');
-        }
-        showZappySpeech('Я снова тут! ^ω^', 1800);
     }
 }
 
 function animateZappy3D() {
     requestAnimationFrame(animateZappy3D);
-    if (!zappy3D.initialized || zappy3D.minimized) return;
+    if (!zappy3D.initialized) return;
+
+    const homeTab = document.getElementById('tab-home');
+    if (homeTab && !homeTab.classList.contains('active')) return;
+    if (document.body.classList.contains('compact-mode')) return;
 
     const now = performance.now();
     const isRunning = !!appState?.isRunning;
-    const theme = getZappyThemeHex();
+    const theme = getZappyThemeColor();
 
-    // Обновляем цвет ушек и ореола под текущую тему
-    zappy3D.accentMats.forEach(mat => {
-        mat.color.setHex(theme.num);
-        if (mat.emissive) mat.emissive.setHex(theme.num);
+    // Синхронизируем цвет акцентов котика с выбранным самоцветом
+    zappy3D.accentMaterials.forEach(m => {
+        m.color.setHex(theme.num);
+        if (m.emissive) m.emissive.setHex(theme.num);
     });
 
-    // Обновляем статус-бейдж под котиком
-    const dot = document.getElementById('zappy-status-dot');
-    const txt = document.getElementById('zappy-status-txt');
-    if (dot && txt) {
-        dot.style.backgroundColor = isRunning ? theme.str : '#666666';
-        dot.style.boxShadow = isRunning ? `0 0 8px ${theme.str}` : 'none';
-        txt.innerText = isRunning ? 'Zappy: Охрана' : 'Zappy: Дремлет';
+    const dot = document.getElementById('zappy-home-dot');
+    if (dot) {
+        dot.className = `w-2 h-2 rounded-full ${isRunning ? 'dot-online' : 'dot-offline'}`;
     }
 
-    // Таймер эмоций
     if (zappy3D.moodTimer > 0) {
         zappy3D.moodTimer--;
         if (zappy3D.moodTimer === 0) zappy3D.mood = 'normal';
     }
 
-    // Таймер естественного моргания
     zappy3D.blinkTimer--;
     if (zappy3D.blinkTimer <= 0) {
         zappy3D.isBlinking = true;
-        if (zappy3D.blinkTimer < -8) {
+        if (zappy3D.blinkTimer < -7) {
             zappy3D.isBlinking = false;
-            zappy3D.blinkTimer = 110 + Math.floor(Math.random() * 140);
+            zappy3D.blinkTimer = 95 + Math.floor(Math.random() * 130);
         }
     }
 
-    // Плавное слежение головы за мышкой + затухание вращения
+    updateVoxelFaceVisibility(isRunning);
+
     if (!zappy3D.isDragging) {
-        const targetRotY = zappy3D.mouseX * 0.45;
-        const targetRotX = zappy3D.mouseY * 0.25;
+        const targetRotY = zappy3D.mouseX * 0.42;
+        const targetRotX = zappy3D.mouseY * 0.22;
         zappy3D.rotY += (targetRotY - zappy3D.rotY) * 0.08 + zappy3D.spinVelY;
         zappy3D.rotX += (targetRotX - zappy3D.rotX) * 0.08;
-        zappy3D.spinVelY *= 0.90;
+        zappy3D.spinVelY *= 0.88;
     }
 
-    // Прыжок и пружинный сквиш
     zappy3D.jumpY += zappy3D.jumpVel;
-    zappy3D.jumpVel -= 0.008;
+    zappy3D.jumpVel -= 0.009;
     if (zappy3D.jumpY <= 0) {
         zappy3D.jumpY = 0;
         zappy3D.jumpVel = 0;
     }
-    zappy3D.squash += (1.0 - zappy3D.squash) * 0.14;
+    zappy3D.squash += (1.0 - zappy3D.squash) * 0.15;
 
-    const hoverY = Math.sin(now * (isRunning ? 0.0045 : 0.0022)) * 0.08;
-    zappy3D.catGroup.position.y = hoverY + zappy3D.jumpY;
+    // 8-битное ступенчатое парение
+    const bob = Math.sin(now * (isRunning ? 0.005 : 0.0025)) * 0.10;
+    zappy3D.voxelGroup.position.y = bob + zappy3D.jumpY;
 
     zappy3D.headGroup.rotation.y = zappy3D.rotY;
     zappy3D.headGroup.rotation.x = zappy3D.rotX;
     zappy3D.headGroup.scale.set(1 / Math.sqrt(zappy3D.squash), zappy3D.squash, 1 / Math.sqrt(zappy3D.squash));
 
-    // Подергивание ушками
-    const earWave = Math.sin(now * 0.006) * 0.06;
-    zappy3D.leftEar.rotation.z = 0.36 + earWave;
-    zappy3D.rightEar.rotation.z = -0.36 - earWave;
+    // Виляние кубическим хвостиком и переступание лапками
+    const speed = isRunning ? 0.008 : 0.003;
+    zappy3D.tailGroup.rotation.z = Math.sin(now * speed * 1.4) * 0.28;
+    zappy3D.leftPaw.position.y = Math.sin(now * speed) * 0.08;
+    zappy3D.rightPaw.position.y = Math.cos(now * speed) * 0.08;
 
-    // Движение лапок
-    const pawSpeed = isRunning ? 0.007 : 0.003;
-    zappy3D.leftPaw.position.y = -0.82 + Math.sin(now * pawSpeed) * 0.06;
-    zappy3D.rightPaw.position.y = -0.82 + Math.cos(now * pawSpeed) * 0.06;
-
-    // Анимация полёта печеньки в ротик
+    // Полёт 8-битной печеньки
     if (zappy3D.cookieAnim > 0) {
-        zappy3D.cookieAnim -= 0.035;
+        zappy3D.cookieAnim -= 0.04;
         const t = 1.0 - Math.max(0, zappy3D.cookieAnim);
-        // Парабола от камеры к мордочке котика
-        zappy3D.cookieMesh.position.set(
-            (1 - t) * 1.2,
-            Math.sin(t * Math.PI) * 0.65 - 0.1,
-            (1 - t) * 2.2 + 0.75
+        zappy3D.cookieGroup.position.set(
+            (1 - t) * 1.1,
+            Math.sin(t * Math.PI) * 0.7,
+            (1 - t) * 2.2 + 0.55
         );
-        zappy3D.cookieMesh.rotation.y += 0.15;
-        zappy3D.cookieMesh.rotation.x += 0.12;
+        zappy3D.cookieGroup.rotation.y += 0.16;
+        zappy3D.cookieGroup.rotation.z += 0.12;
 
         if (zappy3D.cookieAnim <= 0) {
-            zappy3D.cookieMesh.visible = false;
-            zappy3D.squash = 0.82; // Смешно сплющивается, когда проглотил печеньку
+            zappy3D.cookieGroup.visible = false;
+            zappy3D.squash = 0.80;
         }
     }
 
-    drawZappyFace(zappy3D.mouseX, zappy3D.mouseY);
     zappy3D.renderer.render(zappy3D.scene, zappy3D.camera);
 }
 

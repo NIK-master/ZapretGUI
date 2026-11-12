@@ -1,10 +1,11 @@
 // =========================================================================
-// МОДУЛЬ: СТИЛИЗОВАННЫЕ ЮВЕЛИРНЫЕ 3D-САМОЦВЕТЫ (СЕРДЕЧКО, ДРУЗА, БРИЛЛИАНТ)
+// МОДУЛЬ: СТИЛИЗОВАННЫЕ ЮВЕЛИРНЫЕ 3D-САМОЦВЕТЫ (БЕЗ АВТО-ПРОЛИСТЫВАНИЯ)
 // Файл: wwwroot/js/gems3d.js
 // =========================================================================
 
 let gems3DInstances = [];
 let gems3DLoopStarted = false;
+let isSyncingGemsInternal = false;
 
 const GEMS_3D_CONFIG = [
     { id: 'green', title: 'Изумруд', eng: 'EMERALD', color: 0x10B981, deep: 0x064E3B, edge: 0x6EE7B7, shape: 'emerald' },
@@ -14,7 +15,6 @@ const GEMS_3D_CONFIG = [
     { id: 'pink', title: 'Морганит', eng: 'MORGANITE', color: 0xEC4899, deep: 0x831843, edge: 0xFBCFE8, shape: 'morganite' }
 ];
 
-// Создает один заостренный шестигранный кристалл кварца (для друзы Аметиста)
 function createQuartzSpire(radius, height) {
     const pts = [
         new THREE.Vector2(0.001, -height * 0.5),
@@ -25,7 +25,6 @@ function createQuartzSpire(radius, height) {
     return new THREE.LatheGeometry(pts, 6);
 }
 
-// Строит стилизованную 3D-модель каждого драгоценного камня
 function buildStylizedGemMesh(gem, bodyMat, coreMat, edgeMat) {
     const root = new THREE.Group();
 
@@ -36,14 +35,12 @@ function buildStylizedGemMesh(gem, bodyMat, coreMat, edgeMat) {
         mesh.scale.set(...scale);
         root.add(mesh);
 
-        // Внутреннее светящееся ядро для эффекта глубины самоцвета
         const inner = new THREE.Mesh(geom, coreMat);
         inner.position.set(...pos);
         inner.rotation.set(...rot);
         inner.scale.set(scale[0] * 0.55, scale[1] * 0.55, scale[2] * 0.55);
         root.add(inner);
 
-        // Четкая ювелирная подводка граней
         const edgesGeo = new THREE.EdgesGeometry(geom, 10);
         const edges = new THREE.LineSegments(edgesGeo, edgeMat);
         edges.position.set(...pos);
@@ -54,7 +51,6 @@ function buildStylizedGemMesh(gem, bodyMat, coreMat, edgeMat) {
 
     switch (gem.shape) {
         case 'morganite': {
-            // НАСТОЯЩЕЕ ГРАНЕНОЕ 3D-СЕРДЕЧКО (Heart-Cut Gem)
             const x = 0, y = 0;
             const heartShape = new THREE.Shape();
             heartShape.moveTo(x, y + 0.22);
@@ -68,11 +64,11 @@ function buildStylizedGemMesh(gem, bodyMat, coreMat, edgeMat) {
             const geom = new THREE.ExtrudeGeometry(heartShape, {
                 depth: 0.14,
                 bevelEnabled: true,
-                bevelSegments: 1, // 1 сегмент дает острые ювелирные грани вместо круглого мыла!
+                bevelSegments: 1,
                 steps: 1,
                 bevelSize: 0.16,
                 bevelThickness: 0.18,
-                curveSegments: 5  // Делает контур сердца граненым, как у кристалла
+                curveSegments: 5
             });
             geom.center();
             addPart(geom, [0, 0.02, 0], [0, 0, 0], [0.78, 0.78, 0.85]);
@@ -80,12 +76,11 @@ function buildStylizedGemMesh(gem, bodyMat, coreMat, edgeMat) {
         }
 
         case 'topaz': {
-            // КЛАССИЧЕСКАЯ БРИЛЛИАНТОВАЯ ОГРАНКА (Плоская площадка сверху + корона + острый низ)
             const pts = [
-                new THREE.Vector2(0.001, -0.58), // Острый шип снизу (калетта)
-                new THREE.Vector2(0.62, 0.14),  // Широкий поясок (рундист)
-                new THREE.Vector2(0.36, 0.44),  // Скошенная корона сверху
-                new THREE.Vector2(0.001, 0.44)   // Плоская верхняя площадка (table)
+                new THREE.Vector2(0.001, -0.58),
+                new THREE.Vector2(0.62, 0.14),
+                new THREE.Vector2(0.36, 0.44),
+                new THREE.Vector2(0.001, 0.44)
             ];
             const geom = new THREE.LatheGeometry(pts, 8);
             geom.center();
@@ -94,7 +89,6 @@ function buildStylizedGemMesh(gem, bodyMat, coreMat, edgeMat) {
         }
 
         case 'emerald': {
-            // СТУПЕНЧАТАЯ ИЗУМРУДНАЯ ОГРАНКА (Octagonal Step-Cut со скошенными фасками сверху и снизу)
             const pts = [
                 new THREE.Vector2(0.001, -0.56),
                 new THREE.Vector2(0.26, -0.56),
@@ -104,21 +98,20 @@ function buildStylizedGemMesh(gem, bodyMat, coreMat, edgeMat) {
                 new THREE.Vector2(0.001, 0.56)
             ];
             const geom = new THREE.LatheGeometry(pts, 8);
-            geom.scale(0.88, 1.0, 0.68); // Прямоугольный изумрудный профиль
-            geom.rotateY(Math.PI / 8);   // Поворачиваем плоской широкой гранью вперед
+            geom.scale(0.88, 1.0, 0.68);
+            geom.rotateY(Math.PI / 8);
             geom.center();
             addPart(geom, [0, 0.02, 0]);
             break;
         }
 
         case 'sapphire': {
-            // КОРОЛЕВСКИЙ КРИСТАЛЛ САПФИРА (Двойная ступенчатая пирамида с пояском)
             const pts = [
-                new THREE.Vector2(0.001, -0.68), // Нижнее острие
-                new THREE.Vector2(0.44, -0.16), // Нижний ярус граней
-                new THREE.Vector2(0.50, 0.00), // Центральный поясок
-                new THREE.Vector2(0.44, 0.16), // Верхний ярус граней
-                new THREE.Vector2(0.001, 0.68)  // Верхнее острие
+                new THREE.Vector2(0.001, -0.68),
+                new THREE.Vector2(0.44, -0.16),
+                new THREE.Vector2(0.50, 0.00),
+                new THREE.Vector2(0.44, 0.16),
+                new THREE.Vector2(0.001, 0.68)
             ];
             const geom = new THREE.LatheGeometry(pts, 6);
             geom.scale(0.88, 1.0, 0.72);
@@ -129,7 +122,6 @@ function buildStylizedGemMesh(gem, bodyMat, coreMat, edgeMat) {
 
         case 'amethyst':
         default: {
-            // НАСТОЯЩАЯ ДРУЗА АМЕТИСТА (Кластер из 3 сросшихся кристаллов кварца!)
             const mainSpire = createQuartzSpire(0.30, 1.08);
             const leftSpire = createQuartzSpire(0.22, 0.78);
             const rightSpire = createQuartzSpire(0.20, 0.72);
@@ -168,15 +160,15 @@ function createGemInstanceForWrap(wrap) {
     renderer.domElement.style.height = '108px';
     renderer.domElement.style.display = 'block';
 
-    oldCanvas.style.display = 'none';
-    wrap.insertBefore(renderer.domElement, oldCanvas);
+    // Полностью удаляем старый холст с его старыми слушателями из settings.js, чтобы они не листали тему!
+    oldCanvas.remove();
+    wrap.insertBefore(renderer.domElement, wrap.firstChild);
 
     const labelsContainer = document.createElement('div');
     labelsContainer.className = 'absolute inset-0 pointer-events-none overflow-hidden';
     labelsContainer.style.zIndex = '4';
     wrap.appendChild(labelsContainer);
 
-    // Ювелирный студийный свет: глубокие тени + контрастные грани без пересвета
     scene.add(new THREE.AmbientLight(0xffffff, 0.30));
 
     const keyLight = new THREE.DirectionalLight(0xffffff, 0.90);
@@ -191,7 +183,6 @@ function createGemInstanceForWrap(wrap) {
     const step = (Math.PI * 2) / GEMS_3D_CONFIG.length;
 
     GEMS_3D_CONFIG.forEach((gem, idx) => {
-        // Внешняя полупрозрачная оболочка самоцвета
         const bodyMat = new THREE.MeshPhongMaterial({
             color: gem.color,
             emissive: gem.deep,
@@ -203,14 +194,12 @@ function createGemInstanceForWrap(wrap) {
             opacity: 0.88
         });
 
-        // Внутреннее ядро для глубины камня
         const coreMat = new THREE.MeshBasicMaterial({
             color: gem.edge,
             transparent: true,
             opacity: 0.35
         });
 
-        // Четкая подсветка ювелирных граней
         const edgesMat = new THREE.LineBasicMaterial({
             color: gem.edge,
             transparent: true,
@@ -253,6 +242,7 @@ function createGemInstanceForWrap(wrap) {
     glCanvas.style.touchAction = 'none';
 
     glCanvas.addEventListener('pointerdown', e => {
+        if (e.button !== 0) return;
         instance.isDragging = true;
         instance.dragStartX = e.clientX;
         instance.dragMoved = 0;
@@ -275,41 +265,49 @@ function createGemInstanceForWrap(wrap) {
         if (instance.dragMoved < 6) {
             const rect = glCanvas.getBoundingClientRect();
             const relX = (e.clientX - rect.left) / rect.width;
-            if (relX < 0.38) triggerGemStep(-1);
-            else if (relX > 0.62) triggerGemStep(1);
+            if (relX < 0.38) userSelectGemByDelta(-1);
+            else if (relX > 0.62) userSelectGemByDelta(1);
         } else {
             const stepAngle = (Math.PI * 2) / GEMS_3D_CONFIG.length;
             const rawIdx = Math.round(-instance.targetAngle / stepAngle);
             const normIdx = ((rawIdx % GEMS_3D_CONFIG.length) + GEMS_3D_CONFIG.length) % GEMS_3D_CONFIG.length;
             const chosen = GEMS_3D_CONFIG[normIdx];
-            if (chosen) applyGemSelectionEverywhere(chosen.id);
+            if (chosen) userCommitGemTheme(chosen.id);
         }
     });
 
+    // Колесо мыши работает ТОЛЬКО при наведении прямо на 3D-холст и не скроллит страницу
     glCanvas.addEventListener('wheel', e => {
         e.preventDefault();
-        triggerGemStep(e.deltaY > 0 ? 1 : -1);
+        e.stopPropagation();
+        userSelectGemByDelta(e.deltaY > 0 ? 1 : -1);
     }, { passive: false });
 
     gems3DInstances.push(instance);
 }
 
-function triggerGemStep(dir) {
+function userSelectGemByDelta(dir) {
     const curTheme = (appState?.settings?.accentTheme || 'green');
     const norm = (curTheme === 'crimson' || curTheme === 'cyan') ? 'pink' : curTheme;
     const idx = Math.max(0, GEMS_3D_CONFIG.findIndex(g => g.id === norm));
     const nextIdx = (idx + dir + GEMS_3D_CONFIG.length) % GEMS_3D_CONFIG.length;
-    applyGemSelectionEverywhere(GEMS_3D_CONFIG[nextIdx].id);
+    userCommitGemTheme(GEMS_3D_CONFIG[nextIdx].id);
 }
 
-function applyGemSelectionEverywhere(themeId) {
-    if (typeof window.selectAccentTheme === 'function') {
-        window.selectAccentTheme(themeId);
+function userCommitGemTheme(themeId) {
+    if (isSyncingGemsInternal) return;
+    isSyncingGemsInternal = true;
+    try {
+        if (typeof window.selectAccentTheme === 'function') {
+            window.selectAccentTheme(themeId, false);
+        }
+        syncGems3DWithActiveTheme(themeId, false);
+        if (typeof syncReactor3DThemeAndState === 'function') {
+            syncReactor3DThemeAndState();
+        }
+    } finally {
+        isSyncingGemsInternal = false;
     }
-    if (typeof window.selectWizTheme === 'function') {
-        try { window.selectWizTheme(themeId); } catch { }
-    }
-    syncGems3DWithActiveTheme(themeId, false);
 }
 
 function initGems3DShowcase() {
@@ -319,17 +317,13 @@ function initGems3DShowcase() {
     const wraps = document.querySelectorAll('.gem-field-wrap');
     wraps.forEach(w => createGemInstanceForWrap(w));
 
-    ['selectAccentTheme', 'selectWizTheme'].forEach(fnName => {
-        if (typeof window[fnName] === 'function' && !window['_' + fnName + '_hooked']) {
-            const origFn = window[fnName];
-            window['_' + fnName + '_hooked'] = true;
-            window[fnName] = function (themeName, skipSave = false) {
-                origFn(themeName, skipSave);
-                syncGems3DWithActiveTheme(themeName, false);
-                if (typeof syncReactor3DThemeAndState === 'function') syncReactor3DThemeAndState();
-            };
-        }
-    });
+    // Перехватываем кнопки-стрелки cycleGemTheme / cycleWizGemTheme, чтобы они крутили 3D-карусель
+    window.cycleGemTheme = function (dir) {
+        userSelectGemByDelta(dir);
+    };
+    window.cycleWizGemTheme = function (dir) {
+        userSelectGemByDelta(dir);
+    };
 
     syncGems3DWithActiveTheme(appState?.settings?.accentTheme || 'green', true);
 
@@ -406,7 +400,6 @@ function animateGems3D() {
             const s = 0.45 + depthNorm * 0.52;
             item.group.scale.set(s, s, s);
 
-            // Плавное ювелирное вращение
             item.group.rotation.y += 0.011 + depthNorm * 0.011;
             item.group.rotation.x = 0.18 + Math.sin(now * 0.0015 + item.index) * 0.08;
 
