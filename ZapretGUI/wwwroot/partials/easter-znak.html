@@ -1,182 +1,245 @@
-﻿<!-- ОВЕРЛЕЙ ПАСХАЛКИ: TOXI$ & ДОРА - ЗНАК -->
-<div id="znak-easter-overlay" class="fixed inset-0 z-[9999] hidden flex-col items-center justify-center overflow-hidden bg-[#060609]/95 backdrop-blur-2xl select-none">
+﻿<!-- ОВЕРЛЕЙ ПАСХАЛКИ: TOXI$ & ДОРА - ЗНАК (PRO VERSION) -->
+<div id="znak-easter-overlay" class="fixed inset-0 z-[9999] hidden flex-col items-center justify-center overflow-hidden bg-[var(--bg-dark)] backdrop-blur-2xl select-none">
 
-    <!-- Анимированные неоновые сферы на фоне -->
-    <div class="znak-bg-orb znak-orb-pink"></div>
-    <div class="znak-bg-orb znak-orb-purple"></div>
-    <div class="znak-bg-orb znak-orb-cyan"></div>
+    <!-- Адаптивные неоновые сферы -->
+    <div id="znak-orb-1" class="znak-bg-orb znak-orb-1"></div>
+    <div id="znak-orb-2" class="znak-bg-orb znak-orb-2"></div>
+    <div id="znak-orb-3" class="znak-bg-orb znak-orb-3"></div>
     <div class="znak-grid-bg"></div>
 
-    <!-- Кнопка закрытия и кнопка режима записи таймингов (Beat-Tapper) -->
-    <div class="absolute top-5 right-6 z-50 flex items-center gap-2.5">
-        <button id="znak-tapper-btn" onclick="toggleZnakTapperMode()" class="px-3 py-1.5 rounded-lg bg-[#14141C]/80 hover:bg-[#222230] border border-[#2E2E3E] text-[11px] font-mono text-[#9999AA] hover:text-white transition flex items-center gap-1.5 cursor-pointer backdrop-blur-md" title="Режим записи таймингов клавишей ПРОБЕЛ">
-            <span class="w-2 h-2 rounded-full bg-[#EC4899]" id="znak-tapper-dot"></span>
-            <span id="znak-tapper-label">Запись таймингов (Space)</span>
-        </button>
-        <button onclick="closeZnakEasterEgg()" class="w-9 h-9 rounded-full bg-[#14141C]/80 hover:bg-[#D13438] border border-[#2E2E3E] hover:border-[#F44336] text-[#AAAAAA] hover:text-white transition flex items-center justify-center cursor-pointer backdrop-blur-md" title="Выйти из пасхалки (Esc)">
-            ✕
+    <div class="absolute top-4 right-5 z-50 flex items-center gap-2">
+        <button onclick="closeZnakEasterEgg()" class="w-8 h-8 rounded-lg bg-[var(--card-bg)] hover:bg-[var(--danger-color)] border border-[var(--border-color)] text-[#AAAAAA] hover:text-white transition flex items-center justify-center cursor-pointer" title="Закрыть (Esc)">
+            <span class="mdl-icon text-xs">&#xE711;</span>
         </button>
     </div>
 
-    <!-- АУДИО (Положи файл znak.mp3 в папку wwwroot/assets/ или wwwroot/) -->
-    <audio id="znak-audio" src="assets/znak.mp3" preload="auto"></audio>
+    <audio id="znak-audio" src="assets/znak.mp3" preload="auto" crossorigin="anonymous"></audio>
 
-    <!-- 1. МУЗЫКАЛЬНЫЙ ПЛЕЕР (В центре -> Сворачивается в угол при Play) -->
+    <!-- МУЗЫКАЛЬНЫЙ ПЛЕЕР -->
     <div id="znak-player-card" class="znak-player-center">
         <div class="znak-cover-wrap">
             <div class="znak-cover-art">
-                <span class="text-3xl filter drop-shadow-[0_0_12px_rgba(236,72,153,0.8)]">🐾</span>
-                <div class="znak-cover-glow"></div>
+                <span class="mdl-icon text-4xl text-white drop-shadow-[0_0_12px_var(--accent-glow)]">&#xE90A;</span>
             </div>
-            <div class="znak-vinyl-disc"></div>
         </div>
 
-        <div class="znak-track-info">
-            <div class="flex items-center gap-2">
-                <span class="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-[#EC4899]/20 text-[#F472B6] border border-[#EC4899]/40">SECRET TRACK</span>
+        <div class="znak-track-info flex-1 min-w-0">
+            <div class="flex items-center gap-2 justify-center znak-meta-row">
+                <span class="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold text-brand" style="background: var(--accent-soft); border: 1px solid var(--accent-color);">148 BPM • SYNC</span>
                 <span class="text-[10px] font-mono text-[#888899]" id="znak-time-code">00:00</span>
             </div>
-            <div class="text-xl font-black tracking-tight text-white mt-0.5 leading-tight">ЗНАК</div>
-            <div class="text-xs font-medium text-[#A1A1AA]">Toxi$, Дора</div>
+            <div class="text-xl font-black tracking-tight text-white mt-0.5 leading-tight truncate">ЗНАК</div>
+            <div class="text-xs font-medium text-[#888888] truncate">Toxi$, Дора</div>
         </div>
 
-        <!-- Прогресс-бар трека -->
         <div class="znak-progress-wrap" onclick="seekZnakAudio(event)">
             <div id="znak-progress-fill" class="znak-progress-bar"></div>
         </div>
 
-        <!-- Кнопки управления -->
-        <div class="flex items-center justify-center gap-4 mt-1">
-            <button onclick="restartZnakAudio()" class="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center text-xs text-[#CCCCCC] hover:text-white transition cursor-pointer" title="Сначала">
-                ⏮
+        <div class="flex items-center justify-center gap-2.5 shrink-0">
+            <button onclick="restartZnakAudio()" class="w-8 h-8 rounded-lg bg-[#1E1E24] hover:bg-[#2A2A32] border border-[#2E2E36] flex items-center justify-center text-xs text-[#CCCCCC] hover:text-white transition cursor-pointer" title="Сначала">
+                <span class="mdl-icon text-[11px]">&#xE892;</span>
             </button>
-            <button id="znak-play-btn" onclick="toggleZnakPlay()" class="w-14 h-14 rounded-full bg-gradient-to-tr from-[#EC4899] to-[#8B5CF6] hover:scale-105 active:scale-95 text-white shadow-[0_0_30px_rgba(236,72,153,0.55)] flex items-center justify-center text-lg font-bold transition cursor-pointer">
-                ▶
+            <button id="znak-play-btn" onclick="toggleZnakPlay()" class="w-12 h-12 rounded-xl hover:scale-105 active:scale-95 text-white flex items-center justify-center transition cursor-pointer" style="background: var(--accent-color); box-shadow: 0 0 25px var(--accent-glow);">
+                <span id="znak-play-icon" class="mdl-icon text-base">&#xE768;</span>
             </button>
         </div>
     </div>
 
-    <!-- 2. ЦЕНТРАЛЬНАЯ СЦЕНА ДЛЯ MOTION-ДИЗАЙНА И ИНТЕРФЕЙСОВ -->
-    <div id="znak-motion-stage" class="relative w-full h-full flex flex-col items-center justify-center pointer-events-none px-8">
+    <!-- АДАПТИВНАЯ ЦЕНТРАЛЬНАЯ СЦЕНА -->
+    <div id="znak-motion-stage" class="znak-responsive-stage pointer-events-none">
 
-        <!-- Слой всплывающих UI-интерфейсов под смысл строчек -->
-        <div id="znak-ui-widgets-layer" class="relative w-full max-w-[680px] h-[270px] flex items-center justify-center mb-4">
+        <!-- СЛОЙ ИНТЕРФЕЙСОВ (АБСОЛЮТНО СВЕРХУ) -->
+        <div id="znak-ui-widgets-layer" class="znak-widgets-viewport">
 
-            <!-- Виджет 1: Концерт / Выход на сцену и фанаты -->
+            <!-- Виджет 1: Выход на сцену -->
             <div id="zui-stage-pass" class="znak-widget-card hidden">
-                <div class="w-72 rounded-2xl bg-[#12121A]/90 border border-[#A855F7]/50 p-4 shadow-[0_0_40px_rgba(168,85,247,0.25)] backdrop-blur-xl">
-                    <div class="flex items-center justify-between border-b border-white/10 pb-2.5 mb-3">
-                        <span class="text-[10px] font-mono font-bold text-[#C084FC] tracking-wider">⚡ BACKSTAGE LIVE PASS</span>
-                        <span class="px-2 py-0.5 rounded-full bg-[#EF4444]/20 border border-[#EF4444] text-[#F87171] text-[9px] font-mono font-bold animate-pulse">● ON STAGE</span>
+                <div class="znak-ui-panel">
+                    <div class="flex items-center justify-between border-b border-[#2A2A2A] pb-2.5 mb-3">
+                        <div class="flex items-center gap-2">
+                            <span class="mdl-icon text-xs text-brand">&#xE767;</span>
+                            <span class="text-[10px] font-mono font-bold text-brand tracking-wider">STAGE TELEMETRY</span>
+                        </div>
+                        <span id="zui-stage-badge" class="px-2 py-0.5 rounded bg-[#1A1A1A] border border-[#333] text-[#AAAAAA] text-[9px] font-mono font-bold transition-all">BACKSTAGE</span>
                     </div>
-                    <div class="flex items-center justify-between">
+                    <div class="flex items-center justify-between gap-4">
                         <div>
-                            <div class="text-xs text-[#9CA3AF]">Локация</div>
-                            <div class="text-sm font-bold text-white">MAIN ARENA • VIP</div>
+                            <div class="text-[11px] text-[#888888]">Локация</div>
+                            <div id="zui-stage-loc" class="text-sm font-bold text-white transition-all">Выход к микрофону...</div>
                         </div>
                         <div class="text-right">
-                            <div class="text-xs text-[#9CA3AF]">Фанаты в зале</div>
-                            <div class="text-base font-mono font-extrabold text-[#4ADE80]">9,999+ 🔥</div>
+                            <div class="text-[11px] text-[#888888]">Активность зала</div>
+                            <div id="zui-stage-fans" class="text-base font-mono font-extrabold text-white transition-all">Ожидание</div>
                         </div>
                     </div>
-                    <!-- Эквалайзер толпы -->
-                    <div class="mt-3 flex items-end justify-between gap-1 h-7 pt-1">
-                        <div class="w-full bg-[#A855F7] rounded-t animate-[bounce_0.5s_infinite] h-full"></div>
-                        <div class="w-full bg-[#EC4899] rounded-t animate-[bounce_0.7s_infinite] h-4"></div>
-                        <div class="w-full bg-[#8B5CF6] rounded-t animate-[bounce_0.4s_infinite] h-6"></div>
-                        <div class="w-full bg-[#EC4899] rounded-t animate-[bounce_0.6s_infinite] h-3"></div>
-                        <div class="w-full bg-[#A855F7] rounded-t animate-[bounce_0.55s_infinite] h-7"></div>
-                        <div class="w-full bg-[#60A5FA] rounded-t animate-[bounce_0.45s_infinite] h-5"></div>
+                    <div id="zui-stage-bars" class="mt-3 flex items-end justify-between gap-1.5 h-8 pt-1">
+                        <div class="znak-eq-bar w-full rounded-t bg-[var(--accent-color)] h-2 transition-all duration-75"></div>
+                        <div class="znak-eq-bar w-full rounded-t bg-[var(--accent-light)] h-3 transition-all duration-75"></div>
+                        <div class="znak-eq-bar w-full rounded-t bg-[var(--accent-color)] h-4 transition-all duration-75"></div>
+                        <div class="znak-eq-bar w-full rounded-t bg-[var(--accent-light)] h-2 transition-all duration-75"></div>
+                        <div class="znak-eq-bar w-full rounded-t bg-[var(--accent-color)] h-5 transition-all duration-75"></div>
+                        <div class="znak-eq-bar w-full rounded-t bg-[var(--accent-light)] h-3 transition-all duration-75"></div>
+                        <div class="znak-eq-bar w-full rounded-t bg-[var(--accent-color)] h-4 transition-all duration-75"></div>
+                        <div class="znak-eq-bar w-full rounded-t bg-[var(--accent-light)] h-2 transition-all duration-75"></div>
                     </div>
                 </div>
             </div>
 
-            <!-- Виджет 2: Чат с Неформалкой / Отказ на ночь -->
+            <!-- Виджет 2: Мессенджер (Появление сообщений) -->
             <div id="zui-altgirl-chat" class="znak-widget-card hidden">
-                <div class="w-80 rounded-2xl bg-[#14141D]/90 border border-[#EC4899]/50 p-3.5 shadow-[0_0_40px_rgba(236,72,153,0.25)] backdrop-blur-xl flex flex-col gap-2.5">
-                    <div class="flex items-center justify-between border-b border-white/10 pb-2">
-                        <div class="flex items-center gap-2">
-                            <div class="w-7 h-7 rounded-full bg-gradient-to-br from-[#EC4899] to-[#111] flex items-center justify-center text-xs">🖤</div>
+                <div class="znak-ui-panel flex flex-col gap-3 overflow-hidden">
+                    <div class="flex items-center justify-between border-b border-[#2A2A2A] pb-2 z-10 bg-[var(--card-bg)]">
+                        <div class="flex items-center gap-2.5">
+                            <div class="w-7 h-7 rounded-lg flex items-center justify-center border border-[#363636] bg-[#1E1E1E]">
+                                <span class="mdl-icon text-xs text-brand">&#xE77B;</span>
+                            </div>
                             <div>
-                                <div class="text-xs font-bold text-white">Неформалка_2007</div>
-                                <div class="text-[9px] text-[#F472B6] font-mono">печатает сообщение...</div>
+                                <div class="text-xs font-bold text-white">Неформалка</div>
+                                <div id="zui-chat-status" class="text-[9px] text-[#888888] font-mono">ожидание...</div>
                             </div>
                         </div>
-                        <span class="px-2 py-0.5 rounded bg-[#8B5CF6]/20 border border-[#8B5CF6] text-[#C4B5FD] text-[9px] font-mono font-bold">СТАТУС: ЛЕГА 👑</span>
+                        <span id="zui-chat-rank" class="px-2 py-0.5 rounded text-[9px] font-mono font-bold bg-[#1E1E1E] border border-[#333333] text-[#999999] transition-all">USER</span>
                     </div>
-                    <div class="self-start max-w-[85%] rounded-2xl rounded-tl-sm bg-[#232332] px-3 py-1.5 text-xs text-[#E4E4E7]">
-                        Ты такой грустный на сцене... ты эмо?? 🥺🖤
-                    </div>
-                    <div class="self-end max-w-[85%] rounded-2xl rounded-tr-sm bg-gradient-to-r from-[#8B5CF6] to-[#EC4899] px-3 py-1.5 text-xs font-semibold text-white">
-                        Чё? Нет, но эту ночь я проведу не с тобой ✋
-                    </div>
-                </div>
-            </div>
 
-            <!-- Виджет 3: Поиск в параллелях (Мультивселенная) -->
-            <div id="zui-parallel-search" class="znak-widget-card hidden">
-                <div class="w-80 rounded-2xl bg-[#0F172A]/90 border border-[#38BDF8]/50 p-4 shadow-[0_0_45px_rgba(56,189,248,0.25)] backdrop-blur-xl">
-                    <div class="flex items-center justify-between mb-2">
-                        <span class="text-[10px] font-mono font-bold text-[#38BDF8]">🌌 MULTIVERSE SCANNER v4.1</span>
-                        <span class="text-[10px] font-mono text-[#7DD3FC]">ПАРАЛЛЕЛЬ #777</span>
-                    </div>
-                    <div class="p-2.5 rounded-xl bg-black/40 border border-white/10 flex items-center gap-3">
-                        <div class="w-10 h-10 rounded-full border-2 border-dashed border-[#38BDF8] flex items-center justify-center animate-spin text-sm">✨</div>
-                        <div class="flex-1">
-                            <div class="text-xs font-bold text-white">Поиск: «Та самая дура»</div>
-                            <div class="text-[10px] font-mono text-[#4ADE80] mt-0.5">✓ СОВПАДЕНИЕ: 100% LOVE</div>
+                    <!-- Контейнер чата (Без absolute, правильный Flex) -->
+                    <div id="zui-chat-container" class="flex flex-col gap-2 w-full">
+                        <div id="zui-chat-m1" class="chat-bubble left">
+                            Какой грустный взгляд... ты эмо?
+                        </div>
+                        <div id="zui-chat-m2" class="chat-bubble right" style="background: var(--accent-color);">
+                            Точно знаю, что я лега.
+                        </div>
+                        <div id="zui-chat-m3" class="chat-bubble right" style="background: var(--accent-color);">
+                            Но эту ночь я проведу не с тобой.
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Виджет 4: Кардиограмма «Тобою болею, всем сердцем» -->
+            <!-- Виджет 3: 3D Поиск параллелей -->
+            <div id="zui-parallel-search" class="znak-widget-card hidden w-full max-w-[400px]">
+                <div class="znak-ui-panel overflow-hidden relative min-h-[160px] flex items-center justify-center">
+                    <div class="absolute top-3 left-4 right-4 flex items-center justify-between z-10">
+                        <div class="flex items-center gap-2">
+                            <span class="mdl-icon text-xs text-brand">&#xE701;</span>
+                            <span class="text-[10px] font-mono font-bold text-brand">MULTIVERSE ROUTER</span>
+                        </div>
+                        <span id="zui-para-node" class="text-[10px] font-mono text-[#888888]">SCANNING...</span>
+                    </div>
+
+                    <!-- 3D Плоскости -->
+                    <div id="zui-3d-planes" class="relative w-full h-full flex items-center justify-center transform-style-3d">
+                        <div class="para-plane para-p1">PARALLEL #312</div>
+                        <div class="para-plane para-p2">PARALLEL #509</div>
+                        <div class="para-plane para-p3">PARALLEL #777</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Виджет 4: Радар-Карта "Найду тебя дуру" -->
+            <div id="zui-map-tracker" class="znak-widget-card hidden w-full max-w-[360px]">
+                <div class="znak-ui-panel relative overflow-hidden p-0 h-[180px] bg-[#0A0A0C]">
+                    <!-- Сетка и сканирующий луч -->
+                    <div class="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.08)_1px,transparent_1px)] bg-[size:24px_24px]"></div>
+                    <div id="zui-map-sweep" class="absolute inset-0 map-radar-sweep"></div>
+
+                    <!-- Прицел в центре -->
+                    <div class="absolute top-1/2 left-1/2 w-12 h-12 border border-[var(--accent-color)] rounded-full -translate-x-1/2 -translate-y-1/2 flex items-center justify-center">
+                        <div class="w-1.5 h-1.5 bg-[var(--accent-light)] rounded-full shadow-[0_0_10px_var(--accent-glow)]"></div>
+                    </div>
+
+                    <!-- Найденная цель -->
+                    <div id="zui-map-target" class="absolute top-[40%] left-[65%] w-3 h-3 bg-red-500 rounded-full opacity-0 shadow-[0_0_15px_#ef4444] transition-opacity duration-300">
+                        <div class="absolute inset-0 bg-red-500 rounded-full animate-ping"></div>
+                        <div class="absolute -top-5 -left-8 w-20 text-center text-[9px] font-mono text-white bg-black/80 rounded border border-red-500/50">TARGET: LOVE</div>
+                    </div>
+
+                    <div class="absolute top-3 left-4 text-[10px] font-mono text-brand font-bold">TARGETING SYSTEM</div>
+                </div>
+            </div>
+
+            <!-- Виджет 5: Кардиомонитор -->
             <div id="zui-heart-ecg" class="znak-widget-card hidden">
-                <div class="w-72 rounded-2xl bg-[#1F0D18]/90 border border-[#F43F5E]/60 p-4 shadow-[0_0_50px_rgba(244,63,94,0.35)] backdrop-blur-xl text-center">
-                    <div class="flex items-center justify-between text-[10px] font-mono text-[#FDA4AF] mb-1">
-                        <span>HEART_MONITOR.SYS</span>
-                        <span class="font-bold text-[#F43F5E] animate-ping">❤ 175 BPM</span>
+                <div id="zui-heart-panel" class="znak-ui-panel text-center transition-transform">
+                    <div class="flex items-center justify-between text-[10px] font-mono text-[#888888] border-b border-[#2A2A2A] pb-2 mb-2.5">
+                        <span class="flex items-center gap-1.5"><span class="mdl-icon text-xs text-brand">&#xE95E;</span> BIOMETRIC.SYS</span>
+                        <span id="zui-ecg-bpm" class="font-bold text-brand">110 BPM</span>
                     </div>
-                    <div class="text-4xl my-1 animate-bounce">❤️‍🔥</div>
-                    <div class="text-xs font-bold text-white">Диагноз: Тобою болею (You)</div>
-                    <div class="mt-2 h-1.5 w-full rounded-full bg-black/50 overflow-hidden">
-                        <div class="h-full w-full bg-gradient-to-r from-[#F43F5E] via-[#EC4899] to-[#F43F5E] animate-pulse"></div>
-                    </div>
+                    <svg class="w-full h-11 stroke-[var(--accent-light)] fill-none overflow-hidden" viewBox="0 0 200 40" stroke-width="2.2">
+                        <!-- Бесконечно ползущая линия кардиограммы -->
+                        <polyline id="zui-ecg-line" class="ecg-line transition-colors" points="0,20 45,20 55,8 65,34 75,4 85,36 95,18 110,20 150,20 160,8 170,34 180,4 190,36 200,20" />
+                    </svg>
+                    <div id="zui-ecg-status" class="text-xs font-bold text-white mt-1">Синдром: Тобою болею</div>
                 </div>
             </div>
 
-            <!-- Виджет 5: Системное окно «БРАК» -->
+            <!-- Виджет 6: Брак (С печатью) -->
             <div id="zui-marriage-modal" class="znak-widget-card hidden">
-                <div class="w-80 rounded-2xl bg-[#161622]/95 border-2 border-[#FBBF24]/70 p-4 shadow-[0_0_50px_rgba(251,191,36,0.3)] backdrop-blur-xl text-center">
-                    <div class="text-2xl mb-1">💍</div>
-                    <div class="text-xs font-mono uppercase tracking-widest text-[#FBBF24]">Госуслуги • Любовь</div>
-                    <div class="text-sm font-extrabold text-white mt-1">Заключить официальный брак?</div>
-                    <div class="flex items-center justify-center gap-2 mt-3">
-                        <span class="px-4 py-1.5 rounded-lg bg-[#FBBF24] text-black font-extrabold text-xs shadow">ДА, КОНЕЧНО ✓</span>
-                        <span class="px-3 py-1.5 rounded-lg bg-white/10 text-[#999] text-xs line-through">Отмена</span>
+                <div class="znak-ui-panel text-center relative overflow-hidden" style="border: 2px solid var(--accent-light);">
+                    <div class="flex items-center justify-center gap-1.5 text-[10px] font-mono uppercase tracking-widest text-brand mb-1">
+                        <span class="mdl-icon text-xs">&#xE8D7;</span>
+                        <span>PROTOCOL • MARRIAGE</span>
+                    </div>
+                    <div class="text-sm font-extrabold text-white mt-2">Формирование союза...</div>
+
+                    <div class="flex items-center justify-center gap-2.5 mt-4 pb-1">
+                        <span id="zui-marry-yes" class="px-3.5 py-1.5 rounded-lg bg-[#1F1F24] border border-[#333] text-[#AAAAAA] font-bold text-xs transition-all flex items-center gap-1.5">
+                            <span class="mdl-icon text-[10px]">&#xE73E;</span>
+                            <span>ПОДТВЕРДИТЬ</span>
+                        </span>
+                    </div>
+
+                    <!-- Печать ОДОБРЕНО -->
+                    <div id="zui-marry-stamp" class="absolute inset-0 flex items-center justify-center opacity-0 pointer-events-none">
+                        <div class="border-4 border-[#EF4444] text-[#EF4444] text-3xl font-black px-4 py-1 rounded-xl shadow-[0_0_20px_rgba(239,68,68,0.5)] bg-[#2A1215]/80 backdrop-blur-sm">ОДОБРЕНО</div>
                     </div>
                 </div>
             </div>
 
-            <!-- Виджет 6: «КИСА, ПОДАЙ МНЕ ЗНАК» (с котиком Зэппи!) -->
+            <!-- Виджет 7: ЗНАК 1 (Радар Зэппи) -->
             <div id="zui-kitty-sign" class="znak-widget-card hidden">
-                <div class="w-80 rounded-2xl bg-gradient-to-b from-[#2A1228]/95 to-[#12121A]/95 border-2 border-[#EC4899] p-4 shadow-[0_0_65px_rgba(236,72,153,0.5)] backdrop-blur-xl text-center">
-                    <div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#EC4899]/20 border border-[#EC4899] text-[#F472B6] text-[10px] font-mono font-bold mb-2">
-                        🐾 INCOMING SIGNAL FROM ZAPPY
+                <div class="znak-ui-panel text-center">
+                    <div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[10px] font-mono font-bold mb-2 text-brand" style="background: var(--accent-soft); border: 1px solid var(--accent-color);">
+                        <span class="mdl-icon text-[10px]">&#xE704;</span>
+                        <span>ZAPPY SIGNAL RADAR</span>
                     </div>
-                    <div class="text-4xl my-1">🐱✨🪧</div>
-                    <div class="text-base font-black text-white tracking-wide">СИГНАЛ ПОЛУЧЕН!</div>
-                    <div class="text-[11px] text-[#FBCFE8] mt-0.5">Котик Зэппи подаёт тебе знак на частоте 443 Гц</div>
+                    <div class="my-1.5 flex items-center justify-center">
+                        <div id="zui-sign-beacon" class="w-12 h-12 rounded-xl bg-[#141418] border border-[#333] flex items-center justify-center transition-all">
+                            <span class="mdl-icon text-xl text-brand">&#xE945;</span>
+                        </div>
+                    </div>
+                    <div id="zui-sign-title" class="text-sm font-black text-white tracking-wide">ОЖИДАНИЕ СИГНАЛА...</div>
+                </div>
+            </div>
+
+            <!-- Виджет 8: ЗНАК 2 (Неоновая вывеска) -->
+            <div id="zui-neon-sign" class="znak-widget-card hidden">
+                <div class="znak-ui-panel flex items-center justify-center min-h-[140px] bg-[#050505]">
+                    <div id="zui-neon-text" class="text-5xl font-black text-[#222] transition-colors duration-100">ЗНАК</div>
+                </div>
+            </div>
+
+            <!-- Виджет 9: ЗНАК 3 (Успешное соединение вместо ошибки) -->
+            <div id="zui-warning-sign" class="znak-widget-card hidden">
+                <div class="w-[340px] rounded-xl bg-[var(--card-bg)] border-2 border-[var(--accent-light)] p-6 shadow-[0_0_60px_var(--accent-glow)] text-center animate-[pulse_2s_infinite]">
+                    <div class="w-16 h-16 mx-auto mb-3 rounded-full bg-[var(--accent-soft)] border border-[var(--accent-light)] flex items-center justify-center shadow-[0_0_20px_var(--accent-glow)]">
+                        <span class="mdl-icon text-4xl text-brand">&#xE73E;</span>
+                    </div>
+                    <div class="text-2xl font-black text-brand tracking-widest uppercase">CONNECTION SECURED</div>
+                    <div class="text-xs text-[#E4E4E7] mt-1 font-mono tracking-widest">СИГНАЛ ПРИНЯТ</div>
                 </div>
             </div>
 
         </div>
 
-        <!-- 3. КИНЕТИЧЕСКАЯ ТИПОГРАФИКА (ТЕКСТ ПЕСНИ ПО ЦЕНТРУ) -->
-        <div class="text-center max-w-4xl min-h-[110px] flex flex-col items-center justify-center">
-            <div id="znak-lyric-sub" class="text-xs font-mono uppercase tracking-[0.25em] text-[#F472B6] mb-2 opacity-80"></div>
-            <div id="znak-lyric-main" class="text-3xl md:text-5xl font-black tracking-tight text-white leading-tight drop-shadow-[0_4px_24px_rgba(0,0,0,0.9)]">
-                Нажми ▶, чтобы запустить сцену
+        <!-- 3. СЛОЙ ТЕКСТА ПЕСНИ (АБСОЛЮТНО СНИЗУ) -->
+        <div class="znak-lyrics-viewport text-center flex flex-col items-center justify-center">
+            <div id="znak-lyric-sub" class="text-[11px] font-mono uppercase tracking-[0.22em] mb-2.5 opacity-80 text-brand"></div>
+            <div id="znak-lyric-main" class="znak-lyric-line">
+                <span class="znak-word revealed">Нажми</span>
+                <span class="znak-word active">Play</span>
+                <span class="znak-word">для</span>
+                <span class="znak-word">старта</span>
             </div>
         </div>
     </div>
