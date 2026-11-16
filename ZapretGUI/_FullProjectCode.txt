@@ -3368,14 +3368,7 @@ namespace ZapretGUI.Core
             using (var fLogo = new Font("Segoe UI", S(15f), FontStyle.Bold, GraphicsUnit.Pixel))
             using (var bLogo = new SolidBrush(accentLight))
             {
-                UIHelper.DrawPixelZappyHead(
-                g,
-                offsetX: logoRect.X + S(4f),
-                offsetY: logoRect.Y + S(4f),
-                pixelScale: S(1.5f),
-                isRunning: anyRun,
-                accentLight: accentLight,
-                accentBase: accent);
+                g.DrawString("Z", fLogo, bLogo, logoRect, sfCenter);
             }
 
             using (var fTitle = new Font("Segoe UI", S(13.5f), FontStyle.Bold, GraphicsUnit.Pixel))
@@ -3631,8 +3624,7 @@ namespace ZapretGUI.Core
             var theme = (themeOverride ?? SettingsManager.Current.AccentTheme ?? "green").ToLowerInvariant();
             if (theme is "crimson" or "cyan") theme = "pink";
 
-            // Новый ключ v2 гарантирует замену старой иконки с буквой Z на Пиксельного Зэппи
-            var cacheKey = $"zappy8bit_v2_{theme}_{(isRunning ? "on" : "off")}";
+            var cacheKey = $"{theme}_{(isRunning ? "on" : "off")}";
 
             if (_iconCache.TryGetValue(cacheKey, out var cached) && File.Exists(cached.icoFilePath))
                 return cached;
@@ -3688,172 +3680,44 @@ namespace ZapretGUI.Core
             var bmp = new Bitmap(size, size);
             using var g = Graphics.FromImage(bmp);
             g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
             g.Clear(Color.Transparent);
 
-            var accentLight = ColorTranslator.FromHtml(GetAccentHex(light: true, theme));
-            var accentBase = ColorTranslator.FromHtml(GetAccentHex(light: false, theme));
+            var accentColor = ColorTranslator.FromHtml(GetAccentHex(light: true, theme));
+            var borderColor = isRunning ? accentColor : ColorTranslator.FromHtml("#3A3A3A");
+            var bgTop = isRunning ? ColorTranslator.FromHtml(GetAccentDarkBgHex(theme)) : ColorTranslator.FromHtml("#18181B");
+            var bgBottom = ColorTranslator.FromHtml("#0A0A0C");
 
-            // 1. Фон: тёмный неоновый щит со скруглёнными углами
-            var bgTop = isRunning
-                ? ColorTranslator.FromHtml(GetAccentDarkBgHex(theme))
-                : ColorTranslator.FromHtml("#16161A");
-            var bgBottom = ColorTranslator.FromHtml("#08080B");
-
-            var shieldRect = new Rectangle(4, 4, size - 8, size - 8);
-            using var shieldPath = CreateRoundedRectPath(shieldRect, 14);
-
+            using var path = CreateRoundedRectPath(new Rectangle(4, 4, size - 8, size - 8), 14);
             using (var bgBrush = new LinearGradientBrush(new Rectangle(0, 0, size, size), bgTop, bgBottom, LinearGradientMode.Vertical))
             {
-                g.FillPath(bgBrush, shieldPath);
+                g.FillPath(bgBrush, path);
             }
 
-            // 2. Свечение и контур щита
-            if (isRunning)
+            using (var pen = new Pen(borderColor, 3.2f))
             {
-                using (var outerGlowPen = new Pen(Color.FromArgb(65, accentLight), 6.5f))
-                {
-                    g.DrawPath(outerGlowPen, shieldPath);
-                }
-                using (var borderPen = new Pen(accentLight, 2.8f))
-                {
-                    g.DrawPath(borderPen, shieldPath);
-                }
-            }
-            else
-            {
-                using (var borderPen = new Pen(ColorTranslator.FromHtml("#2E2E36"), 2.5f))
-                {
-                    g.DrawPath(borderPen, shieldPath);
-                }
+                g.DrawPath(pen, path);
             }
 
-            // 3. Отрисовка пиксельной головы котика Зэппи (сетка 16x16, шаг 3px -> 48x48, отступ 8px)
-            DrawPixelZappyHead(g, offsetX: 8, offsetY: 8, pixelScale: 3, isRunning, accentLight, accentBase);
+            using var font = new Font("Segoe UI", 28f, FontStyle.Bold, GraphicsUnit.Pixel);
+            var textBrush = isRunning ? new SolidBrush(accentColor) : new SolidBrush(Color.White);
+            using (textBrush)
+            {
+                var sf = new StringFormat
+                {
+                    Alignment = StringAlignment.Center,
+                    LineAlignment = StringAlignment.Center
+                };
+                g.DrawString("Z", font, textBrush, new RectangleF(0, 1, size, size), sf);
+            }
+
+            var dotColor = isRunning ? accentColor : GetErrorColor();
+            using var dotBgBrush = new SolidBrush(ColorTranslator.FromHtml("#0A0A0C"));
+            using var dotBrush = new SolidBrush(dotColor);
+            g.FillEllipse(dotBgBrush, size - 20, size - 20, 16, 16);
+            g.FillEllipse(dotBrush, size - 17, size - 17, 10, 10);
 
             return bmp;
-        }
-
-        public static void DrawPixelZappyHead(
-            Graphics g,
-            float offsetX,
-            float offsetY,
-            float pixelScale,
-            bool isRunning,
-            Color accentLight,
-            Color accentBase)
-        {
-            var oldSmooth = g.SmoothingMode;
-            var oldOffset = g.PixelOffsetMode;
-            g.SmoothingMode = SmoothingMode.None;
-            g.PixelOffsetMode = PixelOffsetMode.Half;
-
-            // Матрица 16x16:
-            // '.' — прозрачно
-            // 'O' — контур силуэта головы и острых ушек
-            // 'B' — тёмный мех головы
-            // 'I' — внутренняя часть ушек
-            // 'N' — пиксельный носик
-            string[] catHeadGrid =
-            [
-                "..O..........O..",
-                ".OOO........OOO.",
-                ".OIBO......OBIO.",
-                ".OIIBOOOOOOBIIO.",
-                ".OBBBBBBBBBBBBO.",
-                "OBBBBBBBBBBBBBBO",
-                "OBBBBBBBBBBBBBBO",
-                "OBBBBBBBBBBBBBBO",
-                "OBBBBBBBBBBBBBBO",
-                "OBBBBBBBBBBBBBBO",
-                "OBBBBBBBBBBBBBBO",
-                "OBBBBBBBBBBBBBBO",
-                ".OBBBBBNNBBBBBO.",
-                "..OBBBBBBBBBBO..",
-                "...OOOOOOOOOO...",
-                "................"
-            ];
-
-            Color bodyFill = isRunning
-                ? ColorTranslator.FromHtml("#0D0D12")
-                : ColorTranslator.FromHtml("#121217");
-
-            Color outlineColor = isRunning
-                ? Color.FromArgb(200, accentBase.R, accentBase.G, accentBase.B)
-                : ColorTranslator.FromHtml("#2C2C35");
-
-            Color earInnerColor = isRunning
-                ? Color.FromArgb(115, accentLight.R, accentLight.G, accentLight.B)
-                : ColorTranslator.FromHtml("#1F1F27");
-
-            Color noseColor = isRunning
-                ? Color.FromArgb(190, accentLight.R, accentLight.G, accentLight.B)
-                : ColorTranslator.FromHtml("#4A4A55");
-
-            using var bodyBrush = new SolidBrush(bodyFill);
-            using var outlineBrush = new SolidBrush(outlineColor);
-            using var earBrush = new SolidBrush(earInnerColor);
-            using var noseBrush = new SolidBrush(noseColor);
-
-            for (int y = 0; y < 16; y++)
-            {
-                string row = catHeadGrid[y];
-                for (int x = 0; x < 16; x++)
-                {
-                    char c = row[x];
-                    if (c == '.') continue;
-
-                    Brush brush = c switch
-                    {
-                        'O' => outlineBrush,
-                        'I' => earBrush,
-                        'N' => noseBrush,
-                        _ => bodyBrush
-                    };
-
-                    g.FillRectangle(brush, offsetX + x * pixelScale, offsetY + y * pixelScale, pixelScale, pixelScale);
-                }
-            }
-
-            if (isRunning)
-            {
-                // СВЕТЯЩИЕСЯ ОТКРЫТЫЕ 8-БИТНЫЕ ГЛАЗКИ (когда обход включён)
-                // Мягкий неоновый ореол вокруг каждого глаза
-                using (var eyeGlowBrush = new SolidBrush(Color.FromArgb(95, accentLight)))
-                {
-                    g.FillRectangle(eyeGlowBrush, offsetX + 2 * pixelScale, offsetY + 7 * pixelScale, 5 * pixelScale, 4 * pixelScale);
-                    g.FillRectangle(eyeGlowBrush, offsetX + 9 * pixelScale, offsetY + 7 * pixelScale, 5 * pixelScale, 4 * pixelScale);
-                }
-
-                // Основной пиксельный блок глаза (3x2 пикселя сетки) цветом выбранной темы
-                using (var eyeMainBrush = new SolidBrush(accentLight))
-                {
-                    g.FillRectangle(eyeMainBrush, offsetX + 3 * pixelScale, offsetY + 8 * pixelScale, 3 * pixelScale, 2 * pixelScale);
-                    g.FillRectangle(eyeMainBrush, offsetX + 10 * pixelScale, offsetY + 8 * pixelScale, 3 * pixelScale, 2 * pixelScale);
-                }
-
-                // Яркий белый 8-битный блик в уголке каждого глаза
-                using (var sparkBrush = new SolidBrush(Color.FromArgb(245, 255, 255, 255)))
-                {
-                    g.FillRectangle(sparkBrush, offsetX + 3 * pixelScale, offsetY + 8 * pixelScale, 1 * pixelScale, 1 * pixelScale);
-                    g.FillRectangle(sparkBrush, offsetX + 10 * pixelScale, offsetY + 8 * pixelScale, 1 * pixelScale, 1 * pixelScale);
-                }
-            }
-            else
-            {
-                // СПЯЩИЕ ГЛАЗКИ-ПОЛОСКИ «- -» (когда обход выключен)
-                using var sleepEyeBrush = new SolidBrush(ColorTranslator.FromHtml("#8A8A98"));
-                using var sleepShadowBrush = new SolidBrush(ColorTranslator.FromHtml("#25252E"));
-
-                // Чуть заметная тень под ресничками и сами узкие полоски (3x1 пикселя сетки)
-                g.FillRectangle(sleepShadowBrush, offsetX + 3 * pixelScale, offsetY + 10 * pixelScale, 3 * pixelScale, 1 * pixelScale);
-                g.FillRectangle(sleepShadowBrush, offsetX + 10 * pixelScale, offsetY + 10 * pixelScale, 3 * pixelScale, 1 * pixelScale);
-
-                g.FillRectangle(sleepEyeBrush, offsetX + 3 * pixelScale, offsetY + 9 * pixelScale, 3 * pixelScale, 1 * pixelScale);
-                g.FillRectangle(sleepEyeBrush, offsetX + 10 * pixelScale, offsetY + 9 * pixelScale, 3 * pixelScale, 1 * pixelScale);
-            }
-
-            g.PixelOffsetMode = oldOffset;
-            g.SmoothingMode = oldSmooth;
         }
 
         public static GraphicsPath CreateRoundedRectPath(Rectangle bounds, int radius)
@@ -6895,29 +6759,17 @@ body {
 #splash-overlay {
     transition: opacity 0.45s ease;
 }
-
 #splash-terminal {
     text-shadow: 0 0 8px rgba(57, 255, 20, 0.45);
-}
-
-/* Гарантированно скрываем котика Зэппи, пока открыта заставка или Мастер настройки */
-body:has(#wizard-overlay.open) [id*="zappy"],
-body:has(#wizard-overlay.open) [class*="zappy"],
-body:has(#splash-overlay:not([style*="display: none"])) [id*="zappy"],
-body:has(#splash-overlay:not([style*="display: none"])) [class*="zappy"] {
-    opacity: 0 !important;
-    visibility: hidden !important;
-    pointer-events: none !important;
 }
 
 .wizard-step {
     display: none;
     animation: slideUpFade 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
-
-    .wizard-step.active {
-        display: flex;
-    }
+.wizard-step.active {
+    display: flex;
+}
 
 .wiz-stepper-item {
     display: flex;
@@ -6933,19 +6785,17 @@ body:has(#splash-overlay:not([style*="display: none"])) [class*="zappy"] {
     border: 1px solid #222222;
     transition: all 0.25s ease;
 }
-
-    .wiz-stepper-item.active {
-        color: #FFFFFF;
-        background: linear-gradient(135deg, var(--accent-soft) 0%, #151815 100%) !important;
-        border-color: var(--accent-color) !important;
-        box-shadow: 0 0 20px var(--accent-soft) !important;
-    }
-
-    .wiz-stepper-item.done {
-        color: var(--accent-light);
-        background: #141E14;
-        border-color: #233823;
-    }
+.wiz-stepper-item.active {
+    color: #FFFFFF;
+    background: linear-gradient(135deg, var(--accent-soft) 0%, #151815 100%) !important;
+    border-color: var(--accent-color) !important;
+    box-shadow: 0 0 20px var(--accent-soft) !important;
+}
+.wiz-stepper-item.done {
+    color: var(--accent-light);
+    background: #141E14;
+    border-color: #233823;
+}
 
 .wiz-option-card {
     background: #141414;
@@ -6959,17 +6809,15 @@ body:has(#splash-overlay:not([style*="display: none"])) [class*="zappy"] {
     cursor: pointer;
     transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
-
-    .wiz-option-card:hover {
-        background: #1A1A1A;
-        border-color: #3A3A3A;
-    }
-
-    .wiz-option-card.selected {
-        background: linear-gradient(135deg, var(--accent-soft) 0%, #151815 100%) !important;
-        border-color: var(--accent-color) !important;
-        box-shadow: 0 0 20px var(--accent-soft) !important;
-    }
+.wiz-option-card:hover {
+    background: #1A1A1A;
+    border-color: #3A3A3A;
+}
+.wiz-option-card.selected {
+    background: linear-gradient(135deg, var(--accent-soft) 0%, #151815 100%) !important;
+    border-color: var(--accent-color) !important;
+    box-shadow: 0 0 20px var(--accent-soft) !important;
+}
 
 #wiz-ascii-stage {
     font-family: 'Consolas', 'Courier New', monospace;
@@ -6986,10 +6834,9 @@ body:has(#splash-overlay:not([style*="display: none"])) [class*="zappy"] {
 #wiz-left-panel {
     cursor: grab;
 }
-
-    #wiz-left-panel.is-dragging {
-        cursor: grabbing;
-    }
+#wiz-left-panel.is-dragging {
+    cursor: grabbing;
+}
 
 /* =========================================================
    ОРБИТАЛЬНЫЙ РЕАКТОР И КРУГЛАЯ КНОПКА ЗАПУСКА
@@ -7038,13 +6885,11 @@ body:has(#splash-overlay:not([style*="display: none"])) [class*="zappy"] {
 .reactor-wrap.active .reactor-ambient {
     opacity: 0.45;
 }
-
 .reactor-wrap.active .reactor-ring-outer {
     border-color: var(--accent-light);
     opacity: 0.55;
     animation-duration: 24s;
 }
-
 .reactor-wrap.active .reactor-ring-inner {
     border-color: rgba(255, 255, 255, 0.06);
     border-top-color: var(--accent-light);
@@ -7053,15 +6898,10 @@ body:has(#splash-overlay:not([style*="display: none"])) [class*="zappy"] {
 }
 
 @keyframes spinSlow {
-    100% {
-        transform: rotate(360deg);
-    }
+    100% { transform: rotate(360deg); }
 }
-
 @keyframes spinReverse {
-    100% {
-        transform: rotate(-360deg);
-    }
+    100% { transform: rotate(-360deg); }
 }
 
 .power-btn {
@@ -7075,37 +6915,27 @@ body:has(#splash-overlay:not([style*="display: none"])) [class*="zappy"] {
     cursor: pointer;
     z-index: 2;
 }
-
-    .power-btn:hover {
-        transform: scale(1.02);
-        border-color: #484848;
-    }
-
-    .power-btn:active {
-        transform: scale(0.97);
-    }
-
-    .power-btn.active {
-        border-color: var(--accent-color);
-        box-shadow: 0 0 40px var(--accent-glow), inset 0 0 18px var(--accent-soft) !important;
-        animation: pulseGlow 3.6s infinite ease-in-out;
-    }
-
-        .power-btn.active .power-icon-glyph {
-            color: var(--accent-light);
-            text-shadow: 0 0 16px var(--accent-glow);
-        }
-
-@keyframes pulseGlow {
-    0%, 100% {
-        box-shadow: 0 0 25px var(--accent-glow), inset 0 0 12px rgba(16, 124, 16, 0.2);
-    }
-
-    50% {
-        box-shadow: 0 0 55px var(--accent-glow), inset 0 0 24px rgba(16, 124, 16, 0.35);
-    }
+.power-btn:hover {
+    transform: scale(1.02);
+    border-color: #484848;
+}
+.power-btn:active {
+    transform: scale(0.97);
+}
+.power-btn.active {
+    border-color: var(--accent-color);
+    box-shadow: 0 0 40px var(--accent-glow), inset 0 0 18px var(--accent-soft) !important;
+    animation: pulseGlow 3.6s infinite ease-in-out;
+}
+.power-btn.active .power-icon-glyph {
+    color: var(--accent-light);
+    text-shadow: 0 0 16px var(--accent-glow);
 }
 
+@keyframes pulseGlow {
+    0%, 100% { box-shadow: 0 0 25px var(--accent-glow), inset 0 0 12px rgba(16, 124, 16, 0.2); }
+    50% { box-shadow: 0 0 55px var(--accent-glow), inset 0 0 24px rgba(16, 124, 16, 0.35); }
+}
 /* =========================================================
    WEBGL 3D-ГИРОСКОП ВОКРУГ КНОПКИ ЗАПУСКА (THREE.JS)
    ========================================================= */
@@ -7122,7 +6952,6 @@ body:has(#splash-overlay:not([style*="display: none"])) [class*="zappy"] {
 .reactor-wrap.webgl-ready .reactor-ring-inner {
     opacity: 0 !important;
 }
-
 
 ////////////////////////////////////////////////////////////////////////////////
 // ФАЙЛ: wwwroot\css\views-modals.css
@@ -7754,10 +7583,7 @@ function handleBackendEvent(type, data) {
                 appendLog(new Date().toLocaleTimeString(), 'Интерфейс загружен. Ожидание команд...');
 
             if (data.isFirstRun) {
-                setZappyMascotVisibility(false);
                 openWizardModal();
-            } else {
-                setZappyMascotVisibility(true);
             }
             break;
 
@@ -8111,6 +7937,7 @@ window.addEventListener('DOMContentLoaded', () => {
     try {
         if (typeof initReactor3D === 'function') initReactor3D();
         if (typeof initGems3DShowcase === 'function') initGems3DShowcase();
+        if (typeof initZappy3DMascot === 'function') initZappy3DMascot();
         if (typeof refreshCardsTiltEffect === 'function') refreshCardsTiltEffect();
     } catch (e) {
         console.error('3D init error:', e);
@@ -8310,35 +8137,6 @@ function filterSettingsView() {
 
         group.classList.toggle('hidden', !anyVisibleInGroup);
     });
-}
-
-function setZappyMascotVisibility(visible) {
-    const zappySelectors = [
-        '#zappy-mascot-container',
-        '#zappy-3d-container',
-        '#zappy-widget',
-        '.zappy-mascot-wrap'
-    ];
-
-    if (visible) {
-        if (!window._zappyMascotInitialized && typeof initZappy3DMascot === 'function') {
-            window._zappyMascotInitialized = true;
-            try { initZappy3DMascot(); } catch (e) { console.error('Zappy init error:', e); }
-        }
-        zappySelectors.forEach(sel => {
-            document.querySelectorAll(sel).forEach(el => {
-                el.style.display = '';
-                el.style.pointerEvents = '';
-            });
-        });
-    } else {
-        zappySelectors.forEach(sel => {
-            document.querySelectorAll(sel).forEach(el => {
-                el.style.display = 'none';
-                el.style.pointerEvents = 'none';
-            });
-        });
-    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -12882,11 +12680,6 @@ function onWizardOptionChange() {
 }
 
 function openWizardModal() {
-    // Скрываем котика Зэппи, чтобы он не перекрывал экран во время Мастера настройки
-    if (typeof setZappyMascotVisibility === 'function') {
-        setZappyMascotVisibility(false);
-    }
-
     wizardStep = 0;
     wizardFinished = false;
     wizHyperSpeed = false;
@@ -12987,11 +12780,6 @@ function wizardNextStep() {
         if (wizardFinished) {
             stopWizAsciiEngine();
             document.getElementById('wizard-overlay').classList.remove('open');
-
-            // Запускаем и показываем котика Зэппи только ПОСЛЕ завершения мастера настроек
-            if (typeof setZappyMascotVisibility === 'function') {
-                setZappyMascotVisibility(true);
-            }
         }
     } else if (wizardStep < 3) {
         wizardStep++;
@@ -13003,11 +12791,6 @@ function skipWizard() {
     stopWizAsciiEngine();
     sendCmd('skipWizard');
     document.getElementById('wizard-overlay').classList.remove('open');
-
-    // Показываем котика Зэппи после пропуска мастера настроек
-    if (typeof setZappyMascotVisibility === 'function') {
-        setZappyMascotVisibility(true);
-    }
 }
 
 function appendWizardLog(time, message, isProgress) {
