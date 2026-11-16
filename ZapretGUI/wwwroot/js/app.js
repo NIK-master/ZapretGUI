@@ -456,7 +456,7 @@ window.addEventListener('DOMContentLoaded', () => {
         const bar = document.getElementById(id);
         if (bar) {
             bar.addEventListener('mousedown', e => {
-                if (e.button === 0 && !e.target.closest('button') && !e.target.closest('input')) {
+                if (e.button === 0 && !e.target.closest('button') && !e.target.closest('input') && !e.target.closest('#titlebar-ver-badge')) {
                     sendCmd('windowDrag');
                 }
             });
@@ -661,5 +661,35 @@ function setZappyMascotVisibility(visible) {
                 el.style.pointerEvents = 'none';
             });
         });
+    }
+}
+
+let verEasterClicks = 0;
+let lastVerEasterClickTime = 0;
+
+function onVersionBadgeClick(e) {
+    if (e) e.stopPropagation();
+    const now = Date.now();
+    if (now - lastVerEasterClickTime > 1200) {
+        verEasterClicks = 0;
+    }
+    verEasterClicks++;
+    lastVerEasterClickTime = now;
+
+    const badge = document.getElementById('titlebar-ver-badge');
+    if (badge && verEasterClicks >= 4 && verEasterClicks < 7) {
+        badge.style.borderColor = 'var(--accent-light)';
+        badge.style.color = 'var(--accent-light)';
+    }
+
+    if (verEasterClicks >= 7) {
+        verEasterClicks = 0;
+        if (badge) {
+            badge.style.borderColor = '';
+            badge.style.color = '';
+        }
+        if (typeof launchZnakEasterEgg === 'function') {
+            launchZnakEasterEgg();
+        }
     }
 }

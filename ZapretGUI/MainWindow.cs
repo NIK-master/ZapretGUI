@@ -512,5 +512,75 @@ namespace ZapretGUI
             catch { }
             return tempDir;
         }
+        private Size _savedPreEasterSize;
+        private Point _savedPreEasterLoc;
+        private bool _isEasterFullscreen = false;
+
+        public async void SetEasterEggFullscreen(bool enable)
+        {
+            if (!_isWindowCreated || _isEasterFullscreen == enable) return;
+            _isEasterFullscreen = enable;
+
+            _resizeAnimCts?.Cancel();
+            _resizeAnimCts = new CancellationTokenSource();
+            var token = _resizeAnimCts.Token;
+
+            Size startSize = default;
+            Point startLoc = default;
+            Size targetSize = default;
+            Point targetLoc = default;
+
+            InvokeOnUI(() =>
+            {
+                startSize = Window.Size;
+                startLoc = Window.Location;
+
+                var screen = WindowHandle != IntPtr.Zero
+                    ? Screen.FromHandle(WindowHandle).WorkingArea
+                    : Screen.PrimaryScreen!.WorkingArea;
+
+                if (enable)
+                {
+                    _savedPreEasterSize = startSize;
+                    _savedPreEasterLoc = startLoc;
+                    targetSize = new Size(screen.Width, screen.Height);
+                    targetLoc = new Point(screen.Left, screen.Top);
+                }
+                else
+                {
+                    targetSize = _savedPreEasterSize.Width > 0
+                        ? _savedPreEasterSize
+                        : GetScaledWindowSize(SettingsManager.Current.CompactMode);
+                    targetLoc = _savedPreEasterLoc.IsEmpty
+                        ? new Point(
+                            screen.Left + (screen.Width - targetSize.Width) / 2,
+                            screen.Top + (screen.Height - targetSize.Height) / 2)
+                        : _savedPreEasterLoc;
+                }
+            });
+
+            const int steps = 16;
+            for (int i = 1; i <= steps; i++)
+            {
+                if (token.IsCancellationRequested) return;
+
+                double t = (double)i / steps;
+                // Cubic Ease-Out для плавного торможения в конце
+                double ease = 1.0 - Math.Pow(1.0 - t, 3.0);
+
+                int curW = (int)Math.Round(startSize.Width + (targetSize.Width - startSize.Width) * ease);
+                int curH = (int)Math.Round(startSize.Height + (targetSize.Height - startSize.Height) * ease);
+                int curX = (int)Math.Round(startLoc.X + (targetLoc.X - startLoc.X) * ease);
+                int curY = (int)Math.Round(startLoc.Y + (targetLoc.Y - startLoc.Y) * ease);
+
+                InvokeOnUI(() =>
+                {
+                    Window.SetSize(new Size(curW, curH));
+                    Window.SetLocation(new Point(curX, curY));
+                });
+
+                await Task.Delay(12);
+            }
+        }
     }
 }

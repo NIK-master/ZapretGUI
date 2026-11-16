@@ -539,3 +539,238 @@ body.compact-mode #editor-modal {
         line-height: 1.3 !important;
     }
     body.compact-mode #lego-3d-sim-canvas-wrap { height: 92px !important; }
+/* =========================================================
+   ПАСХАЛКА: TOXI$ & ДОРА — ЗНАК (CUPERTINO CYBERPUNK STAGE)
+   ========================================================= */
+.znak-grid-bg {
+    position: absolute;
+    inset: 0;
+    background-image: linear-gradient(rgba(236, 72, 153, 0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(139, 92, 246, 0.05) 1px, transparent 1px);
+    background-size: 36px 36px;
+    pointer-events: none;
+    z-index: 0;
+}
+
+.znak-bg-orb {
+    position: absolute;
+    border-radius: 9999px;
+    filter: blur(90px);
+    opacity: 0.35;
+    pointer-events: none;
+    z-index: 0;
+    animation: znakOrbFloat 8s infinite alternate ease-in-out;
+}
+
+.znak-orb-pink {
+    width: 360px;
+    height: 360px;
+    background: #EC4899;
+    top: -80px;
+    left: -60px;
+}
+
+.znak-orb-purple {
+    width: 420px;
+    height: 420px;
+    background: #8B5CF6;
+    bottom: -100px;
+    right: -80px;
+    animation-delay: -3s;
+}
+
+.znak-orb-cyan {
+    width: 280px;
+    height: 280px;
+    background: #3B82F6;
+    top: 35%;
+    left: 45%;
+    opacity: 0.2;
+    animation-delay: -5s;
+}
+
+@keyframes znakOrbFloat {
+    0% {
+        transform: translate(0, 0) scale(1);
+    }
+
+    100% {
+        transform: translate(40px, -35px) scale(1.15);
+    }
+}
+
+/* Плеер: начальное состояние в центре */
+#znak-player-card {
+    position: absolute;
+    z-index: 40;
+    background: rgba(20, 20, 28, 0.82);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    box-shadow: 0 25px 60px rgba(0, 0, 0, 0.75), 0 0 40px rgba(236, 72, 153, 0.2);
+    backdrop-filter: blur(24px);
+    transition: all 0.65s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.znak-player-center {
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(1);
+    width: 310px;
+    padding: 24px;
+    border-radius: 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 14px;
+}
+
+/* Плеер: свернутое состояние в левом нижнем углу */
+.znak-player-mini {
+    top: calc(100% - 96px);
+    left: 24px;
+    transform: translate(0, 0) scale(1);
+    width: 340px;
+    padding: 12px 16px;
+    border-radius: 18px;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    text-align: left;
+    gap: 12px;
+}
+
+.znak-cover-wrap {
+    position: relative;
+    width: 112px;
+    height: 112px;
+    flex-shrink: 0;
+    transition: all 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.znak-player-mini .znak-cover-wrap {
+    width: 48px;
+    height: 48px;
+}
+
+.znak-cover-art {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    border-radius: 18px;
+    background: linear-gradient(135deg, #EC4899 0%, #7C3AED 55%, #0F172A 100%);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2;
+}
+
+.znak-player-mini .znak-cover-art {
+    border-radius: 12px;
+}
+
+.znak-progress-wrap {
+    width: 100%;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 999px;
+    overflow: hidden;
+    cursor: pointer;
+}
+
+.znak-player-mini .znak-progress-wrap {
+    position: absolute;
+    bottom: 0;
+    left: 12px;
+    right: 12px;
+    width: auto;
+    height: 3px;
+}
+
+.znak-progress-bar {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #EC4899, #8B5CF6, #38BDF8);
+    border-radius: 999px;
+    transition: width 0.1s linear;
+}
+
+/* Анимации появления текста и UI-виджетов */
+.znak-widget-card {
+    animation: znakWidgetPop 0.42s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes znakWidgetPop {
+    0% {
+        opacity: 0;
+        transform: translateY(26px) scale(0.86);
+    }
+
+    100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.znak-anim-pop {
+    animation: znakTextPop 0.36s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.znak-anim-glitch {
+    animation: znakTextGlitch 0.45s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    text-shadow: -3px 0 #EC4899, 3px 0 #38BDF8;
+}
+
+.znak-anim-heartbeat {
+    animation: znakTextHeartbeat 0.65s ease-in-out infinite alternate;
+    color: #FDA4AF !important;
+}
+
+.znak-anim-neon {
+    animation: znakTextPop 0.38s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    color: #F472B6 !important;
+    text-shadow: 0 0 28px rgba(236, 72, 153, 0.9), 0 0 60px rgba(139, 92, 246, 0.7);
+}
+
+@keyframes znakTextPop {
+    0% {
+        opacity: 0;
+        transform: scale(0.75) translateY(18px);
+        filter: blur(6px);
+    }
+
+    100% {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+        filter: blur(0);
+    }
+}
+
+@keyframes znakTextGlitch {
+    0% {
+        opacity: 0;
+        transform: skewX(-18deg) scale(1.15);
+    }
+
+    40% {
+        opacity: 1;
+        transform: skewX(12deg) translateX(-6px);
+    }
+
+    70% {
+        transform: skewX(-6deg) translateX(4px);
+    }
+
+    100% {
+        transform: skewX(0) scale(1);
+    }
+}
+
+@keyframes znakTextHeartbeat {
+    0% {
+        transform: scale(1);
+    }
+
+    100% {
+        transform: scale(1.07);
+    }
+}

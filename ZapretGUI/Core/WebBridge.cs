@@ -532,6 +532,11 @@ namespace ZapretGUI.Core
                         SendEvent("alert", new { title = "Ошибка записи в Hosts", message = ex.Message, isError = true });
                     }
                     break;
+
+                case "setEasterFullscreen":
+                    var full = root.TryGetProperty("enable", out var en) && en.GetBoolean();
+                    _mainWindow.SetEasterEggFullscreen(full);
+                    break;
             }
         }
 
