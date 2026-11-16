@@ -290,6 +290,11 @@ function onWizardOptionChange() {
 }
 
 function openWizardModal() {
+    // Скрываем котика Зэппи, чтобы он не перекрывал экран во время Мастера настройки
+    if (typeof setZappyMascotVisibility === 'function') {
+        setZappyMascotVisibility(false);
+    }
+
     wizardStep = 0;
     wizardFinished = false;
     wizHyperSpeed = false;
@@ -390,6 +395,11 @@ function wizardNextStep() {
         if (wizardFinished) {
             stopWizAsciiEngine();
             document.getElementById('wizard-overlay').classList.remove('open');
+
+            // Запускаем и показываем котика Зэппи только ПОСЛЕ завершения мастера настроек
+            if (typeof setZappyMascotVisibility === 'function') {
+                setZappyMascotVisibility(true);
+            }
         }
     } else if (wizardStep < 3) {
         wizardStep++;
@@ -401,6 +411,11 @@ function skipWizard() {
     stopWizAsciiEngine();
     sendCmd('skipWizard');
     document.getElementById('wizard-overlay').classList.remove('open');
+
+    // Показываем котика Зэппи после пропуска мастера настроек
+    if (typeof setZappyMascotVisibility === 'function') {
+        setZappyMascotVisibility(true);
+    }
 }
 
 function appendWizardLog(time, message, isProgress) {

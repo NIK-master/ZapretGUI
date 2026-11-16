@@ -70,10 +70,23 @@ namespace ZapretGUI
 
         public MainWindow()
         {
-            string webViewDataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), AppConstants.AppRegistryName, "WebView2Cache");
-            Directory.CreateDirectory(webViewDataPath);
-            Environment.SetEnvironmentVariable("WEBVIEW2_USER_DATA_FOLDER", webViewDataPath);
+            // Надежная папка кэша WebView2 с автоматическим фолбэком в ProgramData
+            string webViewDataPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+                AppConstants.AppRegistryName,
+                "WebView2Cache");
 
+            try
+            {
+                Directory.CreateDirectory(webViewDataPath);
+            }
+            catch
+            {
+                webViewDataPath = Path.Combine(Path.GetTempPath(), "ZapretForADHD_WebView2");
+                Directory.CreateDirectory(webViewDataPath);
+            }
+
+            Environment.SetEnvironmentVariable("WEBVIEW2_USER_DATA_FOLDER", webViewDataPath);
             Environment.SetEnvironmentVariable("WEBVIEW2_DEFAULT_BACKGROUND_COLOR", "FF0A0A0A");
             Environment.SetEnvironmentVariable("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "--disable-pinch --force-device-scale-factor=1");
 
@@ -89,6 +102,7 @@ namespace ZapretGUI
             Window = new PhotinoWindow()
                 .SetTitle("Zapret for ADHD")
                 .SetIconFile(initIcoPath)
+                .SetTemporaryFilesPath(webViewDataPath) // <-- ВАЖНО: Передает путь напрямую в C++ ядро Photino!
                 .SetUseOsDefaultSize(false)
                 .SetSize(initialSize)
                 .Center()

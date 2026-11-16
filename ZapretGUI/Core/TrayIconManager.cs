@@ -354,7 +354,14 @@ namespace ZapretGUI.Core
             using (var fLogo = new Font("Segoe UI", S(15f), FontStyle.Bold, GraphicsUnit.Pixel))
             using (var bLogo = new SolidBrush(accentLight))
             {
-                g.DrawString("Z", fLogo, bLogo, logoRect, sfCenter);
+                UIHelper.DrawPixelZappyHead(
+                g,
+                offsetX: logoRect.X + S(4f),
+                offsetY: logoRect.Y + S(4f),
+                pixelScale: S(1.5f),
+                isRunning: anyRun,
+                accentLight: accentLight,
+                accentBase: accent);
             }
 
             using (var fTitle = new Font("Segoe UI", S(13.5f), FontStyle.Bold, GraphicsUnit.Pixel))

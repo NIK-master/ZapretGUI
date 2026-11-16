@@ -1,5 +1,5 @@
 ﻿// =========================================================================
-// МОДУЛЬ: 8-БИТНЫЙ 3D-КОТИК "ZAPPY" (ПИКСЕЛЬНЫЙ КОТ + ИНТЕРАКТИВНЫЙ ТУТОРИАЛ)
+// МОДУЛЬ: 8-БИТНЫЙ 3D-КОТИК "ZAPPY" В БОКОВОМ МЕНЮ (ВСЕГДА РЯДОМ НА ВСЕХ ВКЛАДКАХ)
 // Файл: wwwroot/js/zappy3d.js
 // =========================================================================
 
@@ -20,7 +20,6 @@ let zappy3D = {
     mouthMesh: null,
     accentMaterials: [],
     cookieGroup: null,
-    // Физика с жестким лимитом высоты
     mood: 'normal', // normal, happy, dizzy, eating
     moodTimer: 0,
     blinkTimer: 100,
@@ -38,12 +37,12 @@ let zappy3D = {
     dragAccum: 0,
     cookieAnim: 0,
     petsCount: 0,
-    // Пошаговый туториал
     tutorialActive: false,
-    tutorialStep: 0
+    tutorialStep: 0,
+    lookOverrideX: null,
+    lookOverrideY: null
 };
 
-// Все фразы строго без смайликов и эмодзи
 const ZAPPY_PHRASES_PET = [
     'Мур-р... Спасибо за ласку, продолжай в том же духе.',
     'Обожаю, когда меня чешут за пиксельным ушком.',
@@ -61,20 +60,34 @@ const ZAPPY_PHRASES_COOKIE = [
 
 const ZAPPY_TUTORIAL_STEPS = [
     {
-        title: 'Шаг 1 из 4: Знакомство',
-        text: 'Привет! Я Зэппи, твой пиксельный кот-напарник. Давай я быстро покажу, как тут все устроено.'
+        tab: 'home',
+        target: () => document.getElementById('reactor-container'),
+        title: 'Шаг 1 из 5: Сердце обхода',
+        text: 'Привет! Я Зэппи. Эта большая кнопка включает и выключает обход блокировок Zapret и прокси для Telegram.'
     },
     {
-        title: 'Шаг 2 из 4: Главный запуск',
-        text: 'Большая круглая кнопка надо мной включает обход Zapret и прокси для Telegram. А в списке профилей можно автоматически подобрать лучшую стратегию.'
+        tab: 'home',
+        target: () => document.getElementById('txt-main-profile')?.closest('.glass-card') || document.getElementById('home-cards-col'),
+        title: 'Шаг 2 из 5: Выбор стратегии и Игры',
+        text: 'Здесь выбирается активный профиль обхода. Внутри можно запустить умный авто-подбор лучшей стратегии под твоего провайдера и включить игровой фильтр.'
     },
     {
-        title: 'Шаг 3 из 4: Моды и Диагностика',
-        text: 'Во вкладке Модификации можно собирать свои стратегии, а в Диагностике проверять доступность любого сайта и чинить его в один клик.'
+        tab: 'mods',
+        target: () => document.getElementById('mods-seg-track') || document.querySelector('#tab-mods .glass-card'),
+        title: 'Шаг 3 из 5: Мастерская модификаций',
+        text: 'В Мастерской можно создавать свои списки сайтов и собирать собственные стратегии в визуальном конструкторе с 3D-лабораторией пакетов.'
     },
     {
-        title: 'Шаг 4 из 4: Отдых и Палитра',
-        text: 'Нажми Ctrl+K для быстрого вызова команд. А если станет скучно, просто кликни по мне, чтобы погладить, или угости пакетом данных!'
+        tab: 'diag',
+        target: () => document.getElementById('site-check-input')?.closest('.glass-card') || document.getElementById('btn-run-diag'),
+        title: 'Шаг 4 из 5: Диагностика и Быстрый фикс',
+        text: 'Если какой-то сайт не открывается, введи его адрес сюда. Анализатор найдет причину блокировки и починит доступ в один клик.'
+    },
+    {
+        tab: 'settings',
+        target: () => document.querySelector('#tab-settings .gem-field-wrap') || document.getElementById('settings-seg-track'),
+        title: 'Шаг 5 из 5: Самоцветы тем и Команды',
+        text: 'В Настройках можно выбрать 3D-камень темы, обновить базы IPSet и Hosts. А я всегда буду сидеть слева под вкладками!'
     }
 ];
 
@@ -91,74 +104,113 @@ function initZappy3DMascot() {
     if (typeof THREE === 'undefined') return;
     if (appState?.settings?.hardwareAcceleration === false) return;
 
-    const reactorContainer = document.getElementById('reactor-container');
-    const homeTab = document.getElementById('tab-home');
-    if (!reactorContainer && !homeTab) return;
+    const sidebar = document.getElementById('sidebar');
+    const sidebarFooter = document.getElementById('sidebar-footer');
+    if (!sidebar) return;
 
-    const oldCard = document.getElementById('zappy-home-card');
-    if (oldCard) oldCard.remove();
+    document.getElementById('zappy-home-card')?.remove();
+    document.getElementById('zappy-sidebar-card')?.remove();
+    document.getElementById('zappy-tutorial-overlay')?.remove();
 
-    const leftCol = reactorContainer ? reactorContainer.parentElement : homeTab;
-    if (!leftCol) return;
-
+    // 1. Вертикальная уютная карточка Зэппи прямо внутри бокового меню (#sidebar)
     const card = document.createElement('div');
-    card.id = 'zappy-home-card';
-    card.className = 'glass-card rounded-xl p-2.5 mt-3 w-full max-w-[265px] flex items-center gap-2.5 relative overflow-hidden select-none transition-all';
+    card.id = 'zappy-sidebar-card';
+    card.className = 'w-[200px] rounded-xl bg-[#121216] border border-[#26262E] p-2.5 mt-auto mb-2.5 flex flex-col gap-2 relative overflow-hidden select-none transition-all';
     card.innerHTML = `
-        <!-- Левая часть: 3D сцена с пиксельным котиком -->
-        <div id="zappy-voxel-stage" class="relative w-[88px] h-[88px] rounded-lg bg-[#0D0D12] border border-[#25252E] flex items-center justify-center shrink-0 cursor-pointer active:cursor-grabbing overflow-hidden" title="Кликни по котику, чтобы погладить, или зажми ЛКМ для вращения">
-            <div class="absolute inset-1 rounded-full bg-[var(--accent-soft)] blur-md opacity-55 pointer-events-none"></div>
+        <!-- Шапка карточки: Статус + Имя + Уровень -->
+        <div class="flex items-center justify-between px-0.5">
+            <div class="flex items-center gap-1.5">
+                <span id="zappy-home-dot" class="w-2 h-2 rounded-full dot-offline"></span>
+                <span id="zappy-header-title" class="text-[11px] font-mono font-bold text-white tracking-wide">ZAPPY 8-BIT</span>
+            </div>
+            <span id="zappy-lvl-badge" class="px-1.5 py-0.2 rounded bg-[#1A1A22] border border-[#2C2C38] text-[9.5px] font-mono text-brand">LVL 1</span>
         </div>
 
-        <!-- Правая часть: Имя, диалог/туториал и кнопки -->
-        <div class="flex flex-col justify-between flex-1 min-w-0 min-h-[88px] py-0.5 gap-1">
-            <div class="flex items-center justify-between gap-1">
-                <div class="flex items-center gap-1.5">
-                    <span id="zappy-home-dot" class="w-2 h-2 rounded-full dot-offline"></span>
-                    <span id="zappy-header-title" class="text-[11px] font-mono font-bold text-white tracking-wide truncate">ZAPPY 8-BIT</span>
-                </div>
-                <span id="zappy-lvl-badge" class="px-1.5 py-0.2 rounded bg-[#1A1A22] border border-[#2C2C38] text-[9.5px] font-mono text-brand shrink-0">LVL 1</span>
-            </div>
+        <!-- 3D-сцена с пиксельным котиком -->
+        <div id="zappy-home-slot" class="relative w-full h-[108px] rounded-lg bg-[#0A0A0E] border border-[#22222A] flex items-center justify-center overflow-hidden">
+            <div class="absolute inset-2 rounded-full bg-[var(--accent-soft)] blur-md opacity-55 pointer-events-none"></div>
+            <div id="zappy-voxel-stage" class="w-[108px] h-[108px] flex items-center justify-center cursor-pointer active:cursor-grabbing relative z-10" title="Кликни по котику, чтобы погладить, или зажми ЛКМ для вращения"></div>
+        </div>
 
-            <!-- Текст реплики или текущего шага туториала -->
-            <div id="zappy-home-speech" class="text-[10px] font-mono text-[#CCCCCC] leading-snug bg-[#121217] border border-[#22222A] rounded px-2 py-1.5 min-h-[38px] flex items-center">
-                Кликни по мне, чтобы погладить, или угости пакетом данных.
-            </div>
+        <!-- Диалоговое облачко Зэппи -->
+        <div id="zappy-home-speech" class="text-[10px] font-mono text-[#CCCCCC] leading-snug bg-[#0E0E13] border border-[#202028] rounded-lg px-2 py-1.5 min-h-[42px] flex items-center text-center justify-center">
+            Кликни по мне, чтобы погладить, или угости пакетом.
+        </div>
 
-            <!-- Обычные кнопки действий -->
-            <div id="zappy-normal-actions" class="flex items-center gap-1.5">
-                <button onclick="feedZappyCookie()" class="flex-1 py-1 px-2 rounded bg-[#1D1D24] hover:bg-[#282832] border border-[#2E2E3A] text-[10px] font-mono font-semibold text-[#E0E0E0] hover:text-white flex items-center justify-center cursor-pointer transition active:scale-95">
-                    <span>Дать пакет</span>
-                </button>
-                <button onclick="startZappyTutorial()" class="py-1 px-2 rounded bg-[#1D1D24] hover:bg-[#282832] border border-[#2E2E3A] text-[10px] font-mono font-semibold text-[#999999] hover:text-white flex items-center justify-center cursor-pointer transition active:scale-95" title="Показать краткое обучение с Зэппи">
-                    <span>Гид</span>
-                </button>
-            </div>
-
-            <!-- Кнопки управления туториалом (скрыты по умолчанию) -->
-            <div id="zappy-tutorial-actions" class="hidden items-center justify-between gap-1.5">
-                <button onclick="skipZappyTutorial()" class="py-1 px-2 rounded bg-[#18181E] hover:bg-[#22222A] border border-[#2A2A34] text-[9.5px] font-mono text-[#888888] hover:text-white cursor-pointer transition">
-                    Скрыть
-                </button>
-                <button id="zappy-tut-next-btn" onclick="nextZappyTutorialStep()" class="flex-1 py-1 px-2 rounded btn-brand text-[10px] font-mono font-bold text-white cursor-pointer transition">
-                    Далее
-                </button>
-            </div>
+        <!-- Кнопки: Дать пакет и Гид -->
+        <div class="flex items-center gap-1.5">
+            <button onclick="feedZappyCookie()" class="flex-1 py-1 px-2 rounded-md bg-[#1B1B22] hover:bg-[#252530] border border-[#2C2C38] text-[10px] font-mono font-semibold text-[#E0E0E0] hover:text-white flex items-center justify-center cursor-pointer transition active:scale-95">
+                <span>Дать пакет</span>
+            </button>
+            <button onclick="startZappyTutorial()" class="py-1 px-2.5 rounded-md bg-[#1B1B22] hover:bg-[#252530] border border-[#2C2C38] text-[10px] font-mono font-semibold text-[#999999] hover:text-white flex items-center justify-center cursor-pointer transition active:scale-95" title="Запустить интерактивный тур по программе с Зэппи">
+                <span>Гид</span>
+            </button>
         </div>
     `;
 
-    leftCol.appendChild(card);
+    if (sidebarFooter) {
+        sidebar.insertBefore(card, sidebarFooter);
+    } else {
+        sidebar.appendChild(card);
+    }
 
+    // 2. Полноэкранный Spotlight-оверлей для полётов Зэппи во время туториала
+    const overlay = document.createElement('div');
+    overlay.id = 'zappy-tutorial-overlay';
+    overlay.className = 'fixed inset-0 z-[9990] pointer-events-auto hidden';
+    overlay.innerHTML = `
+        <div id="zappy-spotlight-hole" class="fixed rounded-xl pointer-events-none transition-all duration-300 ease-out"
+             style="box-shadow: 0 0 0 9999px rgba(6, 6, 10, 0.80), 0 0 28px var(--accent-glow); border: 2px solid var(--accent-light);"></div>
+
+        <div id="zappy-flying-companion" class="fixed z-[9995] w-[360px] rounded-2xl bg-[#121218]/95 border border-[var(--accent-light)] p-3 shadow-2xl flex items-center gap-3 transition-all duration-300 ease-out backdrop-blur-md">
+            <div id="zappy-flying-slot" class="relative w-[108px] h-[108px] rounded-xl bg-[#0A0A0F] border border-[#282834] flex items-center justify-center shrink-0 overflow-hidden">
+                <div class="absolute inset-1 rounded-full bg-[var(--accent-soft)] blur-md opacity-70 pointer-events-none"></div>
+            </div>
+
+            <div class="flex flex-col justify-between flex-1 min-w-0 gap-2">
+                <div class="flex items-center justify-between">
+                    <span id="zappy-fly-title" class="text-xs font-mono font-bold text-brand truncate">Шаг 1 из 5</span>
+                    <button onclick="skipZappyTutorial()" class="text-[10px] font-mono text-[#777777] hover:text-white cursor-pointer transition">Закрыть</button>
+                </div>
+
+                <div id="zappy-fly-text" class="text-[11px] font-mono text-[#E0E0E0] leading-relaxed">
+                    Описание элемента...
+                </div>
+
+                <div class="flex items-center justify-between gap-2 pt-1 border-t border-[#22222C]">
+                    <button id="zappy-fly-prev" onclick="prevZappyTutorialStep()" class="px-2.5 py-1 rounded-md bg-[#1C1C24] hover:bg-[#262630] border border-[#30303C] text-[10px] font-mono text-[#BBBBBB] hover:text-white cursor-pointer transition">
+                        Назад
+                    </button>
+                    <div class="flex items-center gap-1.5">
+                        <button onclick="skipZappyTutorial()" class="px-2.5 py-1 rounded-md bg-[#1C1C24] hover:bg-[#262630] border border-[#30303C] text-[10px] font-mono text-[#888888] hover:text-white cursor-pointer transition">
+                            Пропустить
+                        </button>
+                        <button id="zappy-fly-next" onclick="nextZappyTutorialStep()" class="px-3 py-1 rounded-md btn-brand text-[10.5px] font-mono font-bold text-white cursor-pointer transition shadow">
+                            Далее
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+
+    // Скрываем карточку Зэппи, когда сайдбар свёрнут в узкую полоску (rail-mode или compact-mode)
     const styleEl = document.createElement('style');
-    styleEl.textContent = `body.compact-mode #zappy-home-card { display: none !important; }`;
+    styleEl.textContent = `
+        #sidebar.rail-mode #zappy-sidebar-card,
+        body.compact-mode #zappy-sidebar-card {
+            display: none !important;
+        }
+    `;
     document.head.appendChild(styleEl);
 
     const stage = document.getElementById('zappy-voxel-stage');
-    const size = 88;
+    const size = 108;
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 100);
-    camera.position.set(0, 0.25, 6.3);
+    camera.position.set(0, 0.25, 6.2);
     camera.lookAt(0, 0.0, 0);
 
     const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'high-performance' });
@@ -179,6 +231,10 @@ function initZappy3DMascot() {
     buildPixelCatVoxelModel(scene);
     setupZappyInteractions(stage);
 
+    window.addEventListener('resize', () => {
+        if (zappy3D.tutorialActive) positionSpotlightAndFlyingZappy();
+    });
+
     Object.assign(zappy3D, {
         initialized: true,
         scene,
@@ -186,28 +242,29 @@ function initZappy3DMascot() {
         renderer
     });
 
-    // Автоматический запуск туториала с Зэппи при первом входе
-    if (!localStorage.getItem('zappy_tutorial_done_v1')) {
-        setTimeout(() => startZappyTutorial(), 900);
+    if (!localStorage.getItem('zappy_tutorial_done_v2')) {
+        setTimeout(() => {
+            const wiz = document.getElementById('wizard-modal');
+            if (!wiz || !wiz.classList.contains('open')) {
+                startZappyTutorial();
+            }
+        }, 1200);
     }
 
     animateZappy3D();
 }
 
-// Собирает настоящего 8-битного воксельного котика (НЕ робота!)
 function buildPixelCatVoxelModel(scene) {
     const theme = getZappyThemeColor();
-    const u = 0.155; // Базовый размер одного 3D-пикселя (вокселя)
+    const u = 0.155;
 
-    // Натуральные кошачьи цвета (тёмно-угольная шерсть, более тёмные полоски, белая мордочка и носочки, розовый носик)
-    const matFurMain = new THREE.MeshLambertMaterial({ color: 0x2B2D38 }); // Основная шерсть
-    const matFurStripe = new THREE.MeshLambertMaterial({ color: 0x1D1E26 }); // Темные кошачьи полоски
-    const matFurWhite = new THREE.MeshLambertMaterial({ color: 0xF1F5F9 }); // Белая грудка, щёчки и носочки лап
-    const matPinkNose = new THREE.MeshLambertMaterial({ color: 0xF472B6 }); // Розовый носик и ушки
-    const matEyePupil = new THREE.MeshBasicMaterial({ color: 0x0B0B0E });   // Черный зрачок
-    const matEyeShine = new THREE.MeshBasicMaterial({ color: 0xFFFFFF });   // Белый блик в глазах
+    const matFurMain = new THREE.MeshLambertMaterial({ color: 0x2B2D38 });
+    const matFurStripe = new THREE.MeshLambertMaterial({ color: 0x1D1E26 });
+    const matFurWhite = new THREE.MeshLambertMaterial({ color: 0xF1F5F9 });
+    const matPinkNose = new THREE.MeshLambertMaterial({ color: 0xF472B6 });
+    const matEyePupil = new THREE.MeshBasicMaterial({ color: 0x0B0B0E });
+    const matEyeShine = new THREE.MeshBasicMaterial({ color: 0xFFFFFF });
 
-    // Цвет темы используется для ошейника, медальона и радужки глаз
     const matCollar = new THREE.MeshLambertMaterial({
         color: theme.num,
         emissive: theme.num,
@@ -230,38 +287,35 @@ function buildPixelCatVoxelModel(scene) {
     const headGroup = new THREE.Group();
     voxelGroup.add(headGroup);
 
-    // 1. ПИКСЕЛЬНАЯ ГОЛОВА И ТЕЛО КОТИКА
-    headGroup.add(makeBox(8, 6, 6, matFurMain, 0, 1.2, 0));       // Основа головы
-    headGroup.add(makeBox(6, 7, 5, matFurMain, 0, 1.2, 0));       // Скругление макушки
-    headGroup.add(makeBox(9, 4, 5, matFurMain, 0, 0.6, 0));       // Пухлые кошачьи щёчки
+    // 1. ПИКСЕЛЬНАЯ ГОЛОВА И МОРДОЧКА КОТА
+    headGroup.add(makeBox(8, 6, 6, matFurMain, 0, 1.2, 0));
+    headGroup.add(makeBox(6, 7, 5, matFurMain, 0, 1.2, 0));
+    headGroup.add(makeBox(9, 4, 5, matFurMain, 0, 0.6, 0));
 
-    // Полоски на лбу и по бокам (табби-окрас)
     headGroup.add(makeBox(1.2, 2.2, 0.3, matFurStripe, 0.0, 3.3, 3.05));
     headGroup.add(makeBox(1.0, 1.4, 0.3, matFurStripe, -1.8, 3.1, 3.05));
     headGroup.add(makeBox(1.0, 1.4, 0.3, matFurStripe, 1.8, 3.1, 3.05));
     headGroup.add(makeBox(0.3, 1.0, 2.6, matFurStripe, -4.55, 0.8, 0));
     headGroup.add(makeBox(0.3, 1.0, 2.6, matFurStripe, 4.55, 0.8, 0));
 
-    // Белая пушистая мордочка вокруг носика + пиксельные усы
     headGroup.add(makeBox(4.2, 2.2, 0.6, matFurWhite, 0, -0.3, 3.0));
     headGroup.add(makeBox(1.0, 0.5, 0.3, matFurWhite, -4.8, 0.4, 2.2));
     headGroup.add(makeBox(1.0, 0.5, 0.3, matFurWhite, -4.8, -0.4, 2.2));
     headGroup.add(makeBox(1.0, 0.5, 0.3, matFurWhite, 4.8, 0.4, 2.2));
     headGroup.add(makeBox(1.0, 0.5, 0.3, matFurWhite, 4.8, -0.4, 2.2));
 
-    // Розовый пиксельный носик и ротик
     headGroup.add(makeBox(1.3, 0.8, 0.5, matPinkNose, 0, 0.2, 3.35));
     const mouthMesh = makeBox(1.0, 0.45, 0.4, matFurStripe, 0, -0.65, 3.32);
     headGroup.add(mouthMesh);
     zappy3D.mouthMesh = mouthMesh;
 
-    // 2. ТУЛОВИЩЕ, БЕЛАЯ ГРУДКА И ОШЕЙНИК С МЕДАЛЬОНОМ
-    headGroup.add(makeBox(6.2, 3.6, 5.0, matFurMain, 0, -3.2, -0.2)); // Тельце
-    headGroup.add(makeBox(3.8, 2.8, 0.5, matFurWhite, 0, -3.3, 2.25)); // Белая грудка
-    headGroup.add(makeBox(6.5, 0.8, 5.3, matCollar, 0, -1.9, -0.1)); // Ошейник в цвет темы
-    headGroup.add(makeBox(1.2, 1.2, 0.6, matEyeShine, 0, -2.3, 2.65)); // Бубенчик/медальон на шее
+    // 2. ТУЛОВИЩЕ, БЕЛАЯ ГРУДКА И ОШЕЙНИК
+    headGroup.add(makeBox(6.2, 3.6, 5.0, matFurMain, 0, -3.2, -0.2));
+    headGroup.add(makeBox(3.8, 2.8, 0.5, matFurWhite, 0, -3.3, 2.25));
+    headGroup.add(makeBox(6.5, 0.8, 5.3, matCollar, 0, -1.9, -0.1));
+    headGroup.add(makeBox(1.2, 1.2, 0.6, matEyeShine, 0, -2.3, 2.65));
 
-    // 3. ПИКСЕЛЬНЫЕ КОШАЧЬИ ГЛАЗА
+    // 3. ПИКСЕЛЬНЫЕ КОШАЧЬИ ГЛАЗКИ
     const eyeZ = 3.08;
     const openEyesL = new THREE.Group();
     openEyesL.add(
@@ -278,7 +332,6 @@ function buildPixelCatVoxelModel(scene) {
     headGroup.add(openEyesL, openEyesR);
     zappy3D.eyeMeshes = [openEyesL, openEyesR];
 
-    // Радостно зажмуренные глазки-дуги
     const happyGroupL = new THREE.Group();
     happyGroupL.add(
         makeBox(0.7, 0.7, 0.3, matEyeIris, -2.8, 1.1, eyeZ),
@@ -296,7 +349,6 @@ function buildPixelCatVoxelModel(scene) {
     headGroup.add(happyGroupL, happyGroupR);
     zappy3D.happyEyeMeshes = [happyGroupL, happyGroupR];
 
-    // Сонные / моргающие глаза
     const sleepL = makeBox(2.0, 0.6, 0.3, matEyeIris, -2.2, 1.2, eyeZ);
     const sleepR = makeBox(2.0, 0.6, 0.3, matEyeIris, 2.2, 1.2, eyeZ);
     sleepL.visible = false;
@@ -304,7 +356,6 @@ function buildPixelCatVoxelModel(scene) {
     headGroup.add(sleepL, sleepR);
     zappy3D.sleepEyeMeshes = [sleepL, sleepR];
 
-    // Головокружение (крестики)
     const dizzyL = new THREE.Group();
     dizzyL.add(
         makeBox(0.6, 0.6, 0.3, matEyeIris, -2.7, 1.8, eyeZ),
@@ -320,7 +371,7 @@ function buildPixelCatVoxelModel(scene) {
     headGroup.add(dizzyL, dizzyR);
     zappy3D.dizzyEyeMeshes = [dizzyL, dizzyR];
 
-    // 4. СТУПЕНЧАТЫЕ 8-БИТНЫЕ КОШАЧЬИ УШКИ С РОЗОВОЙ СЕРЕДИНКОЙ
+    // 4. УШКИ
     [-2.7, 2.7].forEach(ex => {
         headGroup.add(makeBox(2.8, 1.2, 2.0, matFurMain, ex, 4.8, 0));
         headGroup.add(makeBox(2.0, 1.2, 1.6, matFurMain, ex, 5.8, 0));
@@ -328,15 +379,15 @@ function buildPixelCatVoxelModel(scene) {
         headGroup.add(makeBox(1.4, 1.4, 0.4, matPinkNose, ex, 5.1, 0.9));
     });
 
-    // 5. ЛАПКИ С БЕЛЫМИ НОСОЧКАМИ И ПИКСЕЛЬНЫЙ ХВОСТ
+    // 5. ЛАПКИ И ХВОСТ
     const leftPaw = new THREE.Group();
     leftPaw.add(makeBox(2.0, 1.6, 2.2, matFurMain, -2.2, -4.8, 0.8));
-    leftPaw.add(makeBox(2.1, 0.9, 1.6, matFurWhite, -2.2, -5.2, 1.4)); // Белый носочек
+    leftPaw.add(makeBox(2.1, 0.9, 1.6, matFurWhite, -2.2, -5.2, 1.4));
     voxelGroup.add(leftPaw);
 
     const rightPaw = new THREE.Group();
     rightPaw.add(makeBox(2.0, 1.6, 2.2, matFurMain, 2.2, -4.8, 0.8));
-    rightPaw.add(makeBox(2.1, 0.9, 1.6, matFurWhite, 2.2, -5.2, 1.4)); // Белый носочек
+    rightPaw.add(makeBox(2.1, 0.9, 1.6, matFurWhite, 2.2, -5.2, 1.4));
     voxelGroup.add(rightPaw);
 
     const tailGroup = new THREE.Group();
@@ -344,11 +395,11 @@ function buildPixelCatVoxelModel(scene) {
         makeBox(1.1, 1.1, 1.6, matFurMain, 0, -3.8, -3.2),
         makeBox(1.1, 1.8, 1.2, matFurStripe, 0, -2.8, -4.2),
         makeBox(1.1, 1.8, 1.2, matFurMain, 0, -1.3, -4.8),
-        makeBox(1.1, 1.1, 1.1, matFurWhite, 0, -0.1, -5.0) // Белый кончик хвоста
+        makeBox(1.1, 1.1, 1.1, matFurWhite, 0, -0.1, -5.0)
     );
     voxelGroup.add(tailGroup);
 
-    // 6. 8-БИТНЫЙ ПАКЕТ-ПЕЧЕНЬКА
+    // 6. ПАКЕТ-ПЕЧЕНЬКА
     const cookieGroup = new THREE.Group();
     const matCookie = new THREE.MeshLambertMaterial({ color: 0xF59E0B });
     const matChoco = new THREE.MeshBasicMaterial({ color: 0x451A03 });
@@ -373,18 +424,18 @@ function setZappySpeechText(text) {
     if (el) el.innerText = text;
 }
 
-// =========================================================================
-// ИНТЕРАКТИВНЫЙ ТУТОРИАЛ С ЗЭППИ (ЗАПУСКАЕТСЯ ПРИ ПЕРВОМ ВХОДЕ ИЛИ ПО КНОПКЕ)
-// =========================================================================
 function startZappyTutorial() {
+    if (!zappy3D.initialized) return;
     zappy3D.tutorialActive = true;
     zappy3D.tutorialStep = 0;
 
-    document.getElementById('zappy-normal-actions')?.classList.add('hidden');
-    const tutActions = document.getElementById('zappy-tutorial-actions');
-    if (tutActions) {
-        tutActions.classList.remove('hidden');
-        tutActions.classList.add('flex');
+    const stage = document.getElementById('zappy-voxel-stage');
+    const flyingSlot = document.getElementById('zappy-flying-slot');
+    const overlay = document.getElementById('zappy-tutorial-overlay');
+
+    if (stage && flyingSlot && overlay) {
+        flyingSlot.appendChild(stage);
+        overlay.classList.remove('hidden');
     }
 
     renderZappyTutorialStep();
@@ -397,20 +448,94 @@ function renderZappyTutorialStep() {
         return;
     }
 
-    const titleEl = document.getElementById('zappy-header-title');
-    if (titleEl) titleEl.innerText = stepObj.title;
-
-    setZappySpeechText(stepObj.text);
-
-    const nextBtn = document.getElementById('zappy-tut-next-btn');
-    if (nextBtn) {
-        nextBtn.innerText = (zappy3D.tutorialStep >= ZAPPY_TUTORIAL_STEPS.length - 1) ? 'Понятно' : 'Далее';
+    if (stepObj.tab && typeof switchTab === 'function') {
+        const currentActive = document.getElementById('tab-' + stepObj.tab);
+        if (currentActive && !currentActive.classList.contains('active')) {
+            switchTab(stepObj.tab);
+        }
     }
 
-    // Котик радостно подпрыгивает на каждом шаге обучения
+    const titleEl = document.getElementById('zappy-fly-title');
+    const textEl = document.getElementById('zappy-fly-text');
+    const prevBtn = document.getElementById('zappy-fly-prev');
+    const nextBtn = document.getElementById('zappy-fly-next');
+
+    if (titleEl) titleEl.innerText = stepObj.title;
+    if (textEl) textEl.innerText = stepObj.text;
+    if (prevBtn) {
+        prevBtn.disabled = zappy3D.tutorialStep === 0;
+        prevBtn.style.opacity = zappy3D.tutorialStep === 0 ? '0.35' : '1';
+    }
+    if (nextBtn) {
+        nextBtn.innerText = (zappy3D.tutorialStep >= ZAPPY_TUTORIAL_STEPS.length - 1) ? 'Завершить' : 'Далее';
+    }
+
     zappy3D.mood = 'happy';
-    zappy3D.moodTimer = 70;
-    zappy3D.jumpVel = Math.min(0.09, zappy3D.jumpVel + 0.07);
+    zappy3D.moodTimer = 85;
+    zappy3D.jumpVel = 0.09;
+    zappy3D.spinVelY = 0.20;
+
+    requestAnimationFrame(() => {
+        setTimeout(() => positionSpotlightAndFlyingZappy(), 40);
+    });
+}
+
+function positionSpotlightAndFlyingZappy() {
+    if (!zappy3D.tutorialActive) return;
+
+    const stepObj = ZAPPY_TUTORIAL_STEPS[zappy3D.tutorialStep];
+    const hole = document.getElementById('zappy-spotlight-hole');
+    const companion = document.getElementById('zappy-flying-companion');
+    if (!stepObj || !hole || !companion) return;
+
+    const targetEl = typeof stepObj.target === 'function' ? stepObj.target() : null;
+    if (!targetEl) return;
+
+    try {
+        targetEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    } catch { }
+
+    const rect = targetEl.getBoundingClientRect();
+    const pad = 8;
+
+    const holeLeft = Math.max(8, rect.left - pad);
+    const holeTop = Math.max(8, rect.top - pad);
+    const holeW = Math.min(window.innerWidth - holeLeft - 8, rect.width + pad * 2);
+    const holeH = Math.min(window.innerHeight - holeTop - 8, rect.height + pad * 2);
+
+    hole.style.left = `${holeLeft}px`;
+    hole.style.top = `${holeTop}px`;
+    hole.style.width = `${holeW}px`;
+    hole.style.height = `${holeH}px`;
+
+    const compW = 360;
+    const compH = companion.offsetHeight || 136;
+    const margin = 16;
+
+    let compX = holeLeft + holeW + margin;
+    let compY = holeTop + (holeH - compH) / 2;
+
+    if (compX + compW > window.innerWidth - 12) {
+        compX = holeLeft - compW - margin;
+    }
+    if (compX < 12) {
+        compX = Math.max(14, Math.min(window.innerWidth - compW - 14, holeLeft + (holeW - compW) / 2));
+        if (holeTop + holeH + compH + margin < window.innerHeight - 12) {
+            compY = holeTop + holeH + margin;
+        } else {
+            compY = Math.max(54, holeTop - compH - margin);
+        }
+    }
+
+    compY = Math.max(52, Math.min(window.innerHeight - compH - 14, compY));
+
+    companion.style.left = `${Math.round(compX)}px`;
+    companion.style.top = `${Math.round(compY)}px`;
+
+    const targetCenterX = holeLeft + holeW / 2;
+    const compCenterX = compX + compW / 2;
+    zappy3D.lookOverrideX = Math.max(-0.8, Math.min(0.8, (targetCenterX - compCenterX) / 300));
+    zappy3D.lookOverrideY = 0;
 }
 
 function nextZappyTutorialStep() {
@@ -422,21 +547,31 @@ function nextZappyTutorialStep() {
     }
 }
 
+function prevZappyTutorialStep() {
+    if (zappy3D.tutorialStep > 0) {
+        zappy3D.tutorialStep--;
+        renderZappyTutorialStep();
+    }
+}
+
 function skipZappyTutorial() {
     zappy3D.tutorialActive = false;
-    localStorage.setItem('zappy_tutorial_done_v1', '1');
+    zappy3D.lookOverrideX = null;
+    zappy3D.lookOverrideY = null;
+    localStorage.setItem('zappy_tutorial_done_v2', '1');
 
-    const titleEl = document.getElementById('zappy-header-title');
-    if (titleEl) titleEl.innerText = 'ZAPPY 8-BIT';
+    const stage = document.getElementById('zappy-voxel-stage');
+    const homeSlot = document.getElementById('zappy-home-slot');
+    const overlay = document.getElementById('zappy-tutorial-overlay');
 
-    const tutActions = document.getElementById('zappy-tutorial-actions');
-    if (tutActions) {
-        tutActions.classList.add('hidden');
-        tutActions.classList.remove('flex');
+    if (overlay) overlay.classList.add('hidden');
+    if (stage && homeSlot) homeSlot.appendChild(stage);
+
+    if (typeof switchTab === 'function') {
+        switchTab('home');
     }
-    document.getElementById('zappy-normal-actions')?.classList.remove('hidden');
 
-    setZappySpeechText('Обучение завершено. Я всегда рядом на Главном экране.');
+    setZappySpeechText('Экскурсия окончена. Я всегда рядом в боковом меню.');
 }
 
 function setupZappyInteractions(stageEl) {
@@ -493,7 +628,6 @@ function petZappyMascot() {
     zappy3D.mood = 'happy';
     zappy3D.moodTimer = 95;
 
-    // Строгий лимит скорости прыжка и сквиша при спаме кликами!
     if (zappy3D.jumpY < 0.18) {
         zappy3D.jumpVel = Math.min(0.11, zappy3D.jumpVel + 0.09);
     }
@@ -529,7 +663,7 @@ function updateVoxelFaceVisibility(isRunning) {
     const mood = zappy3D.mood;
     const showHappy = (mood === 'happy' || mood === 'eating');
     const showDizzy = (mood === 'dizzy');
-    const showSleep = (!showHappy && !showDizzy && (!isRunning || zappy3D.isBlinking));
+    const showSleep = (!showHappy && !showDizzy && (!isRunning && !zappy3D.tutorialActive || zappy3D.isBlinking));
     const showNormal = (!showHappy && !showDizzy && !showSleep);
 
     zappy3D.eyeMeshes.forEach(m => m.visible = showNormal);
@@ -551,9 +685,11 @@ function animateZappy3D() {
     requestAnimationFrame(animateZappy3D);
     if (!zappy3D.initialized) return;
 
-    const homeTab = document.getElementById('tab-home');
-    if (homeTab && !homeTab.classList.contains('active')) return;
-    if (document.body.classList.contains('compact-mode')) return;
+    const sidebar = document.getElementById('sidebar');
+    if (!zappy3D.tutorialActive) {
+        if (document.body.classList.contains('compact-mode')) return;
+        if (sidebar && sidebar.classList.contains('rail-mode')) return;
+    }
 
     const now = performance.now();
     const isRunning = !!appState?.isRunning;
@@ -586,14 +722,15 @@ function animateZappy3D() {
     updateVoxelFaceVisibility(isRunning);
 
     if (!zappy3D.isDragging) {
-        const targetRotY = zappy3D.mouseX * 0.40;
-        const targetRotX = zappy3D.mouseY * 0.20;
+        const lookX = zappy3D.lookOverrideX !== null ? zappy3D.lookOverrideX : zappy3D.mouseX;
+        const lookY = zappy3D.lookOverrideY !== null ? zappy3D.lookOverrideY : zappy3D.mouseY;
+        const targetRotY = lookX * 0.42;
+        const targetRotX = lookY * 0.20;
         zappy3D.rotY += (targetRotY - zappy3D.rotY) * 0.08 + zappy3D.spinVelY;
         zappy3D.rotX += (targetRotX - zappy3D.rotX) * 0.08;
         zappy3D.spinVelY *= 0.88;
     }
 
-    // Прыжок с ЖЕСТКИМ ПОТОЛКОМ (MAX_JUMP_Y = 0.28), чтобы при спаме котик никогда не улетал из рамки!
     zappy3D.jumpY += zappy3D.jumpVel;
     zappy3D.jumpVel -= 0.010;
     if (zappy3D.jumpY > 0.28) {
@@ -608,14 +745,14 @@ function animateZappy3D() {
     zappy3D.squash += (1.0 - zappy3D.squash) * 0.16;
     zappy3D.squash = Math.max(0.78, Math.min(1.24, zappy3D.squash));
 
-    const bob = Math.sin(now * (isRunning ? 0.0045 : 0.0022)) * 0.07;
+    const bob = Math.sin(now * (isRunning || zappy3D.tutorialActive ? 0.0048 : 0.0022)) * 0.07;
     zappy3D.voxelGroup.position.y = bob + zappy3D.jumpY;
 
     zappy3D.headGroup.rotation.y = zappy3D.rotY;
     zappy3D.headGroup.rotation.x = zappy3D.rotX;
     zappy3D.headGroup.scale.set(1 / Math.sqrt(zappy3D.squash), zappy3D.squash, 1 / Math.sqrt(zappy3D.squash));
 
-    const speed = isRunning ? 0.008 : 0.003;
+    const speed = isRunning || zappy3D.tutorialActive ? 0.008 : 0.003;
     zappy3D.tailGroup.rotation.z = Math.sin(now * speed * 1.4) * 0.26;
     zappy3D.leftPaw.position.y = Math.sin(now * speed) * 0.06;
     zappy3D.rightPaw.position.y = Math.cos(now * speed) * 0.06;

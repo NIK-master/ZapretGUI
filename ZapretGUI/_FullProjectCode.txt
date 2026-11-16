@@ -161,10 +161,23 @@ namespace ZapretGUI
 
         public MainWindow()
         {
-            string webViewDataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), AppConstants.AppRegistryName, "WebView2Cache");
-            Directory.CreateDirectory(webViewDataPath);
-            Environment.SetEnvironmentVariable("WEBVIEW2_USER_DATA_FOLDER", webViewDataPath);
+            // Надежная папка кэша WebView2 с автоматическим фолбэком в ProgramData
+            string webViewDataPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+                AppConstants.AppRegistryName,
+                "WebView2Cache");
 
+            try
+            {
+                Directory.CreateDirectory(webViewDataPath);
+            }
+            catch
+            {
+                webViewDataPath = Path.Combine(Path.GetTempPath(), "ZapretForADHD_WebView2");
+                Directory.CreateDirectory(webViewDataPath);
+            }
+
+            Environment.SetEnvironmentVariable("WEBVIEW2_USER_DATA_FOLDER", webViewDataPath);
             Environment.SetEnvironmentVariable("WEBVIEW2_DEFAULT_BACKGROUND_COLOR", "FF0A0A0A");
             Environment.SetEnvironmentVariable("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "--disable-pinch --force-device-scale-factor=1");
 
@@ -180,6 +193,7 @@ namespace ZapretGUI
             Window = new PhotinoWindow()
                 .SetTitle("Zapret for ADHD")
                 .SetIconFile(initIcoPath)
+                .SetTemporaryFilesPath(webViewDataPath) // <-- ВАЖНО: Передает путь напрямую в C++ ядро Photino!
                 .SetUseOsDefaultSize(false)
                 .SetSize(initialSize)
                 .Center()
@@ -6432,7 +6446,6 @@ namespace ZapretGUI.Core
 	<script src="js/radar.js"></script>
 	<script src="js/reactor3d.js"></script>
 	<script src="js/packet-sim3d.js"></script>
-	<script src="js/globe3d.js"></script>
 	<script src="js/gems3d.js"></script>
 	<script src="js/zappy3d.js"></script>
 	<script src="js/app.js"></script>
@@ -8752,12 +8765,13 @@ function onDiscordEmojiClick() {
 ////////////////////////////////////////////////////////////////////////////////
 
 // =========================================================================
-// МОДУЛЬ: СТИЛИЗОВАННЫЕ ЮВЕЛИРНЫЕ 3D-САМОЦВЕТЫ (СЕРДЕЧКО, ДРУЗА, БРИЛЛИАНТ)
+// МОДУЛЬ: СТИЛИЗОВАННЫЕ ЮВЕЛИРНЫЕ 3D-САМОЦВЕТЫ (БЕЗ АВТО-ПРОЛИСТЫВАНИЯ)
 // Файл: wwwroot/js/gems3d.js
 // =========================================================================
 
 let gems3DInstances = [];
 let gems3DLoopStarted = false;
+let isSyncingGemsInternal = false;
 
 const GEMS_3D_CONFIG = [
     { id: 'green', title: 'Изумруд', eng: 'EMERALD', color: 0x10B981, deep: 0x064E3B, edge: 0x6EE7B7, shape: 'emerald' },
@@ -8767,7 +8781,6 @@ const GEMS_3D_CONFIG = [
     { id: 'pink', title: 'Морганит', eng: 'MORGANITE', color: 0xEC4899, deep: 0x831843, edge: 0xFBCFE8, shape: 'morganite' }
 ];
 
-// Создает один заостренный шестигранный кристалл кварца (для друзы Аметиста)
 function createQuartzSpire(radius, height) {
     const pts = [
         new THREE.Vector2(0.001, -height * 0.5),
@@ -8778,7 +8791,6 @@ function createQuartzSpire(radius, height) {
     return new THREE.LatheGeometry(pts, 6);
 }
 
-// Строит стилизованную 3D-модель каждого драгоценного камня
 function buildStylizedGemMesh(gem, bodyMat, coreMat, edgeMat) {
     const root = new THREE.Group();
 
@@ -8789,14 +8801,12 @@ function buildStylizedGemMesh(gem, bodyMat, coreMat, edgeMat) {
         mesh.scale.set(...scale);
         root.add(mesh);
 
-        // Внутреннее светящееся ядро для эффекта глубины самоцвета
         const inner = new THREE.Mesh(geom, coreMat);
         inner.position.set(...pos);
         inner.rotation.set(...rot);
         inner.scale.set(scale[0] * 0.55, scale[1] * 0.55, scale[2] * 0.55);
         root.add(inner);
 
-        // Четкая ювелирная подводка граней
         const edgesGeo = new THREE.EdgesGeometry(geom, 10);
         const edges = new THREE.LineSegments(edgesGeo, edgeMat);
         edges.position.set(...pos);
@@ -8807,7 +8817,6 @@ function buildStylizedGemMesh(gem, bodyMat, coreMat, edgeMat) {
 
     switch (gem.shape) {
         case 'morganite': {
-            // НАСТОЯЩЕЕ ГРАНЕНОЕ 3D-СЕРДЕЧКО (Heart-Cut Gem)
             const x = 0, y = 0;
             const heartShape = new THREE.Shape();
             heartShape.moveTo(x, y + 0.22);
@@ -8821,11 +8830,11 @@ function buildStylizedGemMesh(gem, bodyMat, coreMat, edgeMat) {
             const geom = new THREE.ExtrudeGeometry(heartShape, {
                 depth: 0.14,
                 bevelEnabled: true,
-                bevelSegments: 1, // 1 сегмент дает острые ювелирные грани вместо круглого мыла!
+                bevelSegments: 1,
                 steps: 1,
                 bevelSize: 0.16,
                 bevelThickness: 0.18,
-                curveSegments: 5  // Делает контур сердца граненым, как у кристалла
+                curveSegments: 5
             });
             geom.center();
             addPart(geom, [0, 0.02, 0], [0, 0, 0], [0.78, 0.78, 0.85]);
@@ -8833,12 +8842,11 @@ function buildStylizedGemMesh(gem, bodyMat, coreMat, edgeMat) {
         }
 
         case 'topaz': {
-            // КЛАССИЧЕСКАЯ БРИЛЛИАНТОВАЯ ОГРАНКА (Плоская площадка сверху + корона + острый низ)
             const pts = [
-                new THREE.Vector2(0.001, -0.58), // Острый шип снизу (калетта)
-                new THREE.Vector2(0.62, 0.14),  // Широкий поясок (рундист)
-                new THREE.Vector2(0.36, 0.44),  // Скошенная корона сверху
-                new THREE.Vector2(0.001, 0.44)   // Плоская верхняя площадка (table)
+                new THREE.Vector2(0.001, -0.58),
+                new THREE.Vector2(0.62, 0.14),
+                new THREE.Vector2(0.36, 0.44),
+                new THREE.Vector2(0.001, 0.44)
             ];
             const geom = new THREE.LatheGeometry(pts, 8);
             geom.center();
@@ -8847,7 +8855,6 @@ function buildStylizedGemMesh(gem, bodyMat, coreMat, edgeMat) {
         }
 
         case 'emerald': {
-            // СТУПЕНЧАТАЯ ИЗУМРУДНАЯ ОГРАНКА (Octagonal Step-Cut со скошенными фасками сверху и снизу)
             const pts = [
                 new THREE.Vector2(0.001, -0.56),
                 new THREE.Vector2(0.26, -0.56),
@@ -8857,21 +8864,20 @@ function buildStylizedGemMesh(gem, bodyMat, coreMat, edgeMat) {
                 new THREE.Vector2(0.001, 0.56)
             ];
             const geom = new THREE.LatheGeometry(pts, 8);
-            geom.scale(0.88, 1.0, 0.68); // Прямоугольный изумрудный профиль
-            geom.rotateY(Math.PI / 8);   // Поворачиваем плоской широкой гранью вперед
+            geom.scale(0.88, 1.0, 0.68);
+            geom.rotateY(Math.PI / 8);
             geom.center();
             addPart(geom, [0, 0.02, 0]);
             break;
         }
 
         case 'sapphire': {
-            // КОРОЛЕВСКИЙ КРИСТАЛЛ САПФИРА (Двойная ступенчатая пирамида с пояском)
             const pts = [
-                new THREE.Vector2(0.001, -0.68), // Нижнее острие
-                new THREE.Vector2(0.44, -0.16), // Нижний ярус граней
-                new THREE.Vector2(0.50, 0.00), // Центральный поясок
-                new THREE.Vector2(0.44, 0.16), // Верхний ярус граней
-                new THREE.Vector2(0.001, 0.68)  // Верхнее острие
+                new THREE.Vector2(0.001, -0.68),
+                new THREE.Vector2(0.44, -0.16),
+                new THREE.Vector2(0.50, 0.00),
+                new THREE.Vector2(0.44, 0.16),
+                new THREE.Vector2(0.001, 0.68)
             ];
             const geom = new THREE.LatheGeometry(pts, 6);
             geom.scale(0.88, 1.0, 0.72);
@@ -8882,7 +8888,6 @@ function buildStylizedGemMesh(gem, bodyMat, coreMat, edgeMat) {
 
         case 'amethyst':
         default: {
-            // НАСТОЯЩАЯ ДРУЗА АМЕТИСТА (Кластер из 3 сросшихся кристаллов кварца!)
             const mainSpire = createQuartzSpire(0.30, 1.08);
             const leftSpire = createQuartzSpire(0.22, 0.78);
             const rightSpire = createQuartzSpire(0.20, 0.72);
@@ -8921,15 +8926,15 @@ function createGemInstanceForWrap(wrap) {
     renderer.domElement.style.height = '108px';
     renderer.domElement.style.display = 'block';
 
-    oldCanvas.style.display = 'none';
-    wrap.insertBefore(renderer.domElement, oldCanvas);
+    // Полностью удаляем старый холст с его старыми слушателями из settings.js, чтобы они не листали тему!
+    oldCanvas.remove();
+    wrap.insertBefore(renderer.domElement, wrap.firstChild);
 
     const labelsContainer = document.createElement('div');
     labelsContainer.className = 'absolute inset-0 pointer-events-none overflow-hidden';
     labelsContainer.style.zIndex = '4';
     wrap.appendChild(labelsContainer);
 
-    // Ювелирный студийный свет: глубокие тени + контрастные грани без пересвета
     scene.add(new THREE.AmbientLight(0xffffff, 0.30));
 
     const keyLight = new THREE.DirectionalLight(0xffffff, 0.90);
@@ -8944,7 +8949,6 @@ function createGemInstanceForWrap(wrap) {
     const step = (Math.PI * 2) / GEMS_3D_CONFIG.length;
 
     GEMS_3D_CONFIG.forEach((gem, idx) => {
-        // Внешняя полупрозрачная оболочка самоцвета
         const bodyMat = new THREE.MeshPhongMaterial({
             color: gem.color,
             emissive: gem.deep,
@@ -8956,14 +8960,12 @@ function createGemInstanceForWrap(wrap) {
             opacity: 0.88
         });
 
-        // Внутреннее ядро для глубины камня
         const coreMat = new THREE.MeshBasicMaterial({
             color: gem.edge,
             transparent: true,
             opacity: 0.35
         });
 
-        // Четкая подсветка ювелирных граней
         const edgesMat = new THREE.LineBasicMaterial({
             color: gem.edge,
             transparent: true,
@@ -9006,6 +9008,7 @@ function createGemInstanceForWrap(wrap) {
     glCanvas.style.touchAction = 'none';
 
     glCanvas.addEventListener('pointerdown', e => {
+        if (e.button !== 0) return;
         instance.isDragging = true;
         instance.dragStartX = e.clientX;
         instance.dragMoved = 0;
@@ -9028,41 +9031,49 @@ function createGemInstanceForWrap(wrap) {
         if (instance.dragMoved < 6) {
             const rect = glCanvas.getBoundingClientRect();
             const relX = (e.clientX - rect.left) / rect.width;
-            if (relX < 0.38) triggerGemStep(-1);
-            else if (relX > 0.62) triggerGemStep(1);
+            if (relX < 0.38) userSelectGemByDelta(-1);
+            else if (relX > 0.62) userSelectGemByDelta(1);
         } else {
             const stepAngle = (Math.PI * 2) / GEMS_3D_CONFIG.length;
             const rawIdx = Math.round(-instance.targetAngle / stepAngle);
             const normIdx = ((rawIdx % GEMS_3D_CONFIG.length) + GEMS_3D_CONFIG.length) % GEMS_3D_CONFIG.length;
             const chosen = GEMS_3D_CONFIG[normIdx];
-            if (chosen) applyGemSelectionEverywhere(chosen.id);
+            if (chosen) userCommitGemTheme(chosen.id);
         }
     });
 
+    // Колесо мыши работает ТОЛЬКО при наведении прямо на 3D-холст и не скроллит страницу
     glCanvas.addEventListener('wheel', e => {
         e.preventDefault();
-        triggerGemStep(e.deltaY > 0 ? 1 : -1);
+        e.stopPropagation();
+        userSelectGemByDelta(e.deltaY > 0 ? 1 : -1);
     }, { passive: false });
 
     gems3DInstances.push(instance);
 }
 
-function triggerGemStep(dir) {
+function userSelectGemByDelta(dir) {
     const curTheme = (appState?.settings?.accentTheme || 'green');
     const norm = (curTheme === 'crimson' || curTheme === 'cyan') ? 'pink' : curTheme;
     const idx = Math.max(0, GEMS_3D_CONFIG.findIndex(g => g.id === norm));
     const nextIdx = (idx + dir + GEMS_3D_CONFIG.length) % GEMS_3D_CONFIG.length;
-    applyGemSelectionEverywhere(GEMS_3D_CONFIG[nextIdx].id);
+    userCommitGemTheme(GEMS_3D_CONFIG[nextIdx].id);
 }
 
-function applyGemSelectionEverywhere(themeId) {
-    if (typeof window.selectAccentTheme === 'function') {
-        window.selectAccentTheme(themeId);
+function userCommitGemTheme(themeId) {
+    if (isSyncingGemsInternal) return;
+    isSyncingGemsInternal = true;
+    try {
+        if (typeof window.selectAccentTheme === 'function') {
+            window.selectAccentTheme(themeId, false);
+        }
+        syncGems3DWithActiveTheme(themeId, false);
+        if (typeof syncReactor3DThemeAndState === 'function') {
+            syncReactor3DThemeAndState();
+        }
+    } finally {
+        isSyncingGemsInternal = false;
     }
-    if (typeof window.selectWizTheme === 'function') {
-        try { window.selectWizTheme(themeId); } catch { }
-    }
-    syncGems3DWithActiveTheme(themeId, false);
 }
 
 function initGems3DShowcase() {
@@ -9072,17 +9083,13 @@ function initGems3DShowcase() {
     const wraps = document.querySelectorAll('.gem-field-wrap');
     wraps.forEach(w => createGemInstanceForWrap(w));
 
-    ['selectAccentTheme', 'selectWizTheme'].forEach(fnName => {
-        if (typeof window[fnName] === 'function' && !window['_' + fnName + '_hooked']) {
-            const origFn = window[fnName];
-            window['_' + fnName + '_hooked'] = true;
-            window[fnName] = function (themeName, skipSave = false) {
-                origFn(themeName, skipSave);
-                syncGems3DWithActiveTheme(themeName, false);
-                if (typeof syncReactor3DThemeAndState === 'function') syncReactor3DThemeAndState();
-            };
-        }
-    });
+    // Перехватываем кнопки-стрелки cycleGemTheme / cycleWizGemTheme, чтобы они крутили 3D-карусель
+    window.cycleGemTheme = function (dir) {
+        userSelectGemByDelta(dir);
+    };
+    window.cycleWizGemTheme = function (dir) {
+        userSelectGemByDelta(dir);
+    };
 
     syncGems3DWithActiveTheme(appState?.settings?.accentTheme || 'green', true);
 
@@ -9159,7 +9166,6 @@ function animateGems3D() {
             const s = 0.45 + depthNorm * 0.52;
             item.group.scale.set(s, s, s);
 
-            // Плавное ювелирное вращение
             item.group.rotation.y += 0.011 + depthNorm * 0.011;
             item.group.rotation.x = 0.18 + Math.sin(now * 0.0015 + item.index) * 0.08;
 
@@ -9186,392 +9192,6 @@ function animateGems3D() {
 
         inst.renderer.render(inst.scene, inst.camera);
     });
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// ФАЙЛ: wwwroot\js\globe3d.js
-////////////////////////////////////////////////////////////////////////////////
-
-// =========================================================================
-// МОДУЛЬ: 3D ГОЛОГРАФИЧЕСКИЙ ГЛОБУС МАРШРУТИЗАЦИИ В ДИАГНОСТИКЕ (THREE.JS)
-// Файл: wwwroot/js/globe3d.js
-// =========================================================================
-
-let diagGlobe = {
-    initialized: false,
-    scene: null,
-    camera: null,
-    renderer: null,
-    globeGroup: null,
-    arcsGroup: null,
-    pulses: [],
-    isDragging: false,
-    prevX: 0,
-    prevY: 0,
-    velX: 0.0025,
-    velY: 0
-};
-function latLonToVec3(lat, lon, radius) {
-    const phi = (90 - lat) * (Math.PI / 180);
-    const theta = (lon + 180) * (Math.PI / 180);
-    return new THREE.Vector3(
-        -radius * Math.sin(phi) * Math.cos(theta),
-        radius * Math.cos(phi),
-        radius * Math.sin(phi) * Math.sin(theta)
-    );
-}
-
-const GLOBE_NODES = [
-    { id: 'user', name: 'Ваш ПК (РФ)',     lat: 55.75, lon: 37.61, isOrigin: true },
-    { id: 'dc2',  name: 'Амстердам (DC2/4)', lat: 52.37, lon: 4.89,  ok: true },
-    { id: 'dc1',  name: 'Майами (DC1/3)',   lat: 25.76, lon: -80.19, ok: true },
-    { id: 'dc5',  name: 'Сингапур (DC5)',   lat: 1.35,  lon: 103.82, ok: true },
-    { id: 'ds',   name: 'Франкфурт (Discord)', lat: 50.11, lon: 8.68, ok: true }
-];
-
-function injectGlobe3DViewButton() {
-    const btnRadar = document.getElementById('btn-diag-view-radar');
-    if (!btnRadar || document.getElementById('btn-diag-view-globe')) return;
-
-    const track = btnRadar.parentElement;
-    const btnGlobe = document.createElement('button');
-    btnGlobe.id = 'btn-diag-view-globe';
-    btnGlobe.className = 'px-2.5 py-0.5 rounded-md text-[11px] font-semibold text-[#888888] hover:text-white transition cursor-pointer flex items-center gap-1.5';
-    btnGlobe.innerHTML = `<span class="mdl-icon text-[10px] text-[#60A5FA]">&#xE774;</span><span>3D Глобус</span>`;
-    btnGlobe.onclick = () => switchDiagViewWithGlobe('globe');
-    track.appendChild(btnGlobe);
-
-    // Вставляем контейнер 3D-глобуса внутрь той же карточки, где лежат #diag-cards-view-wrap и #diag-radar-wrap
-    const radarWrap = document.getElementById('diag-radar-wrap');
-    if (radarWrap && !document.getElementById('diag-globe3d-wrap')) {
-        const globeWrap = document.createElement('div');
-        globeWrap.id = 'diag-globe3d-wrap';
-        globeWrap.className = 'hidden flex-col items-center justify-center relative overflow-hidden pt-1';
-        globeWrap.innerHTML = `
-            <div class="w-full flex items-center justify-between mb-2 px-1 z-10">
-                <div class="flex items-center gap-2">
-                    <span class="w-2 h-2 rounded-full dot-online"></span>
-                    <span class="text-xs font-bold text-[#E0E0E0] uppercase tracking-wider">Межконтинентальная 3D-карта маршрутов (Telegram DC 1–5 & Discord)</span>
-                </div>
-                <span class="text-[11px] font-mono text-[#888888]">Зажмите ЛКМ для вращения 3D-сферы</span>
-            </div>
-
-            <div class="relative w-full h-[290px] rounded-xl bg-gradient-to-b from-[#07090E] to-[#0D131F] border border-[#222938] flex items-center justify-center overflow-hidden">
-                <div id="diag-globe3d-canvas-host" class="w-full h-full flex items-center justify-center cursor-grab active:cursor-grabbing"></div>
-
-                <!-- Плашка-легенда узлов в углу 3D-экрана -->
-                <div class="absolute left-3 top-3 bg-[#0B0F17]/85 border border-[#243044] rounded-lg px-3 py-2 text-[10.5px] font-mono text-[#CCCCCC] space-y-1 pointer-events-none backdrop-blur-sm">
-                    <div class="text-[10px] text-[#777777] uppercase font-bold mb-1">Активные магистрали:</div>
-                    <div id="globe-node-list" class="space-y-1"></div>
-                </div>
-            </div>
-
-            <div class="w-full flex flex-wrap items-center justify-between text-[11px] font-mono text-[#999999] mt-2.5 px-1">
-                <span>📍 Точка исхода: Ваш маршрутизатор</span>
-                <div class="flex items-center gap-4">
-                    <span><b class="text-[#60A5FA]">●</b> Ваш ПК</span>
-                    <span><b class="text-brand">―●</b> Канал открыт (OK)</span>
-                    <span><b class="text-[#EF4444]">―✕</b> Блокировка / Таймаут</span>
-                </div>
-            </div>
-        `;
-        radarWrap.parentNode.insertBefore(globeWrap, radarWrap.nextSibling);
-    }
-
-    // Расширяем штатный переключатель setDiagViewMode из radar.js, чтобы все 3 кнопки работали синхронно
-    if (typeof window.setDiagViewMode === 'function' && !window._globeHooked) {
-        const origSetMode = window.setDiagViewMode;
-        window._globeHooked = true;
-        window.setDiagViewMode = function (mode) {
-            const globeWrap = document.getElementById('diag-globe3d-wrap');
-            const gBtn = document.getElementById('btn-diag-view-globe');
-            if (globeWrap) {
-                globeWrap.classList.add('hidden');
-                globeWrap.classList.remove('flex');
-            }
-            if (gBtn) {
-                gBtn.className = 'px-2.5 py-0.5 rounded-md text-[11px] font-semibold text-[#888888] hover:text-white transition cursor-pointer flex items-center gap-1.5';
-            }
-            origSetMode(mode);
-        };
-    }
-}
-
-function switchDiagViewWithGlobe(mode) {
-    if (mode !== 'globe') {
-        if (typeof setDiagViewMode === 'function') setDiagViewMode(mode);
-        return;
-    }
-
-    sendCmd('playClick');
-
-    // Скрываем ТОЛЬКО внутренние блоки (#diag-cards-view-wrap и #diag-radar-wrap), НЕ пряча родительский .glass-card!
-    const cardsWrap = document.getElementById('diag-cards-view-wrap');
-    const radarWrap = document.getElementById('diag-radar-wrap');
-    const globeWrap = document.getElementById('diag-globe3d-wrap');
-
-    if (cardsWrap) cardsWrap.classList.add('hidden');
-    if (radarWrap) {
-        radarWrap.classList.add('hidden');
-        radarWrap.classList.remove('flex');
-    }
-    if (globeWrap) {
-        globeWrap.classList.remove('hidden');
-        globeWrap.classList.add('flex');
-    }
-
-    ['btn-diag-view-cards', 'btn-diag-view-radar'].forEach(id => {
-        const b = document.getElementById(id);
-        if (b) b.className = 'px-2.5 py-0.5 rounded-md text-[11px] font-semibold text-[#888888] hover:text-white transition cursor-pointer flex items-center gap-1.5';
-    });
-
-    const gBtn = document.getElementById('btn-diag-view-globe');
-    if (gBtn) {
-        gBtn.className = 'px-2.5 py-0.5 rounded-md bg-[#262626] text-white text-[11px] font-semibold transition cursor-pointer flex items-center gap-1.5';
-    }
-
-    requestAnimationFrame(() => {
-        initDiagGlobe3D();
-        rebuildGlobe3DArcs();
-    });
-}
-
-function initDiagGlobe3D() {
-    if (diagGlobe.initialized) return;
-    if (typeof THREE === 'undefined') return;
-
-    const host = document.getElementById('diag-globe3d-canvas-host');
-    if (!host) return;
-
-    const w = host.clientWidth || 720;
-    const h = host.clientHeight || 290;
-
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(38, w / h, 0.1, 100);
-    camera.position.z = 5.2;
-
-    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'high-performance' });
-    renderer.setSize(w, h);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-    host.innerHTML = '';
-    host.appendChild(renderer.domElement);
-
-    const globeGroup = new THREE.Group();
-    scene.add(globeGroup);
-
-    // 1. Темное ядро Земли
-    const coreGeo = new THREE.SphereGeometry(1.58, 36, 36);
-    const coreMat = new THREE.MeshBasicMaterial({ color: 0x0A0F18, transparent: true, opacity: 0.95 });
-    globeGroup.add(new THREE.Mesh(coreGeo, coreMat));
-
-    // 2. Голографическая сетка параллелей и меридианов
-    const wireGeo = new THREE.SphereGeometry(1.60, 28, 20);
-    const wireMat = new THREE.MeshBasicMaterial({ color: 0x1E3A5F, wireframe: true, transparent: true, opacity: 0.45 });
-    globeGroup.add(new THREE.Mesh(wireGeo, wireMat));
-
-    // 3. Точечная матрица поверхности планеты (эффект голограммы материков)
-    const dotsCount = 360;
-    const dotPositions = new Float32Array(dotsCount * 3);
-    for (let i = 0; i < dotsCount; i++) {
-        const phi = Math.acos(-1 + (2 * i) / dotsCount);
-        const theta = Math.sqrt(dotsCount * Math.PI) * phi;
-        const r = 1.61;
-        dotPositions[i * 3] = r * Math.cos(theta) * Math.sin(phi);
-        dotPositions[i * 3 + 1] = r * Math.sin(theta) * Math.sin(phi);
-        dotPositions[i * 3 + 2] = r * Math.cos(phi);
-    }
-    const dotsGeo = new THREE.BufferGeometry();
-    dotsGeo.setAttribute('position', new THREE.BufferAttribute(dotPositions, 3));
-    const dotsMat = new THREE.PointsMaterial({ color: 0x38BDF8, size: 0.028, transparent: true, opacity: 0.35 });
-    globeGroup.add(new THREE.Points(dotsGeo, dotsMat));
-
-    // 4. Внешнее орбитальное кольцо атмосферы
-    const ringGeo = new THREE.RingGeometry(1.76, 1.78, 64);
-    const ringMat = new THREE.MeshBasicMaterial({ color: 0x3B82F6, transparent: true, opacity: 0.22, side: THREE.DoubleSide });
-    scene.add(new THREE.Mesh(ringGeo, ringMat));
-
-    const arcsGroup = new THREE.Group();
-    globeGroup.add(arcsGroup);
-
-    // Начальный поворот лицом к Европе / РФ
-    globeGroup.rotation.y = -0.65;
-    globeGroup.rotation.x = 0.32;
-
-    const canvasEl = renderer.domElement;
-    canvasEl.style.touchAction = 'none';
-
-    canvasEl.addEventListener('pointerdown', e => {
-        e.preventDefault();
-        e.stopPropagation();
-        diagGlobe.isDragging = true;
-        diagGlobe.prevX = e.clientX;
-        diagGlobe.prevY = e.clientY;
-        diagGlobe.velX = 0;
-        diagGlobe.velY = 0;
-        try { canvasEl.setPointerCapture(e.pointerId); } catch { }
-    });
-
-    canvasEl.addEventListener('pointermove', e => {
-        if (!diagGlobe.isDragging) return;
-        e.preventDefault();
-        e.stopPropagation();
-
-        const dx = e.clientX - diagGlobe.prevX;
-        const dy = e.clientY - diagGlobe.prevY;
-        diagGlobe.prevX = e.clientX;
-        diagGlobe.prevY = e.clientY;
-
-        diagGlobe.velX = dx * 0.0065;
-        diagGlobe.velY = dy * 0.0065;
-
-        applyGlobeQuaternionDelta(diagGlobe.velX, diagGlobe.velY);
-    });
-
-    const stopGlobeDrag = (e) => {
-        if (!diagGlobe.isDragging) return;
-        diagGlobe.isDragging = false;
-        try { canvasEl.releasePointerCapture(e.pointerId); } catch { }
-    };
-
-    canvasEl.addEventListener('pointerup', stopGlobeDrag);
-    canvasEl.addEventListener('pointercancel', stopGlobeDrag);
-
-    Object.assign(diagGlobe, {
-        initialized: true,
-        scene,
-        camera,
-        renderer,
-        globeGroup,
-        arcsGroup
-    });
-
-    rebuildGlobe3DArcs();
-    animateDiagGlobe3D();
-}
-
-function rebuildGlobe3DArcs() {
-    if (!diagGlobe.initialized) return;
-
-    while (diagGlobe.arcsGroup.children.length > 0) {
-        const ch = diagGlobe.arcsGroup.children[0];
-        diagGlobe.arcsGroup.remove(ch);
-    }
-    diagGlobe.pulses = [];
-
-    const radius = 1.62;
-    const originPos = latLonToVec3(GLOBE_NODES[0].lat, GLOBE_NODES[0].lon, radius);
-
-    // Маяк пользователя (синий)
-    const userDot = new THREE.Mesh(
-        new THREE.SphereGeometry(0.06, 14, 14),
-        new THREE.MeshBasicMaterial({ color: 0x60A5FA })
-    );
-    userDot.position.copy(originPos);
-    diagGlobe.arcsGroup.add(userDot);
-
-    const accentHex = typeof getThemeHexNumber === 'function' ? getThemeHexNumber() : 0x4CAF50;
-    const legendHtml = [];
-
-    for (let i = 1; i < GLOBE_NODES.length; i++) {
-        const node = GLOBE_NODES[i];
-        const targetPos = latLonToVec3(node.lat, node.lon, radius);
-        const colorHex = node.ok ? accentHex : 0xEF4444;
-
-        const dcDot = new THREE.Mesh(
-            new THREE.SphereGeometry(0.055, 14, 14),
-            new THREE.MeshBasicMaterial({ color: colorHex })
-        );
-        dcDot.position.copy(targetPos);
-        diagGlobe.arcsGroup.add(dcDot);
-
-        const midPos = originPos.clone().add(targetPos).multiplyScalar(0.5).normalize().multiplyScalar(radius + 0.52);
-        const curve = new THREE.QuadraticBezierCurve3(originPos, midPos, targetPos);
-        const points = curve.getPoints(40);
-        const lineGeo = new THREE.BufferGeometry().setFromPoints(points);
-        const lineMat = new THREE.LineBasicMaterial({ color: colorHex, transparent: true, opacity: 0.75 });
-        diagGlobe.arcsGroup.add(new THREE.Line(lineGeo, lineMat));
-
-        const pulseMesh = new THREE.Mesh(
-            new THREE.SphereGeometry(0.042, 10, 10),
-            new THREE.MeshBasicMaterial({ color: 0xFFFFFF })
-        );
-        diagGlobe.arcsGroup.add(pulseMesh);
-        diagGlobe.pulses.push({
-            mesh: pulseMesh,
-            curve,
-            t: (i * 0.23) % 1.0,
-            speed: node.ok ? 0.011 : 0.0035
-        });
-
-        const dotCls = node.ok ? 'text-brand' : 'text-[#EF4444]';
-        const statusStr = node.ok ? 'ONLINE' : 'BLOCK';
-        legendHtml.push(`<div class="flex items-center justify-between gap-3"><span>${node.name}</span><span class="${dotCls} font-bold">${statusStr}</span></div>`);
-    }
-
-    const legEl = document.getElementById('globe-node-list');
-    if (legEl) legEl.innerHTML = legendHtml.join('');
-}
-
-function syncGlobe3DWithDiagReport(report) {
-    if (!report) return;
-    const dcs = report.dcResults || [];
-    const ds = report.discordPing || [];
-
-    const dc13 = dcs.filter(x => x.dcId === 1 || x.dcId === 3);
-    const dc24 = dcs.filter(x => x.dcId === 2 || x.dcId === 4);
-    const dc5 = dcs.filter(x => x.dcId === 5);
-
-    if (dc24.length) GLOBE_NODES[1].ok = dc24.some(x => x.ok);
-    if (dc13.length) GLOBE_NODES[2].ok = dc13.some(x => x.ok);
-    if (dc5.length)  GLOBE_NODES[3].ok = dc5.some(x => x.ok);
-    if (ds.length)   GLOBE_NODES[4].ok = ds.some(x => x.ok);
-
-    rebuildGlobe3DArcs();
-}
-
-function applyGlobeQuaternionDelta(deltaX, deltaY) {
-    if (!diagGlobe.globeGroup) return;
-
-    const qY = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), deltaX);
-    const qX = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), deltaY);
-
-    diagGlobe.globeGroup.quaternion.premultiply(qY);
-    diagGlobe.globeGroup.quaternion.premultiply(qX);
-}
-
-function animateDiagGlobe3D() {
-    requestAnimationFrame(animateDiagGlobe3D);
-    if (!diagGlobe.initialized) return;
-
-    const wrap = document.getElementById('diag-globe3d-wrap');
-    if (!wrap || wrap.classList.contains('hidden')) return;
-
-    const host = document.getElementById('diag-globe3d-canvas-host');
-    if (host && host.clientWidth > 100) {
-        const w = host.clientWidth;
-        const h = host.clientHeight || 290;
-        if (Math.abs(diagGlobe.renderer.domElement.width / (window.devicePixelRatio || 1) - w) > 5) {
-            diagGlobe.renderer.setSize(w, h);
-            diagGlobe.camera.aspect = w / h;
-            diagGlobe.camera.updateProjectionMatrix();
-        }
-    }
-
-    // Свободная инерция после отпускания мыши + легкое авто-вращение
-    if (!diagGlobe.isDragging) {
-        diagGlobe.velX = diagGlobe.velX * 0.94 + 0.0022 * 0.06;
-        diagGlobe.velY = diagGlobe.velY * 0.92;
-        applyGlobeQuaternionDelta(diagGlobe.velX, diagGlobe.velY);
-    }
-
-    diagGlobe.pulses.forEach(p => {
-        p.t += p.speed;
-        if (p.t > 1) p.t = 0;
-        const pos = p.curve.getPoint(p.t);
-        p.mesh.position.copy(pos);
-    });
-
-    diagGlobe.renderer.render(diagGlobe.scene, diagGlobe.camera);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -13224,7 +12844,7 @@ function appendWizardLog(time, message, isProgress) {
 ////////////////////////////////////////////////////////////////////////////////
 
 // =========================================================================
-// МОДУЛЬ: 8-BIT VOXEL 3D МАСКОТ "ZAPPY" (ВСТРОЕННЫЙ В ГЛАВНЫЙ ЭКРАН)
+// МОДУЛЬ: 8-БИТНЫЙ 3D-КОТИК "ZAPPY" В БОКОВОМ МЕНЮ (ВСЕГДА РЯДОМ НА ВСЕХ ВКЛАДКАХ)
 // Файл: wwwroot/js/zappy3d.js
 // =========================================================================
 
@@ -13235,7 +12855,6 @@ let zappy3D = {
     renderer: null,
     voxelGroup: null,
     headGroup: null,
-    earsGroup: null,
     tailGroup: null,
     leftPaw: null,
     rightPaw: null,
@@ -13244,10 +12863,8 @@ let zappy3D = {
     sleepEyeMeshes: [],
     dizzyEyeMeshes: [],
     mouthMesh: null,
-    cheekMeshes: [],
     accentMaterials: [],
     cookieGroup: null,
-    // Состояния и физика
     mood: 'normal', // normal, happy, dizzy, eating
     moodTimer: 0,
     blinkTimer: 100,
@@ -13264,29 +12881,59 @@ let zappy3D = {
     dragLastX: 0,
     dragAccum: 0,
     cookieAnim: 0,
-    petsCount: 0
+    petsCount: 0,
+    tutorialActive: false,
+    tutorialStep: 0,
+    lookOverrideX: null,
+    lookOverrideY: null
 };
 
-const ZAPPY_VOXEL_PHRASES_IDLE = [
-    'Жду пакетов... Мур-р 🐾',
-    'Слежу за пингом в 8-бит!',
-    'Нажми на меня или дай печеньку!',
-    'Воксельный щит готов к работе ⚡'
+const ZAPPY_PHRASES_PET = [
+    'Мур-р... Спасибо за ласку, продолжай в том же духе.',
+    'Обожаю, когда меня чешут за пиксельным ушком.',
+    'Мурчание синхронизировано с сетевым адаптером.',
+    'Клик принят. Уровень кошачьего антистресса повышен.',
+    'Слежу за пакетами и мурчу на частоте процессора.'
 ];
 
-const ZAPPY_VOXEL_PHRASES_PET = [
-    'МУР-Р! +100 к антистрессу! ^ω^',
-    'Кусь за DPI! Пакеты летят! ⚡',
-    'Воксельное мурчание активировано!',
-    'Почеши за пиксельным ушком ещё!',
-    'РКН не пройдет мимо моих лапок! 🛡'
+const ZAPPY_PHRASES_COOKIE = [
+    'Хрум-хрум... Заблокированный пакет успешно съеден.',
+    'Вкусные зашифрованные байты, давай еще.',
+    'Пакет переработан в чистую энергию обхода.',
+    'Спасибо за угощение, теперь пинг будет еще стабильнее.'
 ];
 
-const ZAPPY_VOXEL_PHRASES_COOKIE = [
-    'ХРУМ! 8-битный пакет ТСПУ съеден! 🍪',
-    'Ням-ням! Вкусные зашифрованные байты!',
-    'Печенька усвоена! Пинг снижен! 😋',
-    'Энергия воксельного ядра 100%! ✨'
+const ZAPPY_TUTORIAL_STEPS = [
+    {
+        tab: 'home',
+        target: () => document.getElementById('reactor-container'),
+        title: 'Шаг 1 из 5: Сердце обхода',
+        text: 'Привет! Я Зэппи. Эта большая кнопка включает и выключает обход блокировок Zapret и прокси для Telegram.'
+    },
+    {
+        tab: 'home',
+        target: () => document.getElementById('txt-main-profile')?.closest('.glass-card') || document.getElementById('home-cards-col'),
+        title: 'Шаг 2 из 5: Выбор стратегии и Игры',
+        text: 'Здесь выбирается активный профиль обхода. Внутри можно запустить умный авто-подбор лучшей стратегии под твоего провайдера и включить игровой фильтр.'
+    },
+    {
+        tab: 'mods',
+        target: () => document.getElementById('mods-seg-track') || document.querySelector('#tab-mods .glass-card'),
+        title: 'Шаг 3 из 5: Мастерская модификаций',
+        text: 'В Мастерской можно создавать свои списки сайтов и собирать собственные стратегии в визуальном конструкторе с 3D-лабораторией пакетов.'
+    },
+    {
+        tab: 'diag',
+        target: () => document.getElementById('site-check-input')?.closest('.glass-card') || document.getElementById('btn-run-diag'),
+        title: 'Шаг 4 из 5: Диагностика и Быстрый фикс',
+        text: 'Если какой-то сайт не открывается, введи его адрес сюда. Анализатор найдет причину блокировки и починит доступ в один клик.'
+    },
+    {
+        tab: 'settings',
+        target: () => document.querySelector('#tab-settings .gem-field-wrap') || document.getElementById('settings-seg-track'),
+        title: 'Шаг 5 из 5: Самоцветы тем и Команды',
+        text: 'В Настройках можно выбрать 3D-камень темы, обновить базы IPSet и Hosts. А я всегда буду сидеть слева под вкладками!'
+    }
 ];
 
 function getZappyThemeColor() {
@@ -13302,70 +12949,114 @@ function initZappy3DMascot() {
     if (typeof THREE === 'undefined') return;
     if (appState?.settings?.hardwareAcceleration === false) return;
 
-    // Находим колонку с кнопкой запуска на Главном экране (#tab-home)
-    const reactorContainer = document.getElementById('reactor-container');
-    const homeTab = document.getElementById('tab-home');
-    if (!reactorContainer && !homeTab) return;
+    const sidebar = document.getElementById('sidebar');
+    const sidebarFooter = document.getElementById('sidebar-footer');
+    if (!sidebar) return;
 
-    // Удаляем старый плавающий док, если он остался
-    const oldFloating = document.getElementById('zappy-mascot-dock');
-    if (oldFloating) oldFloating.remove();
+    document.getElementById('zappy-home-card')?.remove();
+    document.getElementById('zappy-sidebar-card')?.remove();
+    document.getElementById('zappy-tutorial-overlay')?.remove();
 
-    // Находим левую колонку (где лежит реактор) или создаем слот прямо под ним
-    const leftCol = reactorContainer ? reactorContainer.parentElement : homeTab;
-    if (!leftCol) return;
-
-    // Делаем так, чтобы в компактном режиме маскот не теснил кнопку
+    // 1. Вертикальная уютная карточка Зэппи прямо внутри бокового меню (#sidebar)
     const card = document.createElement('div');
-    card.id = 'zappy-home-card';
-    card.className = 'glass-card rounded-xl p-2.5 mt-3 w-full max-w-[260px] flex items-center gap-2.5 relative overflow-hidden select-none transition-all';
+    card.id = 'zappy-sidebar-card';
+    card.className = 'w-[200px] rounded-xl bg-[#121216] border border-[#26262E] p-2.5 mt-auto mb-2.5 flex flex-col gap-2 relative overflow-hidden select-none transition-all';
     card.innerHTML = `
-        <!-- Левая часть: 3D Воксельная сцена с котиком -->
-        <div id="zappy-voxel-stage" class="relative w-[86px] h-[86px] rounded-lg bg-[#0D0D12] border border-[#25252E] flex items-center justify-center shrink-0 cursor-grab active:cursor-grabbing overflow-hidden" title="ЛКМ — погладить, Зажать и потянуть — покрутить 8-битного Зэппи!">
-            <div class="absolute inset-1 rounded-full bg-[var(--accent-soft)] blur-md opacity-60 pointer-events-none"></div>
+        <!-- Шапка карточки: Статус + Имя + Уровень -->
+        <div class="flex items-center justify-between px-0.5">
+            <div class="flex items-center gap-1.5">
+                <span id="zappy-home-dot" class="w-2 h-2 rounded-full dot-offline"></span>
+                <span id="zappy-header-title" class="text-[11px] font-mono font-bold text-white tracking-wide">ZAPPY 8-BIT</span>
+            </div>
+            <span id="zappy-lvl-badge" class="px-1.5 py-0.2 rounded bg-[#1A1A22] border border-[#2C2C38] text-[9.5px] font-mono text-brand">LVL 1</span>
         </div>
 
-        <!-- Правая часть: Статус, реплика и кнопки взаимодействия -->
-        <div class="flex flex-col justify-between flex-1 min-w-0 h-[86px] py-0.5">
-            <div class="flex items-center justify-between gap-1">
-                <div class="flex items-center gap-1.5">
-                    <span id="zappy-home-dot" class="w-2 h-2 rounded-full dot-offline"></span>
-                    <span class="text-[11px] font-mono font-bold text-white tracking-wide">ZAPPY 8-BIT</span>
-                </div>
-                <span id="zappy-lvl-badge" class="px-1.5 py-0.2 rounded bg-[#1A1A22] border border-[#2C2C38] text-[9.5px] font-mono text-brand">LVL 1</span>
-            </div>
+        <!-- 3D-сцена с пиксельным котиком -->
+        <div id="zappy-home-slot" class="relative w-full h-[108px] rounded-lg bg-[#0A0A0E] border border-[#22222A] flex items-center justify-center overflow-hidden">
+            <div class="absolute inset-2 rounded-full bg-[var(--accent-soft)] blur-md opacity-55 pointer-events-none"></div>
+            <div id="zappy-voxel-stage" class="w-[108px] h-[108px] flex items-center justify-center cursor-pointer active:cursor-grabbing relative z-10" title="Кликни по котику, чтобы погладить, или зажми ЛКМ для вращения"></div>
+        </div>
 
-            <!-- Диалоговая строка котика -->
-            <div id="zappy-home-speech" class="text-[10.5px] font-mono text-[#BBBBBB] leading-tight line-clamp-2 bg-[#121217] border border-[#22222A] rounded px-2 py-1">
-                Жду команд... Погладь меня! ^ω^
-            </div>
+        <!-- Диалоговое облачко Зэппи -->
+        <div id="zappy-home-speech" class="text-[10px] font-mono text-[#CCCCCC] leading-snug bg-[#0E0E13] border border-[#202028] rounded-lg px-2 py-1.5 min-h-[42px] flex items-center text-center justify-center">
+            Кликни по мне, чтобы погладить, или угости пакетом.
+        </div>
 
-            <!-- Кнопки действий -->
-            <div class="flex items-center gap-1.5">
-                <button onclick="petZappyMascot()" class="flex-1 py-1 px-2 rounded bg-[#1D1D24] hover:bg-[#282832] border border-[#2E2E3A] text-[10px] font-mono font-semibold text-[#E0E0E0] hover:text-white flex items-center justify-center gap-1 cursor-pointer transition active:scale-95">
-                    <span>🐾</span><span>Гладить</span>
-                </button>
-                <button onclick="feedZappyCookie()" class="flex-1 py-1 px-2 rounded bg-[#1D1D24] hover:bg-[#282832] border border-[#2E2E3A] text-[10px] font-mono font-semibold text-[#E0E0E0] hover:text-white flex items-center justify-center gap-1 cursor-pointer transition active:scale-95" title="Скормить перехваченный пакет данных">
-                    <span>🍪</span><span>Пакет</span>
-                </button>
-            </div>
+        <!-- Кнопки: Дать пакет и Гид -->
+        <div class="flex items-center gap-1.5">
+            <button onclick="feedZappyCookie()" class="flex-1 py-1 px-2 rounded-md bg-[#1B1B22] hover:bg-[#252530] border border-[#2C2C38] text-[10px] font-mono font-semibold text-[#E0E0E0] hover:text-white flex items-center justify-center cursor-pointer transition active:scale-95">
+                <span>Дать пакет</span>
+            </button>
+            <button onclick="startZappyTutorial()" class="py-1 px-2.5 rounded-md bg-[#1B1B22] hover:bg-[#252530] border border-[#2C2C38] text-[10px] font-mono font-semibold text-[#999999] hover:text-white flex items-center justify-center cursor-pointer transition active:scale-95" title="Запустить интерактивный тур по программе с Зэппи">
+                <span>Гид</span>
+            </button>
         </div>
     `;
 
-    leftCol.appendChild(card);
+    if (sidebarFooter) {
+        sidebar.insertBefore(card, sidebarFooter);
+    } else {
+        sidebar.appendChild(card);
+    }
 
-    // Прячем карточку маскота в компактном режиме (850x520), чтобы не нарушать минимализм
+    // 2. Полноэкранный Spotlight-оверлей для полётов Зэппи во время туториала
+    const overlay = document.createElement('div');
+    overlay.id = 'zappy-tutorial-overlay';
+    overlay.className = 'fixed inset-0 z-[9990] pointer-events-auto hidden';
+    overlay.innerHTML = `
+        <div id="zappy-spotlight-hole" class="fixed rounded-xl pointer-events-none transition-all duration-300 ease-out"
+             style="box-shadow: 0 0 0 9999px rgba(6, 6, 10, 0.80), 0 0 28px var(--accent-glow); border: 2px solid var(--accent-light);"></div>
+
+        <div id="zappy-flying-companion" class="fixed z-[9995] w-[360px] rounded-2xl bg-[#121218]/95 border border-[var(--accent-light)] p-3 shadow-2xl flex items-center gap-3 transition-all duration-300 ease-out backdrop-blur-md">
+            <div id="zappy-flying-slot" class="relative w-[108px] h-[108px] rounded-xl bg-[#0A0A0F] border border-[#282834] flex items-center justify-center shrink-0 overflow-hidden">
+                <div class="absolute inset-1 rounded-full bg-[var(--accent-soft)] blur-md opacity-70 pointer-events-none"></div>
+            </div>
+
+            <div class="flex flex-col justify-between flex-1 min-w-0 gap-2">
+                <div class="flex items-center justify-between">
+                    <span id="zappy-fly-title" class="text-xs font-mono font-bold text-brand truncate">Шаг 1 из 5</span>
+                    <button onclick="skipZappyTutorial()" class="text-[10px] font-mono text-[#777777] hover:text-white cursor-pointer transition">Закрыть</button>
+                </div>
+
+                <div id="zappy-fly-text" class="text-[11px] font-mono text-[#E0E0E0] leading-relaxed">
+                    Описание элемента...
+                </div>
+
+                <div class="flex items-center justify-between gap-2 pt-1 border-t border-[#22222C]">
+                    <button id="zappy-fly-prev" onclick="prevZappyTutorialStep()" class="px-2.5 py-1 rounded-md bg-[#1C1C24] hover:bg-[#262630] border border-[#30303C] text-[10px] font-mono text-[#BBBBBB] hover:text-white cursor-pointer transition">
+                        Назад
+                    </button>
+                    <div class="flex items-center gap-1.5">
+                        <button onclick="skipZappyTutorial()" class="px-2.5 py-1 rounded-md bg-[#1C1C24] hover:bg-[#262630] border border-[#30303C] text-[10px] font-mono text-[#888888] hover:text-white cursor-pointer transition">
+                            Пропустить
+                        </button>
+                        <button id="zappy-fly-next" onclick="nextZappyTutorialStep()" class="px-3 py-1 rounded-md btn-brand text-[10.5px] font-mono font-bold text-white cursor-pointer transition shadow">
+                            Далее
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+
+    // Скрываем карточку Зэппи, когда сайдбар свёрнут в узкую полоску (rail-mode или compact-mode)
     const styleEl = document.createElement('style');
-    styleEl.textContent = `body.compact-mode #zappy-home-card { display: none !important; }`;
+    styleEl.textContent = `
+        #sidebar.rail-mode #zappy-sidebar-card,
+        body.compact-mode #zappy-sidebar-card {
+            display: none !important;
+        }
+    `;
     document.head.appendChild(styleEl);
 
     const stage = document.getElementById('zappy-voxel-stage');
-    const size = 86;
+    const size = 108;
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 100);
-    camera.position.set(0, 0.35, 6.2);
-    camera.lookAt(0, 0.05, 0);
+    camera.position.set(0, 0.25, 6.2);
+    camera.lookAt(0, 0.0, 0);
 
     const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'high-performance' });
     renderer.setSize(size, size);
@@ -13373,18 +13064,21 @@ function initZappy3DMascot() {
     renderer.domElement.className = 'relative z-10 block';
     stage.appendChild(renderer.domElement);
 
-    // Освещение для четких 8-битных кубических граней
-    scene.add(new THREE.AmbientLight(0xffffff, 0.55));
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1.15);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.62));
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.05);
     dirLight.position.set(4, 7, 5);
     scene.add(dirLight);
 
-    const backLight = new THREE.DirectionalLight(0x94A3B8, 0.5);
+    const backLight = new THREE.DirectionalLight(0x94A3B8, 0.45);
     backLight.position.set(-4, -2, -3);
     scene.add(backLight);
 
-    buildVoxelCatModel(scene);
+    buildPixelCatVoxelModel(scene);
     setupZappyInteractions(stage);
+
+    window.addEventListener('resize', () => {
+        if (zappy3D.tutorialActive) positionSpotlightAndFlyingZappy();
+    });
 
     Object.assign(zappy3D, {
         initialized: true,
@@ -13393,28 +13087,38 @@ function initZappy3DMascot() {
         renderer
     });
 
+    if (!localStorage.getItem('zappy_tutorial_done_v2')) {
+        setTimeout(() => {
+            const wiz = document.getElementById('wizard-modal');
+            if (!wiz || !wiz.classList.contains('open')) {
+                startZappyTutorial();
+            }
+        }, 1200);
+    }
+
     animateZappy3D();
 }
 
-// Собирает 3D-воксельного 8-битного котика из кубиков!
-function buildVoxelCatModel(scene) {
+function buildPixelCatVoxelModel(scene) {
     const theme = getZappyThemeColor();
-    const u = 0.16; // Размер одного 3D-вокселя (кубика)
+    const u = 0.155;
 
-    const matDarkBody = new THREE.MeshLambertMaterial({ color: 0x22222B });
-    const matBelly = new THREE.MeshLambertMaterial({ color: 0x323240 });
-    const matVisor = new THREE.MeshBasicMaterial({ color: 0x09090D });
-    const matPink = new THREE.MeshBasicMaterial({ color: 0xF472B6 });
-    const matAccent = new THREE.MeshLambertMaterial({
+    const matFurMain = new THREE.MeshLambertMaterial({ color: 0x2B2D38 });
+    const matFurStripe = new THREE.MeshLambertMaterial({ color: 0x1D1E26 });
+    const matFurWhite = new THREE.MeshLambertMaterial({ color: 0xF1F5F9 });
+    const matPinkNose = new THREE.MeshLambertMaterial({ color: 0xF472B6 });
+    const matEyePupil = new THREE.MeshBasicMaterial({ color: 0x0B0B0E });
+    const matEyeShine = new THREE.MeshBasicMaterial({ color: 0xFFFFFF });
+
+    const matCollar = new THREE.MeshLambertMaterial({
         color: theme.num,
         emissive: theme.num,
-        emissiveIntensity: 0.45
+        emissiveIntensity: 0.25
     });
-    const matGlowEye = new THREE.MeshBasicMaterial({ color: theme.num });
+    const matEyeIris = new THREE.MeshBasicMaterial({ color: theme.num });
 
-    zappy3D.accentMaterials = [matAccent, matGlowEye];
+    zappy3D.accentMaterials = [matCollar, matEyeIris];
 
-    // Вспомогательная функция создания воксельного блока (w, h, d в вокселях)
     function makeBox(w, h, d, mat, x, y, z) {
         const geo = new THREE.BoxGeometry(w * u, h * u, d * u);
         const mesh = new THREE.Mesh(geo, mat);
@@ -13428,111 +13132,119 @@ function buildVoxelCatModel(scene) {
     const headGroup = new THREE.Group();
     voxelGroup.add(headGroup);
 
-    // 1. ГОЛОВА-КОРПУС (8-битный ступенчатый куб со скругленными воксельными углами)
-    headGroup.add(makeBox(9, 7, 7, matDarkBody, 0, 1.0, 0));     // Центральное ядро головы
-    headGroup.add(makeBox(7, 8, 6, matDarkBody, 0, 1.0, 0));     // Верхняя/нижняя ступенька
-    headGroup.add(makeBox(10, 5, 5, matDarkBody, 0, 1.0, 0));    // Боковые щёчки
-    headGroup.add(makeBox(5, 2.5, 4, matBelly, 0, -3.2, 0.3));   // Воксельное пузико снизу
+    // 1. ПИКСЕЛЬНАЯ ГОЛОВА И МОРДОЧКА КОТА
+    headGroup.add(makeBox(8, 6, 6, matFurMain, 0, 1.2, 0));
+    headGroup.add(makeBox(6, 7, 5, matFurMain, 0, 1.2, 0));
+    headGroup.add(makeBox(9, 4, 5, matFurMain, 0, 0.6, 0));
 
-    // Боковые 8-битные наушники (светятся в цвет темы)
-    headGroup.add(makeBox(1, 3, 3, matAccent, -5.2, 1.0, 0));
-    headGroup.add(makeBox(1, 3, 3, matAccent, 5.2, 1.0, 0));
+    headGroup.add(makeBox(1.2, 2.2, 0.3, matFurStripe, 0.0, 3.3, 3.05));
+    headGroup.add(makeBox(1.0, 1.4, 0.3, matFurStripe, -1.8, 3.1, 3.05));
+    headGroup.add(makeBox(1.0, 1.4, 0.3, matFurStripe, 1.8, 3.1, 3.05));
+    headGroup.add(makeBox(0.3, 1.0, 2.6, matFurStripe, -4.55, 0.8, 0));
+    headGroup.add(makeBox(0.3, 1.0, 2.6, matFurStripe, 4.55, 0.8, 0));
 
-    // 2. ЭКРАН-МОРДОЧКА СПЕРЕДИ
-    headGroup.add(makeBox(7.6, 5.2, 0.6, matVisor, 0, 1.0, 3.4));
+    headGroup.add(makeBox(4.2, 2.2, 0.6, matFurWhite, 0, -0.3, 3.0));
+    headGroup.add(makeBox(1.0, 0.5, 0.3, matFurWhite, -4.8, 0.4, 2.2));
+    headGroup.add(makeBox(1.0, 0.5, 0.3, matFurWhite, -4.8, -0.4, 2.2));
+    headGroup.add(makeBox(1.0, 0.5, 0.3, matFurWhite, 4.8, 0.4, 2.2));
+    headGroup.add(makeBox(1.0, 0.5, 0.3, matFurWhite, 4.8, -0.4, 2.2));
 
-    // 3. ПИКСЕЛЬНЫЕ ГЛАЗКИ И МИМИКА НА ЭКРАНЕ (переключаются по состояниям)
-    const eyeZ = 3.78;
-    // Обычные 8-битные глаза (вертикальные пиксели + белый блик)
-    const eyeL = makeBox(1.3, 2.2, 0.2, matGlowEye, -2.1, 1.4, eyeZ);
-    const eyeR = makeBox(1.3, 2.2, 0.2, matGlowEye, 2.1, 1.4, eyeZ);
-    headGroup.add(eyeL, eyeR);
-    zappy3D.eyeMeshes = [eyeL, eyeR];
+    headGroup.add(makeBox(1.3, 0.8, 0.5, matPinkNose, 0, 0.2, 3.35));
+    const mouthMesh = makeBox(1.0, 0.45, 0.4, matFurStripe, 0, -0.65, 3.32);
+    headGroup.add(mouthMesh);
+    zappy3D.mouthMesh = mouthMesh;
 
-    // Радостные 8-битные глаза-уголки (^ ^) из 3 кубиков каждый
+    // 2. ТУЛОВИЩЕ, БЕЛАЯ ГРУДКА И ОШЕЙНИК
+    headGroup.add(makeBox(6.2, 3.6, 5.0, matFurMain, 0, -3.2, -0.2));
+    headGroup.add(makeBox(3.8, 2.8, 0.5, matFurWhite, 0, -3.3, 2.25));
+    headGroup.add(makeBox(6.5, 0.8, 5.3, matCollar, 0, -1.9, -0.1));
+    headGroup.add(makeBox(1.2, 1.2, 0.6, matEyeShine, 0, -2.3, 2.65));
+
+    // 3. ПИКСЕЛЬНЫЕ КОШАЧЬИ ГЛАЗКИ
+    const eyeZ = 3.08;
+    const openEyesL = new THREE.Group();
+    openEyesL.add(
+        makeBox(1.8, 2.2, 0.3, matEyeIris, -2.2, 1.3, eyeZ),
+        makeBox(1.1, 1.8, 0.35, matEyePupil, -2.1, 1.3, eyeZ + 0.05),
+        makeBox(0.6, 0.6, 0.4, matEyeShine, -2.5, 1.8, eyeZ + 0.1)
+    );
+    const openEyesR = new THREE.Group();
+    openEyesR.add(
+        makeBox(1.8, 2.2, 0.3, matEyeIris, 2.2, 1.3, eyeZ),
+        makeBox(1.1, 1.8, 0.35, matEyePupil, 2.1, 1.3, eyeZ + 0.05),
+        makeBox(0.6, 0.6, 0.4, matEyeShine, 1.9, 1.8, eyeZ + 0.1)
+    );
+    headGroup.add(openEyesL, openEyesR);
+    zappy3D.eyeMeshes = [openEyesL, openEyesR];
+
     const happyGroupL = new THREE.Group();
     happyGroupL.add(
-        makeBox(0.7, 0.7, 0.2, matGlowEye, -2.7, 1.2, eyeZ),
-        makeBox(0.7, 0.7, 0.2, matGlowEye, -2.1, 1.9, eyeZ),
-        makeBox(0.7, 0.7, 0.2, matGlowEye, -1.5, 1.2, eyeZ)
+        makeBox(0.7, 0.7, 0.3, matEyeIris, -2.8, 1.1, eyeZ),
+        makeBox(0.8, 0.7, 0.3, matEyeIris, -2.2, 1.8, eyeZ),
+        makeBox(0.7, 0.7, 0.3, matEyeIris, -1.6, 1.1, eyeZ)
     );
     const happyGroupR = new THREE.Group();
     happyGroupR.add(
-        makeBox(0.7, 0.7, 0.2, matGlowEye, 1.5, 1.2, eyeZ),
-        makeBox(0.7, 0.7, 0.2, matGlowEye, 2.1, 1.9, eyeZ),
-        makeBox(0.7, 0.7, 0.2, matGlowEye, 2.7, 1.2, eyeZ)
+        makeBox(0.7, 0.7, 0.3, matEyeIris, 1.6, 1.1, eyeZ),
+        makeBox(0.8, 0.7, 0.3, matEyeIris, 2.2, 1.8, eyeZ),
+        makeBox(0.7, 0.7, 0.3, matEyeIris, 2.8, 1.1, eyeZ)
     );
     happyGroupL.visible = false;
     happyGroupR.visible = false;
     headGroup.add(happyGroupL, happyGroupR);
     zappy3D.happyEyeMeshes = [happyGroupL, happyGroupR];
 
-    // Сонные / моргающие глаза (- -)
-    const sleepL = makeBox(2.0, 0.6, 0.2, matGlowEye, -2.1, 1.3, eyeZ);
-    const sleepR = makeBox(2.0, 0.6, 0.2, matGlowEye, 2.1, 1.3, eyeZ);
+    const sleepL = makeBox(2.0, 0.6, 0.3, matEyeIris, -2.2, 1.2, eyeZ);
+    const sleepR = makeBox(2.0, 0.6, 0.3, matEyeIris, 2.2, 1.2, eyeZ);
     sleepL.visible = false;
     sleepR.visible = false;
     headGroup.add(sleepL, sleepR);
     zappy3D.sleepEyeMeshes = [sleepL, sleepR];
 
-    // Головокружение (X X)
     const dizzyL = new THREE.Group();
     dizzyL.add(
-        makeBox(0.6, 0.6, 0.2, matGlowEye, -2.6, 1.9, eyeZ),
-        makeBox(0.6, 0.6, 0.2, matGlowEye, -1.6, 1.9, eyeZ),
-        makeBox(0.7, 0.7, 0.2, matGlowEye, -2.1, 1.3, eyeZ),
-        makeBox(0.6, 0.6, 0.2, matGlowEye, -2.6, 0.7, eyeZ),
-        makeBox(0.6, 0.6, 0.2, matGlowEye, -1.6, 0.7, eyeZ)
+        makeBox(0.6, 0.6, 0.3, matEyeIris, -2.7, 1.8, eyeZ),
+        makeBox(0.6, 0.6, 0.3, matEyeIris, -1.7, 1.8, eyeZ),
+        makeBox(0.7, 0.7, 0.3, matEyeIris, -2.2, 1.3, eyeZ),
+        makeBox(0.6, 0.6, 0.3, matEyeIris, -2.7, 0.8, eyeZ),
+        makeBox(0.6, 0.6, 0.3, matEyeIris, -1.7, 0.8, eyeZ)
     );
     const dizzyR = dizzyL.clone();
-    dizzyR.position.x = 4.2 * u;
+    dizzyR.position.x = 4.4 * u;
     dizzyL.visible = false;
     dizzyR.visible = false;
     headGroup.add(dizzyL, dizzyR);
     zappy3D.dizzyEyeMeshes = [dizzyL, dizzyR];
 
-    // Пиксельный кошачий носик/ротик и розовые румяные щечки
-    const mouthMesh = makeBox(1.4, 0.55, 0.2, matGlowEye, 0, 0.0, eyeZ);
-    headGroup.add(mouthMesh);
-    zappy3D.mouthMesh = mouthMesh;
-
-    const cheekL = makeBox(1.1, 0.6, 0.2, matPink, -3.1, 0.2, eyeZ);
-    const cheekR = makeBox(1.1, 0.6, 0.2, matPink, 3.1, 0.2, eyeZ);
-    headGroup.add(cheekL, cheekR);
-    zappy3D.cheekMeshes = [cheekL, cheekR];
-
-    // 4. СТУПЕНЧАТЫЕ 8-БИТНЫЕ УШКИ НА МАКУШКЕ
-    const earsGroup = new THREE.Group();
-    [-3.0, 3.0].forEach(ex => {
-        // Пирамидка уха из 3 слоев вокселей
-        earsGroup.add(makeBox(3.0, 1.0, 2.2, matDarkBody, ex, 5.2, 0));
-        earsGroup.add(makeBox(2.0, 1.0, 1.8, matDarkBody, ex, 6.2, 0));
-        earsGroup.add(makeBox(1.0, 1.0, 1.2, matAccent, ex, 7.2, 0)); // Светящийся кончик уха!
-        earsGroup.add(makeBox(1.4, 1.4, 0.5, matAccent, ex, 5.6, 0.95)); // Внутренняя часть ушка
+    // 4. УШКИ
+    [-2.7, 2.7].forEach(ex => {
+        headGroup.add(makeBox(2.8, 1.2, 2.0, matFurMain, ex, 4.8, 0));
+        headGroup.add(makeBox(2.0, 1.2, 1.6, matFurMain, ex, 5.8, 0));
+        headGroup.add(makeBox(1.1, 1.0, 1.2, matFurStripe, ex, 6.7, 0));
+        headGroup.add(makeBox(1.4, 1.4, 0.4, matPinkNose, ex, 5.1, 0.9));
     });
-    headGroup.add(earsGroup);
 
-    // 5. ВОКСЕЛЬНЫЕ ЛАПКИ И ХВОСТИК ИЗ КУБИКОВ
+    // 5. ЛАПКИ И ХВОСТ
     const leftPaw = new THREE.Group();
-    leftPaw.add(makeBox(2.2, 1.6, 2.6, matDarkBody, -2.8, -4.4, 1.2));
-    leftPaw.add(makeBox(1.4, 0.6, 0.6, matAccent, -2.8, -4.7, 2.4)); // Светящиеся подушечки лап
+    leftPaw.add(makeBox(2.0, 1.6, 2.2, matFurMain, -2.2, -4.8, 0.8));
+    leftPaw.add(makeBox(2.1, 0.9, 1.6, matFurWhite, -2.2, -5.2, 1.4));
     voxelGroup.add(leftPaw);
 
     const rightPaw = new THREE.Group();
-    rightPaw.add(makeBox(2.2, 1.6, 2.6, matDarkBody, 2.8, -4.4, 1.2));
-    rightPaw.add(makeBox(1.4, 0.6, 0.6, matAccent, 2.8, -4.7, 2.4));
+    rightPaw.add(makeBox(2.0, 1.6, 2.2, matFurMain, 2.2, -4.8, 0.8));
+    rightPaw.add(makeBox(2.1, 0.9, 1.6, matFurWhite, 2.2, -5.2, 1.4));
     voxelGroup.add(rightPaw);
 
-    // Ступенчатый 8-битный хвост сзади
     const tailGroup = new THREE.Group();
     tailGroup.add(
-        makeBox(1.2, 1.2, 1.5, matDarkBody, 0, -2.8, -3.6),
-        makeBox(1.2, 1.8, 1.2, matDarkBody, 0, -1.8, -4.6),
-        makeBox(1.2, 1.8, 1.2, matAccent, 0, -0.2, -5.2)
+        makeBox(1.1, 1.1, 1.6, matFurMain, 0, -3.8, -3.2),
+        makeBox(1.1, 1.8, 1.2, matFurStripe, 0, -2.8, -4.2),
+        makeBox(1.1, 1.8, 1.2, matFurMain, 0, -1.3, -4.8),
+        makeBox(1.1, 1.1, 1.1, matFurWhite, 0, -0.1, -5.0)
     );
     voxelGroup.add(tailGroup);
 
-    // 6. 8-БИТНАЯ ПЕЧЕНЬКА-ПАКЕТ (прилетает при нажатии на кнопку 🍪)
+    // 6. ПАКЕТ-ПЕЧЕНЬКА
     const cookieGroup = new THREE.Group();
     const matCookie = new THREE.MeshLambertMaterial({ color: 0xF59E0B });
     const matChoco = new THREE.MeshBasicMaterial({ color: 0x451A03 });
@@ -13545,7 +13257,6 @@ function buildVoxelCatModel(scene) {
     Object.assign(zappy3D, {
         voxelGroup,
         headGroup,
-        earsGroup,
         tailGroup,
         leftPaw,
         rightPaw,
@@ -13558,6 +13269,156 @@ function setZappySpeechText(text) {
     if (el) el.innerText = text;
 }
 
+function startZappyTutorial() {
+    if (!zappy3D.initialized) return;
+    zappy3D.tutorialActive = true;
+    zappy3D.tutorialStep = 0;
+
+    const stage = document.getElementById('zappy-voxel-stage');
+    const flyingSlot = document.getElementById('zappy-flying-slot');
+    const overlay = document.getElementById('zappy-tutorial-overlay');
+
+    if (stage && flyingSlot && overlay) {
+        flyingSlot.appendChild(stage);
+        overlay.classList.remove('hidden');
+    }
+
+    renderZappyTutorialStep();
+}
+
+function renderZappyTutorialStep() {
+    const stepObj = ZAPPY_TUTORIAL_STEPS[zappy3D.tutorialStep];
+    if (!stepObj) {
+        skipZappyTutorial();
+        return;
+    }
+
+    if (stepObj.tab && typeof switchTab === 'function') {
+        const currentActive = document.getElementById('tab-' + stepObj.tab);
+        if (currentActive && !currentActive.classList.contains('active')) {
+            switchTab(stepObj.tab);
+        }
+    }
+
+    const titleEl = document.getElementById('zappy-fly-title');
+    const textEl = document.getElementById('zappy-fly-text');
+    const prevBtn = document.getElementById('zappy-fly-prev');
+    const nextBtn = document.getElementById('zappy-fly-next');
+
+    if (titleEl) titleEl.innerText = stepObj.title;
+    if (textEl) textEl.innerText = stepObj.text;
+    if (prevBtn) {
+        prevBtn.disabled = zappy3D.tutorialStep === 0;
+        prevBtn.style.opacity = zappy3D.tutorialStep === 0 ? '0.35' : '1';
+    }
+    if (nextBtn) {
+        nextBtn.innerText = (zappy3D.tutorialStep >= ZAPPY_TUTORIAL_STEPS.length - 1) ? 'Завершить' : 'Далее';
+    }
+
+    zappy3D.mood = 'happy';
+    zappy3D.moodTimer = 85;
+    zappy3D.jumpVel = 0.09;
+    zappy3D.spinVelY = 0.20;
+
+    requestAnimationFrame(() => {
+        setTimeout(() => positionSpotlightAndFlyingZappy(), 40);
+    });
+}
+
+function positionSpotlightAndFlyingZappy() {
+    if (!zappy3D.tutorialActive) return;
+
+    const stepObj = ZAPPY_TUTORIAL_STEPS[zappy3D.tutorialStep];
+    const hole = document.getElementById('zappy-spotlight-hole');
+    const companion = document.getElementById('zappy-flying-companion');
+    if (!stepObj || !hole || !companion) return;
+
+    const targetEl = typeof stepObj.target === 'function' ? stepObj.target() : null;
+    if (!targetEl) return;
+
+    try {
+        targetEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    } catch { }
+
+    const rect = targetEl.getBoundingClientRect();
+    const pad = 8;
+
+    const holeLeft = Math.max(8, rect.left - pad);
+    const holeTop = Math.max(8, rect.top - pad);
+    const holeW = Math.min(window.innerWidth - holeLeft - 8, rect.width + pad * 2);
+    const holeH = Math.min(window.innerHeight - holeTop - 8, rect.height + pad * 2);
+
+    hole.style.left = `${holeLeft}px`;
+    hole.style.top = `${holeTop}px`;
+    hole.style.width = `${holeW}px`;
+    hole.style.height = `${holeH}px`;
+
+    const compW = 360;
+    const compH = companion.offsetHeight || 136;
+    const margin = 16;
+
+    let compX = holeLeft + holeW + margin;
+    let compY = holeTop + (holeH - compH) / 2;
+
+    if (compX + compW > window.innerWidth - 12) {
+        compX = holeLeft - compW - margin;
+    }
+    if (compX < 12) {
+        compX = Math.max(14, Math.min(window.innerWidth - compW - 14, holeLeft + (holeW - compW) / 2));
+        if (holeTop + holeH + compH + margin < window.innerHeight - 12) {
+            compY = holeTop + holeH + margin;
+        } else {
+            compY = Math.max(54, holeTop - compH - margin);
+        }
+    }
+
+    compY = Math.max(52, Math.min(window.innerHeight - compH - 14, compY));
+
+    companion.style.left = `${Math.round(compX)}px`;
+    companion.style.top = `${Math.round(compY)}px`;
+
+    const targetCenterX = holeLeft + holeW / 2;
+    const compCenterX = compX + compW / 2;
+    zappy3D.lookOverrideX = Math.max(-0.8, Math.min(0.8, (targetCenterX - compCenterX) / 300));
+    zappy3D.lookOverrideY = 0;
+}
+
+function nextZappyTutorialStep() {
+    zappy3D.tutorialStep++;
+    if (zappy3D.tutorialStep >= ZAPPY_TUTORIAL_STEPS.length) {
+        skipZappyTutorial();
+    } else {
+        renderZappyTutorialStep();
+    }
+}
+
+function prevZappyTutorialStep() {
+    if (zappy3D.tutorialStep > 0) {
+        zappy3D.tutorialStep--;
+        renderZappyTutorialStep();
+    }
+}
+
+function skipZappyTutorial() {
+    zappy3D.tutorialActive = false;
+    zappy3D.lookOverrideX = null;
+    zappy3D.lookOverrideY = null;
+    localStorage.setItem('zappy_tutorial_done_v2', '1');
+
+    const stage = document.getElementById('zappy-voxel-stage');
+    const homeSlot = document.getElementById('zappy-home-slot');
+    const overlay = document.getElementById('zappy-tutorial-overlay');
+
+    if (overlay) overlay.classList.add('hidden');
+    if (stage && homeSlot) homeSlot.appendChild(stage);
+
+    if (typeof switchTab === 'function') {
+        switchTab('home');
+    }
+
+    setZappySpeechText('Экскурсия окончена. Я всегда рядом в боковом меню.');
+}
+
 function setupZappyInteractions(stageEl) {
     window.addEventListener('mousemove', e => {
         const nx = (e.clientX / window.innerWidth) * 2 - 1;
@@ -13568,14 +13429,16 @@ function setupZappyInteractions(stageEl) {
         if (zappy3D.isDragging) {
             const dx = e.clientX - zappy3D.dragLastX;
             zappy3D.dragLastX = e.clientX;
-            zappy3D.spinVelY = dx * 0.03;
+            zappy3D.spinVelY = Math.max(-0.25, Math.min(0.25, dx * 0.03));
             zappy3D.rotY += zappy3D.spinVelY;
             zappy3D.dragAccum += Math.abs(dx);
 
             if (zappy3D.dragAccum > 220 && zappy3D.mood !== 'dizzy') {
                 zappy3D.mood = 'dizzy';
                 zappy3D.moodTimer = 140;
-                setZappySpeechText('Уи-и-и! Мои воксели кружатся! X_X');
+                if (!zappy3D.tutorialActive) {
+                    setZappySpeechText('Ой-ой, слишком быстрое вращение, голова кружится.');
+                }
             }
         }
     });
@@ -13608,14 +13471,19 @@ function bumpZappyLevel() {
 function petZappyMascot() {
     if (!zappy3D.initialized) return;
     zappy3D.mood = 'happy';
-    zappy3D.moodTimer = 100;
-    zappy3D.jumpVel = 0.14;
-    zappy3D.squash = 1.25;
-    zappy3D.spinVelY = 0.22;
+    zappy3D.moodTimer = 95;
+
+    if (zappy3D.jumpY < 0.18) {
+        zappy3D.jumpVel = Math.min(0.11, zappy3D.jumpVel + 0.09);
+    }
+    zappy3D.squash = Math.min(1.22, zappy3D.squash + 0.16);
+    zappy3D.spinVelY = 0.18;
     bumpZappyLevel();
 
-    const phrase = ZAPPY_VOXEL_PHRASES_PET[Math.floor(Math.random() * ZAPPY_VOXEL_PHRASES_PET.length)];
-    setZappySpeechText(phrase);
+    if (!zappy3D.tutorialActive) {
+        const phrase = ZAPPY_PHRASES_PET[Math.floor(Math.random() * ZAPPY_PHRASES_PET.length)];
+        setZappySpeechText(phrase);
+    }
 }
 
 function feedZappyCookie() {
@@ -13624,18 +13492,23 @@ function feedZappyCookie() {
     zappy3D.cookieGroup.visible = true;
     zappy3D.mood = 'eating';
     zappy3D.moodTimer = 110;
-    zappy3D.jumpVel = 0.11;
+
+    if (zappy3D.jumpY < 0.18) {
+        zappy3D.jumpVel = Math.min(0.10, zappy3D.jumpVel + 0.08);
+    }
     bumpZappyLevel();
 
-    const phrase = ZAPPY_VOXEL_PHRASES_COOKIE[Math.floor(Math.random() * ZAPPY_VOXEL_PHRASES_COOKIE.length)];
-    setZappySpeechText(phrase);
+    if (!zappy3D.tutorialActive) {
+        const phrase = ZAPPY_PHRASES_COOKIE[Math.floor(Math.random() * ZAPPY_PHRASES_COOKIE.length)];
+        setZappySpeechText(phrase);
+    }
 }
 
 function updateVoxelFaceVisibility(isRunning) {
     const mood = zappy3D.mood;
     const showHappy = (mood === 'happy' || mood === 'eating');
     const showDizzy = (mood === 'dizzy');
-    const showSleep = (!showHappy && !showDizzy && (!isRunning || zappy3D.isBlinking));
+    const showSleep = (!showHappy && !showDizzy && (!isRunning && !zappy3D.tutorialActive || zappy3D.isBlinking));
     const showNormal = (!showHappy && !showDizzy && !showSleep);
 
     zappy3D.eyeMeshes.forEach(m => m.visible = showNormal);
@@ -13643,7 +13516,6 @@ function updateVoxelFaceVisibility(isRunning) {
     zappy3D.sleepEyeMeshes.forEach(m => m.visible = showSleep);
     zappy3D.dizzyEyeMeshes.forEach(m => m.visible = showDizzy);
 
-    // Открываем ротик при поедании печеньки
     if (zappy3D.mouthMesh) {
         if (mood === 'eating') {
             const openScale = 1.2 + Math.abs(Math.sin(performance.now() * 0.03)) * 2.2;
@@ -13658,15 +13530,16 @@ function animateZappy3D() {
     requestAnimationFrame(animateZappy3D);
     if (!zappy3D.initialized) return;
 
-    const homeTab = document.getElementById('tab-home');
-    if (homeTab && !homeTab.classList.contains('active')) return;
-    if (document.body.classList.contains('compact-mode')) return;
+    const sidebar = document.getElementById('sidebar');
+    if (!zappy3D.tutorialActive) {
+        if (document.body.classList.contains('compact-mode')) return;
+        if (sidebar && sidebar.classList.contains('rail-mode')) return;
+    }
 
     const now = performance.now();
     const isRunning = !!appState?.isRunning;
     const theme = getZappyThemeColor();
 
-    // Синхронизируем цвет акцентов котика с выбранным самоцветом
     zappy3D.accentMaterials.forEach(m => {
         m.color.setHex(theme.num);
         if (m.emissive) m.emissive.setHex(theme.num);
@@ -13694,50 +13567,55 @@ function animateZappy3D() {
     updateVoxelFaceVisibility(isRunning);
 
     if (!zappy3D.isDragging) {
-        const targetRotY = zappy3D.mouseX * 0.42;
-        const targetRotX = zappy3D.mouseY * 0.22;
+        const lookX = zappy3D.lookOverrideX !== null ? zappy3D.lookOverrideX : zappy3D.mouseX;
+        const lookY = zappy3D.lookOverrideY !== null ? zappy3D.lookOverrideY : zappy3D.mouseY;
+        const targetRotY = lookX * 0.42;
+        const targetRotX = lookY * 0.20;
         zappy3D.rotY += (targetRotY - zappy3D.rotY) * 0.08 + zappy3D.spinVelY;
         zappy3D.rotX += (targetRotX - zappy3D.rotX) * 0.08;
         zappy3D.spinVelY *= 0.88;
     }
 
     zappy3D.jumpY += zappy3D.jumpVel;
-    zappy3D.jumpVel -= 0.009;
+    zappy3D.jumpVel -= 0.010;
+    if (zappy3D.jumpY > 0.28) {
+        zappy3D.jumpY = 0.28;
+        if (zappy3D.jumpVel > 0) zappy3D.jumpVel = 0;
+    }
     if (zappy3D.jumpY <= 0) {
         zappy3D.jumpY = 0;
         zappy3D.jumpVel = 0;
     }
-    zappy3D.squash += (1.0 - zappy3D.squash) * 0.15;
 
-    // 8-битное ступенчатое парение
-    const bob = Math.sin(now * (isRunning ? 0.005 : 0.0025)) * 0.10;
+    zappy3D.squash += (1.0 - zappy3D.squash) * 0.16;
+    zappy3D.squash = Math.max(0.78, Math.min(1.24, zappy3D.squash));
+
+    const bob = Math.sin(now * (isRunning || zappy3D.tutorialActive ? 0.0048 : 0.0022)) * 0.07;
     zappy3D.voxelGroup.position.y = bob + zappy3D.jumpY;
 
     zappy3D.headGroup.rotation.y = zappy3D.rotY;
     zappy3D.headGroup.rotation.x = zappy3D.rotX;
     zappy3D.headGroup.scale.set(1 / Math.sqrt(zappy3D.squash), zappy3D.squash, 1 / Math.sqrt(zappy3D.squash));
 
-    // Виляние кубическим хвостиком и переступание лапками
-    const speed = isRunning ? 0.008 : 0.003;
-    zappy3D.tailGroup.rotation.z = Math.sin(now * speed * 1.4) * 0.28;
-    zappy3D.leftPaw.position.y = Math.sin(now * speed) * 0.08;
-    zappy3D.rightPaw.position.y = Math.cos(now * speed) * 0.08;
+    const speed = isRunning || zappy3D.tutorialActive ? 0.008 : 0.003;
+    zappy3D.tailGroup.rotation.z = Math.sin(now * speed * 1.4) * 0.26;
+    zappy3D.leftPaw.position.y = Math.sin(now * speed) * 0.06;
+    zappy3D.rightPaw.position.y = Math.cos(now * speed) * 0.06;
 
-    // Полёт 8-битной печеньки
     if (zappy3D.cookieAnim > 0) {
         zappy3D.cookieAnim -= 0.04;
         const t = 1.0 - Math.max(0, zappy3D.cookieAnim);
         zappy3D.cookieGroup.position.set(
-            (1 - t) * 1.1,
-            Math.sin(t * Math.PI) * 0.7,
-            (1 - t) * 2.2 + 0.55
+            (1 - t) * 1.0,
+            Math.sin(t * Math.PI) * 0.55,
+            (1 - t) * 2.1 + 0.55
         );
         zappy3D.cookieGroup.rotation.y += 0.16;
         zappy3D.cookieGroup.rotation.z += 0.12;
 
         if (zappy3D.cookieAnim <= 0) {
             zappy3D.cookieGroup.visible = false;
-            zappy3D.squash = 0.80;
+            zappy3D.squash = 0.82;
         }
     }
 

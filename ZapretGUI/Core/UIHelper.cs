@@ -95,7 +95,8 @@ namespace ZapretGUI.Core
             var theme = (themeOverride ?? SettingsManager.Current.AccentTheme ?? "green").ToLowerInvariant();
             if (theme is "crimson" or "cyan") theme = "pink";
 
-            var cacheKey = $"{theme}_{(isRunning ? "on" : "off")}";
+            // Новый ключ v2 гарантирует замену старой иконки с буквой Z на Пиксельного Зэппи
+            var cacheKey = $"zappy8bit_v2_{theme}_{(isRunning ? "on" : "off")}";
 
             if (_iconCache.TryGetValue(cacheKey, out var cached) && File.Exists(cached.icoFilePath))
                 return cached;
@@ -151,44 +152,172 @@ namespace ZapretGUI.Core
             var bmp = new Bitmap(size, size);
             using var g = Graphics.FromImage(bmp);
             g.SmoothingMode = SmoothingMode.AntiAlias;
-            g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
             g.Clear(Color.Transparent);
 
-            var accentColor = ColorTranslator.FromHtml(GetAccentHex(light: true, theme));
-            var borderColor = isRunning ? accentColor : ColorTranslator.FromHtml("#3A3A3A");
-            var bgTop = isRunning ? ColorTranslator.FromHtml(GetAccentDarkBgHex(theme)) : ColorTranslator.FromHtml("#18181B");
-            var bgBottom = ColorTranslator.FromHtml("#0A0A0C");
+            var accentLight = ColorTranslator.FromHtml(GetAccentHex(light: true, theme));
+            var accentBase = ColorTranslator.FromHtml(GetAccentHex(light: false, theme));
 
-            using var path = CreateRoundedRectPath(new Rectangle(4, 4, size - 8, size - 8), 14);
+            // 1. Фон: тёмный неоновый щит со скруглёнными углами
+            var bgTop = isRunning
+                ? ColorTranslator.FromHtml(GetAccentDarkBgHex(theme))
+                : ColorTranslator.FromHtml("#16161A");
+            var bgBottom = ColorTranslator.FromHtml("#08080B");
+
+            var shieldRect = new Rectangle(4, 4, size - 8, size - 8);
+            using var shieldPath = CreateRoundedRectPath(shieldRect, 14);
+
             using (var bgBrush = new LinearGradientBrush(new Rectangle(0, 0, size, size), bgTop, bgBottom, LinearGradientMode.Vertical))
             {
-                g.FillPath(bgBrush, path);
+                g.FillPath(bgBrush, shieldPath);
             }
 
-            using (var pen = new Pen(borderColor, 3.2f))
+            // 2. Свечение и контур щита
+            if (isRunning)
             {
-                g.DrawPath(pen, path);
-            }
-
-            using var font = new Font("Segoe UI", 28f, FontStyle.Bold, GraphicsUnit.Pixel);
-            var textBrush = isRunning ? new SolidBrush(accentColor) : new SolidBrush(Color.White);
-            using (textBrush)
-            {
-                var sf = new StringFormat
+                using (var outerGlowPen = new Pen(Color.FromArgb(65, accentLight), 6.5f))
                 {
-                    Alignment = StringAlignment.Center,
-                    LineAlignment = StringAlignment.Center
-                };
-                g.DrawString("Z", font, textBrush, new RectangleF(0, 1, size, size), sf);
+                    g.DrawPath(outerGlowPen, shieldPath);
+                }
+                using (var borderPen = new Pen(accentLight, 2.8f))
+                {
+                    g.DrawPath(borderPen, shieldPath);
+                }
+            }
+            else
+            {
+                using (var borderPen = new Pen(ColorTranslator.FromHtml("#2E2E36"), 2.5f))
+                {
+                    g.DrawPath(borderPen, shieldPath);
+                }
             }
 
-            var dotColor = isRunning ? accentColor : GetErrorColor();
-            using var dotBgBrush = new SolidBrush(ColorTranslator.FromHtml("#0A0A0C"));
-            using var dotBrush = new SolidBrush(dotColor);
-            g.FillEllipse(dotBgBrush, size - 20, size - 20, 16, 16);
-            g.FillEllipse(dotBrush, size - 17, size - 17, 10, 10);
+            // 3. Отрисовка пиксельной головы котика Зэппи (сетка 16x16, шаг 3px -> 48x48, отступ 8px)
+            DrawPixelZappyHead(g, offsetX: 8, offsetY: 8, pixelScale: 3, isRunning, accentLight, accentBase);
 
             return bmp;
+        }
+
+        public static void DrawPixelZappyHead(
+            Graphics g,
+            float offsetX,
+            float offsetY,
+            float pixelScale,
+            bool isRunning,
+            Color accentLight,
+            Color accentBase)
+        {
+            var oldSmooth = g.SmoothingMode;
+            var oldOffset = g.PixelOffsetMode;
+            g.SmoothingMode = SmoothingMode.None;
+            g.PixelOffsetMode = PixelOffsetMode.Half;
+
+            // Матрица 16x16:
+            // '.' — прозрачно
+            // 'O' — контур силуэта головы и острых ушек
+            // 'B' — тёмный мех головы
+            // 'I' — внутренняя часть ушек
+            // 'N' — пиксельный носик
+            string[] catHeadGrid =
+            [
+                "..O..........O..",
+                ".OOO........OOO.",
+                ".OIBO......OBIO.",
+                ".OIIBOOOOOOBIIO.",
+                ".OBBBBBBBBBBBBO.",
+                "OBBBBBBBBBBBBBBO",
+                "OBBBBBBBBBBBBBBO",
+                "OBBBBBBBBBBBBBBO",
+                "OBBBBBBBBBBBBBBO",
+                "OBBBBBBBBBBBBBBO",
+                "OBBBBBBBBBBBBBBO",
+                "OBBBBBBBBBBBBBBO",
+                ".OBBBBBNNBBBBBO.",
+                "..OBBBBBBBBBBO..",
+                "...OOOOOOOOOO...",
+                "................"
+            ];
+
+            Color bodyFill = isRunning
+                ? ColorTranslator.FromHtml("#0D0D12")
+                : ColorTranslator.FromHtml("#121217");
+
+            Color outlineColor = isRunning
+                ? Color.FromArgb(200, accentBase.R, accentBase.G, accentBase.B)
+                : ColorTranslator.FromHtml("#2C2C35");
+
+            Color earInnerColor = isRunning
+                ? Color.FromArgb(115, accentLight.R, accentLight.G, accentLight.B)
+                : ColorTranslator.FromHtml("#1F1F27");
+
+            Color noseColor = isRunning
+                ? Color.FromArgb(190, accentLight.R, accentLight.G, accentLight.B)
+                : ColorTranslator.FromHtml("#4A4A55");
+
+            using var bodyBrush = new SolidBrush(bodyFill);
+            using var outlineBrush = new SolidBrush(outlineColor);
+            using var earBrush = new SolidBrush(earInnerColor);
+            using var noseBrush = new SolidBrush(noseColor);
+
+            for (int y = 0; y < 16; y++)
+            {
+                string row = catHeadGrid[y];
+                for (int x = 0; x < 16; x++)
+                {
+                    char c = row[x];
+                    if (c == '.') continue;
+
+                    Brush brush = c switch
+                    {
+                        'O' => outlineBrush,
+                        'I' => earBrush,
+                        'N' => noseBrush,
+                        _ => bodyBrush
+                    };
+
+                    g.FillRectangle(brush, offsetX + x * pixelScale, offsetY + y * pixelScale, pixelScale, pixelScale);
+                }
+            }
+
+            if (isRunning)
+            {
+                // СВЕТЯЩИЕСЯ ОТКРЫТЫЕ 8-БИТНЫЕ ГЛАЗКИ (когда обход включён)
+                // Мягкий неоновый ореол вокруг каждого глаза
+                using (var eyeGlowBrush = new SolidBrush(Color.FromArgb(95, accentLight)))
+                {
+                    g.FillRectangle(eyeGlowBrush, offsetX + 2 * pixelScale, offsetY + 7 * pixelScale, 5 * pixelScale, 4 * pixelScale);
+                    g.FillRectangle(eyeGlowBrush, offsetX + 9 * pixelScale, offsetY + 7 * pixelScale, 5 * pixelScale, 4 * pixelScale);
+                }
+
+                // Основной пиксельный блок глаза (3x2 пикселя сетки) цветом выбранной темы
+                using (var eyeMainBrush = new SolidBrush(accentLight))
+                {
+                    g.FillRectangle(eyeMainBrush, offsetX + 3 * pixelScale, offsetY + 8 * pixelScale, 3 * pixelScale, 2 * pixelScale);
+                    g.FillRectangle(eyeMainBrush, offsetX + 10 * pixelScale, offsetY + 8 * pixelScale, 3 * pixelScale, 2 * pixelScale);
+                }
+
+                // Яркий белый 8-битный блик в уголке каждого глаза
+                using (var sparkBrush = new SolidBrush(Color.FromArgb(245, 255, 255, 255)))
+                {
+                    g.FillRectangle(sparkBrush, offsetX + 3 * pixelScale, offsetY + 8 * pixelScale, 1 * pixelScale, 1 * pixelScale);
+                    g.FillRectangle(sparkBrush, offsetX + 10 * pixelScale, offsetY + 8 * pixelScale, 1 * pixelScale, 1 * pixelScale);
+                }
+            }
+            else
+            {
+                // СПЯЩИЕ ГЛАЗКИ-ПОЛОСКИ «- -» (когда обход выключен)
+                using var sleepEyeBrush = new SolidBrush(ColorTranslator.FromHtml("#8A8A98"));
+                using var sleepShadowBrush = new SolidBrush(ColorTranslator.FromHtml("#25252E"));
+
+                // Чуть заметная тень под ресничками и сами узкие полоски (3x1 пикселя сетки)
+                g.FillRectangle(sleepShadowBrush, offsetX + 3 * pixelScale, offsetY + 10 * pixelScale, 3 * pixelScale, 1 * pixelScale);
+                g.FillRectangle(sleepShadowBrush, offsetX + 10 * pixelScale, offsetY + 10 * pixelScale, 3 * pixelScale, 1 * pixelScale);
+
+                g.FillRectangle(sleepEyeBrush, offsetX + 3 * pixelScale, offsetY + 9 * pixelScale, 3 * pixelScale, 1 * pixelScale);
+                g.FillRectangle(sleepEyeBrush, offsetX + 10 * pixelScale, offsetY + 9 * pixelScale, 3 * pixelScale, 1 * pixelScale);
+            }
+
+            g.PixelOffsetMode = oldOffset;
+            g.SmoothingMode = oldSmooth;
         }
 
         public static GraphicsPath CreateRoundedRectPath(Rectangle bounds, int radius)

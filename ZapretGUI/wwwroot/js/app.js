@@ -77,7 +77,10 @@ function handleBackendEvent(type, data) {
                 appendLog(new Date().toLocaleTimeString(), 'Интерфейс загружен. Ожидание команд...');
 
             if (data.isFirstRun) {
+                setZappyMascotVisibility(false);
                 openWizardModal();
+            } else {
+                setZappyMascotVisibility(true);
             }
             break;
 
@@ -431,7 +434,6 @@ window.addEventListener('DOMContentLoaded', () => {
     try {
         if (typeof initReactor3D === 'function') initReactor3D();
         if (typeof initGems3DShowcase === 'function') initGems3DShowcase();
-        if (typeof initZappy3DMascot === 'function') initZappy3DMascot();
         if (typeof refreshCardsTiltEffect === 'function') refreshCardsTiltEffect();
     } catch (e) {
         console.error('3D init error:', e);
@@ -631,4 +633,33 @@ function filterSettingsView() {
 
         group.classList.toggle('hidden', !anyVisibleInGroup);
     });
+}
+
+function setZappyMascotVisibility(visible) {
+    const zappySelectors = [
+        '#zappy-mascot-container',
+        '#zappy-3d-container',
+        '#zappy-widget',
+        '.zappy-mascot-wrap'
+    ];
+
+    if (visible) {
+        if (!window._zappyMascotInitialized && typeof initZappy3DMascot === 'function') {
+            window._zappyMascotInitialized = true;
+            try { initZappy3DMascot(); } catch (e) { console.error('Zappy init error:', e); }
+        }
+        zappySelectors.forEach(sel => {
+            document.querySelectorAll(sel).forEach(el => {
+                el.style.display = '';
+                el.style.pointerEvents = '';
+            });
+        });
+    } else {
+        zappySelectors.forEach(sel => {
+            document.querySelectorAll(sel).forEach(el => {
+                el.style.display = 'none';
+                el.style.pointerEvents = 'none';
+            });
+        });
+    }
 }
