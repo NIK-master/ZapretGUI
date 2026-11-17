@@ -38,8 +38,11 @@ namespace ZapretGUI.Core
         public void InitializeFolders()
         {
             Directory.CreateDirectory(_modsBasePath);
-            Directory.CreateDirectory(_strategiesPath);
-            Directory.CreateDirectory(_listsPath);
+            Directory.CreateDirectory(Path.Combine(_modsBasePath, "strategies"));
+            Directory.CreateDirectory(Path.Combine(_modsBasePath, "lists"));
+            Directory.CreateDirectory(Path.Combine(_modsBasePath, "themes"));
+            Directory.CreateDirectory(Path.Combine(_modsBasePath, "plugins"));
+            Directory.CreateDirectory(Path.Combine(_modsBasePath, "libraries"));
         }
 
         public bool IsModIdTaken(string id)
@@ -165,14 +168,31 @@ namespace ZapretGUI.Core
         public async Task<List<UIModItem>> GetAvailableModsAsync(ModType type)
         {
             var mods = new List<UIModItem>();
-            var targetFolder = type == ModType.BatStrategy ? _strategiesPath : _listsPath;
 
-            if (!Directory.Exists(targetFolder))
-                return mods;
+            // Определяем папку в зависимости от типа мода
+            string folderName = type switch
+            {
+                ModType.BatStrategy => "strategies",
+                ModType.DomainList => "lists",
+                ModType.Theme => "themes",
+                ModType.Plugin => "plugins",
+                ModType.Library => "libraries",
+                _ => throw new ArgumentOutOfRangeException()
+            };
 
-            var activeList = type == ModType.BatStrategy
-                ? SettingsManager.Current.ActiveBatMods
-                : SettingsManager.Current.ActiveListMods;
+            var targetFolder = Path.Combine(_modsBasePath, folderName);
+            if (!Directory.Exists(targetFolder)) return mods;
+
+            // Определяем список активных модов из настроек
+            var activeList = type switch
+            {
+                ModType.BatStrategy => SettingsManager.Current.ActiveBatMods,
+                ModType.DomainList => SettingsManager.Current.ActiveListMods,
+                ModType.Theme => SettingsManager.Current.ActiveThemeMods,
+                ModType.Plugin => SettingsManager.Current.ActivePluginMods,
+                ModType.Library => SettingsManager.Current.ActiveLibraryMods,
+                _ => new List<string>()
+            };
 
             foreach (var dir in Directory.GetDirectories(targetFolder))
             {
@@ -190,6 +210,8 @@ namespace ZapretGUI.Core
                         {
                             if (string.IsNullOrWhiteSpace(meta.UniqueId))
                                 meta.UniqueId = modId;
+
+                            meta.Type = type;
 
                             mods.Add(new UIModItem
                             {
@@ -338,6 +360,21 @@ namespace ZapretGUI.Core
 
             await ApplyListModsAsync();
             return (isNew, customModId);
+        }
+
+        public string? GetThemeFileOverride(string relativePath)
+        {
+            if (SettingsManager.Current.ActiveThemeMods == null) return null;
+
+            for (var i = SettingsManager.Current.ActiveThemeMods.Count - 1; i >= 0; i--)
+            {
+                var themeId = SettingsManager.Current.ActiveThemeMods[i];
+                var themePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, "themes", themeId, relativePath);
+
+                if (File.Exists(themePath))
+                    return themePath;
+            }
+            return null;
         }
     }
 }

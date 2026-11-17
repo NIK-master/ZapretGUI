@@ -316,6 +316,10 @@ function handleBackendEvent(type, data) {
         case 'siteAnalyzeError':
             if (typeof renderSiteAnalyzeError === 'function') renderSiteAnalyzeError(data.error);
             break;
+
+        case 'injectPluginTab':
+            injectCustomPluginTab(data);
+            break;
     }
 }
 
@@ -690,6 +694,56 @@ function onVersionBadgeClick(e) {
         }
         if (typeof launchZnakEasterEgg === 'function') {
             launchZnakEasterEgg();
+        }
+    }
+}
+
+function injectCustomPluginTab(pluginData) {
+    const sidebarNav = document.getElementById('sidebar-nav');
+    const mainContainer = document.getElementById('main-container');
+
+    if (!sidebarNav || !mainContainer) return;
+
+    const tabId = 'plugin-' + pluginData.id;
+
+    // 1. Создаем кнопку в боковом меню
+    // Если кнопка уже есть — обновляем
+    let navBtn = document.getElementById('nav-btn-' + tabId);
+    if (!navBtn) {
+        navBtn = document.createElement('button');
+        navBtn.id = 'nav-btn-' + tabId;
+        navBtn.title = pluginData.title;
+        navBtn.className = 'nav-btn relative z-10 flex items-center gap-3 px-4 h-[40px] rounded-md text-sm font-medium text-[#CCCCCC] hover:text-white transition-colors cursor-pointer';
+        navBtn.onclick = function () { switchTab(tabId, this); };
+
+        sidebarNav.appendChild(navBtn);
+    }
+
+    navBtn.innerHTML = `
+        <span class="mdl-icon text-sm text-[#888888] transition-colors">${pluginData.iconGlyph || '&#xE74C;'}</span>
+        <span>${pluginData.title}</span>
+    `;
+
+    // 2. Создаем контейнер-вкладку в главной области
+    let tabContainer = document.getElementById('tab-' + tabId);
+    if (!tabContainer) {
+        tabContainer = document.createElement('div');
+        tabContainer.id = 'tab-' + tabId;
+        tabContainer.className = 'tab-view w-full h-full flex flex-col relative';
+        mainContainer.appendChild(tabContainer);
+    }
+
+    // Вставляем HTML, сгенерированный плагином
+    tabContainer.innerHTML = pluginData.htmlContent;
+
+    // 3. Выполняем JS скрипты, если плагин их передал
+    if (pluginData.jsContent) {
+        try {
+            const script = document.createElement('script');
+            script.textContent = pluginData.jsContent;
+            document.body.appendChild(script);
+        } catch (e) {
+            console.error(`Ошибка выполнения JS плагина ${pluginData.id}:`, e);
         }
     }
 }

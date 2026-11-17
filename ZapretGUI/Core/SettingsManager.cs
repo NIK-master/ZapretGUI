@@ -34,6 +34,10 @@ namespace ZapretGUI.Core
         public System.Collections.Generic.List<string> ActiveBatMods { get; set; } = new();
         public System.Collections.Generic.List<string> ActiveListMods { get; set; } = new();
 
+        public System.Collections.Generic.List<string> ActiveThemeMods { get; set; } = new();
+        public System.Collections.Generic.List<string> ActivePluginMods { get; set; } = new();
+        public System.Collections.Generic.List<string> ActiveLibraryMods { get; set; } = new();
+
         public string GameFilterMode { get; set; } = "disabled";
         public string GameFilterTcpRange { get; set; } = "1024-65535";
         public string GameFilterUdpRange { get; set; } = "1024-65535";

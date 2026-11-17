@@ -8,6 +8,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using ZapretGUI.Core;
+using ZapretGUI.Core.Plugins;
+using System.Linq;
 
 namespace ZapretGUI
 {
@@ -49,6 +51,9 @@ namespace ZapretGUI
         private bool _isForceExiting = false;
         private bool _isWindowCreated = false;
         private CancellationTokenSource? _resizeAnimCts;
+        public PluginManager PluginLoader { get; private set; }
+
+        private string _currentWebRoot = "";
 
         // Безопасное получение дескриптора окна только после физического создания HWND
         public IntPtr WindowHandle
@@ -112,7 +117,12 @@ namespace ZapretGUI
                 .SetContextMenuEnabled(false)
                 .SetDevToolsEnabled(false);
 
+            Window.RegisterCustomSchemeHandler("zapret", CustomSchemeHandler);
+
             _webBridge = new WebBridge(this, _isFirstRun);
+
+            var modApi = new ModAPI(_webBridge);
+            PluginLoader = new PluginManager(modApi);
 
             Window.RegisterWebMessageReceivedHandler((sender, message) =>
             {
@@ -139,6 +149,8 @@ namespace ZapretGUI
                     HideToTray();
                 }
 
+                _ = LoadActivePluginsAsync();
+
                 _ = InitializeAppAsync();
             });
 
@@ -158,6 +170,23 @@ namespace ZapretGUI
             });
         }
 
+        private async Task LoadActivePluginsAsync()
+        {
+            var modManager = new ModManager();
+
+            // Собираем метаданные всех активных плагинов и библиотек
+            var allPluginMods = new List<ModMetaData>();
+
+            // В реальном коде GetAvailableModsAsync нужно обновить под новые ModType
+            var libs = await modManager.GetAvailableModsAsync(ModType.Library);
+            var plugins = await modManager.GetAvailableModsAsync(ModType.Plugin);
+
+            allPluginMods.AddRange(libs.Where(m => SettingsManager.Current.ActiveLibraryMods.Contains(m.Id)).Select(m => m.Meta));
+            allPluginMods.AddRange(plugins.Where(m => SettingsManager.Current.ActivePluginMods.Contains(m.Id)).Select(m => m.Meta));
+
+            // Отдаем в загрузчик
+            PluginLoader.LoadPlugins(allPluginMods);
+        }
         private double GetDpiScale()
         {
             try
@@ -192,23 +221,66 @@ namespace ZapretGUI
             var devWebRootDir = Path.GetFullPath(Path.Combine(baseDir, @"..\..\..\wwwroot"));
             var localWebRootDir = Path.Combine(baseDir, "wwwroot");
 
-            string webRootDir;
             if (File.Exists(Path.Combine(devWebRootDir, "index.html")))
-            {
-                webRootDir = devWebRootDir;
-            }
+                _currentWebRoot = devWebRootDir;
             else if (File.Exists(Path.Combine(localWebRootDir, "index.html")))
-            {
-                webRootDir = localWebRootDir;
-            }
+                _currentWebRoot = localWebRootDir;
             else
+                _currentWebRoot = ExtractEmbeddedWebUI();
+
+            BuildBundledHtmlIfNeeded(_currentWebRoot);
+
+            Window.Load("zapret://app/index.html");
+            Window.WaitForClose();
+        }
+
+        private Stream? CustomSchemeHandler(string url, out string contentType)
+        {
+            var uri = new Uri(url);
+            var localPath = uri.AbsolutePath.TrimStart('/').Replace('/', Path.DirectorySeparatorChar);
+            if (string.IsNullOrEmpty(localPath)) localPath = "index.html";
+
+            // 1. Поиск переопределенного файла в активных Темах (ModManager)
+            var modManager = new ModManager();
+            var themeOverridePath = modManager.GetThemeFileOverride(localPath);
+
+            if (themeOverridePath != null && File.Exists(themeOverridePath))
             {
-                webRootDir = ExtractEmbeddedWebUI();
+                contentType = GetMimeType(localPath);
+                return File.OpenRead(themeOverridePath);
             }
 
-            string htmlPath = BuildBundledHtmlIfNeeded(webRootDir);
-            Window.Load(htmlPath);
-            Window.WaitForClose();
+            // 2. Стандартный путь из оригинального wwwroot
+            var defaultPath = Path.Combine(_currentWebRoot, localPath);
+            contentType = GetMimeType(localPath);
+
+            if (File.Exists(defaultPath))
+            {
+                return File.OpenRead(defaultPath);
+            }
+
+            // Заглушка, если файл не найден
+            contentType = "text/plain";
+            return null;
+        }
+
+        private string GetMimeType(string path)
+        {
+            var ext = Path.GetExtension(path).ToLowerInvariant();
+            return ext switch
+            {
+                ".html" => "text/html",
+                ".css" => "text/css",
+                ".js" => "application/javascript",
+                ".json" => "application/json",
+                ".png" => "image/png",
+                ".jpg" or ".jpeg" => "image/jpeg",
+                ".svg" => "image/svg+xml",
+                ".woff" => "font/woff",
+                ".woff2" => "font/woff2",
+                ".wav" => "audio/wav",
+                _ => "application/octet-stream"
+            };
         }
 
         private static string BuildBundledHtmlIfNeeded(string webRootDir)
@@ -361,6 +433,7 @@ namespace ZapretGUI
 
             _webBridge?.Dispose();
             _trayIconManager?.Dispose();
+            PluginLoader?.UnloadAll();
         }
 
         public void InvokeOnUI(Action action)

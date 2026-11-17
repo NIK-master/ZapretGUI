@@ -31,6 +31,8 @@ namespace ZapretGUI.Core
         private bool _isInternalFileOp = false;
         private TaskCompletionSource<bool>? _pendingConfirmTcs;
 
+        private readonly Dictionary<string, Func<JsonElement, Task>> _pluginCommandHandlers = new(StringComparer.OrdinalIgnoreCase);
+
         private static readonly JsonSerializerOptions _jsonOptions = new JsonSerializerOptions
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -256,6 +258,11 @@ namespace ZapretGUI.Core
             };
         }
 
+        public void RegisterPluginRoute(string action, Func<JsonElement, Task> handler)
+        {
+            _pluginCommandHandlers[action] = handler;
+        }
+
         private void SetupLiveModsWatcher()
         {
             var modsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory);
@@ -344,9 +351,9 @@ namespace ZapretGUI.Core
             var action = actionProp.GetString() ?? "";
 
             if (_commandHandlers.TryGetValue(action, out var handler))
-            {
                 await handler(root);
-            }
+            else if (_pluginCommandHandlers.TryGetValue(action, out var pluginHandler))
+                await pluginHandler(root);
         }
 
         private async Task HandleRunWizardSetupAsync(JsonElement root)

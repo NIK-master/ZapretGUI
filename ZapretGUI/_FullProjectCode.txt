@@ -99,6 +99,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using ZapretGUI.Core;
+using ZapretGUI.Core.Plugins;
+using System.Linq;
 
 namespace ZapretGUI
 {
@@ -140,6 +142,9 @@ namespace ZapretGUI
         private bool _isForceExiting = false;
         private bool _isWindowCreated = false;
         private CancellationTokenSource? _resizeAnimCts;
+        public PluginManager PluginLoader { get; private set; }
+
+        private string _currentWebRoot = "";
 
         // Безопасное получение дескриптора окна только после физического создания HWND
         public IntPtr WindowHandle
@@ -203,7 +208,12 @@ namespace ZapretGUI
                 .SetContextMenuEnabled(false)
                 .SetDevToolsEnabled(false);
 
+            Window.RegisterCustomSchemeHandler("zapret", CustomSchemeHandler);
+
             _webBridge = new WebBridge(this, _isFirstRun);
+
+            var modApi = new ModAPI(_webBridge);
+            PluginLoader = new PluginManager(modApi);
 
             Window.RegisterWebMessageReceivedHandler((sender, message) =>
             {
@@ -230,6 +240,8 @@ namespace ZapretGUI
                     HideToTray();
                 }
 
+                _ = LoadActivePluginsAsync();
+
                 _ = InitializeAppAsync();
             });
 
@@ -249,6 +261,23 @@ namespace ZapretGUI
             });
         }
 
+        private async Task LoadActivePluginsAsync()
+        {
+            var modManager = new ModManager();
+
+            // Собираем метаданные всех активных плагинов и библиотек
+            var allPluginMods = new List<ModMetaData>();
+
+            // В реальном коде GetAvailableModsAsync нужно обновить под новые ModType
+            var libs = await modManager.GetAvailableModsAsync(ModType.Library);
+            var plugins = await modManager.GetAvailableModsAsync(ModType.Plugin);
+
+            allPluginMods.AddRange(libs.Where(m => SettingsManager.Current.ActiveLibraryMods.Contains(m.Id)).Select(m => m.Meta));
+            allPluginMods.AddRange(plugins.Where(m => SettingsManager.Current.ActivePluginMods.Contains(m.Id)).Select(m => m.Meta));
+
+            // Отдаем в загрузчик
+            PluginLoader.LoadPlugins(allPluginMods);
+        }
         private double GetDpiScale()
         {
             try
@@ -283,23 +312,66 @@ namespace ZapretGUI
             var devWebRootDir = Path.GetFullPath(Path.Combine(baseDir, @"..\..\..\wwwroot"));
             var localWebRootDir = Path.Combine(baseDir, "wwwroot");
 
-            string webRootDir;
             if (File.Exists(Path.Combine(devWebRootDir, "index.html")))
-            {
-                webRootDir = devWebRootDir;
-            }
+                _currentWebRoot = devWebRootDir;
             else if (File.Exists(Path.Combine(localWebRootDir, "index.html")))
-            {
-                webRootDir = localWebRootDir;
-            }
+                _currentWebRoot = localWebRootDir;
             else
+                _currentWebRoot = ExtractEmbeddedWebUI();
+
+            BuildBundledHtmlIfNeeded(_currentWebRoot);
+
+            Window.Load("zapret://app/index.html");
+            Window.WaitForClose();
+        }
+
+        private Stream? CustomSchemeHandler(string url, out string contentType)
+        {
+            var uri = new Uri(url);
+            var localPath = uri.AbsolutePath.TrimStart('/').Replace('/', Path.DirectorySeparatorChar);
+            if (string.IsNullOrEmpty(localPath)) localPath = "index.html";
+
+            // 1. Поиск переопределенного файла в активных Темах (ModManager)
+            var modManager = new ModManager();
+            var themeOverridePath = modManager.GetThemeFileOverride(localPath);
+
+            if (themeOverridePath != null && File.Exists(themeOverridePath))
             {
-                webRootDir = ExtractEmbeddedWebUI();
+                contentType = GetMimeType(localPath);
+                return File.OpenRead(themeOverridePath);
             }
 
-            string htmlPath = BuildBundledHtmlIfNeeded(webRootDir);
-            Window.Load(htmlPath);
-            Window.WaitForClose();
+            // 2. Стандартный путь из оригинального wwwroot
+            var defaultPath = Path.Combine(_currentWebRoot, localPath);
+            contentType = GetMimeType(localPath);
+
+            if (File.Exists(defaultPath))
+            {
+                return File.OpenRead(defaultPath);
+            }
+
+            // Заглушка, если файл не найден
+            contentType = "text/plain";
+            return null;
+        }
+
+        private string GetMimeType(string path)
+        {
+            var ext = Path.GetExtension(path).ToLowerInvariant();
+            return ext switch
+            {
+                ".html" => "text/html",
+                ".css" => "text/css",
+                ".js" => "application/javascript",
+                ".json" => "application/json",
+                ".png" => "image/png",
+                ".jpg" or ".jpeg" => "image/jpeg",
+                ".svg" => "image/svg+xml",
+                ".woff" => "font/woff",
+                ".woff2" => "font/woff2",
+                ".wav" => "audio/wav",
+                _ => "application/octet-stream"
+            };
         }
 
         private static string BuildBundledHtmlIfNeeded(string webRootDir)
@@ -452,6 +524,7 @@ namespace ZapretGUI
 
             _webBridge?.Dispose();
             _trayIconManager?.Dispose();
+            PluginLoader?.UnloadAll();
         }
 
         public void InvokeOnUI(Action action)
@@ -2167,6 +2240,21 @@ namespace ZapretGUI.Core
             await ApplyListModsAsync();
             return (isNew, customModId);
         }
+
+        public string? GetThemeFileOverride(string relativePath)
+        {
+            if (SettingsManager.Current.ActiveThemeMods == null) return null;
+
+            for (var i = SettingsManager.Current.ActiveThemeMods.Count - 1; i >= 0; i--)
+            {
+                var themeId = SettingsManager.Current.ActiveThemeMods[i];
+                var themePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, "themes", themeId, relativePath);
+
+                if (File.Exists(themePath))
+                    return themePath;
+            }
+            return null;
+        }
     }
 }
 
@@ -2174,12 +2262,23 @@ namespace ZapretGUI.Core
 // ФАЙЛ: Core\ModModels.cs
 ////////////////////////////////////////////////////////////////////////////////
 
+using System.Collections.Generic;
+
 namespace ZapretGUI.Core
 {
     public enum ModType
     {
         BatStrategy,
-        DomainList
+        DomainList,
+        Theme,
+        Plugin,
+        Library
+    }
+
+    public class ModDependency
+    {
+        public string ModId { get; set; } = "";
+        public string MinVersion { get; set; } = "1.0";
     }
 
     public class ModMetaData
@@ -2189,7 +2288,17 @@ namespace ZapretGUI.Core
         public string Author { get; set; } = "Аноним";
         public string Version { get; set; } = "1.0";
         public string Description { get; set; } = "Описание отсутствует.";
-        public bool IsBatStrategy { get; set; } = false;
+        public ModType Type { get; set; } = ModType.BatStrategy;
+
+        public string EntryPoint { get; set; } = "";
+
+        public List<ModDependency> Dependencies { get; set; } = new();
+
+        public bool IsBatStrategy
+        {
+            get => Type == ModType.BatStrategy;
+            set { if (value) Type = ModType.BatStrategy; }
+        }
     }
 
     public class UIModItem
@@ -2764,6 +2873,10 @@ namespace ZapretGUI.Core
 
         public System.Collections.Generic.List<string> ActiveBatMods { get; set; } = new();
         public System.Collections.Generic.List<string> ActiveListMods { get; set; } = new();
+
+        public System.Collections.Generic.List<string> ActiveThemeMods { get; set; } = new();
+        public System.Collections.Generic.List<string> ActivePluginMods { get; set; } = new();
+        public System.Collections.Generic.List<string> ActiveLibraryMods { get; set; } = new();
 
         public string GameFilterMode { get; set; } = "disabled";
         public string GameFilterTcpRange { get; set; } = "1024-65535";
@@ -4452,6 +4565,8 @@ namespace ZapretGUI.Core
         private bool _isInternalFileOp = false;
         private TaskCompletionSource<bool>? _pendingConfirmTcs;
 
+        private readonly Dictionary<string, Func<JsonElement, Task>> _pluginCommandHandlers = new(StringComparer.OrdinalIgnoreCase);
+
         private static readonly JsonSerializerOptions _jsonOptions = new JsonSerializerOptions
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -4677,6 +4792,11 @@ namespace ZapretGUI.Core
             };
         }
 
+        public void RegisterPluginRoute(string action, Func<JsonElement, Task> handler)
+        {
+            _pluginCommandHandlers[action] = handler;
+        }
+
         private void SetupLiveModsWatcher()
         {
             var modsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory);
@@ -4765,9 +4885,9 @@ namespace ZapretGUI.Core
             var action = actionProp.GetString() ?? "";
 
             if (_commandHandlers.TryGetValue(action, out var handler))
-            {
                 await handler(root);
-            }
+            else if (_pluginCommandHandlers.TryGetValue(action, out var pluginHandler))
+                await pluginHandler(root);
         }
 
         private async Task HandleRunWizardSetupAsync(JsonElement root)
@@ -5205,7 +5325,7 @@ namespace ZapretGUI.Core
             }
         }
 
-        private void HandleExportModAsync(JsonElement root)
+        private async Task HandleExportModAsync(JsonElement root)
         {
             var id = root.GetProperty("id").GetString() ?? "";
             var isBat = root.GetProperty("isBat").GetBoolean();
@@ -5226,7 +5346,10 @@ namespace ZapretGUI.Core
                 if (!Directory.Exists(modFolderPath)) { SendEvent("alert", new { title = "Ошибка", message = "Папка мода не найдена на диске!", isError = true }); return; }
 
                 if (File.Exists(savePath)) File.Delete(savePath);
-                ZipFile.CreateFromDirectory(modFolderPath, savePath);
+
+                // ИСПРАВЛЕНО: Асинхронная архивация не фризит UI и корректно возвращает Task
+                await Task.Run(() => ZipFile.CreateFromDirectory(modFolderPath, savePath));
+
                 SendEvent("alert", new { title = "Экспорт завершен", message = $"Мод «{modName}» (ID: {id}) успешно экспортирован и готов к отправке!", isError = false });
             }
             catch (Exception ex) { SendEvent("alert", new { title = "Ошибка экспорта", message = ex.Message, isError = true }); }
@@ -6030,6 +6153,264 @@ namespace ZapretGUI.Core
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// ФАЙЛ: Core\Plugins\IModAPI.cs
+////////////////////////////////////////////////////////////////////////////////
+
+using System;
+using System.Text.Json;
+using System.Threading.Tasks;
+
+namespace ZapretGUI.Core.Plugins
+{
+    /// <summary>
+    /// API, которое передается плагину при загрузке.
+    /// Позволяет плагину безопасно общаться с UI и ядром.
+    /// </summary>
+    public interface IModAPI
+    {
+        // Регистрация кастомных команд от Web UI плагина
+        void RegisterWebMessageRoute(string action, Func<JsonElement, Task> handler);
+
+        // Отправка событий в Web UI
+        void SendWebEvent(string eventName, object payload);
+
+        // Хуки на события ядра обхода
+        void HookBypassStart(Action<string> onStart);
+        void HookBypassStop(Action onStop);
+
+        // Доступ к настройкам
+        AppSettings GetSettings();
+        void SaveSettings();
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// ФАЙЛ: Core\Plugins\IZapretPlugin.cs
+////////////////////////////////////////////////////////////////////////////////
+
+namespace ZapretGUI.Core.Plugins
+{
+    /// <summary>
+    /// Точка входа для любого C# плагина.
+    /// DLL плагина должна содержать один класс, реализующий этот интерфейс.
+    /// </summary>
+    public interface IZapretPlugin
+    {
+        void OnLoad(IModAPI api);
+        void OnUnload();
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// ФАЙЛ: Core\Plugins\ModAPI.cs
+////////////////////////////////////////////////////////////////////////////////
+
+using System;
+using System.Text.Json;
+using System.Threading.Tasks;
+
+namespace ZapretGUI.Core.Plugins
+{
+    public class ModAPI : IModAPI
+    {
+        private readonly WebBridge _webBridge;
+
+        public ModAPI(WebBridge webBridge)
+        {
+            _webBridge = webBridge;
+        }
+
+        public void RegisterWebMessageRoute(string action, Func<JsonElement, Task> handler)
+        {
+            // Регистрируем кастомный обработчик команд от интерфейса плагина
+            _webBridge.RegisterPluginRoute(action, handler);
+        }
+
+        public void SendWebEvent(string eventName, object payload)
+        {
+            // Прокидываем отправку событий из плагина во Frontend
+            _webBridge.SendEvent(eventName, payload);
+        }
+
+        public void HookBypassStart(Action<string> onStart)
+        {
+            BypassController.Current.OnLog += onStart;
+        }
+
+        public void HookBypassStop(Action onStop)
+        {
+            // Здесь плагин может подписаться на глобальные события остановки
+            // Заглушка до реализации полноценной шины событий в BypassController
+        }
+
+        public AppSettings GetSettings() => SettingsManager.Current;
+
+        public void SaveSettings() => SettingsManager.Save();
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// ФАЙЛ: Core\Plugins\PluginLoaderContext.cs
+////////////////////////////////////////////////////////////////////////////////
+
+using System.IO;
+using System.Reflection;
+using System.Runtime.Loader;
+
+namespace ZapretGUI.Core.Plugins
+{
+    public class PluginLoaderContext : AssemblyLoadContext
+    {
+        private readonly string _pluginDirectory;
+
+        public PluginLoaderContext(string pluginDirectory) : base(isCollectible: true)
+        {
+            _pluginDirectory = pluginDirectory;
+        }
+
+        protected override Assembly? Load(AssemblyName assemblyName)
+        {
+            var dllPath = Path.Combine(_pluginDirectory, $"{assemblyName.Name}.dll");
+            if (File.Exists(dllPath))
+                return LoadFromAssemblyPath(dllPath);
+
+            return null;
+        }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// ФАЙЛ: Core\Plugins\PluginManager.cs
+////////////////////////////////////////////////////////////////////////////////
+
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Reflection;
+
+namespace ZapretGUI.Core.Plugins
+{
+    public class PluginManager
+    {
+        private readonly Dictionary<string, PluginLoaderContext> _loadContexts = new();
+        private readonly Dictionary<string, IZapretPlugin> _activePlugins = new();
+        private readonly IModAPI _api;
+
+        public PluginManager(IModAPI api)
+        {
+            _api = api;
+        }
+
+        public void LoadPlugins(List<ModMetaData> activeMods)
+        {
+            // 1. Сортируем моды по зависимостям
+            var sortedMods = SortModsByDependencies(activeMods);
+
+            // 2. Загружаем Библиотеки и Плагины в правильном порядке
+            foreach (var mod in sortedMods)
+            {
+                if (mod.Type == ModType.Plugin || mod.Type == ModType.Library)
+                {
+                    LoadSinglePlugin(mod);
+                }
+            }
+        }
+
+        private void LoadSinglePlugin(ModMetaData mod)
+        {
+            try
+            {
+                string folderName = mod.Type == ModType.Library ? "libraries" : "plugins";
+                string modFolder = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, folderName, mod.UniqueId);
+                string dllPath = Path.Combine(modFolder, mod.EntryPoint);
+
+                if (!File.Exists(dllPath))
+                {
+                    Debug.WriteLine($"[Mod Loader] Точка входа {dllPath} не найдена для {mod.UniqueId}");
+                    return;
+                }
+
+                // Создаем изолированный контекст и загружаем сборку
+                var context = new PluginLoaderContext(modFolder);
+                _loadContexts[mod.UniqueId] = context;
+                var assembly = context.LoadFromAssemblyPath(dllPath);
+
+                // Если это плагин (не библиотека), ищем реализацию IZapretPlugin
+                if (mod.Type == ModType.Plugin)
+                {
+                    var pluginType = assembly.GetTypes().FirstOrDefault(t =>
+                        typeof(IZapretPlugin).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract);
+
+                    if (pluginType != null)
+                    {
+                        var pluginInstance = (IZapretPlugin)Activator.CreateInstance(pluginType)!;
+                        pluginInstance.OnLoad(_api);
+                        _activePlugins[mod.UniqueId] = pluginInstance;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[Mod Loader] Ошибка загрузки {mod.UniqueId}: {ex.Message}");
+            }
+        }
+
+        public void UnloadAll()
+        {
+            foreach (var kvp in _activePlugins)
+            {
+                try { kvp.Value.OnUnload(); } catch { }
+            }
+            _activePlugins.Clear();
+
+            foreach (var kvp in _loadContexts)
+            {
+                try { kvp.Value.Unload(); } catch { }
+            }
+            _loadContexts.Clear();
+
+            // Принудительно освобождаем память и выгружаем DLL-файлы
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+        }
+
+        private List<ModMetaData> SortModsByDependencies(List<ModMetaData> activeMods)
+        {
+            var sorted = new List<ModMetaData>();
+            var visited = new HashSet<string>();
+            var visiting = new HashSet<string>();
+
+            void Visit(ModMetaData mod)
+            {
+                if (visited.Contains(mod.UniqueId)) return;
+
+                if (visiting.Contains(mod.UniqueId))
+                    throw new Exception($"Обнаружена циклическая зависимость мода: {mod.UniqueId}");
+
+                visiting.Add(mod.UniqueId);
+
+                // Рекурсивно обходим все зависимости мода перед ним самим
+                foreach (var dep in mod.Dependencies)
+                {
+                    var depMod = activeMods.FirstOrDefault(m => m.UniqueId == dep.ModId);
+                    if (depMod != null) Visit(depMod);
+                }
+
+                visiting.Remove(mod.UniqueId);
+                visited.Add(mod.UniqueId);
+                sorted.Add(mod);
+            }
+
+            foreach (var mod in activeMods) Visit(mod);
+
+            return sorted;
+        }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // ФАЙЛ: wwwroot\index.html
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -6061,7 +6442,7 @@ namespace ZapretGUI.Core
 			<div class="flex items-center gap-5 ml-2.5 pointer-events-none">
 				<div class="flex items-center gap-2">
 					<span class="font-semibold text-sm text-[#888888]">Zapret for ADHD</span>
-					<span id="titlebar-ver-badge" onclick="onVersionBadgeClick(event)" class="app-ver-text pointer-events-auto cursor-pointer select-none text-[11px] font-mono text-[#666666] hover:text-white hover:border-[#444444] bg-[#1A1A1A] border border-[#2A2A2A] px-1.5 py-0.5 rounded transition-all active:scale-90">v4.1</span>
+					<span id="titlebar-ver-badge" onclick="onVersionBadgeClick(event)" class="app-ver-text pointer-events-auto cursor-pointer select-none text-[11px] font-mono text-[#666666] hover:text-white hover:border-[#444444] bg-[#1A1A1A] border border-[#2A2A2A] px-1.5 py-0.5 rounded transition-all active:scale-90">v4.2</span>
 				</div>
 
 				<div class="flex items-center gap-4 text-xs text-[#888888]">
@@ -6119,7 +6500,7 @@ namespace ZapretGUI.Core
 			</nav>
 
 			<div id="sidebar-footer" class="text-center text-[11px] text-[#555555] font-mono pb-1 whitespace-nowrap">
-				Zapret for ADHD <span id="app-version" class="app-ver-text">v4.1</span>
+				Zapret for ADHD <span id="app-version" class="app-ver-text">v4.2</span>
 			</div>
 		</aside>
 
@@ -7980,6 +8361,10 @@ function handleBackendEvent(type, data) {
         case 'siteAnalyzeError':
             if (typeof renderSiteAnalyzeError === 'function') renderSiteAnalyzeError(data.error);
             break;
+
+        case 'injectPluginTab':
+            injectCustomPluginTab(data);
+            break;
     }
 }
 
@@ -8354,6 +8739,56 @@ function onVersionBadgeClick(e) {
         }
         if (typeof launchZnakEasterEgg === 'function') {
             launchZnakEasterEgg();
+        }
+    }
+}
+
+function injectCustomPluginTab(pluginData) {
+    const sidebarNav = document.getElementById('sidebar-nav');
+    const mainContainer = document.getElementById('main-container');
+
+    if (!sidebarNav || !mainContainer) return;
+
+    const tabId = 'plugin-' + pluginData.id;
+
+    // 1. Создаем кнопку в боковом меню
+    // Если кнопка уже есть — обновляем
+    let navBtn = document.getElementById('nav-btn-' + tabId);
+    if (!navBtn) {
+        navBtn = document.createElement('button');
+        navBtn.id = 'nav-btn-' + tabId;
+        navBtn.title = pluginData.title;
+        navBtn.className = 'nav-btn relative z-10 flex items-center gap-3 px-4 h-[40px] rounded-md text-sm font-medium text-[#CCCCCC] hover:text-white transition-colors cursor-pointer';
+        navBtn.onclick = function () { switchTab(tabId, this); };
+
+        sidebarNav.appendChild(navBtn);
+    }
+
+    navBtn.innerHTML = `
+        <span class="mdl-icon text-sm text-[#888888] transition-colors">${pluginData.iconGlyph || '&#xE74C;'}</span>
+        <span>${pluginData.title}</span>
+    `;
+
+    // 2. Создаем контейнер-вкладку в главной области
+    let tabContainer = document.getElementById('tab-' + tabId);
+    if (!tabContainer) {
+        tabContainer = document.createElement('div');
+        tabContainer.id = 'tab-' + tabId;
+        tabContainer.className = 'tab-view w-full h-full flex flex-col relative';
+        mainContainer.appendChild(tabContainer);
+    }
+
+    // Вставляем HTML, сгенерированный плагином
+    tabContainer.innerHTML = pluginData.htmlContent;
+
+    // 3. Выполняем JS скрипты, если плагин их передал
+    if (pluginData.jsContent) {
+        try {
+            const script = document.createElement('script');
+            script.textContent = pluginData.jsContent;
+            document.body.appendChild(script);
+        } catch (e) {
+            console.error(`Ошибка выполнения JS плагина ${pluginData.id}:`, e);
         }
     }
 }
@@ -15286,7 +15721,7 @@ function animateZappy3D() {
 				<div>
 					<div class="text-base font-bold text-white leading-tight">Мастер развертывания системы</div>
 					<div class="text-xs text-[#777777] font-mono">
-						Zapret for ADHD <span class="app-ver-text">v4.1</span> • Первоначальная настройка
+						Zapret for ADHD <span class="app-ver-text">v4.2</span> • Первоначальная настройка
 					</div>
 				</div>
 			</div>
@@ -16553,7 +16988,7 @@ function animateZappy3D() {
 				<div>
 					<div class="text-sm font-bold text-white flex items-center gap-2">
 						<span>Zapret for ADHD</span>
-						<span class="app-ver-text px-2 py-0.2 rounded bg-[#222222] border border-[#333333] font-mono text-[11px] text-brand">v4.1</span>
+						<span class="app-ver-text px-2 py-0.2 rounded bg-[#222222] border border-[#333333] font-mono text-[11px] text-brand">v4.2</span>
 					</div>
 					<div class="flex flex-wrap items-center gap-3 mt-1 text-[11px] font-mono text-[#888888]">
 						<span>
