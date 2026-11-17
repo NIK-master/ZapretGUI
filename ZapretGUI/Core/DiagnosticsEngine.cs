@@ -109,10 +109,12 @@ namespace ZapretGUI.Core
                 var txId = (ushort)Random.Shared.Next(0, 65536);
                 var query = BuildDnsQuery(domain, txId);
                 using var udp = new UdpClient();
-                udp.Client.ReceiveTimeout = 3000;
                 var ep = new IPEndPoint(IPAddress.Parse(server), 53);
                 await udp.SendAsync(query, ep);
-                var result = await udp.ReceiveAsync();
+
+                using var cts = new CancellationTokenSource(3000);
+                var result = await udp.ReceiveAsync(cts.Token);
+
                 return ParseDnsResponse(result.Buffer);
             }
             catch { return []; }
@@ -264,20 +266,23 @@ namespace ZapretGUI.Core
 
         public static async Task<List<PingResult>> CheckPingAsync(Action<double>? progress = null)
         {
-            var results = new List<PingResult>();
-            for (var i = 0; i < PingHosts.Length; i++)
+            var done = 0;
+            var tasks = PingHosts.Select(async host =>
             {
-                var (ok, rtt) = await PingOnceAsync(PingHosts[i]);
-                results.Add(new PingResult
+                var (ok, rtt) = await PingOnceAsync(host);
+                Interlocked.Increment(ref done);
+                progress?.Invoke((double)done / PingHosts.Length);
+                return new PingResult
                 {
-                    Host = PingHosts[i],
+                    Host = host,
                     Ok = ok,
                     LatencyMs = ok ? rtt : null,
                     PacketLoss = ok ? 0 : 100
-                });
-                progress?.Invoke((double)(i + 1) / PingHosts.Length);
-            }
-            return results;
+                };
+            });
+
+            var results = await Task.WhenAll(tasks);
+            return results.ToList();
         }
 
         public static async Task<DnsResult> CheckDnsAsync(string domain = "telegram.org", Action<double>? progress = null)
@@ -371,22 +376,25 @@ namespace ZapretGUI.Core
 
         public static async Task<List<DiscordPingResult>> CheckDiscordPingAsync(Action<double>? progress = null)
         {
-            var results = new List<DiscordPingResult>();
-            for (var i = 0; i < DiscordPingHosts.Length; i++)
+            var done = 0;
+            var tasks = DiscordPingHosts.Select(async hostInfo =>
             {
-                var (label, ip) = DiscordPingHosts[i];
+                var (label, ip) = hostInfo;
                 var (ok, lat, err) = await TcpConnectAsync(ip, 443, 4.0);
-                results.Add(new DiscordPingResult
+                Interlocked.Increment(ref done);
+                progress?.Invoke((double)done / DiscordPingHosts.Length);
+                return new DiscordPingResult
                 {
                     Label = label,
                     Ip = ip,
                     Ok = ok,
                     LatencyMs = ok ? lat : null,
                     Error = err
-                });
-                progress?.Invoke((double)(i + 1) / DiscordPingHosts.Length);
-            }
-            return results;
+                };
+            });
+
+            var results = await Task.WhenAll(tasks);
+            return results.ToList();
         }
 
         public static List<BlockType> ClassifyBlocks(DiagReport r)

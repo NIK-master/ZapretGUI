@@ -29,7 +29,6 @@ namespace ZapretGUI.Core
                         try { File.Delete(oldClick); } catch { }
                     }
                 }
-
                 _successFilePath = EnsureSuccessFileCached("success.wav");
             }
             catch (Exception ex)
@@ -94,10 +93,6 @@ namespace ZapretGUI.Core
 
             GenerateSuccessWavToFile(targetCachedPath);
             return targetCachedPath;
-        }
-
-        public static void PlayClick()
-        {
         }
 
         public static void PlaySuccess()

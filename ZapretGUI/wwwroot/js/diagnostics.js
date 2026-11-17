@@ -197,7 +197,6 @@ function updateDiagStepPills(progressPercent, statusText) {
 }
 
 function runDiagnostics() {
-    sendCmd('playClick');
     const btn = document.getElementById('btn-run-diag');
     btn.disabled = true;
     btn.style.opacity = '0.5';
@@ -511,7 +510,6 @@ function formatCleanRecommendation(rawText) {
 }
 
 function diagQuickAction(act) {
-    sendCmd('playClick');
     const navBtns = document.querySelectorAll('.nav-btn');
 
     if (act === 'startBypass') {
@@ -533,7 +531,6 @@ function diagQuickAction(act) {
 }
 
 async function copyDiagnosticsReport() {
-    sendCmd('playClick');
     if (!lastDiagReport) return;
 
     const dcOk = (lastDiagReport.dcResults || []).filter(x => x.ok).length;

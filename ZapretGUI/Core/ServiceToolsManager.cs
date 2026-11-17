@@ -6,14 +6,17 @@ using System.Linq;
 using System.Net.Http;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace ZapretGUI.Core
 {
-    public static class ServiceToolsManager
+    public static partial class ServiceToolsManager
     {
-        private static readonly HttpClient _http = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+        [GeneratedRegex(@"^[1-9][0-9]*(?:-[1-9][0-9]*)?$")]
+        private static partial Regex PortRangeRegex();
 
+        private static readonly HttpClient _http = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
         private const string HostsMarkerStart = "# >>> ZAPRET FOR ADHD HOSTS START >>>";
         private const string HostsMarkerEnd = "# <<< ZAPRET FOR ADHD HOSTS END <<<";
 
@@ -37,7 +40,7 @@ namespace ZapretGUI.Core
 
             foreach (var part in parts)
             {
-                if (!Regex.IsMatch(part, @"^[1-9][0-9]*(?:-[1-9][0-9]*)?$"))
+                if (!PortRangeRegex().IsMatch(part))
                     return false;
 
                 var bounds = part.Split('-');
@@ -89,25 +92,18 @@ namespace ZapretGUI.Core
         {
             try
             {
-                if (!Directory.Exists(UtilsPath))
-                    Directory.CreateDirectory(UtilsPath);
+                if (!Directory.Exists(UtilsPath)) Directory.CreateDirectory(UtilsPath);
 
                 string flagFile = Path.Combine(UtilsPath, "game_filter.enabled");
                 string mode = (SettingsManager.Current.GameFilterMode ?? "disabled").ToLowerInvariant();
 
                 if (mode == "disabled")
                 {
-                    if (File.Exists(flagFile))
-                        File.Delete(flagFile);
+                    if (File.Exists(flagFile)) File.Delete(flagFile);
                 }
                 else
                 {
-                    var lines = new[]
-                    {
-                        $"mode={mode}",
-                        $"tcp={SettingsManager.Current.GameFilterTcpRange}",
-                        $"udp={SettingsManager.Current.GameFilterUdpRange}"
-                    };
+                    var lines = new[] { $"mode={mode}", $"tcp={SettingsManager.Current.GameFilterTcpRange}", $"udp={SettingsManager.Current.GameFilterUdpRange}" };
                     File.WriteAllLines(flagFile, lines);
                 }
             }
@@ -123,27 +119,14 @@ namespace ZapretGUI.Core
             {
                 if (!Directory.Exists(ListsPath)) Directory.CreateDirectory(ListsPath);
                 string listFile = Path.Combine(ListsPath, "ipset-all.txt");
+                if (!File.Exists(listFile)) return ("none", 0, "Файл не найден");
 
-                if (!File.Exists(listFile))
-                    return ("none", 0, "Файл не найден");
-
-                var lines = File.ReadAllLines(listFile)
-                                .Where(l => !string.IsNullOrWhiteSpace(l) && !l.TrimStart().StartsWith("#"))
-                                .Select(l => l.Trim())
-                                .ToList();
-
-                if (lines.Count == 0)
-                    return ("any", 0, "Весь трафик (Any • 0 IP)");
-
-                if (lines.Count == 1 && lines[0] == "203.0.113.113/32")
-                    return ("none", 0, "Отключен (Заглушка)");
-
+                var lines = File.ReadAllLines(listFile).Where(l => !string.IsNullOrWhiteSpace(l) && !l.TrimStart().StartsWith("#")).ToList();
+                if (lines.Count == 0) return ("any", 0, "Весь трафик (Any • 0 IP)");
+                if (lines.Count == 1 && lines[0] == "203.0.113.113/32") return ("none", 0, "Отключен (Заглушка)");
                 return ("loaded", lines.Count, $"Активен ({lines.Count} подсетей)");
             }
-            catch
-            {
-                return ("none", 0, "Ошибка чтения");
-            }
+            catch { return ("none", 0, "Ошибка чтения"); }
         }
 
         public static void SetIpSetMode(string targetMode)
@@ -151,32 +134,16 @@ namespace ZapretGUI.Core
             if (!Directory.Exists(ListsPath)) Directory.CreateDirectory(ListsPath);
             string listFile = Path.Combine(ListsPath, "ipset-all.txt");
             string backupFile = Path.Combine(ListsPath, "ipset-all.txt.backup");
-
             var (currentMode, _, _) = GetIpSetStatus();
 
-            if (currentMode == "loaded" && File.Exists(listFile))
-            {
-                File.Copy(listFile, backupFile, overwrite: true);
-            }
+            if (currentMode == "loaded" && File.Exists(listFile)) File.Copy(listFile, backupFile, overwrite: true);
 
-            if (targetMode == "none")
-            {
-                File.WriteAllText(listFile, "203.0.113.113/32\r\n");
-            }
-            else if (targetMode == "any")
-            {
-                File.WriteAllText(listFile, "");
-            }
+            if (targetMode == "none") File.WriteAllText(listFile, "203.0.113.113/32\r\n");
+            else if (targetMode == "any") File.WriteAllText(listFile, "");
             else if (targetMode == "loaded")
             {
-                if (File.Exists(backupFile))
-                {
-                    File.Copy(backupFile, listFile, overwrite: true);
-                }
-                else if (currentMode != "loaded")
-                {
-                    throw new FileNotFoundException("Резервная копия базы IPSet не найдена. Нажмите кнопку «Обновить IP», чтобы скачать свежий список.");
-                }
+                if (File.Exists(backupFile)) File.Copy(backupFile, listFile, overwrite: true);
+                else if (currentMode != "loaded") throw new FileNotFoundException("Резервная копия базы IPSet не найдена. Нажмите кнопку «Обновить IP», чтобы скачать свежий список.");
             }
         }
 
@@ -187,15 +154,12 @@ namespace ZapretGUI.Core
             string backupFile = Path.Combine(ListsPath, "ipset-all.txt.backup");
 
             string content = await _http.GetStringAsync(AppConstants.FlowsealIpSetUrl);
-            if (string.IsNullOrWhiteSpace(content))
-                throw new Exception("Сервер вернул пустой список IPSet.");
+            if (string.IsNullOrWhiteSpace(content)) throw new Exception("Сервер вернул пустой список IPSet.");
 
             await File.WriteAllTextAsync(listFile, content, Encoding.UTF8);
             await File.WriteAllTextAsync(backupFile, content, Encoding.UTF8);
 
-            int count = content.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
-                               .Count(l => !string.IsNullOrWhiteSpace(l) && !l.TrimStart().StartsWith("#"));
-            return count;
+            return content.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).Count(l => !string.IsNullOrWhiteSpace(l) && !l.TrimStart().StartsWith("#"));
         }
 
         private static string SystemHostsPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), @"drivers\etc\hosts");
@@ -206,40 +170,28 @@ namespace ZapretGUI.Core
             {
                 if (!File.Exists(SystemHostsPath)) return (false, 0);
                 var text = File.ReadAllText(SystemHostsPath);
-
                 int startIdx = text.IndexOf(HostsMarkerStart, StringComparison.OrdinalIgnoreCase);
                 int endIdx = text.IndexOf(HostsMarkerEnd, StringComparison.OrdinalIgnoreCase);
 
                 if (startIdx >= 0 && endIdx > startIdx)
                 {
                     string block = text.Substring(startIdx + HostsMarkerStart.Length, endIdx - (startIdx + HostsMarkerStart.Length));
-                    int count = block.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
-                                     .Count(l => !string.IsNullOrWhiteSpace(l) && !l.TrimStart().StartsWith("#"));
+                    int count = block.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).Count(l => !string.IsNullOrWhiteSpace(l) && !l.TrimStart().StartsWith("#"));
                     return (true, count);
                 }
                 return (false, 0);
             }
-            catch
-            {
-                return (false, 0);
-            }
+            catch { return (false, 0); }
         }
 
         public static async Task<int> UpdateSystemHostsAsync(int sourceIndex)
         {
             var urls = new List<string>();
-            if (sourceIndex == 0) 
-                urls.Add(AppConstants.FlowsealHostsUrl);
-            else if (sourceIndex == 1 || sourceIndex == 3) 
-                urls.Add(AppConstants.V3nillaHostsUrl);
-            else
-            {
-                urls.Add(AppConstants.FlowsealHostsUrl);
-                urls.Add(AppConstants.V3nillaHostsUrl);
-            }
+            if (sourceIndex == 0) urls.Add(AppConstants.FlowsealHostsUrl);
+            else if (sourceIndex == 1 || sourceIndex == 3) urls.Add(AppConstants.V3nillaHostsUrl);
+            else { urls.Add(AppConstants.FlowsealHostsUrl); urls.Add(AppConstants.V3nillaHostsUrl); }
 
             var includeAdBlockZeroIps = (sourceIndex == 3);
-
             var collectedLines = new List<string>();
             var seenEntries = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -250,101 +202,74 @@ namespace ZapretGUI.Core
                 {
                     var trimmed = line.Trim();
                     if (string.IsNullOrWhiteSpace(trimmed)) continue;
-
-                    if (!includeAdBlockZeroIps && trimmed.Contains("Блокировка рекламы, трекеров", StringComparison.OrdinalIgnoreCase))
-                        break;
-
-                    if (trimmed.StartsWith("#"))
-                    {
-                        collectedLines.Add(trimmed);
-                        continue;
-                    }
-
-                    if (trimmed.Contains("localhost", StringComparison.OrdinalIgnoreCase))
-                        continue;
-
-                    if (!includeAdBlockZeroIps && trimmed.StartsWith("0.0.0.0"))
-                        continue;
+                    if (!includeAdBlockZeroIps && trimmed.Contains("Блокировка рекламы, трекеров", StringComparison.OrdinalIgnoreCase)) break;
+                    if (trimmed.StartsWith("#")) { collectedLines.Add(trimmed); continue; }
+                    if (trimmed.Contains("localhost", StringComparison.OrdinalIgnoreCase)) continue;
+                    if (!includeAdBlockZeroIps && trimmed.StartsWith("0.0.0.0")) continue;
 
                     var parts = trimmed.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
                     if (parts.Length >= 2)
                     {
                         var normalizedEntry = $"{parts[0]} {parts[1]}";
-                        if (seenEntries.Add(normalizedEntry))
-                            collectedLines.Add(normalizedEntry);
+                        if (seenEntries.Add(normalizedEntry)) collectedLines.Add(normalizedEntry);
                     }
                 }
             }
 
             var activeDomainsCount = collectedLines.Count(l => !l.StartsWith("#"));
-            if (activeDomainsCount == 0)
-                throw new Exception("Не удалось получить ни одной записи из выбранного источника.");
+            if (activeDomainsCount == 0) throw new Exception("Не удалось получить ни одной записи из выбранного источника.");
 
             var backupPath = SystemHostsPath + ".zapret.bak";
-            if (File.Exists(SystemHostsPath) && !File.Exists(backupPath))
-                try { File.Copy(SystemHostsPath, backupPath, overwrite: false); } catch { }
+            if (File.Exists(SystemHostsPath) && !File.Exists(backupPath)) try { File.Copy(SystemHostsPath, backupPath, overwrite: false); } catch { }
 
             var existingContent = File.Exists(SystemHostsPath) ? await File.ReadAllTextAsync(SystemHostsPath) : "";
             var cleanBase = RemoveZapretBlock(existingContent).TrimEnd();
 
             var sb = new StringBuilder();
-            if (!string.IsNullOrEmpty(cleanBase))
-            {
-                sb.AppendLine(cleanBase);
-                sb.AppendLine();
-            }
-
+            if (!string.IsNullOrEmpty(cleanBase)) { sb.AppendLine(cleanBase); sb.AppendLine(); }
             sb.AppendLine(HostsMarkerStart);
             sb.AppendLine($"# Обновлено: {DateTime.Now:dd.MM.yyyy HH:mm} (Активных записей: {activeDomainsCount})");
-            foreach (var l in collectedLines)
-                sb.AppendLine(l);
+            foreach (var l in collectedLines) sb.AppendLine(l);
             sb.AppendLine(HostsMarkerEnd);
 
             await File.WriteAllTextAsync(SystemHostsPath, sb.ToString(), new UTF8Encoding(false));
-            FlushDnsCache();
-
+            await FlushDnsCacheAsync();
             return activeDomainsCount;
         }
 
-        public static void ClearZapretHosts()
+        public static async Task ClearZapretHostsAsync()
         {
             if (!File.Exists(SystemHostsPath)) return;
-
-            var existingContent = File.ReadAllText(SystemHostsPath);
+            var existingContent = await File.ReadAllTextAsync(SystemHostsPath);
             var cleanBase = RemoveZapretBlock(existingContent).TrimEnd() + "\r\n";
-
-            File.WriteAllText(SystemHostsPath, cleanBase, new UTF8Encoding(false));
-            FlushDnsCache();
+            await File.WriteAllTextAsync(SystemHostsPath, cleanBase, new UTF8Encoding(false));
+            await FlushDnsCacheAsync();
         }
 
         private static string RemoveZapretBlock(string content)
         {
             var startIdx = content.IndexOf(HostsMarkerStart, StringComparison.OrdinalIgnoreCase);
             var endIdx = content.IndexOf(HostsMarkerEnd, StringComparison.OrdinalIgnoreCase);
-
             if (startIdx >= 0 && endIdx > startIdx)
-            {
-                var removeLength = (endIdx + HostsMarkerEnd.Length) - startIdx;
-                return content.Remove(startIdx, removeLength);
-            }
+                return content.Remove(startIdx, (endIdx + HostsMarkerEnd.Length) - startIdx);
             return content;
         }
 
-        private static void FlushDnsCache()
+        public static async Task FlushDnsCacheAsync()
         {
             try
             {
-                Process.Start(new ProcessStartInfo
+                using var p = Process.Start(new ProcessStartInfo { FileName = "ipconfig.exe", Arguments = "/flushdns", CreateNoWindow = true, UseShellExecute = false });
+                if (p != null)
                 {
-                    FileName = "ipconfig.exe",
-                    Arguments = "/flushdns",
-                    CreateNoWindow = true,
-                    UseShellExecute = false
-                })?.WaitForExit(3000);
+                    using var cts = new CancellationTokenSource(3000);
+                    try { await p.WaitForExitAsync(cts.Token); } catch (TaskCanceledException) { }
+                }
             }
             catch { }
         }
-        public static string UnloadWinDivertDriver()
+
+        public static async Task<string> UnloadWinDivertDriverAsync()
         {
             BypassController.Current.StopServices();
             string[] driverNames = ["WinDivert", "WinDivert14", "WinDivert64", "Monkey"];
@@ -354,42 +279,53 @@ namespace ZapretGUI.Core
             {
                 try
                 {
-                    using var p = Process.Start(new ProcessStartInfo
+                    using var p = Process.Start(new ProcessStartInfo { FileName = "sc.exe", Arguments = $"stop {name}", CreateNoWindow = true, UseShellExecute = false });
+                    if (p != null)
                     {
-                        FileName = "sc.exe",
-                        Arguments = $"stop {name}",
-                        CreateNoWindow = true,
-                        UseShellExecute = false,
-                        RedirectStandardOutput = true,
-                        RedirectStandardError = true
-                    });
-                    p?.WaitForExit(2500);
-                    if (p != null && p.ExitCode == 0)
-                        stopped++;
+                        using var cts = new CancellationTokenSource(2500);
+                        try { await p.WaitForExitAsync(cts.Token); } catch (TaskCanceledException) { }
+                        if (p.HasExited && p.ExitCode == 0) stopped++;
+                    }
                 }
                 catch { }
             }
 
-            FlushDnsCache();
+            await FlushDnsCacheAsync();
             return stopped > 0
                 ? $"Драйвер WinDivert успешно остановлен и выгружен из ядра (служб остановлено: {stopped}), DNS-кэш очищен."
                 : "Все процессы обхода остановлены, активных служб WinDivert в памяти не обнаружено. DNS-кэш очищен.";
         }
+
         public static async Task AddSingleHostEntryAsync(string domain, string ip)
         {
-            if (string.IsNullOrWhiteSpace(domain) || string.IsNullOrWhiteSpace(ip))
-                throw new Exception("Некорректный домен или IP-адрес.");
+            if (string.IsNullOrWhiteSpace(domain) || string.IsNullOrWhiteSpace(ip)) throw new Exception("Некорректный домен или IP-адрес.");
 
             var existingContent = File.Exists(SystemHostsPath) ? await File.ReadAllTextAsync(SystemHostsPath) : "";
-            var lines = existingContent.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None).ToList();
-
             string rule = $"{ip.Trim()} {domain.Trim().ToLowerInvariant()}";
-            if (!lines.Any(l => l.Trim().Equals(rule, StringComparison.OrdinalIgnoreCase)))
+            if (existingContent.Contains(rule, StringComparison.OrdinalIgnoreCase)) return;
+
+            var sb = new StringBuilder();
+            var startIdx = existingContent.IndexOf(HostsMarkerStart, StringComparison.OrdinalIgnoreCase);
+            var endIdx = existingContent.IndexOf(HostsMarkerEnd, StringComparison.OrdinalIgnoreCase);
+
+            if (startIdx >= 0 && endIdx > startIdx)
             {
-                lines.Add(rule);
-                await File.WriteAllTextAsync(SystemHostsPath, string.Join("\r\n", lines).TrimEnd() + "\r\n", new UTF8Encoding(false));
-                FlushDnsCache();
+                sb.Append(existingContent.Substring(0, endIdx));
+                sb.AppendLine(rule);
+                sb.Append(existingContent.Substring(endIdx));
             }
+            else
+            {
+                sb.Append(existingContent.TrimEnd());
+                sb.AppendLine();
+                sb.AppendLine();
+                sb.AppendLine(HostsMarkerStart);
+                sb.AppendLine(rule);
+                sb.AppendLine(HostsMarkerEnd);
+            }
+
+            await File.WriteAllTextAsync(SystemHostsPath, sb.ToString(), new UTF8Encoding(false));
+            await FlushDnsCacheAsync();
         }
     }
 }

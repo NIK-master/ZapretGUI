@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
@@ -10,7 +9,6 @@ namespace ZapretGUI.Core
     {
         public bool ZapretEnabled { get; set; } = true;
         public bool TgProxyEnabled { get; set; } = true;
-        public int SelectedProfileIndex { get; set; } = 0;
         public string SelectedProfileName { get; set; } = "general.bat";
         public bool StartMinimized { get; set; } = false;
         public bool MinimizeOnClose { get; set; } = true;
@@ -22,20 +20,19 @@ namespace ZapretGUI.Core
         public bool AutoRestartServices { get; set; } = false;
         public int StatsUpdateInterval { get; set; } = 1;
 
-        // Настройки v4.1
         public bool AutoStartBypass { get; set; } = false;
         public bool StopServicesOnExit { get; set; } = true;
         public bool SoundEffectsEnabled { get; set; } = true;
         public bool SkipSplashScreen { get; set; } = false;
         public bool AlwaysOnTop { get; set; } = false;
-        public string AccentTheme { get; set; } = "green"; // green, blue, purple, amber, crimson
+        public string AccentTheme { get; set; } = "green";
         public bool WatchdogPingAutoRestart { get; set; } = false;
 
         public string ZapretCoreVersion { get; set; } = "0.0.0";
         public string TgProxyCoreVersion { get; set; } = "0.0.0";
 
-        public List<string> ActiveBatMods { get; set; } = new List<string>();
-        public List<string> ActiveListMods { get; set; } = new List<string>();
+        public System.Collections.Generic.List<string> ActiveBatMods { get; set; } = new();
+        public System.Collections.Generic.List<string> ActiveListMods { get; set; } = new();
 
         public string GameFilterMode { get; set; } = "disabled";
         public string GameFilterTcpRange { get; set; } = "1024-65535";
@@ -47,9 +44,9 @@ namespace ZapretGUI.Core
     public static class SettingsManager
     {
         private static readonly string _settingsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.json");
+        private static readonly object _saveLock = new object();
 
         public static AppSettings Current { get; set; } = new AppSettings();
-
         public static event Action? SettingsSaved;
 
         public static void Load()
@@ -72,16 +69,22 @@ namespace ZapretGUI.Core
 
         public static void Save()
         {
-            try
+            lock (_saveLock)
             {
-                var json = JsonSerializer.Serialize(Current, new JsonSerializerOptions { WriteIndented = true });
-                File.WriteAllText(_settingsPath, json);
+                try
+                {
+                    var json = JsonSerializer.Serialize(Current, new JsonSerializerOptions { WriteIndented = true });
+                    var tempPath = _settingsPath + ".tmp";
 
-                SettingsSaved?.Invoke();
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Ошибка сохранения настроек: {ex.Message}");
+                    File.WriteAllText(tempPath, json);
+                    File.Move(tempPath, _settingsPath, overwrite: true);
+
+                    SettingsSaved?.Invoke();
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Ошибка сохранения настроек: {ex.Message}");
+                }
             }
         }
     }

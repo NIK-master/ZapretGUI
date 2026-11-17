@@ -4,18 +4,26 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace ZapretGUI.Core
 {
-    public class ZapretManager : IBypassService
+    public partial class ZapretManager : IBypassService
     {
-        private static readonly Regex _winwsCmdRegex = new($@"{AppConstants.ZapretProcessName}(?:\.exe)?[""']?\s*(.*)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-        private static readonly Regex _standardBatCmdRegex = new(@"^(@?echo|chcp|cd|pushd|popd|set|title|cls|color|mode|goto|call|if|for|pause|timeout|:)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-        private static readonly Regex _tokenSplitRegex = new(@"[\""].+?[\""]|[^ ]+", RegexOptions.Compiled);
-        private static readonly Regex _fileParamRegex = new(@"^--(hostlist|hostlist-exclude|ipset|ipset-exclude|dpi-desync-fake-tls|dpi-desync-fake-quic|dpi-desync-fake-unknown-udp|dpi-desync-split-seqovl-pattern)=(.+)$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-        private static readonly Regex _unexpandedVarRegex = new(@"%[a-zA-Z0-9_]+%", RegexOptions.Compiled);
+        [GeneratedRegex($@"{AppConstants.ZapretProcessName}(?:\.exe)?[""']?\s*(.*)", RegexOptions.IgnoreCase)]
+        private static partial Regex WinwsCmdRegex();
+
+        [GeneratedRegex(@"^(@?echo|chcp|cd|pushd|popd|set|title|cls|color|mode|goto|call|if|for|pause|timeout|:)\b", RegexOptions.IgnoreCase)]
+        private static partial Regex StandardBatCmdRegex();
+
+        [GeneratedRegex(@"[\""].+?[\""]|[^ ]+")]
+        private static partial Regex TokenSplitRegex();
+
+        [GeneratedRegex(@"^--(hostlist|hostlist-exclude|ipset|ipset-exclude|dpi-desync-fake-tls|dpi-desync-fake-quic|dpi-desync-fake-unknown-udp|dpi-desync-split-seqovl-pattern)=(.+)$", RegexOptions.IgnoreCase)]
+        private static partial Regex FileParamRegex();
+
+        [GeneratedRegex(@"%[a-zA-Z0-9_]+%")]
+        private static partial Regex UnexpandedVarRegex();
 
         private readonly string _basePath;
         private Process? _process;
@@ -56,7 +64,7 @@ namespace ZapretGUI.Core
                 {
                     try
                     {
-                        var meta = JsonSerializer.Deserialize<ModMetaData>(File.ReadAllText(modJsonPath), new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                        var meta = System.Text.Json.JsonSerializer.Deserialize<ModMetaData>(File.ReadAllText(modJsonPath), new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
                         if (meta != null && !string.IsNullOrWhiteSpace(meta.Name))
                             return $"моде «{meta.Name}» ({profileName})";
                     }
@@ -99,12 +107,12 @@ namespace ZapretGUI.Core
                         winwsFound = true;
                         winwsStartLine = lineNum;
 
-                        var match = _winwsCmdRegex.Match(trimmed);
+                        var match = WinwsCmdRegex().Match(trimmed);
                         trimmed = match.Success ? match.Groups[1].Value.Trim() : "";
                     }
                     else
                     {
-                        if (!_standardBatCmdRegex.IsMatch(trimmed))
+                        if (!StandardBatCmdRegex().IsMatch(trimmed))
                             throw new Exception($"Синтаксическая ошибка в {sourceName} [Строка {lineNum}]:\nНеизвестная команда «{trimmed}».\nОжидался вызов {AppConstants.ZapretProcessName}.exe или стандартная инструкция Batch.");
                         continue;
                     }
@@ -121,7 +129,7 @@ namespace ZapretGUI.Core
 
                     if (!string.IsNullOrWhiteSpace(cleanLine))
                     {
-                        var tokens = _tokenSplitRegex.Matches(cleanLine)
+                        var tokens = TokenSplitRegex().Matches(cleanLine)
                                           .Select(m => m.Value.Trim())
                                           .ToList();
 
@@ -135,7 +143,7 @@ namespace ZapretGUI.Core
 
                             if (checkReferencedFiles && Directory.Exists(zapretBasePath))
                             {
-                                var fileMatch = _fileParamRegex.Match(token);
+                                var fileMatch = FileParamRegex().Match(token);
                                 if (fileMatch.Success)
                                 {
                                     var paramName = fileMatch.Groups[1].Value;
@@ -184,7 +192,7 @@ namespace ZapretGUI.Core
             if (string.IsNullOrEmpty(arguments))
                 throw new Exception($"Ошибка в {sourceName} [Строка {winwsStartLine}]:\nКоманда «{AppConstants.ZapretProcessName}» вызвана без параметров фильтрации.");
 
-            var unexpandedVar = _unexpandedVarRegex.Match(arguments);
+            var unexpandedVar = UnexpandedVarRegex().Match(arguments);
             if (unexpandedVar.Success)
                 throw new Exception($"Ошибка в {sourceName}:\nОбнаружена неизвестная переменная «{unexpandedVar.Value}», которая не поддерживается в прямом запуске Zapret.");
 

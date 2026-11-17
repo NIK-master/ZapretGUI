@@ -119,7 +119,10 @@ namespace ZapretGUI.Core
         private int _hoveredZone = -1;
         private float _scale = 1.0f;
 
-        // Базовые координаты зон (умножаются на _scale при отрисовке и кликах)
+        private readonly StringFormat _sfCenter = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+        private readonly StringFormat _sfLeftCenter = new StringFormat { Alignment = StringAlignment.Near, LineAlignment = StringAlignment.Center };
+        private readonly StringFormat _sfRightCenter = new StringFormat { Alignment = StringAlignment.Far, LineAlignment = StringAlignment.Center };
+
         private Rectangle SRect(int x, int y, int w, int h) =>
             new((int)Math.Round(x * _scale), (int)Math.Round(y * _scale), (int)Math.Round(w * _scale), (int)Math.Round(h * _scale));
 
@@ -141,6 +144,18 @@ namespace ZapretGUI.Core
 
             BypassController.Current.NetMonitor.StatsUpdated += OnStatsUpdated;
             Deactivate += (s, e) => Hide();
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                BypassController.Current.NetMonitor.StatsUpdated -= OnStatsUpdated;
+                _sfCenter?.Dispose();
+                _sfLeftCenter?.Dispose();
+                _sfRightCenter?.Dispose();
+            }
+            base.Dispose(disposing);
         }
 
         private void UpdateDpiMetrics()
@@ -331,18 +346,12 @@ namespace ZapretGUI.Core
             var accentDarkBg = UIHelper.GetAccentDarkBgColor();
             var danger = UIHelper.GetErrorColor();
 
-            var sfCenter = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
-            var sfLeftCenter = new StringFormat { Alignment = StringAlignment.Near, LineAlignment = StringAlignment.Center };
-            var sfRightCenter = new StringFormat { Alignment = StringAlignment.Far, LineAlignment = StringAlignment.Center };
-
-            // Внешняя рамка
             using (var borderPen = new Pen(ColorTranslator.FromHtml("#2A2A2A"), S(1.5f)))
             using (var borderPath = UIHelper.CreateRoundedRectPath(new Rectangle(1, 1, Width - 3, Height - 3), SI(11)))
             {
                 g.DrawPath(borderPen, borderPath);
             }
 
-            // 1. Шапка: иконка, заголовок, подзаголовок и бейдж версии
             var logoRect = SRect(14, 14, 32, 32);
             using (var logoBg = new SolidBrush(accentDarkBg))
             using (var logoPen = new Pen(accent, S(1f)))
@@ -354,14 +363,7 @@ namespace ZapretGUI.Core
             using (var fLogo = new Font("Segoe UI", S(15f), FontStyle.Bold, GraphicsUnit.Pixel))
             using (var bLogo = new SolidBrush(accentLight))
             {
-                UIHelper.DrawPixelZappyHead(
-                g,
-                offsetX: logoRect.X + S(4f),
-                offsetY: logoRect.Y + S(4f),
-                pixelScale: S(1.5f),
-                isRunning: anyRun,
-                accentLight: accentLight,
-                accentBase: accent);
+                UIHelper.DrawPixelZappyHead(g, offsetX: logoRect.X + S(4f), offsetY: logoRect.Y + S(4f), pixelScale: S(1.5f), isRunning: anyRun, accentLight: accentLight, accentBase: accent);
             }
 
             using (var fTitle = new Font("Segoe UI", S(13.5f), FontStyle.Bold, GraphicsUnit.Pixel))
@@ -385,10 +387,9 @@ namespace ZapretGUI.Core
             {
                 g.FillPath(verBg, verPath);
                 g.DrawPath(verPen, verPath);
-                g.DrawString(AppConstants.AppVersion, fVer, bVer, verRect, sfCenter);
+                g.DrawString(AppConstants.AppVersion, fVer, bVer, verRect, _sfCenter);
             }
 
-            // 2. Пилюли статуса + селектор профиля
             DrawStatusPill(g, SRect(14, 60, 66, 26), "Zapret", zapretRun ? accentLight : danger);
             DrawStatusPill(g, SRect(84, 60, 64, 26), "Proxy", proxyRun ? accentLight : danger);
 
@@ -403,16 +404,15 @@ namespace ZapretGUI.Core
             using (var fArrow = new Font("Segoe UI", S(13f), FontStyle.Bold, GraphicsUnit.Pixel))
             using (var fProf = new Font("Consolas", S(10.5f), FontStyle.Bold, GraphicsUnit.Pixel))
             {
-                g.DrawString("‹", fArrow, _hoveredZone == 1 ? Brushes.White : Brushes.Gray, RectPrevProf, sfCenter);
-                g.DrawString("›", fArrow, _hoveredZone == 2 ? Brushes.White : Brushes.Gray, RectNextProf, sfCenter);
+                g.DrawString("‹", fArrow, _hoveredZone == 1 ? Brushes.White : Brushes.Gray, RectPrevProf, _sfCenter);
+                g.DrawString("›", fArrow, _hoveredZone == 2 ? Brushes.White : Brushes.Gray, RectNextProf, _sfCenter);
 
                 string profName = SettingsManager.Current.SelectedProfileName ?? "general.bat";
                 if (profName.Length > 13) profName = profName.Substring(0, 12) + "…";
                 var textRect = SRect(176, 60, 96, 26);
-                g.DrawString(profName, fProf, Brushes.White, textRect, sfCenter);
+                g.DrawString(profName, fProf, Brushes.White, textRect, _sfCenter);
             }
 
-            // 3. Главная кнопка запуска / остановки
             var pwrBgColor = anyRun ? ColorTranslator.FromHtml("#2A1215") : accentDarkBg;
             var pwrBorderColor = anyRun ? danger : accent;
             using (var pwrBg = new SolidBrush(pwrBgColor))
@@ -424,10 +424,9 @@ namespace ZapretGUI.Core
             }
             using (var fPwr = new Font("Segoe UI", S(13f), FontStyle.Bold, GraphicsUnit.Pixel))
             {
-                g.DrawString(anyRun ? "■   Остановить обход" : "▶   Включить обход", fPwr, Brushes.White, RectPowerBtn, sfCenter);
+                g.DrawString(anyRun ? "■   Остановить обход" : "▶   Включить обход", fPwr, Brushes.White, RectPowerBtn, _sfCenter);
             }
 
-            // 4. Бенто-карточка телеметрии и пинга
             var teleRect = SRect(14, 148, 280, 80);
             using (var teleBg = new SolidBrush(ColorTranslator.FromHtml("#171717")))
             using (var telePen = new Pen(ColorTranslator.FromHtml("#242424")))
@@ -442,34 +441,28 @@ namespace ZapretGUI.Core
             using (var bGray = new SolidBrush(ColorTranslator.FromHtml("#888888")))
             using (var sepPen = new Pen(ColorTranslator.FromHtml("#242424")))
             {
-                // Входящий (левая колонка)
                 g.DrawString("↓ Входящий", fLbl, bGray, S(24), S(154));
                 g.DrawString($"{_rxMbps:0.0} Мбит/с", fVal, Brushes.White, S(24), S(170));
 
-                // Вертикальный разделитель
                 g.DrawLine(sepPen, S(154), S(155), S(154), S(185));
 
-                // Исходящий (правая колонка)
-                g.DrawString("↑ Исходящий", fLbl, bGray, SRect(160, 154, 124, 14), sfRightCenter);
-                g.DrawString($"{_txMbps:0.0} Мбит/с", fVal, Brushes.White, SRect(160, 170, 124, 16), sfRightCenter);
+                g.DrawString("↑ Исходящий", fLbl, bGray, SRect(160, 154, 124, 14), _sfRightCenter);
+                g.DrawString($"{_txMbps:0.0} Мбит/с", fVal, Brushes.White, SRect(160, 170, 124, 16), _sfRightCenter);
 
-                // Горизонтальный разделитель
                 g.DrawLine(sepPen, S(24), S(191), S(284), S(191));
 
-                // Строка пинга
                 using var fPingLbl = new Font("Segoe UI", S(11.5f), FontStyle.Regular, GraphicsUnit.Pixel);
-                g.DrawString("Пинг (EU):", fPingLbl, bGray, SRect(24, 196, 110, 24), sfLeftCenter);
+                g.DrawString("Пинг (EU):", fPingLbl, bGray, SRect(24, 196, 110, 24), _sfLeftCenter);
 
                 using var bPing = new SolidBrush(_pingColor);
-                g.DrawString(_pingStr, fVal, bPing, SRect(110, 196, 146, 24), sfRightCenter);
+                g.DrawString(_pingStr, fVal, bPing, SRect(110, 196, 146, 24), _sfRightCenter);
 
                 using var btnPath = UIHelper.CreateRoundedRectPath(RectPingBtn, SI(5));
                 using var btnBg = new SolidBrush(_hoveredZone == 4 ? ColorTranslator.FromHtml("#2E2E2E") : ColorTranslator.FromHtml("#222222"));
                 g.FillPath(btnBg, btnPath);
-                g.DrawString("↻", fVal, Brushes.LightGray, RectPingBtn, sfCenter);
+                g.DrawString("↻", fVal, Brushes.LightGray, RectPingBtn, _sfCenter);
             }
 
-            // 5. Нижние кнопки быстрых действий
             DrawMenuRow(g, RectRestartBtn, "↻   Перезапустить службы", _hoveredZone == 5, false);
             DrawMenuRow(g, RectOpenBtn, "❐   Открыть панель управления", _hoveredZone == 6, false);
             DrawMenuRow(g, RectExitBtn, "✕   Полностью закрыть", _hoveredZone == 7, true);
@@ -490,8 +483,7 @@ namespace ZapretGUI.Core
             using var font = new Font("Segoe UI", S(10.5f), FontStyle.Bold, GraphicsUnit.Pixel);
             using var textBrush = new SolidBrush(ColorTranslator.FromHtml("#CCCCCC"));
             var textRect = new Rectangle(rect.X + SI(18), rect.Y, rect.Width - SI(20), rect.Height);
-            var sf = new StringFormat { Alignment = StringAlignment.Near, LineAlignment = StringAlignment.Center };
-            g.DrawString(text, font, textBrush, textRect, sf);
+            g.DrawString(text, font, textBrush, textRect, _sfLeftCenter);
         }
 
         private void DrawMenuRow(Graphics g, Rectangle rect, string text, bool hovered, bool isDanger)
@@ -510,8 +502,7 @@ namespace ZapretGUI.Core
             using var font = new Font("Segoe UI", S(12f), isDanger ? FontStyle.Bold : FontStyle.Regular, GraphicsUnit.Pixel);
             using var brush = new SolidBrush(isDanger ? ColorTranslator.FromHtml("#F44336") : ColorTranslator.FromHtml("#E0E0E0"));
             var textRect = new Rectangle(rect.X + SI(10), rect.Y, rect.Width - SI(16), rect.Height);
-            var sf = new StringFormat { Alignment = StringAlignment.Near, LineAlignment = StringAlignment.Center };
-            g.DrawString(text, font, brush, textRect, sf);
+            g.DrawString(text, font, brush, textRect, _sfLeftCenter);
         }
     }
 }

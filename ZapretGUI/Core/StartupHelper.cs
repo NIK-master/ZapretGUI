@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Diagnostics;
 using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.Win32;
 
 namespace ZapretGUI.Core
@@ -10,11 +12,10 @@ namespace ZapretGUI.Core
         private const string RegistryKeyPath = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
         private const string TaskName = AppConstants.AppRegistryName;
 
-        public static bool IsAutoStartEnabled()
+        public static async Task<bool> IsAutoStartEnabledAsync()
         {
             try
             {
-                // 1. Проверяем наличие задачи в Планировщике Windows (основной способ для requireAdministrator)
                 using var p = Process.Start(new ProcessStartInfo
                 {
                     FileName = "schtasks.exe",
@@ -25,11 +26,13 @@ namespace ZapretGUI.Core
                     RedirectStandardError = true
                 });
 
-                p?.WaitForExit(1500);
-                if (p != null && p.ExitCode == 0)
-                    return true;
+                if (p != null)
+                {
+                    using var cts = new CancellationTokenSource(1500);
+                    try { await p.WaitForExitAsync(cts.Token); } catch (TaskCanceledException) { }
+                    if (p.HasExited && p.ExitCode == 0) return true;
+                }
 
-                // 2. Фолбэк: проверяем реестр (на случай если запуск без админ-прав)
                 using var key = Registry.CurrentUser.OpenSubKey(RegistryKeyPath, false);
                 return key?.GetValue(AppConstants.AppRegistryName) != null;
             }
@@ -40,7 +43,7 @@ namespace ZapretGUI.Core
             }
         }
 
-        public static void SetAutoStart(bool enable)
+        public static async Task SetAutoStartAsync(bool enable)
         {
             try
             {
@@ -48,7 +51,6 @@ namespace ZapretGUI.Core
                 if (string.IsNullOrEmpty(exePath))
                     exePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ZapretGUI.exe");
 
-                // Всегда подчищаем старый ключ в Run, чтобы Windows не плодила дубликаты
                 using (var key = Registry.CurrentUser.OpenSubKey(RegistryKeyPath, true))
                 {
                     key?.DeleteValue(AppConstants.AppRegistryName, false);
@@ -56,7 +58,6 @@ namespace ZapretGUI.Core
 
                 if (enable)
                 {
-                    // Создаем задачу при входе пользователя с наивысшими правами (/RL HIGHEST)
                     using var p = Process.Start(new ProcessStartInfo
                     {
                         FileName = "schtasks.exe",
@@ -66,10 +67,14 @@ namespace ZapretGUI.Core
                         RedirectStandardOutput = true,
                         RedirectStandardError = true
                     });
-                    p?.WaitForExit(2500);
 
-                    // Если по какой-то причине служба планировщика отключена, пишем в реестр как резерв
-                    if (p == null || p.ExitCode != 0)
+                    if (p != null)
+                    {
+                        using var cts = new CancellationTokenSource(2500);
+                        try { await p.WaitForExitAsync(cts.Token); } catch (TaskCanceledException) { }
+                    }
+
+                    if (p == null || !p.HasExited || p.ExitCode != 0)
                     {
                         using var key = Registry.CurrentUser.OpenSubKey(RegistryKeyPath, true);
                         key?.SetValue(AppConstants.AppRegistryName, $"\"{exePath}\"");
@@ -86,7 +91,11 @@ namespace ZapretGUI.Core
                         RedirectStandardOutput = true,
                         RedirectStandardError = true
                     });
-                    p?.WaitForExit(2500);
+                    if (p != null)
+                    {
+                        using var cts = new CancellationTokenSource(2500);
+                        try { await p.WaitForExitAsync(cts.Token); } catch (TaskCanceledException) { }
+                    }
                 }
             }
             catch (Exception ex)

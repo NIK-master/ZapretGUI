@@ -406,15 +406,26 @@ namespace ZapretGUI
 
         public async void ToggleBypass()
         {
-            if (BypassController.Current.IsRunning)
-                BypassController.Current.StopServices();
-            else
-                await BypassController.Current.StartServicesAsync(
-                    SettingsManager.Current.SelectedProfileName,
-                    SettingsManager.Current.ZapretEnabled,
-                    SettingsManager.Current.TgProxyEnabled);
+            try
+            {
+                if (BypassController.Current.IsRunning)
+                    BypassController.Current.StopServices();
+                else
+                {
+                    await BypassController.Current.StartServicesAsync(
+                        SettingsManager.Current.SelectedProfileName,
+                        SettingsManager.Current.ZapretEnabled,
+                        SettingsManager.Current.TgProxyEnabled);
+                }
 
-            UpdateIndicators(BypassController.Current.Zapret.IsRunning, BypassController.Current.TgProxy.IsRunning);
+                UpdateIndicators(BypassController.Current.Zapret.IsRunning, BypassController.Current.TgProxy.IsRunning);
+            }
+            catch (Exception ex)
+            {
+                BypassController.Current.StopServices();
+                UpdateIndicators(false, false);
+                InvokeOnUI(() => ShowNotification("Ошибка запуска обхода", ex.Message, ToolTipIcon.Error));
+            }
         }
 
         public async Task RestartBypassAsync()

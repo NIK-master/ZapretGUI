@@ -12,8 +12,8 @@
 		<!-- Метаданные исполняемого файла -->
 		<AssemblyName>ZapretGUI</AssemblyName>
 		<Product>Zapret for ADHD</Product>
-		<Version>4.1.0</Version>
-		<FileVersion>4.1.0.0</FileVersion>
+		<Version>4.2.0</Version>
+		<FileVersion>4.2.0.0</FileVersion>
 
 		<!-- Настройки сборки в ОДИН чистый .exe -->
 		<PublishSingleFile>true</PublishSingleFile>

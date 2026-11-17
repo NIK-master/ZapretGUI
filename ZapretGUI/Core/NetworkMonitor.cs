@@ -5,7 +5,7 @@ using System.Timers;
 
 namespace ZapretGUI.Core
 {
-    public class NetworkMonitor
+    public class NetworkMonitor : IDisposable
     {
         private readonly System.Timers.Timer _networkTimer;
         private readonly Stopwatch _elapsedStopwatch = new Stopwatch();
@@ -23,6 +23,15 @@ namespace ZapretGUI.Core
             _networkTimer.Elapsed += Timer_Tick;
 
             SettingsManager.SettingsSaved += UpdateIntervalFromSettings;
+
+            NetworkChange.NetworkAvailabilityChanged += OnNetworkAvailabilityChanged;
+            _wasNetworkAvailable = NetworkInterface.GetIsNetworkAvailable();
+        }
+
+        private void OnNetworkAvailabilityChanged(object? sender, NetworkAvailabilityEventArgs e)
+        {
+            _wasNetworkAvailable = e.IsAvailable;
+            StatusChanged?.Invoke(_wasNetworkAvailable);
         }
 
         public void UpdateIntervalFromSettings()
@@ -46,13 +55,7 @@ namespace ZapretGUI.Core
 
         private void Timer_Tick(object? sender, ElapsedEventArgs e)
         {
-            var isAvailable = NetworkInterface.GetIsNetworkAvailable();
-
-            if (isAvailable != _wasNetworkAvailable)
-            {
-                _wasNetworkAvailable = isAvailable;
-                StatusChanged?.Invoke(isAvailable);
-            }
+            if (!_wasNetworkAvailable) return;
 
             var currentReceived = 0L;
             var currentSent = 0L;
@@ -85,6 +88,13 @@ namespace ZapretGUI.Core
 
             _lastBytesReceived = currentReceived;
             _lastBytesSent = currentSent;
+        }
+
+        public void Dispose()
+        {
+            NetworkChange.NetworkAvailabilityChanged -= OnNetworkAvailabilityChanged;
+            SettingsManager.SettingsSaved -= UpdateIntervalFromSettings;
+            _networkTimer.Dispose();
         }
     }
 }

@@ -497,15 +497,26 @@ namespace ZapretGUI
 
         public async void ToggleBypass()
         {
-            if (BypassController.Current.IsRunning)
-                BypassController.Current.StopServices();
-            else
-                await BypassController.Current.StartServicesAsync(
-                    SettingsManager.Current.SelectedProfileName,
-                    SettingsManager.Current.ZapretEnabled,
-                    SettingsManager.Current.TgProxyEnabled);
+            try
+            {
+                if (BypassController.Current.IsRunning)
+                    BypassController.Current.StopServices();
+                else
+                {
+                    await BypassController.Current.StartServicesAsync(
+                        SettingsManager.Current.SelectedProfileName,
+                        SettingsManager.Current.ZapretEnabled,
+                        SettingsManager.Current.TgProxyEnabled);
+                }
 
-            UpdateIndicators(BypassController.Current.Zapret.IsRunning, BypassController.Current.TgProxy.IsRunning);
+                UpdateIndicators(BypassController.Current.Zapret.IsRunning, BypassController.Current.TgProxy.IsRunning);
+            }
+            catch (Exception ex)
+            {
+                BypassController.Current.StopServices();
+                UpdateIndicators(false, false);
+                InvokeOnUI(() => ShowNotification("Ошибка запуска обхода", ex.Message, ToolTipIcon.Error));
+            }
         }
 
         public async Task RestartBypassAsync()
@@ -721,8 +732,8 @@ namespace ZapretGUI
 		<!-- Метаданные исполняемого файла -->
 		<AssemblyName>ZapretGUI</AssemblyName>
 		<Product>Zapret for ADHD</Product>
-		<Version>4.1.0</Version>
-		<FileVersion>4.1.0.0</FileVersion>
+		<Version>4.2.0</Version>
+		<FileVersion>4.2.0.0</FileVersion>
 
 		<!-- Настройки сборки в ОДИН чистый .exe -->
 		<PublishSingleFile>true</PublishSingleFile>
@@ -798,7 +809,7 @@ namespace ZapretGUI.Core
     public static class AppConstants
     {
         // Основные
-        public const string AppVersion = "v4.1";
+        public const string AppVersion = "v4.2";
         public const string CoreFilesDirectory = "ZapretFiles";
         public const string ModsDirectory = "Mods";
         public const string ZapretProcessName = "winws";
@@ -859,7 +870,6 @@ namespace ZapretGUI.Core
                         try { File.Delete(oldClick); } catch { }
                     }
                 }
-
                 _successFilePath = EnsureSuccessFileCached("success.wav");
             }
             catch (Exception ex)
@@ -924,10 +934,6 @@ namespace ZapretGUI.Core
 
             GenerateSuccessWavToFile(targetCachedPath);
             return targetCachedPath;
-        }
-
-        public static void PlayClick()
-        {
         }
 
         public static void PlaySuccess()
@@ -1199,10 +1205,12 @@ namespace ZapretGUI.Core
                 var txId = (ushort)Random.Shared.Next(0, 65536);
                 var query = BuildDnsQuery(domain, txId);
                 using var udp = new UdpClient();
-                udp.Client.ReceiveTimeout = 3000;
                 var ep = new IPEndPoint(IPAddress.Parse(server), 53);
                 await udp.SendAsync(query, ep);
-                var result = await udp.ReceiveAsync();
+
+                using var cts = new CancellationTokenSource(3000);
+                var result = await udp.ReceiveAsync(cts.Token);
+
                 return ParseDnsResponse(result.Buffer);
             }
             catch { return []; }
@@ -1354,20 +1362,23 @@ namespace ZapretGUI.Core
 
         public static async Task<List<PingResult>> CheckPingAsync(Action<double>? progress = null)
         {
-            var results = new List<PingResult>();
-            for (var i = 0; i < PingHosts.Length; i++)
+            var done = 0;
+            var tasks = PingHosts.Select(async host =>
             {
-                var (ok, rtt) = await PingOnceAsync(PingHosts[i]);
-                results.Add(new PingResult
+                var (ok, rtt) = await PingOnceAsync(host);
+                Interlocked.Increment(ref done);
+                progress?.Invoke((double)done / PingHosts.Length);
+                return new PingResult
                 {
-                    Host = PingHosts[i],
+                    Host = host,
                     Ok = ok,
                     LatencyMs = ok ? rtt : null,
                     PacketLoss = ok ? 0 : 100
-                });
-                progress?.Invoke((double)(i + 1) / PingHosts.Length);
-            }
-            return results;
+                };
+            });
+
+            var results = await Task.WhenAll(tasks);
+            return results.ToList();
         }
 
         public static async Task<DnsResult> CheckDnsAsync(string domain = "telegram.org", Action<double>? progress = null)
@@ -1461,22 +1472,25 @@ namespace ZapretGUI.Core
 
         public static async Task<List<DiscordPingResult>> CheckDiscordPingAsync(Action<double>? progress = null)
         {
-            var results = new List<DiscordPingResult>();
-            for (var i = 0; i < DiscordPingHosts.Length; i++)
+            var done = 0;
+            var tasks = DiscordPingHosts.Select(async hostInfo =>
             {
-                var (label, ip) = DiscordPingHosts[i];
+                var (label, ip) = hostInfo;
                 var (ok, lat, err) = await TcpConnectAsync(ip, 443, 4.0);
-                results.Add(new DiscordPingResult
+                Interlocked.Increment(ref done);
+                progress?.Invoke((double)done / DiscordPingHosts.Length);
+                return new DiscordPingResult
                 {
                     Label = label,
                     Ip = ip,
                     Ok = ok,
                     LatencyMs = ok ? lat : null,
                     Error = err
-                });
-                progress?.Invoke((double)(i + 1) / DiscordPingHosts.Length);
-            }
-            return results;
+                };
+            });
+
+            var results = await Task.WhenAll(tasks);
+            return results.ToList();
         }
 
         public static List<BlockType> ClassifyBlocks(DiagReport r)
@@ -1824,9 +1838,12 @@ using System.Threading.Tasks;
 
 namespace ZapretGUI.Core
 {
-    public class ModManager
+    public partial class ModManager
     {
-        private static readonly Regex _sanitizeIdRegex = new(@"[^a-z0-9_\-]", RegexOptions.Compiled);
+        // ИСПРАВЛЕНО: Генерация регулярного выражения на этапе компиляции (.NET 8)
+        [GeneratedRegex(@"[^a-z0-9_\-]")]
+        private static partial Regex SanitizeIdRegex();
+
         private static readonly JsonSerializerOptions _jsonOptions = new()
         {
             PropertyNameCaseInsensitive = true,
@@ -1889,7 +1906,7 @@ namespace ZapretGUI.Core
                 return "";
 
             var clean = raw.Trim().ToLowerInvariant().Replace(" ", "_");
-            clean = _sanitizeIdRegex.Replace(clean, "");
+            clean = SanitizeIdRegex().Replace(clean, "");
             return clean.Trim('_');
         }
 
@@ -1956,7 +1973,6 @@ namespace ZapretGUI.Core
                         var relativePath = Path.GetRelativePath(modRootPath, file);
                         var targetPath = Path.GetFullPath(Path.Combine(destPath, relativePath));
 
-                        // Защита от Zip-Slip
                         if (!targetPath.StartsWith(destRootWithSep, StringComparison.OrdinalIgnoreCase))
                             continue;
 
@@ -2158,15 +2174,12 @@ namespace ZapretGUI.Core
 // ФАЙЛ: Core\ModModels.cs
 ////////////////////////////////////////////////////////////////////////////////
 
-using System.ComponentModel;
-
 namespace ZapretGUI.Core
 {
     public enum ModType
     {
         BatStrategy,
-        DomainList,
-        Guide
+        DomainList
     }
 
     public class ModMetaData
@@ -2179,30 +2192,12 @@ namespace ZapretGUI.Core
         public bool IsBatStrategy { get; set; } = false;
     }
 
-    public class UIModItem : INotifyPropertyChanged
+    public class UIModItem
     {
-        public event PropertyChangedEventHandler? PropertyChanged;
-
         public string Id { get; set; } = "";
         public ModType Type { get; set; }
         public ModMetaData Meta { get; set; } = new ModMetaData();
-
-        private bool _isActive;
-        public bool IsActive
-        {
-            get => _isActive;
-            set
-            {
-                if (_isActive != value)
-                {
-                    _isActive = value;
-                    OnPropertyChanged(nameof(IsActive));
-                }
-            }
-        }
-
-        protected void OnPropertyChanged(string propertyName) =>
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        public bool IsActive { get; set; }
     }
 }
 
@@ -2252,7 +2247,7 @@ using System.Timers;
 
 namespace ZapretGUI.Core
 {
-    public class NetworkMonitor
+    public class NetworkMonitor : IDisposable
     {
         private readonly System.Timers.Timer _networkTimer;
         private readonly Stopwatch _elapsedStopwatch = new Stopwatch();
@@ -2270,6 +2265,15 @@ namespace ZapretGUI.Core
             _networkTimer.Elapsed += Timer_Tick;
 
             SettingsManager.SettingsSaved += UpdateIntervalFromSettings;
+
+            NetworkChange.NetworkAvailabilityChanged += OnNetworkAvailabilityChanged;
+            _wasNetworkAvailable = NetworkInterface.GetIsNetworkAvailable();
+        }
+
+        private void OnNetworkAvailabilityChanged(object? sender, NetworkAvailabilityEventArgs e)
+        {
+            _wasNetworkAvailable = e.IsAvailable;
+            StatusChanged?.Invoke(_wasNetworkAvailable);
         }
 
         public void UpdateIntervalFromSettings()
@@ -2293,13 +2297,7 @@ namespace ZapretGUI.Core
 
         private void Timer_Tick(object? sender, ElapsedEventArgs e)
         {
-            var isAvailable = NetworkInterface.GetIsNetworkAvailable();
-
-            if (isAvailable != _wasNetworkAvailable)
-            {
-                _wasNetworkAvailable = isAvailable;
-                StatusChanged?.Invoke(isAvailable);
-            }
+            if (!_wasNetworkAvailable) return;
 
             var currentReceived = 0L;
             var currentSent = 0L;
@@ -2332,6 +2330,13 @@ namespace ZapretGUI.Core
 
             _lastBytesReceived = currentReceived;
             _lastBytesSent = currentSent;
+        }
+
+        public void Dispose()
+        {
+            NetworkChange.NetworkAvailabilityChanged -= OnNetworkAvailabilityChanged;
+            SettingsManager.SettingsSaved -= UpdateIntervalFromSettings;
+            _networkTimer.Dispose();
         }
     }
 }
@@ -2396,14 +2401,17 @@ using System.Linq;
 using System.Net.Http;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace ZapretGUI.Core
 {
-    public static class ServiceToolsManager
+    public static partial class ServiceToolsManager
     {
-        private static readonly HttpClient _http = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+        [GeneratedRegex(@"^[1-9][0-9]*(?:-[1-9][0-9]*)?$")]
+        private static partial Regex PortRangeRegex();
 
+        private static readonly HttpClient _http = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
         private const string HostsMarkerStart = "# >>> ZAPRET FOR ADHD HOSTS START >>>";
         private const string HostsMarkerEnd = "# <<< ZAPRET FOR ADHD HOSTS END <<<";
 
@@ -2427,7 +2435,7 @@ namespace ZapretGUI.Core
 
             foreach (var part in parts)
             {
-                if (!Regex.IsMatch(part, @"^[1-9][0-9]*(?:-[1-9][0-9]*)?$"))
+                if (!PortRangeRegex().IsMatch(part))
                     return false;
 
                 var bounds = part.Split('-');
@@ -2479,25 +2487,18 @@ namespace ZapretGUI.Core
         {
             try
             {
-                if (!Directory.Exists(UtilsPath))
-                    Directory.CreateDirectory(UtilsPath);
+                if (!Directory.Exists(UtilsPath)) Directory.CreateDirectory(UtilsPath);
 
                 string flagFile = Path.Combine(UtilsPath, "game_filter.enabled");
                 string mode = (SettingsManager.Current.GameFilterMode ?? "disabled").ToLowerInvariant();
 
                 if (mode == "disabled")
                 {
-                    if (File.Exists(flagFile))
-                        File.Delete(flagFile);
+                    if (File.Exists(flagFile)) File.Delete(flagFile);
                 }
                 else
                 {
-                    var lines = new[]
-                    {
-                        $"mode={mode}",
-                        $"tcp={SettingsManager.Current.GameFilterTcpRange}",
-                        $"udp={SettingsManager.Current.GameFilterUdpRange}"
-                    };
+                    var lines = new[] { $"mode={mode}", $"tcp={SettingsManager.Current.GameFilterTcpRange}", $"udp={SettingsManager.Current.GameFilterUdpRange}" };
                     File.WriteAllLines(flagFile, lines);
                 }
             }
@@ -2513,27 +2514,14 @@ namespace ZapretGUI.Core
             {
                 if (!Directory.Exists(ListsPath)) Directory.CreateDirectory(ListsPath);
                 string listFile = Path.Combine(ListsPath, "ipset-all.txt");
+                if (!File.Exists(listFile)) return ("none", 0, "Файл не найден");
 
-                if (!File.Exists(listFile))
-                    return ("none", 0, "Файл не найден");
-
-                var lines = File.ReadAllLines(listFile)
-                                .Where(l => !string.IsNullOrWhiteSpace(l) && !l.TrimStart().StartsWith("#"))
-                                .Select(l => l.Trim())
-                                .ToList();
-
-                if (lines.Count == 0)
-                    return ("any", 0, "Весь трафик (Any • 0 IP)");
-
-                if (lines.Count == 1 && lines[0] == "203.0.113.113/32")
-                    return ("none", 0, "Отключен (Заглушка)");
-
+                var lines = File.ReadAllLines(listFile).Where(l => !string.IsNullOrWhiteSpace(l) && !l.TrimStart().StartsWith("#")).ToList();
+                if (lines.Count == 0) return ("any", 0, "Весь трафик (Any • 0 IP)");
+                if (lines.Count == 1 && lines[0] == "203.0.113.113/32") return ("none", 0, "Отключен (Заглушка)");
                 return ("loaded", lines.Count, $"Активен ({lines.Count} подсетей)");
             }
-            catch
-            {
-                return ("none", 0, "Ошибка чтения");
-            }
+            catch { return ("none", 0, "Ошибка чтения"); }
         }
 
         public static void SetIpSetMode(string targetMode)
@@ -2541,32 +2529,16 @@ namespace ZapretGUI.Core
             if (!Directory.Exists(ListsPath)) Directory.CreateDirectory(ListsPath);
             string listFile = Path.Combine(ListsPath, "ipset-all.txt");
             string backupFile = Path.Combine(ListsPath, "ipset-all.txt.backup");
-
             var (currentMode, _, _) = GetIpSetStatus();
 
-            if (currentMode == "loaded" && File.Exists(listFile))
-            {
-                File.Copy(listFile, backupFile, overwrite: true);
-            }
+            if (currentMode == "loaded" && File.Exists(listFile)) File.Copy(listFile, backupFile, overwrite: true);
 
-            if (targetMode == "none")
-            {
-                File.WriteAllText(listFile, "203.0.113.113/32\r\n");
-            }
-            else if (targetMode == "any")
-            {
-                File.WriteAllText(listFile, "");
-            }
+            if (targetMode == "none") File.WriteAllText(listFile, "203.0.113.113/32\r\n");
+            else if (targetMode == "any") File.WriteAllText(listFile, "");
             else if (targetMode == "loaded")
             {
-                if (File.Exists(backupFile))
-                {
-                    File.Copy(backupFile, listFile, overwrite: true);
-                }
-                else if (currentMode != "loaded")
-                {
-                    throw new FileNotFoundException("Резервная копия базы IPSet не найдена. Нажмите кнопку «Обновить IP», чтобы скачать свежий список.");
-                }
+                if (File.Exists(backupFile)) File.Copy(backupFile, listFile, overwrite: true);
+                else if (currentMode != "loaded") throw new FileNotFoundException("Резервная копия базы IPSet не найдена. Нажмите кнопку «Обновить IP», чтобы скачать свежий список.");
             }
         }
 
@@ -2577,15 +2549,12 @@ namespace ZapretGUI.Core
             string backupFile = Path.Combine(ListsPath, "ipset-all.txt.backup");
 
             string content = await _http.GetStringAsync(AppConstants.FlowsealIpSetUrl);
-            if (string.IsNullOrWhiteSpace(content))
-                throw new Exception("Сервер вернул пустой список IPSet.");
+            if (string.IsNullOrWhiteSpace(content)) throw new Exception("Сервер вернул пустой список IPSet.");
 
             await File.WriteAllTextAsync(listFile, content, Encoding.UTF8);
             await File.WriteAllTextAsync(backupFile, content, Encoding.UTF8);
 
-            int count = content.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
-                               .Count(l => !string.IsNullOrWhiteSpace(l) && !l.TrimStart().StartsWith("#"));
-            return count;
+            return content.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).Count(l => !string.IsNullOrWhiteSpace(l) && !l.TrimStart().StartsWith("#"));
         }
 
         private static string SystemHostsPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), @"drivers\etc\hosts");
@@ -2596,40 +2565,28 @@ namespace ZapretGUI.Core
             {
                 if (!File.Exists(SystemHostsPath)) return (false, 0);
                 var text = File.ReadAllText(SystemHostsPath);
-
                 int startIdx = text.IndexOf(HostsMarkerStart, StringComparison.OrdinalIgnoreCase);
                 int endIdx = text.IndexOf(HostsMarkerEnd, StringComparison.OrdinalIgnoreCase);
 
                 if (startIdx >= 0 && endIdx > startIdx)
                 {
                     string block = text.Substring(startIdx + HostsMarkerStart.Length, endIdx - (startIdx + HostsMarkerStart.Length));
-                    int count = block.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
-                                     .Count(l => !string.IsNullOrWhiteSpace(l) && !l.TrimStart().StartsWith("#"));
+                    int count = block.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).Count(l => !string.IsNullOrWhiteSpace(l) && !l.TrimStart().StartsWith("#"));
                     return (true, count);
                 }
                 return (false, 0);
             }
-            catch
-            {
-                return (false, 0);
-            }
+            catch { return (false, 0); }
         }
 
         public static async Task<int> UpdateSystemHostsAsync(int sourceIndex)
         {
             var urls = new List<string>();
-            if (sourceIndex == 0) 
-                urls.Add(AppConstants.FlowsealHostsUrl);
-            else if (sourceIndex == 1 || sourceIndex == 3) 
-                urls.Add(AppConstants.V3nillaHostsUrl);
-            else
-            {
-                urls.Add(AppConstants.FlowsealHostsUrl);
-                urls.Add(AppConstants.V3nillaHostsUrl);
-            }
+            if (sourceIndex == 0) urls.Add(AppConstants.FlowsealHostsUrl);
+            else if (sourceIndex == 1 || sourceIndex == 3) urls.Add(AppConstants.V3nillaHostsUrl);
+            else { urls.Add(AppConstants.FlowsealHostsUrl); urls.Add(AppConstants.V3nillaHostsUrl); }
 
             var includeAdBlockZeroIps = (sourceIndex == 3);
-
             var collectedLines = new List<string>();
             var seenEntries = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -2640,101 +2597,74 @@ namespace ZapretGUI.Core
                 {
                     var trimmed = line.Trim();
                     if (string.IsNullOrWhiteSpace(trimmed)) continue;
-
-                    if (!includeAdBlockZeroIps && trimmed.Contains("Блокировка рекламы, трекеров", StringComparison.OrdinalIgnoreCase))
-                        break;
-
-                    if (trimmed.StartsWith("#"))
-                    {
-                        collectedLines.Add(trimmed);
-                        continue;
-                    }
-
-                    if (trimmed.Contains("localhost", StringComparison.OrdinalIgnoreCase))
-                        continue;
-
-                    if (!includeAdBlockZeroIps && trimmed.StartsWith("0.0.0.0"))
-                        continue;
+                    if (!includeAdBlockZeroIps && trimmed.Contains("Блокировка рекламы, трекеров", StringComparison.OrdinalIgnoreCase)) break;
+                    if (trimmed.StartsWith("#")) { collectedLines.Add(trimmed); continue; }
+                    if (trimmed.Contains("localhost", StringComparison.OrdinalIgnoreCase)) continue;
+                    if (!includeAdBlockZeroIps && trimmed.StartsWith("0.0.0.0")) continue;
 
                     var parts = trimmed.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
                     if (parts.Length >= 2)
                     {
                         var normalizedEntry = $"{parts[0]} {parts[1]}";
-                        if (seenEntries.Add(normalizedEntry))
-                            collectedLines.Add(normalizedEntry);
+                        if (seenEntries.Add(normalizedEntry)) collectedLines.Add(normalizedEntry);
                     }
                 }
             }
 
             var activeDomainsCount = collectedLines.Count(l => !l.StartsWith("#"));
-            if (activeDomainsCount == 0)
-                throw new Exception("Не удалось получить ни одной записи из выбранного источника.");
+            if (activeDomainsCount == 0) throw new Exception("Не удалось получить ни одной записи из выбранного источника.");
 
             var backupPath = SystemHostsPath + ".zapret.bak";
-            if (File.Exists(SystemHostsPath) && !File.Exists(backupPath))
-                try { File.Copy(SystemHostsPath, backupPath, overwrite: false); } catch { }
+            if (File.Exists(SystemHostsPath) && !File.Exists(backupPath)) try { File.Copy(SystemHostsPath, backupPath, overwrite: false); } catch { }
 
             var existingContent = File.Exists(SystemHostsPath) ? await File.ReadAllTextAsync(SystemHostsPath) : "";
             var cleanBase = RemoveZapretBlock(existingContent).TrimEnd();
 
             var sb = new StringBuilder();
-            if (!string.IsNullOrEmpty(cleanBase))
-            {
-                sb.AppendLine(cleanBase);
-                sb.AppendLine();
-            }
-
+            if (!string.IsNullOrEmpty(cleanBase)) { sb.AppendLine(cleanBase); sb.AppendLine(); }
             sb.AppendLine(HostsMarkerStart);
             sb.AppendLine($"# Обновлено: {DateTime.Now:dd.MM.yyyy HH:mm} (Активных записей: {activeDomainsCount})");
-            foreach (var l in collectedLines)
-                sb.AppendLine(l);
+            foreach (var l in collectedLines) sb.AppendLine(l);
             sb.AppendLine(HostsMarkerEnd);
 
             await File.WriteAllTextAsync(SystemHostsPath, sb.ToString(), new UTF8Encoding(false));
-            FlushDnsCache();
-
+            await FlushDnsCacheAsync();
             return activeDomainsCount;
         }
 
-        public static void ClearZapretHosts()
+        public static async Task ClearZapretHostsAsync()
         {
             if (!File.Exists(SystemHostsPath)) return;
-
-            var existingContent = File.ReadAllText(SystemHostsPath);
+            var existingContent = await File.ReadAllTextAsync(SystemHostsPath);
             var cleanBase = RemoveZapretBlock(existingContent).TrimEnd() + "\r\n";
-
-            File.WriteAllText(SystemHostsPath, cleanBase, new UTF8Encoding(false));
-            FlushDnsCache();
+            await File.WriteAllTextAsync(SystemHostsPath, cleanBase, new UTF8Encoding(false));
+            await FlushDnsCacheAsync();
         }
 
         private static string RemoveZapretBlock(string content)
         {
             var startIdx = content.IndexOf(HostsMarkerStart, StringComparison.OrdinalIgnoreCase);
             var endIdx = content.IndexOf(HostsMarkerEnd, StringComparison.OrdinalIgnoreCase);
-
             if (startIdx >= 0 && endIdx > startIdx)
-            {
-                var removeLength = (endIdx + HostsMarkerEnd.Length) - startIdx;
-                return content.Remove(startIdx, removeLength);
-            }
+                return content.Remove(startIdx, (endIdx + HostsMarkerEnd.Length) - startIdx);
             return content;
         }
 
-        private static void FlushDnsCache()
+        public static async Task FlushDnsCacheAsync()
         {
             try
             {
-                Process.Start(new ProcessStartInfo
+                using var p = Process.Start(new ProcessStartInfo { FileName = "ipconfig.exe", Arguments = "/flushdns", CreateNoWindow = true, UseShellExecute = false });
+                if (p != null)
                 {
-                    FileName = "ipconfig.exe",
-                    Arguments = "/flushdns",
-                    CreateNoWindow = true,
-                    UseShellExecute = false
-                })?.WaitForExit(3000);
+                    using var cts = new CancellationTokenSource(3000);
+                    try { await p.WaitForExitAsync(cts.Token); } catch (TaskCanceledException) { }
+                }
             }
             catch { }
         }
-        public static string UnloadWinDivertDriver()
+
+        public static async Task<string> UnloadWinDivertDriverAsync()
         {
             BypassController.Current.StopServices();
             string[] driverNames = ["WinDivert", "WinDivert14", "WinDivert64", "Monkey"];
@@ -2744,42 +2674,53 @@ namespace ZapretGUI.Core
             {
                 try
                 {
-                    using var p = Process.Start(new ProcessStartInfo
+                    using var p = Process.Start(new ProcessStartInfo { FileName = "sc.exe", Arguments = $"stop {name}", CreateNoWindow = true, UseShellExecute = false });
+                    if (p != null)
                     {
-                        FileName = "sc.exe",
-                        Arguments = $"stop {name}",
-                        CreateNoWindow = true,
-                        UseShellExecute = false,
-                        RedirectStandardOutput = true,
-                        RedirectStandardError = true
-                    });
-                    p?.WaitForExit(2500);
-                    if (p != null && p.ExitCode == 0)
-                        stopped++;
+                        using var cts = new CancellationTokenSource(2500);
+                        try { await p.WaitForExitAsync(cts.Token); } catch (TaskCanceledException) { }
+                        if (p.HasExited && p.ExitCode == 0) stopped++;
+                    }
                 }
                 catch { }
             }
 
-            FlushDnsCache();
+            await FlushDnsCacheAsync();
             return stopped > 0
                 ? $"Драйвер WinDivert успешно остановлен и выгружен из ядра (служб остановлено: {stopped}), DNS-кэш очищен."
                 : "Все процессы обхода остановлены, активных служб WinDivert в памяти не обнаружено. DNS-кэш очищен.";
         }
+
         public static async Task AddSingleHostEntryAsync(string domain, string ip)
         {
-            if (string.IsNullOrWhiteSpace(domain) || string.IsNullOrWhiteSpace(ip))
-                throw new Exception("Некорректный домен или IP-адрес.");
+            if (string.IsNullOrWhiteSpace(domain) || string.IsNullOrWhiteSpace(ip)) throw new Exception("Некорректный домен или IP-адрес.");
 
             var existingContent = File.Exists(SystemHostsPath) ? await File.ReadAllTextAsync(SystemHostsPath) : "";
-            var lines = existingContent.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None).ToList();
-
             string rule = $"{ip.Trim()} {domain.Trim().ToLowerInvariant()}";
-            if (!lines.Any(l => l.Trim().Equals(rule, StringComparison.OrdinalIgnoreCase)))
+            if (existingContent.Contains(rule, StringComparison.OrdinalIgnoreCase)) return;
+
+            var sb = new StringBuilder();
+            var startIdx = existingContent.IndexOf(HostsMarkerStart, StringComparison.OrdinalIgnoreCase);
+            var endIdx = existingContent.IndexOf(HostsMarkerEnd, StringComparison.OrdinalIgnoreCase);
+
+            if (startIdx >= 0 && endIdx > startIdx)
             {
-                lines.Add(rule);
-                await File.WriteAllTextAsync(SystemHostsPath, string.Join("\r\n", lines).TrimEnd() + "\r\n", new UTF8Encoding(false));
-                FlushDnsCache();
+                sb.Append(existingContent.Substring(0, endIdx));
+                sb.AppendLine(rule);
+                sb.Append(existingContent.Substring(endIdx));
             }
+            else
+            {
+                sb.Append(existingContent.TrimEnd());
+                sb.AppendLine();
+                sb.AppendLine();
+                sb.AppendLine(HostsMarkerStart);
+                sb.AppendLine(rule);
+                sb.AppendLine(HostsMarkerEnd);
+            }
+
+            await File.WriteAllTextAsync(SystemHostsPath, sb.ToString(), new UTF8Encoding(false));
+            await FlushDnsCacheAsync();
         }
     }
 }
@@ -2789,7 +2730,6 @@ namespace ZapretGUI.Core
 ////////////////////////////////////////////////////////////////////////////////
 
 using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
@@ -2800,7 +2740,6 @@ namespace ZapretGUI.Core
     {
         public bool ZapretEnabled { get; set; } = true;
         public bool TgProxyEnabled { get; set; } = true;
-        public int SelectedProfileIndex { get; set; } = 0;
         public string SelectedProfileName { get; set; } = "general.bat";
         public bool StartMinimized { get; set; } = false;
         public bool MinimizeOnClose { get; set; } = true;
@@ -2812,20 +2751,19 @@ namespace ZapretGUI.Core
         public bool AutoRestartServices { get; set; } = false;
         public int StatsUpdateInterval { get; set; } = 1;
 
-        // Настройки v4.1
         public bool AutoStartBypass { get; set; } = false;
         public bool StopServicesOnExit { get; set; } = true;
         public bool SoundEffectsEnabled { get; set; } = true;
         public bool SkipSplashScreen { get; set; } = false;
         public bool AlwaysOnTop { get; set; } = false;
-        public string AccentTheme { get; set; } = "green"; // green, blue, purple, amber, crimson
+        public string AccentTheme { get; set; } = "green";
         public bool WatchdogPingAutoRestart { get; set; } = false;
 
         public string ZapretCoreVersion { get; set; } = "0.0.0";
         public string TgProxyCoreVersion { get; set; } = "0.0.0";
 
-        public List<string> ActiveBatMods { get; set; } = new List<string>();
-        public List<string> ActiveListMods { get; set; } = new List<string>();
+        public System.Collections.Generic.List<string> ActiveBatMods { get; set; } = new();
+        public System.Collections.Generic.List<string> ActiveListMods { get; set; } = new();
 
         public string GameFilterMode { get; set; } = "disabled";
         public string GameFilterTcpRange { get; set; } = "1024-65535";
@@ -2837,9 +2775,9 @@ namespace ZapretGUI.Core
     public static class SettingsManager
     {
         private static readonly string _settingsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.json");
+        private static readonly object _saveLock = new object();
 
         public static AppSettings Current { get; set; } = new AppSettings();
-
         public static event Action? SettingsSaved;
 
         public static void Load()
@@ -2862,16 +2800,22 @@ namespace ZapretGUI.Core
 
         public static void Save()
         {
-            try
+            lock (_saveLock)
             {
-                var json = JsonSerializer.Serialize(Current, new JsonSerializerOptions { WriteIndented = true });
-                File.WriteAllText(_settingsPath, json);
+                try
+                {
+                    var json = JsonSerializer.Serialize(Current, new JsonSerializerOptions { WriteIndented = true });
+                    var tempPath = _settingsPath + ".tmp";
 
-                SettingsSaved?.Invoke();
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Ошибка сохранения настроек: {ex.Message}");
+                    File.WriteAllText(tempPath, json);
+                    File.Move(tempPath, _settingsPath, overwrite: true);
+
+                    SettingsSaved?.Invoke();
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Ошибка сохранения настроек: {ex.Message}");
+                }
             }
         }
     }
@@ -2884,6 +2828,8 @@ namespace ZapretGUI.Core
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.Win32;
 
 namespace ZapretGUI.Core
@@ -2893,11 +2839,10 @@ namespace ZapretGUI.Core
         private const string RegistryKeyPath = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
         private const string TaskName = AppConstants.AppRegistryName;
 
-        public static bool IsAutoStartEnabled()
+        public static async Task<bool> IsAutoStartEnabledAsync()
         {
             try
             {
-                // 1. Проверяем наличие задачи в Планировщике Windows (основной способ для requireAdministrator)
                 using var p = Process.Start(new ProcessStartInfo
                 {
                     FileName = "schtasks.exe",
@@ -2908,11 +2853,13 @@ namespace ZapretGUI.Core
                     RedirectStandardError = true
                 });
 
-                p?.WaitForExit(1500);
-                if (p != null && p.ExitCode == 0)
-                    return true;
+                if (p != null)
+                {
+                    using var cts = new CancellationTokenSource(1500);
+                    try { await p.WaitForExitAsync(cts.Token); } catch (TaskCanceledException) { }
+                    if (p.HasExited && p.ExitCode == 0) return true;
+                }
 
-                // 2. Фолбэк: проверяем реестр (на случай если запуск без админ-прав)
                 using var key = Registry.CurrentUser.OpenSubKey(RegistryKeyPath, false);
                 return key?.GetValue(AppConstants.AppRegistryName) != null;
             }
@@ -2923,7 +2870,7 @@ namespace ZapretGUI.Core
             }
         }
 
-        public static void SetAutoStart(bool enable)
+        public static async Task SetAutoStartAsync(bool enable)
         {
             try
             {
@@ -2931,7 +2878,6 @@ namespace ZapretGUI.Core
                 if (string.IsNullOrEmpty(exePath))
                     exePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ZapretGUI.exe");
 
-                // Всегда подчищаем старый ключ в Run, чтобы Windows не плодила дубликаты
                 using (var key = Registry.CurrentUser.OpenSubKey(RegistryKeyPath, true))
                 {
                     key?.DeleteValue(AppConstants.AppRegistryName, false);
@@ -2939,7 +2885,6 @@ namespace ZapretGUI.Core
 
                 if (enable)
                 {
-                    // Создаем задачу при входе пользователя с наивысшими правами (/RL HIGHEST)
                     using var p = Process.Start(new ProcessStartInfo
                     {
                         FileName = "schtasks.exe",
@@ -2949,10 +2894,14 @@ namespace ZapretGUI.Core
                         RedirectStandardOutput = true,
                         RedirectStandardError = true
                     });
-                    p?.WaitForExit(2500);
 
-                    // Если по какой-то причине служба планировщика отключена, пишем в реестр как резерв
-                    if (p == null || p.ExitCode != 0)
+                    if (p != null)
+                    {
+                        using var cts = new CancellationTokenSource(2500);
+                        try { await p.WaitForExitAsync(cts.Token); } catch (TaskCanceledException) { }
+                    }
+
+                    if (p == null || !p.HasExited || p.ExitCode != 0)
                     {
                         using var key = Registry.CurrentUser.OpenSubKey(RegistryKeyPath, true);
                         key?.SetValue(AppConstants.AppRegistryName, $"\"{exePath}\"");
@@ -2969,7 +2918,11 @@ namespace ZapretGUI.Core
                         RedirectStandardOutput = true,
                         RedirectStandardError = true
                     });
-                    p?.WaitForExit(2500);
+                    if (p != null)
+                    {
+                        using var cts = new CancellationTokenSource(2500);
+                        try { await p.WaitForExitAsync(cts.Token); } catch (TaskCanceledException) { }
+                    }
                 }
             }
             catch (Exception ex)
@@ -3203,7 +3156,10 @@ namespace ZapretGUI.Core
         private int _hoveredZone = -1;
         private float _scale = 1.0f;
 
-        // Базовые координаты зон (умножаются на _scale при отрисовке и кликах)
+        private readonly StringFormat _sfCenter = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+        private readonly StringFormat _sfLeftCenter = new StringFormat { Alignment = StringAlignment.Near, LineAlignment = StringAlignment.Center };
+        private readonly StringFormat _sfRightCenter = new StringFormat { Alignment = StringAlignment.Far, LineAlignment = StringAlignment.Center };
+
         private Rectangle SRect(int x, int y, int w, int h) =>
             new((int)Math.Round(x * _scale), (int)Math.Round(y * _scale), (int)Math.Round(w * _scale), (int)Math.Round(h * _scale));
 
@@ -3225,6 +3181,18 @@ namespace ZapretGUI.Core
 
             BypassController.Current.NetMonitor.StatsUpdated += OnStatsUpdated;
             Deactivate += (s, e) => Hide();
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                BypassController.Current.NetMonitor.StatsUpdated -= OnStatsUpdated;
+                _sfCenter?.Dispose();
+                _sfLeftCenter?.Dispose();
+                _sfRightCenter?.Dispose();
+            }
+            base.Dispose(disposing);
         }
 
         private void UpdateDpiMetrics()
@@ -3415,18 +3383,12 @@ namespace ZapretGUI.Core
             var accentDarkBg = UIHelper.GetAccentDarkBgColor();
             var danger = UIHelper.GetErrorColor();
 
-            var sfCenter = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
-            var sfLeftCenter = new StringFormat { Alignment = StringAlignment.Near, LineAlignment = StringAlignment.Center };
-            var sfRightCenter = new StringFormat { Alignment = StringAlignment.Far, LineAlignment = StringAlignment.Center };
-
-            // Внешняя рамка
             using (var borderPen = new Pen(ColorTranslator.FromHtml("#2A2A2A"), S(1.5f)))
             using (var borderPath = UIHelper.CreateRoundedRectPath(new Rectangle(1, 1, Width - 3, Height - 3), SI(11)))
             {
                 g.DrawPath(borderPen, borderPath);
             }
 
-            // 1. Шапка: иконка, заголовок, подзаголовок и бейдж версии
             var logoRect = SRect(14, 14, 32, 32);
             using (var logoBg = new SolidBrush(accentDarkBg))
             using (var logoPen = new Pen(accent, S(1f)))
@@ -3438,14 +3400,7 @@ namespace ZapretGUI.Core
             using (var fLogo = new Font("Segoe UI", S(15f), FontStyle.Bold, GraphicsUnit.Pixel))
             using (var bLogo = new SolidBrush(accentLight))
             {
-                UIHelper.DrawPixelZappyHead(
-                g,
-                offsetX: logoRect.X + S(4f),
-                offsetY: logoRect.Y + S(4f),
-                pixelScale: S(1.5f),
-                isRunning: anyRun,
-                accentLight: accentLight,
-                accentBase: accent);
+                UIHelper.DrawPixelZappyHead(g, offsetX: logoRect.X + S(4f), offsetY: logoRect.Y + S(4f), pixelScale: S(1.5f), isRunning: anyRun, accentLight: accentLight, accentBase: accent);
             }
 
             using (var fTitle = new Font("Segoe UI", S(13.5f), FontStyle.Bold, GraphicsUnit.Pixel))
@@ -3469,10 +3424,9 @@ namespace ZapretGUI.Core
             {
                 g.FillPath(verBg, verPath);
                 g.DrawPath(verPen, verPath);
-                g.DrawString(AppConstants.AppVersion, fVer, bVer, verRect, sfCenter);
+                g.DrawString(AppConstants.AppVersion, fVer, bVer, verRect, _sfCenter);
             }
 
-            // 2. Пилюли статуса + селектор профиля
             DrawStatusPill(g, SRect(14, 60, 66, 26), "Zapret", zapretRun ? accentLight : danger);
             DrawStatusPill(g, SRect(84, 60, 64, 26), "Proxy", proxyRun ? accentLight : danger);
 
@@ -3487,16 +3441,15 @@ namespace ZapretGUI.Core
             using (var fArrow = new Font("Segoe UI", S(13f), FontStyle.Bold, GraphicsUnit.Pixel))
             using (var fProf = new Font("Consolas", S(10.5f), FontStyle.Bold, GraphicsUnit.Pixel))
             {
-                g.DrawString("‹", fArrow, _hoveredZone == 1 ? Brushes.White : Brushes.Gray, RectPrevProf, sfCenter);
-                g.DrawString("›", fArrow, _hoveredZone == 2 ? Brushes.White : Brushes.Gray, RectNextProf, sfCenter);
+                g.DrawString("‹", fArrow, _hoveredZone == 1 ? Brushes.White : Brushes.Gray, RectPrevProf, _sfCenter);
+                g.DrawString("›", fArrow, _hoveredZone == 2 ? Brushes.White : Brushes.Gray, RectNextProf, _sfCenter);
 
                 string profName = SettingsManager.Current.SelectedProfileName ?? "general.bat";
                 if (profName.Length > 13) profName = profName.Substring(0, 12) + "…";
                 var textRect = SRect(176, 60, 96, 26);
-                g.DrawString(profName, fProf, Brushes.White, textRect, sfCenter);
+                g.DrawString(profName, fProf, Brushes.White, textRect, _sfCenter);
             }
 
-            // 3. Главная кнопка запуска / остановки
             var pwrBgColor = anyRun ? ColorTranslator.FromHtml("#2A1215") : accentDarkBg;
             var pwrBorderColor = anyRun ? danger : accent;
             using (var pwrBg = new SolidBrush(pwrBgColor))
@@ -3508,10 +3461,9 @@ namespace ZapretGUI.Core
             }
             using (var fPwr = new Font("Segoe UI", S(13f), FontStyle.Bold, GraphicsUnit.Pixel))
             {
-                g.DrawString(anyRun ? "■   Остановить обход" : "▶   Включить обход", fPwr, Brushes.White, RectPowerBtn, sfCenter);
+                g.DrawString(anyRun ? "■   Остановить обход" : "▶   Включить обход", fPwr, Brushes.White, RectPowerBtn, _sfCenter);
             }
 
-            // 4. Бенто-карточка телеметрии и пинга
             var teleRect = SRect(14, 148, 280, 80);
             using (var teleBg = new SolidBrush(ColorTranslator.FromHtml("#171717")))
             using (var telePen = new Pen(ColorTranslator.FromHtml("#242424")))
@@ -3526,34 +3478,28 @@ namespace ZapretGUI.Core
             using (var bGray = new SolidBrush(ColorTranslator.FromHtml("#888888")))
             using (var sepPen = new Pen(ColorTranslator.FromHtml("#242424")))
             {
-                // Входящий (левая колонка)
                 g.DrawString("↓ Входящий", fLbl, bGray, S(24), S(154));
                 g.DrawString($"{_rxMbps:0.0} Мбит/с", fVal, Brushes.White, S(24), S(170));
 
-                // Вертикальный разделитель
                 g.DrawLine(sepPen, S(154), S(155), S(154), S(185));
 
-                // Исходящий (правая колонка)
-                g.DrawString("↑ Исходящий", fLbl, bGray, SRect(160, 154, 124, 14), sfRightCenter);
-                g.DrawString($"{_txMbps:0.0} Мбит/с", fVal, Brushes.White, SRect(160, 170, 124, 16), sfRightCenter);
+                g.DrawString("↑ Исходящий", fLbl, bGray, SRect(160, 154, 124, 14), _sfRightCenter);
+                g.DrawString($"{_txMbps:0.0} Мбит/с", fVal, Brushes.White, SRect(160, 170, 124, 16), _sfRightCenter);
 
-                // Горизонтальный разделитель
                 g.DrawLine(sepPen, S(24), S(191), S(284), S(191));
 
-                // Строка пинга
                 using var fPingLbl = new Font("Segoe UI", S(11.5f), FontStyle.Regular, GraphicsUnit.Pixel);
-                g.DrawString("Пинг (EU):", fPingLbl, bGray, SRect(24, 196, 110, 24), sfLeftCenter);
+                g.DrawString("Пинг (EU):", fPingLbl, bGray, SRect(24, 196, 110, 24), _sfLeftCenter);
 
                 using var bPing = new SolidBrush(_pingColor);
-                g.DrawString(_pingStr, fVal, bPing, SRect(110, 196, 146, 24), sfRightCenter);
+                g.DrawString(_pingStr, fVal, bPing, SRect(110, 196, 146, 24), _sfRightCenter);
 
                 using var btnPath = UIHelper.CreateRoundedRectPath(RectPingBtn, SI(5));
                 using var btnBg = new SolidBrush(_hoveredZone == 4 ? ColorTranslator.FromHtml("#2E2E2E") : ColorTranslator.FromHtml("#222222"));
                 g.FillPath(btnBg, btnPath);
-                g.DrawString("↻", fVal, Brushes.LightGray, RectPingBtn, sfCenter);
+                g.DrawString("↻", fVal, Brushes.LightGray, RectPingBtn, _sfCenter);
             }
 
-            // 5. Нижние кнопки быстрых действий
             DrawMenuRow(g, RectRestartBtn, "↻   Перезапустить службы", _hoveredZone == 5, false);
             DrawMenuRow(g, RectOpenBtn, "❐   Открыть панель управления", _hoveredZone == 6, false);
             DrawMenuRow(g, RectExitBtn, "✕   Полностью закрыть", _hoveredZone == 7, true);
@@ -3574,8 +3520,7 @@ namespace ZapretGUI.Core
             using var font = new Font("Segoe UI", S(10.5f), FontStyle.Bold, GraphicsUnit.Pixel);
             using var textBrush = new SolidBrush(ColorTranslator.FromHtml("#CCCCCC"));
             var textRect = new Rectangle(rect.X + SI(18), rect.Y, rect.Width - SI(20), rect.Height);
-            var sf = new StringFormat { Alignment = StringAlignment.Near, LineAlignment = StringAlignment.Center };
-            g.DrawString(text, font, textBrush, textRect, sf);
+            g.DrawString(text, font, textBrush, textRect, _sfLeftCenter);
         }
 
         private void DrawMenuRow(Graphics g, Rectangle rect, string text, bool hovered, bool isDanger)
@@ -3594,8 +3539,7 @@ namespace ZapretGUI.Core
             using var font = new Font("Segoe UI", S(12f), isDanger ? FontStyle.Bold : FontStyle.Regular, GraphicsUnit.Pixel);
             using var brush = new SolidBrush(isDanger ? ColorTranslator.FromHtml("#F44336") : ColorTranslator.FromHtml("#E0E0E0"));
             var textRect = new Rectangle(rect.X + SI(10), rect.Y, rect.Width - SI(16), rect.Height);
-            var sf = new StringFormat { Alignment = StringAlignment.Near, LineAlignment = StringAlignment.Center };
-            g.DrawString(text, font, brush, textRect, sf);
+            g.DrawString(text, font, brush, textRect, _sfLeftCenter);
         }
     }
 }
@@ -3988,8 +3932,11 @@ namespace ZapretGUI.Core
         public bool IsZip { get; set; }
     }
 
-    public static class UpdateManager
+    public static partial class UpdateManager
     {
+        [GeneratedRegex(@"^(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:\.(\d+))?")]
+        private static partial Regex VersionRegex();
+
         public const string CurrentVersion = AppConstants.AppVersion;
 
         private static readonly HttpClient _httpClient = new HttpClient();
@@ -4025,7 +3972,7 @@ namespace ZapretGUI.Core
         private static bool TryParseNormalizedVersion(string input, out Version? version)
         {
             version = null;
-            var match = Regex.Match(input, @"^(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:\.(\d+))?");
+            var match = VersionRegex().Match(input);
             if (!match.Success) return false;
 
             int major = int.Parse(match.Groups[1].Value);
@@ -4473,6 +4420,7 @@ del ""%~f0""
 ////////////////////////////////////////////////////////////////////////////////
 
 using System;
+using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -4496,6 +4444,7 @@ namespace ZapretGUI.Core
 
         private readonly MainWindow _mainWindow;
         private readonly ModManager _modManager = new ModManager();
+        private readonly FrozenDictionary<string, Func<JsonElement, Task>> _commandHandlers;
         private bool _isFirstRun;
 
         private FileSystemWatcher? _modsWatcher;
@@ -4517,11 +4466,10 @@ namespace ZapretGUI.Core
             _modManager.InitializeFolders();
             SetupLiveModsWatcher();
 
-            UIHelper.WebAlertHandler = (title, message, isError) =>
-            {
-                SendEvent("alert", new { title, message, isError });
-            };
+            // Инициализация маршрутизатора команд за O(1)
+            _commandHandlers = InitializeCommandHandlers().ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
 
+            UIHelper.WebAlertHandler = (title, message, isError) => SendEvent("alert", new { title, message, isError });
             UIHelper.WebConfirmHandler = (title, message, confirmText, isDanger) =>
             {
                 _pendingConfirmTcs?.TrySetResult(false);
@@ -4530,47 +4478,19 @@ namespace ZapretGUI.Core
                 return _pendingConfirmTcs.Task;
             };
 
-            BypassController.Current.OnLog += msg => SendEvent("log", new
-            {
-                message = msg,
-                time = DateTime.Now.ToString("HH:mm:ss"),
-                isProgress = msg.Contains("Скачивание:") || msg.Contains("Скачано:")
-            });
-
-            BypassController.Current.NetMonitor.StatsUpdated += (rx, tx) =>
-            {
-                SendEvent("netStats", new
-                {
-                    download = Math.Round(rx, 1),
-                    upload = Math.Round(tx, 1),
-                    zapretRunning = BypassController.Current.Zapret.IsRunning,
-                    proxyRunning = BypassController.Current.TgProxy.IsRunning
-                });
-            };
-
+            BypassController.Current.OnLog += msg => SendEvent("log", new { message = msg, time = DateTime.Now.ToString("HH:mm:ss"), isProgress = msg.Contains("Скачивание:") || msg.Contains("Скачано:") });
+            BypassController.Current.NetMonitor.StatsUpdated += (rx, tx) => SendEvent("netStats", new { download = Math.Round(rx, 1), upload = Math.Round(tx, 1), zapretRunning = BypassController.Current.Zapret.IsRunning, proxyRunning = BypassController.Current.TgProxy.IsRunning });
             BypassController.Current.NetMonitor.StatusChanged += async isOnline =>
             {
                 SendEvent("netStatus", new { isOnline });
-
                 if (isOnline && SettingsManager.Current.AutoRestartServices && BypassController.Current.IsRunning)
                 {
-                    SendEvent("log", new
-                    {
-                        message = "🔄 [AutoRestart] Сеть восстановлена. Перезапуск служб обхода...",
-                        time = DateTime.Now.ToString("HH:mm:ss"),
-                        isProgress = false
-                    });
-
+                    SendEvent("log", new { message = "🔄 [AutoRestart] Сеть восстановлена. Перезапуск служб обхода...", time = DateTime.Now.ToString("HH:mm:ss"), isProgress = false });
                     await BypassController.Current.RestartServicesAsync(SettingsManager.Current.SelectedProfileName);
                     BroadcastBypassState();
                 }
             };
-
-            BypassController.Current.Scanner.ConfigTested += (file, ok, total) =>
-            {
-                SendEvent("configTested", new { fileName = file, ok, total });
-            };
-
+            BypassController.Current.Scanner.ConfigTested += (file, ok, total) => SendEvent("configTested", new { fileName = file, ok, total });
             BypassController.Current.Scanner.ScanCompleted += topConfigs =>
             {
                 if (topConfigs.Count > 0)
@@ -4578,16 +4498,182 @@ namespace ZapretGUI.Core
                     SettingsManager.Current.SelectedProfileName = topConfigs[0];
                     SettingsManager.Save();
                 }
-                SendEvent("scanCompleted", new
-                {
-                    topConfigs,
-                    bestConfig = topConfigs.FirstOrDefault() ?? ""
-                });
+                SendEvent("scanCompleted", new { topConfigs, bestConfig = topConfigs.FirstOrDefault() ?? "" });
             };
+            BypassController.Current.Scanner.ScanFailed += ex => SendEvent("scanFailed", new { error = ex.Message });
+        }
 
-            BypassController.Current.Scanner.ScanFailed += ex =>
+        private Dictionary<string, Func<JsonElement, Task>> InitializeCommandHandlers()
+        {
+            return new Dictionary<string, Func<JsonElement, Task>>
             {
-                SendEvent("scanFailed", new { error = ex.Message });
+                ["init"] = async _ => await SendInitialStateAsync(),
+                ["confirmResponse"] = root => {
+                    var accepted = root.TryGetProperty("accepted", out var acc) && acc.GetBoolean();
+                    _pendingConfirmTcs?.TrySetResult(accepted);
+                    return Task.CompletedTask;
+                },
+                ["runWizardSetup"] = HandleRunWizardSetupAsync,
+                ["skipWizard"] = _ => {
+                    _isFirstRun = false;
+                    SettingsManager.Save();
+                    return Task.CompletedTask;
+                },
+                ["windowDrag"] = _ => {
+                    _mainWindow.InvokeOnUI(() => {
+                        try { ReleaseCapture(); SendMessage(_mainWindow.WindowHandle, 0xA1, 0x2, 0); } catch { }
+                    });
+                    return Task.CompletedTask;
+                },
+                ["windowMinimize"] = _ => { _mainWindow.MinimizeWindow(); return Task.CompletedTask; },
+                ["windowClose"] = _ => { _mainWindow.CloseWindow(); return Task.CompletedTask; },
+                ["playSuccess"] = _ => { AudioHelper.PlaySuccess(); return Task.CompletedTask; },
+                ["openUrl"] = root => {
+                    var url = root.GetProperty("url").GetString() ?? "";
+                    if (!string.IsNullOrWhiteSpace(url)) Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+                    return Task.CompletedTask;
+                },
+                ["toggleBypass"] = HandleToggleBypassAsync,
+                ["restartBypass"] = async _ => {
+                    await BypassController.Current.RestartServicesAsync(SettingsManager.Current.SelectedProfileName);
+                    BroadcastBypassState();
+                },
+                ["updateModuleToggles"] = root => {
+                    if (root.TryGetProperty("useZapret", out var uz)) SettingsManager.Current.ZapretEnabled = uz.GetBoolean();
+                    if (root.TryGetProperty("useProxy", out var up)) SettingsManager.Current.TgProxyEnabled = up.GetBoolean();
+                    SettingsManager.Save();
+                    return Task.CompletedTask;
+                },
+                ["selectProfile"] = HandleSelectProfileAsync,
+                ["ping"] = async _ => {
+                    var pingMs = await BypassController.Current.CheckPingAsync();
+                    SendEvent("pingResult", new { ping = pingMs });
+                },
+                ["startScan"] = async _ => {
+                    SettingsManager.Current.FirstTimeScanPrompted = true;
+                    SettingsManager.Save();
+                    if (BypassController.Current.Scanner.IsScanning)
+                    {
+                        BypassController.Current.Scanner.CancelScan();
+                        SendEvent("scanState", new { isScanning = false });
+                    }
+                    else
+                    {
+                        SendEvent("scanState", new { isScanning = true });
+                        await BypassController.Current.Scanner.StartScanAsync();
+                        SendEvent("scanState", new { isScanning = false });
+                    }
+                },
+                ["markFirstScanPrompted"] = _ => {
+                    SettingsManager.Current.FirstTimeScanPrompted = true;
+                    SettingsManager.Save();
+                    return Task.CompletedTask;
+                },
+                ["saveGameFilter"] = HandleSaveGameFilterAsync,
+                ["exportLogs"] = root => { HandleExportLogs(root); return Task.CompletedTask; },
+                ["getMods"] = async _ => await BroadcastModsAndProfilesAsync(),
+                ["generateModId"] = root => {
+                    var baseName = root.TryGetProperty("baseName", out var bn) ? bn.GetString() ?? "mod" : "mod";
+                    var genId = _modManager.GenerateUniqueModId(baseName);
+                    SendEvent("modIdGenerated", new { id = genId, isTaken = false });
+                    return Task.CompletedTask;
+                },
+                ["checkModId"] = root => {
+                    var candidate = root.GetProperty("id").GetString() ?? "";
+                    var cleanId = ModManager.SanitizeModId(candidate);
+                    var isTaken = string.IsNullOrEmpty(cleanId) || _modManager.IsModIdTaken(cleanId);
+                    SendEvent("modIdChecked", new { cleanId, isTaken, isEmpty = string.IsNullOrEmpty(cleanId) });
+                    return Task.CompletedTask;
+                },
+                ["createMod"] = HandleCreateModAsync,
+                ["toggleMod"] = HandleToggleModAsync,
+                ["disableAllMods"] = HandleDisableAllModsAsync,
+                ["deleteMod"] = HandleDeleteModAsync,
+                ["getModContent"] = HandleGetModContentAsync,
+                ["validateBatMod"] = root => {
+                    var modTitle = root.GetProperty("name").GetString() ?? "Скрипт";
+                    var batCode = root.GetProperty("content").GetString() ?? "";
+                    var (isValid, errMsg) = _modManager.ValidateBatMod(modTitle, batCode);
+                    SendEvent("batValidationResult", new { isValid, errorMessage = errMsg });
+                    return Task.CompletedTask;
+                },
+                ["saveModContent"] = HandleSaveModContentAsync,
+                ["importMod"] = async _ => await HandleImportModAsync(),
+                ["importDroppedFile"] = HandleImportDroppedFileAsync,
+                ["exportMod"] = HandleExportModAsync,
+                ["runDiagnostics"] = async _ => await HandleRunDiagnosticsAsync(),
+                ["saveSettings"] = root => { HandleSaveSettings(root.GetProperty("settings")); return Task.CompletedTask; },
+                ["setIpSetMode"] = root => { HandleSetIpSetMode(root); return Task.CompletedTask; },
+                ["updateIpSet"] = async _ => await HandleUpdateIpSetAsync(),
+                ["updateHosts"] = HandleUpdateHostsAsync,
+                ["clearHosts"] = async _ => await HandleClearHostsAsync(),
+                ["checkUpdates"] = async _ => await HandleCheckUpdatesManualAsync(),
+                ["resetSettings"] = async _ => await HandleResetSettingsAsync(),
+                ["openFolder"] = root => {
+                    var folderType = root.GetProperty("folder").GetString();
+                    var targetPath = folderType switch
+                    {
+                        "mods" => Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory),
+                        "zapret" => Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.CoreFilesDirectory),
+                        _ => AppDomain.CurrentDomain.BaseDirectory
+                    };
+                    if (!Directory.Exists(targetPath)) Directory.CreateDirectory(targetPath);
+                    Process.Start(new ProcessStartInfo { FileName = "explorer.exe", Arguments = targetPath, UseShellExecute = true });
+                    return Task.CompletedTask;
+                },
+                ["unloadWinDivert"] = async _ => {
+                    var msgUnload = await ServiceToolsManager.UnloadWinDivertDriverAsync();
+                    _mainWindow.UpdateIndicators(false, false);
+                    SendEvent("log", new { message = $"🛡 [System] {msgUnload}", time = DateTime.Now.ToString("HH:mm:ss") });
+                    SendEvent("alert", new { title = "Выгрузка драйвера WinDivert", message = msgUnload, isError = false });
+                },
+                ["connectTelegramProxy"] = _ => {
+                    try
+                    {
+                        Process.Start(new ProcessStartInfo("tg://socks?server=127.0.0.1&port=1080") { UseShellExecute = true });
+                        SendEvent("log", new { message = "✈️ Запрос на подключение локального SOCKS5 прокси отправлен в Telegram.", time = DateTime.Now.ToString("HH:mm:ss") });
+                    }
+                    catch (Exception ex)
+                    {
+                        SendEvent("alert", new { title = "Ошибка", message = $"Не удалось открыть Telegram:\n{ex.Message}", isError = true });
+                    }
+                    return Task.CompletedTask;
+                },
+                ["exportConfigBackup"] = _ => { HandleExportConfigBackup(); return Task.CompletedTask; },
+                ["importConfigBackup"] = async _ => await HandleImportConfigBackupAsync(),
+                ["analyzeSite"] = async root => {
+                    var targetSite = root.GetProperty("url").GetString() ?? "";
+                    try
+                    {
+                        var siteRes = await DiagnosticsEngine.AnalyzeCustomSiteAsync(targetSite);
+                        SendEvent("siteAnalyzed", siteRes);
+                    }
+                    catch (Exception ex)
+                    {
+                        SendEvent("siteAnalyzeError", new { error = ex.Message });
+                    }
+                },
+                ["quickFixAddDomain"] = HandleQuickFixAddDomainAsync,
+                ["quickFixAddHost"] = async root => {
+                    var hostDom = root.GetProperty("domain").GetString() ?? "";
+                    var hostIp = root.GetProperty("ip").GetString() ?? "";
+                    try
+                    {
+                        await ServiceToolsManager.AddSingleHostEntryAsync(hostDom, hostIp);
+                        SendEvent("routingStatusUpdated", GetRoutingStatusObj());
+                        AudioHelper.PlaySuccess();
+                        SendEvent("alert", new { title = "Чистый IP прописан в Hosts", message = $"Связка «{hostIp} {hostDom}» успешно добавлена в системный файл hosts!", isError = false });
+                    }
+                    catch (Exception ex)
+                    {
+                        SendEvent("alert", new { title = "Ошибка", message = ex.Message, isError = true });
+                    }
+                },
+                ["setEasterFullscreen"] = root => {
+                    var full = root.TryGetProperty("enable", out var en) && en.GetBoolean();
+                    _mainWindow.SetEasterEggFullscreen(full);
+                    return Task.CompletedTask;
+                }
             };
         }
 
@@ -4637,11 +4723,7 @@ namespace ZapretGUI.Core
                 var json = JsonSerializer.Serialize(new { type = eventName, data = payload }, _jsonOptions);
                 _mainWindow.InvokeOnUI(() =>
                 {
-                    try
-                    {
-                        _mainWindow.Window.SendWebMessage(json);
-                    }
-                    catch { }
+                    try { _mainWindow.Window.SendWebMessage(json); } catch { }
                 });
             }
             catch (Exception ex)
@@ -4652,8 +4734,7 @@ namespace ZapretGUI.Core
 
         public async void HandleMessage(string? rawJson)
         {
-            if (string.IsNullOrWhiteSpace(rawJson))
-                return;
+            if (string.IsNullOrWhiteSpace(rawJson)) return;
 
             try
             {
@@ -4663,15 +4744,13 @@ namespace ZapretGUI.Core
                 if (root.ValueKind == JsonValueKind.String)
                 {
                     var innerStr = root.GetString();
-                    if (string.IsNullOrWhiteSpace(innerStr))
-                        return;
-
+                    if (string.IsNullOrWhiteSpace(innerStr)) return;
                     using var innerDoc = JsonDocument.Parse(innerStr);
-                    await ProcessActionAsync(innerDoc.RootElement.Clone());
+                    await ProcessActionAsync(innerDoc.RootElement);
                 }
                 else if (root.ValueKind == JsonValueKind.Object)
                 {
-                    await ProcessActionAsync(root.Clone());
+                    await ProcessActionAsync(root);
                 }
             }
             catch (Exception ex)
@@ -4685,332 +4764,9 @@ namespace ZapretGUI.Core
             if (!root.TryGetProperty("action", out var actionProp)) return;
             var action = actionProp.GetString() ?? "";
 
-            switch (action)
+            if (_commandHandlers.TryGetValue(action, out var handler))
             {
-                case "init":
-                    await SendInitialStateAsync();
-                    break;
-
-                case "confirmResponse":
-                    var accepted = root.TryGetProperty("accepted", out var acc) && acc.GetBoolean();
-                    _pendingConfirmTcs?.TrySetResult(accepted);
-                    break;
-
-                case "runWizardSetup":
-                    await HandleRunWizardSetupAsync(root);
-                    break;
-
-                case "skipWizard":
-                    _isFirstRun = false;
-                    SettingsManager.Save();
-                    break;
-
-                case "windowDrag":
-                    _mainWindow.InvokeOnUI(() =>
-                    {
-                        try
-                        {
-                            var hwnd = _mainWindow.WindowHandle;
-                            ReleaseCapture();
-                            SendMessage(hwnd, 0xA1 /* WM_NCLBUTTONDOWN */, 0x2 /* HT_CAPTION */, 0);
-                        }
-                        catch { }
-                    });
-                    break;
-
-                case "windowMinimize":
-                    _mainWindow.MinimizeWindow();
-                    break;
-
-                case "windowClose":
-                    _mainWindow.CloseWindow();
-                    break;
-
-                case "playClick":
-                    AudioHelper.PlayClick();
-                    break;
-
-                case "playSuccess":
-                    AudioHelper.PlaySuccess();
-                    break;
-
-                case "openUrl":
-                    var url = root.GetProperty("url").GetString() ?? "";
-                    if (!string.IsNullOrWhiteSpace(url))
-                        Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
-                    break;
-
-                case "toggleBypass":
-                    await HandleToggleBypassAsync(root);
-                    break;
-
-                case "restartBypass":
-                    await BypassController.Current.RestartServicesAsync(SettingsManager.Current.SelectedProfileName);
-                    BroadcastBypassState();
-                    break;
-
-                case "updateModuleToggles":
-                    if (root.TryGetProperty("useZapret", out var uz)) SettingsManager.Current.ZapretEnabled = uz.GetBoolean();
-                    if (root.TryGetProperty("useProxy", out var up)) SettingsManager.Current.TgProxyEnabled = up.GetBoolean();
-                    SettingsManager.Save();
-                    break;
-
-                case "selectProfile":
-                    var prof = root.GetProperty("profile").GetString() ?? "general.bat";
-                    var prevChanged = !string.Equals(SettingsManager.Current.SelectedProfileName, prof, StringComparison.OrdinalIgnoreCase);
-                    SettingsManager.Current.SelectedProfileName = prof;
-                    SettingsManager.Save();
-                    SendEvent("profileSelected", new { profile = prof });
-
-                    if (prevChanged && BypassController.Current.Zapret.IsRunning)
-                    {
-                        SendEvent("log", new
-                        {
-                            message = $"🔄 Переключение конфига на {prof}...",
-                            time = DateTime.Now.ToString("HH:mm:ss"),
-                            isProgress = false
-                        });
-                        await BypassController.Current.RestartServicesAsync(prof);
-                        BroadcastBypassState();
-                    }
-                    break;
-
-                case "ping":
-                    var pingMs = await BypassController.Current.CheckPingAsync();
-                    SendEvent("pingResult", new { ping = pingMs });
-                    break;
-
-                case "startScan":
-                    SettingsManager.Current.FirstTimeScanPrompted = true;
-                    SettingsManager.Save();
-
-                    if (BypassController.Current.Scanner.IsScanning)
-                    {
-                        BypassController.Current.Scanner.CancelScan();
-                        SendEvent("scanState", new { isScanning = false });
-                    }
-                    else
-                    {
-                        SendEvent("scanState", new { isScanning = true });
-                        await BypassController.Current.Scanner.StartScanAsync();
-                        SendEvent("scanState", new { isScanning = false });
-                    }
-                    break;
-
-                case "markFirstScanPrompted":
-                    SettingsManager.Current.FirstTimeScanPrompted = true;
-                    SettingsManager.Save();
-                    break;
-
-                case "saveGameFilter":
-                    await HandleSaveGameFilterAsync(root);
-                    break;
-
-                case "exportLogs":
-                    HandleExportLogs(root);
-                    break;
-
-                case "getMods":
-                    await BroadcastModsAndProfilesAsync();
-                    break;
-
-                case "generateModId":
-                    var baseName = root.TryGetProperty("baseName", out var bn) ? bn.GetString() ?? "mod" : "mod";
-                    var genId = _modManager.GenerateUniqueModId(baseName);
-                    SendEvent("modIdGenerated", new { id = genId, isTaken = false });
-                    break;
-
-                case "checkModId":
-                    var candidate = root.GetProperty("id").GetString() ?? "";
-                    var cleanId = ModManager.SanitizeModId(candidate);
-                    var isTaken = string.IsNullOrEmpty(cleanId) || _modManager.IsModIdTaken(cleanId);
-                    SendEvent("modIdChecked", new { cleanId, isTaken, isEmpty = string.IsNullOrEmpty(cleanId) });
-                    break;
-
-                case "createMod":
-                    await HandleCreateModAsync(root);
-                    break;
-
-                case "toggleMod":
-                    await HandleToggleModAsync(root);
-                    break;
-
-                case "disableAllMods":
-                    await HandleDisableAllModsAsync(root);
-                    break;
-
-                case "deleteMod":
-                    await HandleDeleteModAsync(root);
-                    break;
-
-                case "getModContent":
-                    await HandleGetModContentAsync(root);
-                    break;
-
-                case "validateBatMod":
-                    var modTitle = root.GetProperty("name").GetString() ?? "Скрипт";
-                    var batCode = root.GetProperty("content").GetString() ?? "";
-                    var (isValid, errMsg) = _modManager.ValidateBatMod(modTitle, batCode);
-                    SendEvent("batValidationResult", new { isValid, errorMessage = errMsg });
-                    break;
-
-                case "saveModContent":
-                    await HandleSaveModContentAsync(root);
-                    break;
-
-                case "importMod":
-                    await HandleImportModAsync();
-                    break;
-
-                case "importDroppedFile":
-                    await HandleImportDroppedFileAsync(root);
-                    break;
-
-                case "exportMod":
-                    await HandleExportModAsync(root);
-                    break;
-
-                case "runDiagnostics":
-                    await HandleRunDiagnosticsAsync();
-                    break;
-
-                case "saveSettings":
-                    HandleSaveSettings(root.GetProperty("settings"));
-                    break;
-
-                case "setIpSetMode":
-                    HandleSetIpSetMode(root);
-                    break;
-
-                case "updateIpSet":
-                    await HandleUpdateIpSetAsync();
-                    break;
-
-                case "updateHosts":
-                    await HandleUpdateHostsAsync(root);
-                    break;
-
-                case "clearHosts":
-                    HandleClearHosts();
-                    break;
-
-                case "checkUpdates":
-                    await HandleCheckUpdatesManualAsync();
-                    break;
-
-                case "resetSettings":
-                    await HandleResetSettingsAsync();
-                    break;
-
-                case "openFolder":
-                    var folderType = root.GetProperty("folder").GetString();
-                    var targetPath = folderType switch
-                    {
-                        "mods" => Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory),
-                        "zapret" => Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.CoreFilesDirectory),
-                        _ => AppDomain.CurrentDomain.BaseDirectory
-                    };
-                    if (!Directory.Exists(targetPath)) Directory.CreateDirectory(targetPath);
-                    Process.Start("explorer.exe", targetPath);
-                    break;
-
-                case "unloadWinDivert":
-                    var msgUnload = ServiceToolsManager.UnloadWinDivertDriver();
-                    _mainWindow.UpdateIndicators(false, false);
-                    SendEvent("log", new { message = $"🛡 [System] {msgUnload}", time = DateTime.Now.ToString("HH:mm:ss") });
-                    SendEvent("alert", new { title = "Выгрузка драйвера WinDivert", message = msgUnload, isError = false });
-                    break;
-
-                case "connectTelegramProxy":
-                    try
-                    {
-                        Process.Start(new ProcessStartInfo("tg://socks?server=127.0.0.1&port=1080") { UseShellExecute = true });
-                        SendEvent("log", new { message = "✈️ Запрос на подключение локального SOCKS5 прокси (127.0.0.1:1080) отправлен в Telegram Desktop.", time = DateTime.Now.ToString("HH:mm:ss") });
-                    }
-                    catch (Exception ex)
-                    {
-                        SendEvent("alert", new { title = "Ошибка открытия Telegram", message = $"Не удалось открыть ссылку tg://socks:\n{ex.Message}", isError = true });
-                    }
-                    break;
-
-                case "exportConfigBackup":
-                    HandleExportConfigBackup();
-                    break;
-
-                case "importConfigBackup":
-                    await HandleImportConfigBackupAsync();
-                    break;
-
-                case "analyzeSite":
-                    var targetSite = root.GetProperty("url").GetString() ?? "";
-                    try
-                    {
-                        var siteRes = await DiagnosticsEngine.AnalyzeCustomSiteAsync(targetSite);
-                        SendEvent("siteAnalyzed", siteRes);
-                    }
-                    catch (Exception ex)
-                    {
-                        SendEvent("siteAnalyzeError", new { error = ex.Message });
-                    }
-                    break;
-
-                case "quickFixAddDomain":
-                    var domToAdd = root.GetProperty("domain").GetString() ?? "";
-                    try
-                    {
-                        _isInternalFileOp = true;
-                        var (added, modId) = await _modManager.AddCustomDomainToBypassAsync(domToAdd);
-                        await BroadcastModsAndProfilesAsync();
-                        AudioHelper.PlaySuccess();
-
-                        if (BypassController.Current.Zapret.IsRunning)
-                        {
-                            await BypassController.Current.RestartServicesAsync(SettingsManager.Current.SelectedProfileName);
-                            BroadcastBypassState();
-                        }
-
-                        SendEvent("alert", new
-                        {
-                            title = "Домен добавлен в обход",
-                            message = $"Домен «{domToAdd}» добавлен в активный список «Мои сайты» и внедрен в list-general.txt!\n{(BypassController.Current.Zapret.IsRunning ? "Служба Zapret была автоматически перезапущена." : "Теперь включите обход на Главной вкладке.")}",
-                            isError = false
-                        });
-                    }
-                    catch (Exception ex)
-                    {
-                        SendEvent("alert", new { title = "Ошибка", message = ex.Message, isError = true });
-                    }
-                    finally
-                    {
-                        _isInternalFileOp = false;
-                    }
-                    break;
-
-                case "quickFixAddHost":
-                    var hostDom = root.GetProperty("domain").GetString() ?? "";
-                    var hostIp = root.GetProperty("ip").GetString() ?? "";
-                    try
-                    {
-                        await ServiceToolsManager.AddSingleHostEntryAsync(hostDom, hostIp);
-                        SendEvent("routingStatusUpdated", GetRoutingStatusObj());
-                        AudioHelper.PlaySuccess();
-                        SendEvent("alert", new
-                        {
-                            title = "Чистый IP прописан в Hosts",
-                            message = $"Связка «{hostIp} {hostDom}» успешно добавлена в системный файл hosts, а DNS-кэш Windows очищен!",
-                            isError = false
-                        });
-                    }
-                    catch (Exception ex)
-                    {
-                        SendEvent("alert", new { title = "Ошибка записи в Hosts", message = ex.Message, isError = true });
-                    }
-                    break;
-
-                case "setEasterFullscreen":
-                    var full = root.TryGetProperty("enable", out var en) && en.GetBoolean();
-                    _mainWindow.SetEasterEggFullscreen(full);
-                    break;
+                await handler(root);
             }
         }
 
@@ -5022,12 +4778,7 @@ namespace ZapretGUI.Core
             var focusMode = root.TryGetProperty("focusMode", out var fm) ? fm.GetBoolean() : false;
             var accentTheme = root.TryGetProperty("accentTheme", out var act) ? act.GetString() ?? "green" : "green";
 
-            void WizLog(string msg) => SendEvent("wizardLog", new
-            {
-                message = msg,
-                time = DateTime.Now.ToString("HH:mm:ss"),
-                isProgress = msg.Contains("Скачивание:") || msg.Contains("Скачано:")
-            });
+            void WizLog(string msg) => SendEvent("wizardLog", new { message = msg, time = DateTime.Now.ToString("HH:mm:ss"), isProgress = msg.Contains("Скачивание:") || msg.Contains("Скачано:") });
 
             WizLog("Инициализация модуля установки...");
             await Task.Delay(200);
@@ -5047,7 +4798,7 @@ namespace ZapretGUI.Core
             if (autoStart)
             {
                 WizLog("[System] Регистрация приложения в автозагрузке Windows...");
-                StartupHelper.SetAutoStart(true);
+                await StartupHelper.SetAutoStartAsync(true);
                 await Task.Delay(150);
             }
 
@@ -5064,16 +4815,12 @@ namespace ZapretGUI.Core
                 WizLog("=====================================");
                 WizLog("Запуск загрузки выбранных ядер...");
                 var progress = new Progress<string>(status => WizLog($"[Download] {status}"));
-
                 try
                 {
                     await UpdateManager.InstallModulesSilentAsync(useZapret, useTgProxy, progress);
                     WizLog("✅ Модули успешно загружены и распакованы.");
                 }
-                catch (Exception ex)
-                {
-                    WizLog($"[ERROR] Ошибка при загрузке: {ex.Message}");
-                }
+                catch (Exception ex) { WizLog($"[ERROR] Ошибка при загрузке: {ex.Message}"); }
                 WizLog("=====================================");
             }
 
@@ -5089,16 +4836,7 @@ namespace ZapretGUI.Core
         {
             var (ipMode, ipCount, ipStatusText) = ServiceToolsManager.GetIpSetStatus();
             var (hostsApplied, hostsCount) = ServiceToolsManager.GetHostsStatus();
-
-            return new
-            {
-                ipMode,
-                ipCount,
-                ipStatusText,
-                hostsApplied,
-                hostsCount,
-                hostsStatusText = hostsApplied ? $"Активен ({hostsCount} домен.)" : "Не применен"
-            };
+            return new { ipMode, ipCount, ipStatusText, hostsApplied, hostsCount, hostsStatusText = hostsApplied ? $"Активен ({hostsCount} домен.)" : "Не применен" };
         }
 
         private void HandleSetIpSetMode(JsonElement root)
@@ -5136,57 +4874,32 @@ namespace ZapretGUI.Core
             int sourceIdx = root.TryGetProperty("sourceIndex", out var si) ? Math.Clamp(si.GetInt32(), 0, 3) : SettingsManager.Current.HostsSourceIndex;
             SettingsManager.Current.HostsSourceIndex = sourceIdx;
             SettingsManager.Save();
-
             try
             {
                 int count = await ServiceToolsManager.UpdateSystemHostsAsync(sourceIdx);
                 SendEvent("routingStatusUpdated", GetRoutingStatusObj());
-                SendEvent("alert", new { title = "Файл Hosts обновлен", message = $"В системный файл hosts успешно записано {count} актуальных правил маршрутизации, а DNS-кэш Windows очищен!\n\nВаши личные записи в файле hosts были бережно сохранены.", isError = false });
+                SendEvent("alert", new { title = "Файл Hosts обновлен", message = $"В системный файл hosts успешно записано {count} актуальных правил, DNS-кэш Windows очищен!", isError = false });
             }
-            catch (UnauthorizedAccessException)
-            {
-                SendEvent("routingStatusUpdated", GetRoutingStatusObj());
-                SendEvent("alert", new { title = "Требуются права администратора", message = "Для изменения системного файла C:\\Windows\\System32\\drivers\\etc\\hosts перезапустите программу от имени Администратора!", isError = true });
-            }
-            catch (Exception ex)
-            {
-                SendEvent("routingStatusUpdated", GetRoutingStatusObj());
-                SendEvent("alert", new { title = "Ошибка обновления Hosts", message = $"Не удалось обновить системный файл hosts:\n{ex.Message}", isError = true });
-            }
+            catch (UnauthorizedAccessException) { SendEvent("routingStatusUpdated", GetRoutingStatusObj()); SendEvent("alert", new { title = "Требуются права администратора", message = "Перезапустите программу от имени Администратора!", isError = true }); }
+            catch (Exception ex) { SendEvent("routingStatusUpdated", GetRoutingStatusObj()); SendEvent("alert", new { title = "Ошибка обновления Hosts", message = $"Не удалось обновить системный файл hosts:\n{ex.Message}", isError = true }); }
         }
 
-        private void HandleClearHosts()
+        private async Task HandleClearHostsAsync()
         {
             try
             {
-                ServiceToolsManager.ClearZapretHosts();
+                await ServiceToolsManager.ClearZapretHostsAsync();
                 SendEvent("routingStatusUpdated", GetRoutingStatusObj());
                 SendEvent("alert", new { title = "Готово", message = "Записи Zapret успешно удалены из системного файла hosts, DNS-кэш сброшен.", isError = false });
             }
-            catch (UnauthorizedAccessException)
-            {
-                SendEvent("alert", new { title = "Требуются права администратора", message = "Для изменения системного файла hosts запустите программу от имени Администратора!", isError = true });
-            }
-            catch (Exception ex)
-            {
-                SendEvent("alert", new { title = "Ошибка", message = $"Не удалось очистить файл hosts:\n{ex.Message}", isError = true });
-            }
+            catch (UnauthorizedAccessException) { SendEvent("alert", new { title = "Требуются права администратора", message = "Запустите программу от имени Администратора!", isError = true }); }
+            catch (Exception ex) { SendEvent("alert", new { title = "Ошибка", message = $"Не удалось очистить файл hosts:\n{ex.Message}", isError = true }); }
         }
 
         private async Task HandleCheckUpdatesManualAsync()
         {
-            var stopServicesAction = () =>
-            {
-                if (BypassController.Current.IsRunning)
-                {
-                    BypassController.Current.StopServices();
-                    BroadcastBypassState();
-                }
-            };
-
-            var progress = new Progress<string>(status =>
-                SendEvent("log", new { message = $"[Updater] {status}", time = DateTime.Now.ToString("HH:mm:ss"), isProgress = status.Contains("Скачивание:") || status.Contains("Скачано:") }));
-
+            var stopServicesAction = () => { if (BypassController.Current.IsRunning) { BypassController.Current.StopServices(); BroadcastBypassState(); } };
+            var progress = new Progress<string>(status => SendEvent("log", new { message = $"[Updater] {status}", time = DateTime.Now.ToString("HH:mm:ss"), isProgress = status.Contains("Скачивание:") || status.Contains("Скачано:") }));
             await UpdateManager.RunUpdateWorkflowAsync(isManualCheck: true, stopServicesAction, progress);
             await BroadcastModsAndProfilesAsync();
             SendEvent("updatesCheckFinished", new { });
@@ -5197,39 +4910,23 @@ namespace ZapretGUI.Core
             try
             {
                 var settingsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.json");
-                if (File.Exists(settingsPath))
-                    File.Delete(settingsPath);
-
-                StartupHelper.SetAutoStart(false);
-
+                if (File.Exists(settingsPath)) File.Delete(settingsPath);
+                await StartupHelper.SetAutoStartAsync(false);
                 SettingsManager.Load();
                 ServiceToolsManager.SyncGameFilterFile();
                 UIHelper.ApplyThemeColors();
-
                 _mainWindow.AnimateWindowSize(SettingsManager.Current.CompactMode);
-
                 await SendInitialStateAsync();
                 SendEvent("alert", new { title = "Готово", message = "Настройки успешно сброшены к состоянию по умолчанию.", isError = false });
             }
-            catch (Exception ex)
-            {
-                SendEvent("alert", new { title = "Ошибка сброса", message = $"Ошибка при сбросе: {ex.Message}", isError = true });
-            }
+            catch (Exception ex) { SendEvent("alert", new { title = "Ошибка сброса", message = $"Ошибка при сбросе: {ex.Message}", isError = true }); }
         }
 
         private async Task BroadcastModsAndProfilesAsync()
         {
             var batMods = await _modManager.GetAvailableModsAsync(ModType.BatStrategy);
             var listMods = await _modManager.GetAvailableModsAsync(ModType.DomainList);
-            var profiles = GetBatProfiles();
-
-            SendEvent("modsUpdated", new
-            {
-                batMods,
-                listMods,
-                profiles,
-                selectedProfile = SettingsManager.Current.SelectedProfileName
-            });
+            SendEvent("modsUpdated", new { batMods, listMods, profiles = BypassController.Current.Zapret.GetAvailableProfiles(), selectedProfile = SettingsManager.Current.SelectedProfileName });
         }
 
         private async Task HandleCreateModAsync(JsonElement root)
@@ -5241,11 +4938,7 @@ namespace ZapretGUI.Core
             var desc = root.GetProperty("description").GetString() ?? "";
 
             var id = ModManager.SanitizeModId(rawId);
-            if (string.IsNullOrEmpty(id) || _modManager.IsModIdTaken(id))
-            {
-                SendEvent("alert", new { title = "Конфликт ID", message = "Мод с таким ID уже существует! Нажмите 🎲 для генерации уникального ID.", isError = true });
-                return;
-            }
+            if (string.IsNullOrEmpty(id) || _modManager.IsModIdTaken(id)) { SendEvent("alert", new { title = "Конфликт ID", message = "Мод с таким ID уже существует! Нажмите 🎲 для генерации уникального ID.", isError = true }); return; }
 
             var folderName = isBat ? "strategies" : "lists";
             var modFolderPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, folderName, id);
@@ -5254,33 +4947,14 @@ namespace ZapretGUI.Core
             {
                 _isInternalFileOp = true;
                 Directory.CreateDirectory(modFolderPath);
-
-                var meta = new ModMetaData
-                {
-                    UniqueId = id,
-                    Name = string.IsNullOrWhiteSpace(name) ? id : name.Trim(),
-                    Author = string.IsNullOrWhiteSpace(author) ? "Аноним" : author.Trim(),
-                    Version = "1.0",
-                    Description = desc.Trim(),
-                    IsBatStrategy = isBat
-                };
-
-                var jsonPath = Path.Combine(modFolderPath, "mod.json");
-                await File.WriteAllTextAsync(jsonPath, JsonSerializer.Serialize(meta, new JsonSerializerOptions { WriteIndented = true }));
+                var meta = new ModMetaData { UniqueId = id, Name = string.IsNullOrWhiteSpace(name) ? id : name.Trim(), Author = string.IsNullOrWhiteSpace(author) ? "Аноним" : author.Trim(), Version = "1.0", Description = desc.Trim(), IsBatStrategy = isBat };
+                await File.WriteAllTextAsync(Path.Combine(modFolderPath, "mod.json"), JsonSerializer.Serialize(meta, new JsonSerializerOptions { WriteIndented = true }));
 
                 if (isBat)
                 {
-                    var defaultBat = ":: Шаблон стратегии обхода\r\n" +
-                                     "\"%BIN%winws.exe\" --wf-tcp=80,443 --wf-udp=443,50000-50100 ^\r\n" +
-                                     "--filter-udp=443 --hostlist=\"%LISTS%list-general.txt\" --dpi-desync=fake --dpi-desync-repeats=6 ^\r\n" +
-                                     "--new ^\r\n" +
-                                     "--filter-tcp=80,443 --hostlist=\"%LISTS%list-general.txt\" --dpi-desync=fake,split2 --dpi-desync-fooling=md5sig\r\n";
+                    var defaultBat = ":: Шаблон стратегии обхода\r\n\"%BIN%winws.exe\" --wf-tcp=80,443 --wf-udp=443,50000-50100 ^\r\n--filter-udp=443 --hostlist=\"%LISTS%list-general.txt\" --dpi-desync=fake --dpi-desync-repeats=6 ^\r\n--new ^\r\n--filter-tcp=80,443 --hostlist=\"%LISTS%list-general.txt\" --dpi-desync=fake,split2 --dpi-desync-fooling=md5sig\r\n";
                     await File.WriteAllTextAsync(Path.Combine(modFolderPath, "strategy.bat"), defaultBat);
-
-                    // Сразу активируем созданную стратегию и выбираем её как профиль
-                    if (!SettingsManager.Current.ActiveBatMods.Contains(id))
-                        SettingsManager.Current.ActiveBatMods.Add(id);
-
+                    if (!SettingsManager.Current.ActiveBatMods.Contains(id)) SettingsManager.Current.ActiveBatMods.Add(id);
                     await _modManager.SyncActiveBatModsAsync();
                     SettingsManager.Current.SelectedProfileName = $"mod_{id}.bat";
                     SettingsManager.Save();
@@ -5289,9 +4963,7 @@ namespace ZapretGUI.Core
                 else
                 {
                     await File.WriteAllTextAsync(Path.Combine(modFolderPath, "list.txt"), "");
-                    if (!SettingsManager.Current.ActiveListMods.Contains(id))
-                        SettingsManager.Current.ActiveListMods.Add(id);
-
+                    if (!SettingsManager.Current.ActiveListMods.Contains(id)) SettingsManager.Current.ActiveListMods.Add(id);
                     await _modManager.ApplyListModsAsync();
                     SettingsManager.Save();
                 }
@@ -5299,14 +4971,8 @@ namespace ZapretGUI.Core
                 SendEvent("modCreated", new { id, isBat });
                 await BroadcastModsAndProfilesAsync();
             }
-            catch (Exception ex)
-            {
-                SendEvent("alert", new { title = "Ошибка", message = $"Ошибка при создании мода: {ex.Message}", isError = true });
-            }
-            finally
-            {
-                _isInternalFileOp = false;
-            }
+            catch (Exception ex) { SendEvent("alert", new { title = "Ошибка", message = $"Ошибка при создании мода: {ex.Message}", isError = true }); }
+            finally { _isInternalFileOp = false; }
         }
 
         private async Task HandleToggleModAsync(JsonElement root)
@@ -5321,46 +4987,28 @@ namespace ZapretGUI.Core
                 var list = isBat ? SettingsManager.Current.ActiveBatMods : SettingsManager.Current.ActiveListMods;
                 bool nowActive;
 
-                if (list.Contains(id))
-                {
-                    list.Remove(id);
-                    nowActive = false;
-                }
-                else
-                {
-                    list.Add(id);
-                    nowActive = true;
-                }
+                if (list.Contains(id)) { list.Remove(id); nowActive = false; }
+                else { list.Add(id); nowActive = true; }
 
                 if (isBat)
                 {
                     await _modManager.SyncActiveBatModsAsync();
-                    var modProfileFile = $"mod_{id}.bat";
-                    if (!nowActive && string.Equals(SettingsManager.Current.SelectedProfileName, modProfileFile, StringComparison.OrdinalIgnoreCase))
+                    if (!nowActive && string.Equals(SettingsManager.Current.SelectedProfileName, $"mod_{id}.bat", StringComparison.OrdinalIgnoreCase))
                     {
-                        var fallback = GetBatProfiles().FirstOrDefault() ?? "general.bat";
+                        var fallback = BypassController.Current.Zapret.GetAvailableProfiles().FirstOrDefault() ?? "general.bat";
                         SettingsManager.Current.SelectedProfileName = fallback;
                         SendEvent("profileSelected", new { profile = fallback });
                     }
                 }
-                else
-                {
-                    await _modManager.ApplyListModsAsync();
-                }
+                else { await _modManager.ApplyListModsAsync(); }
 
                 SettingsManager.Save();
                 await BroadcastModsAndProfilesAsync();
 
                 if (!isBat && BypassController.Current.Zapret.IsRunning)
-                {
-                    var word = nowActive ? "включен" : "отключен";
-                    SendEvent("promptRestartZapret", new { reason = $"Список доменов «{modName}» был {word}." });
-                }
+                    SendEvent("promptRestartZapret", new { reason = $"Список доменов «{modName}» был {(nowActive ? "включен" : "отключен")}." });
             }
-            finally
-            {
-                _isInternalFileOp = false;
-            }
+            finally { _isInternalFileOp = false; }
         }
 
         private async Task HandleDisableAllModsAsync(JsonElement root)
@@ -5369,27 +5017,15 @@ namespace ZapretGUI.Core
             try
             {
                 _isInternalFileOp = true;
-                if (isBat)
-                {
-                    SettingsManager.Current.ActiveBatMods.Clear();
-                    await _modManager.SyncActiveBatModsAsync();
-                }
-                else
-                {
-                    SettingsManager.Current.ActiveListMods.Clear();
-                    await _modManager.ApplyListModsAsync();
-                }
-
+                if (isBat) { SettingsManager.Current.ActiveBatMods.Clear(); await _modManager.SyncActiveBatModsAsync(); }
+                else { SettingsManager.Current.ActiveListMods.Clear(); await _modManager.ApplyListModsAsync(); }
                 SettingsManager.Save();
                 await BroadcastModsAndProfilesAsync();
 
                 if (!isBat && BypassController.Current.Zapret.IsRunning)
                     SendEvent("promptRestartZapret", new { reason = "Все дополнительные списки доменов были отключены." });
             }
-            finally
-            {
-                _isInternalFileOp = false;
-            }
+            finally { _isInternalFileOp = false; }
         }
 
         private async Task HandleDeleteModAsync(JsonElement root)
@@ -5403,12 +5039,10 @@ namespace ZapretGUI.Core
                 _isInternalFileOp = true;
                 var list = isBat ? SettingsManager.Current.ActiveBatMods : SettingsManager.Current.ActiveListMods;
                 var wasActiveList = !isBat && list.Contains(id);
-
                 var folderName = isBat ? "strategies" : "lists";
                 var modFolderPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, folderName, id);
 
-                if (Directory.Exists(modFolderPath))
-                    Directory.Delete(modFolderPath, true);
+                if (Directory.Exists(modFolderPath)) Directory.Delete(modFolderPath, true);
 
                 if (list.Remove(id))
                 {
@@ -5418,7 +5052,7 @@ namespace ZapretGUI.Core
 
                 if (isBat && string.Equals(SettingsManager.Current.SelectedProfileName, $"mod_{id}.bat", StringComparison.OrdinalIgnoreCase))
                 {
-                    var fallback = GetBatProfiles().FirstOrDefault() ?? "general.bat";
+                    var fallback = BypassController.Current.Zapret.GetAvailableProfiles().FirstOrDefault() ?? "general.bat";
                     SettingsManager.Current.SelectedProfileName = fallback;
                     SendEvent("profileSelected", new { profile = fallback });
                 }
@@ -5429,53 +5063,27 @@ namespace ZapretGUI.Core
                 if (wasActiveList && BypassController.Current.Zapret.IsRunning)
                     SendEvent("promptRestartZapret", new { reason = $"Активный список доменов «{modName}» был удален." });
             }
-            catch (Exception ex)
-            {
-                SendEvent("alert", new { title = "Ошибка удаления", message = $"Не удалось удалить мод: {ex.Message}", isError = true });
-            }
-            finally
-            {
-                _isInternalFileOp = false;
-            }
+            catch (Exception ex) { SendEvent("alert", new { title = "Ошибка удаления", message = $"Не удалось удалить мод: {ex.Message}", isError = true }); }
+            finally { _isInternalFileOp = false; }
         }
 
         private async Task HandleGetModContentAsync(JsonElement root)
         {
             var id = root.GetProperty("id").GetString() ?? "";
             var isBat = root.GetProperty("isBat").GetBoolean();
-
             var folderName = isBat ? "strategies" : "lists";
             var fileName = isBat ? "strategy.bat" : "list.txt";
             var modFolder = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, folderName, id);
             var filePath = Path.Combine(modFolder, fileName);
             var jsonPath = Path.Combine(modFolder, "mod.json");
 
-            if (!File.Exists(filePath))
-            {
-                SendEvent("alert", new { title = "Ошибка", message = $"Файл {fileName} не найден в папке мода!", isError = true });
-                return;
-            }
+            if (!File.Exists(filePath)) { SendEvent("alert", new { title = "Ошибка", message = $"Файл {fileName} не найден в папке мода!", isError = true }); return; }
 
             var content = await File.ReadAllTextAsync(filePath);
-            ModMetaData meta = new ModMetaData { UniqueId = id, Name = id, IsBatStrategy = isBat };
-            if (File.Exists(jsonPath))
-            {
-                try
-                {
-                    var m = JsonSerializer.Deserialize<ModMetaData>(await File.ReadAllTextAsync(jsonPath), _jsonOptions);
-                    if (m != null) meta = m;
-                }
-                catch { }
-            }
+            var meta = new ModMetaData { UniqueId = id, Name = id, IsBatStrategy = isBat };
+            if (File.Exists(jsonPath)) { try { var m = JsonSerializer.Deserialize<ModMetaData>(await File.ReadAllTextAsync(jsonPath), _jsonOptions); if (m != null) meta = m; } catch { } }
 
-            SendEvent("modContentLoaded", new
-            {
-                id,
-                isBat,
-                fileName,
-                meta,
-                content
-            });
+            SendEvent("modContentLoaded", new { id, isBat, fileName, meta, content });
         }
 
         private async Task HandleSaveModContentAsync(JsonElement root)
@@ -5488,17 +5096,12 @@ namespace ZapretGUI.Core
             var desc = root.GetProperty("description").GetString() ?? "";
             var content = root.GetProperty("content").GetString() ?? "";
             var bypassWarning = root.TryGetProperty("bypassWarning", out var bw) && bw.GetBoolean();
-
             var editedModName = string.IsNullOrWhiteSpace(name) ? id : name.Trim();
 
             if (isBat && !bypassWarning)
             {
                 var (isValid, errMsg) = _modManager.ValidateBatMod(editedModName, content);
-                if (!isValid)
-                {
-                    SendEvent("modSaveSyntaxWarning", new { errorMessage = errMsg });
-                    return;
-                }
+                if (!isValid) { SendEvent("modSaveSyntaxWarning", new { errorMessage = errMsg }); return; }
             }
 
             try
@@ -5508,49 +5111,28 @@ namespace ZapretGUI.Core
                 var fileName = isBat ? "strategy.bat" : "list.txt";
                 var modFolder = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, folderName, id);
 
-                var meta = new ModMetaData
-                {
-                    UniqueId = id,
-                    Name = editedModName,
-                    Author = string.IsNullOrWhiteSpace(author) ? "Аноним" : author.Trim(),
-                    Version = string.IsNullOrWhiteSpace(version) ? "1.0" : version.Trim(),
-                    Description = desc.Trim(),
-                    IsBatStrategy = isBat
-                };
-
+                var meta = new ModMetaData { UniqueId = id, Name = editedModName, Author = string.IsNullOrWhiteSpace(author) ? "Аноним" : author.Trim(), Version = string.IsNullOrWhiteSpace(version) ? "1.0" : version.Trim(), Description = desc.Trim(), IsBatStrategy = isBat };
                 await File.WriteAllTextAsync(Path.Combine(modFolder, "mod.json"), JsonSerializer.Serialize(meta, new JsonSerializerOptions { WriteIndented = true }));
                 await File.WriteAllTextAsync(Path.Combine(modFolder, fileName), content);
 
                 if (isBat)
                 {
-                    if (!SettingsManager.Current.ActiveBatMods.Contains(id))
-                        SettingsManager.Current.ActiveBatMods.Add(id);
-
+                    if (!SettingsManager.Current.ActiveBatMods.Contains(id)) SettingsManager.Current.ActiveBatMods.Add(id);
                     await _modManager.SyncActiveBatModsAsync();
                     SettingsManager.Current.SelectedProfileName = $"mod_{id}.bat";
                     SendEvent("profileSelected", new { profile = SettingsManager.Current.SelectedProfileName });
                 }
-                else
-                    await _modManager.ApplyListModsAsync();
+                else await _modManager.ApplyListModsAsync();
 
                 SettingsManager.Save();
                 SendEvent("modContentSaved", new { id });
                 await BroadcastModsAndProfilesAsync();
 
-                bool isActiveList = !isBat && SettingsManager.Current.ActiveListMods.Contains(id);
-                if (isActiveList && BypassController.Current.Zapret.IsRunning)
-                {
+                if (!isBat && SettingsManager.Current.ActiveListMods.Contains(id) && BypassController.Current.Zapret.IsRunning)
                     SendEvent("promptRestartZapret", new { reason = $"Содержимое активного списка «{editedModName}» было обновлено." });
-                }
             }
-            catch (Exception ex)
-            {
-                SendEvent("alert", new { title = "Ошибка сохранения", message = ex.Message, isError = true });
-            }
-            finally
-            {
-                _isInternalFileOp = false;
-            }
+            catch (Exception ex) { SendEvent("alert", new { title = "Ошибка сохранения", message = ex.Message, isError = true }); }
+            finally { _isInternalFileOp = false; }
         }
 
         private async Task HandleImportModAsync()
@@ -5558,13 +5140,8 @@ namespace ZapretGUI.Core
             string? selectedFile = null;
             _mainWindow.InvokeOnUI(() =>
             {
-                using var openFileDialog = new OpenFileDialog
-                {
-                    Filter = "Архивы модов (*.zip;*.netfix-mod)|*.zip;*.netfix-mod|Все файлы (*.*)|*.*",
-                    Title = "Выберите архив с модом"
-                };
-                if (openFileDialog.ShowDialog() == DialogResult.OK)
-                    selectedFile = openFileDialog.FileName;
+                using var openFileDialog = new OpenFileDialog { Filter = "Архивы модов (*.zip;*.netfix-mod)|*.zip;*.netfix-mod|Все файлы (*.*)|*.*", Title = "Выберите архив с модом" };
+                if (openFileDialog.ShowDialog() == DialogResult.OK) selectedFile = openFileDialog.FileName;
             });
 
             if (string.IsNullOrEmpty(selectedFile)) return;
@@ -5576,14 +5153,8 @@ namespace ZapretGUI.Core
                 await BroadcastModsAndProfilesAsync();
                 SendEvent("alert", new { title = "Импорт завершен", message = $"Мод «{meta.Name}» (ID: {meta.UniqueId}) успешно импортирован!", isError = false });
             }
-            catch (Exception ex)
-            {
-                SendEvent("alert", new { title = "Ошибка импорта", message = ex.Message, isError = true });
-            }
-            finally
-            {
-                _isInternalFileOp = false;
-            }
+            catch (Exception ex) { SendEvent("alert", new { title = "Ошибка импорта", message = ex.Message, isError = true }); }
+            finally { _isInternalFileOp = false; }
         }
 
         private async Task HandleImportDroppedFileAsync(JsonElement root)
@@ -5603,20 +5174,12 @@ namespace ZapretGUI.Core
                     _isInternalFileOp = true;
                     await File.WriteAllBytesAsync(tempZip, bytes);
                     var meta = await _modManager.ImportModFromArchiveAsync(tempZip, Path.GetFileNameWithoutExtension(fileName));
-
                     await BroadcastModsAndProfilesAsync();
                     AudioHelper.PlaySuccess();
                     SendEvent("alert", new { title = "Мод импортирован", message = $"Архив «{meta.Name}» (ID: {meta.UniqueId}) успешно установлен через Drag & Drop!", isError = false });
                 }
-                catch (Exception ex)
-                {
-                    SendEvent("alert", new { title = "Ошибка импорта", message = ex.Message, isError = true });
-                }
-                finally
-                {
-                    _isInternalFileOp = false;
-                    try { if (File.Exists(tempZip)) File.Delete(tempZip); } catch { }
-                }
+                catch (Exception ex) { SendEvent("alert", new { title = "Ошибка импорта", message = ex.Message, isError = true }); }
+                finally { _isInternalFileOp = false; try { if (File.Exists(tempZip)) File.Delete(tempZip); } catch { } }
             }
             else if (ext == ".bat" || ext == ".txt")
             {
@@ -5630,52 +5193,28 @@ namespace ZapretGUI.Core
                 {
                     _isInternalFileOp = true;
                     Directory.CreateDirectory(modFolderPath);
-
-                    var meta = new ModMetaData
-                    {
-                        UniqueId = finalId,
-                        Name = rawTitle,
-                        Author = "Drag & Drop",
-                        Version = "1.0",
-                        Description = $"Создано автоматически из файла {fileName}",
-                        IsBatStrategy = isBat
-                    };
-
+                    var meta = new ModMetaData { UniqueId = finalId, Name = rawTitle, Author = "Drag & Drop", Version = "1.0", Description = $"Создано автоматически из файла {fileName}", IsBatStrategy = isBat };
                     await File.WriteAllTextAsync(Path.Combine(modFolderPath, "mod.json"), JsonSerializer.Serialize(meta, new JsonSerializerOptions { WriteIndented = true }));
                     await File.WriteAllBytesAsync(Path.Combine(modFolderPath, isBat ? "strategy.bat" : "list.txt"), bytes);
-
                     await BroadcastModsAndProfilesAsync();
                     AudioHelper.PlaySuccess();
                     SendEvent("alert", new { title = "Файл превращен в мод!", message = $"Файл «{fileName}» автоматически упакован в мод «{rawTitle}» (ID: {finalId}).", isError = false });
                 }
-                catch (Exception ex)
-                {
-                    SendEvent("alert", new { title = "Ошибка создания мода", message = ex.Message, isError = true });
-                }
-                finally
-                {
-                    _isInternalFileOp = false;
-                }
+                catch (Exception ex) { SendEvent("alert", new { title = "Ошибка создания мода", message = ex.Message, isError = true }); }
+                finally { _isInternalFileOp = false; }
             }
         }
 
-        private async Task HandleExportModAsync(JsonElement root)
+        private void HandleExportModAsync(JsonElement root)
         {
             var id = root.GetProperty("id").GetString() ?? "";
             var isBat = root.GetProperty("isBat").GetBoolean();
             var modName = root.TryGetProperty("name", out var n) ? n.GetString() ?? id : id;
-
             string? savePath = null;
             _mainWindow.InvokeOnUI(() =>
             {
-                using var saveFileDialog = new SaveFileDialog
-                {
-                    Filter = "Архивы модов (*.zip)|*.zip|Мод NetFix (*.netfix-mod)|*.netfix-mod|Все файлы (*.*)|*.*",
-                    Title = "Экспорт мода",
-                    FileName = $"{id}_export.zip"
-                };
-                if (saveFileDialog.ShowDialog() == DialogResult.OK)
-                    savePath = saveFileDialog.FileName;
+                using var saveFileDialog = new SaveFileDialog { Filter = "Архивы модов (*.zip)|*.zip|Мод NetFix (*.netfix-mod)|*.netfix-mod|Все файлы (*.*)|*.*", Title = "Экспорт мода", FileName = $"{id}_export.zip" };
+                if (saveFileDialog.ShowDialog() == DialogResult.OK) savePath = saveFileDialog.FileName;
             });
 
             if (string.IsNullOrEmpty(savePath)) return;
@@ -5684,27 +5223,18 @@ namespace ZapretGUI.Core
             {
                 var folderName = isBat ? "strategies" : "lists";
                 var modFolderPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, folderName, id);
-
-                if (!Directory.Exists(modFolderPath))
-                {
-                    SendEvent("alert", new { title = "Ошибка", message = "Папка мода не найдена на диске!", isError = true });
-                    return;
-                }
+                if (!Directory.Exists(modFolderPath)) { SendEvent("alert", new { title = "Ошибка", message = "Папка мода не найдена на диске!", isError = true }); return; }
 
                 if (File.Exists(savePath)) File.Delete(savePath);
-                await Task.Run(() => ZipFile.CreateFromDirectory(modFolderPath, savePath));
-
+                ZipFile.CreateFromDirectory(modFolderPath, savePath);
                 SendEvent("alert", new { title = "Экспорт завершен", message = $"Мод «{modName}» (ID: {id}) успешно экспортирован и готов к отправке!", isError = false });
             }
-            catch (Exception ex)
-            {
-                SendEvent("alert", new { title = "Ошибка экспорта", message = ex.Message, isError = true });
-            }
+            catch (Exception ex) { SendEvent("alert", new { title = "Ошибка экспорта", message = ex.Message, isError = true }); }
         }
 
         private async Task SendInitialStateAsync()
         {
-            var profiles = GetBatProfiles();
+            var profiles = BypassController.Current.Zapret.GetAvailableProfiles();
             var batMods = await _modManager.GetAvailableModsAsync(ModType.BatStrategy);
             var listMods = await _modManager.GetAvailableModsAsync(ModType.DomainList);
 
@@ -5713,7 +5243,7 @@ namespace ZapretGUI.Core
                 version = AppConstants.AppVersion,
                 isFirstRun = _isFirstRun,
                 settings = SettingsManager.Current,
-                isAutoStart = StartupHelper.IsAutoStartEnabled(),
+                isAutoStart = await StartupHelper.IsAutoStartEnabledAsync(),
                 zapretRunning = BypassController.Current.Zapret.IsRunning,
                 proxyRunning = BypassController.Current.TgProxy.IsRunning,
                 profiles,
@@ -5726,8 +5256,6 @@ namespace ZapretGUI.Core
             var pingMs = await BypassController.Current.CheckPingAsync();
             SendEvent("pingResult", new { ping = pingMs });
         }
-
-        private List<string> GetBatProfiles() => BypassController.Current.Zapret.GetAvailableProfiles();
 
         private async Task HandleToggleBypassAsync(JsonElement root)
         {
@@ -5742,12 +5270,7 @@ namespace ZapretGUI.Core
                 var useZapret = root.TryGetProperty("useZapret", out var z) ? z.GetBoolean() : SettingsManager.Current.ZapretEnabled;
                 var useProxy = root.TryGetProperty("useProxy", out var t) ? t.GetBoolean() : SettingsManager.Current.TgProxyEnabled;
 
-                if (!useZapret && !useProxy)
-                {
-                    SendEvent("log", new { message = "⚠ ОШИБКА: Нет выбранных модулей для запуска!", time = DateTime.Now.ToString("HH:mm:ss") });
-                    SendEvent("errorGlitch", new { });
-                    return;
-                }
+                if (!useZapret && !useProxy) { SendEvent("log", new { message = "⚠ ОШИБКА: Нет выбранных модулей для запуска!", time = DateTime.Now.ToString("HH:mm:ss") }); SendEvent("errorGlitch", new { }); return; }
 
                 SettingsManager.Current.SelectedProfileName = profile;
                 SettingsManager.Current.ZapretEnabled = useZapret;
@@ -5767,7 +5290,22 @@ namespace ZapretGUI.Core
                     foreach (var line in ex.Message.Split('\n', StringSplitOptions.RemoveEmptyEntries))
                         SendEvent("log", new { message = $"❌ ОШИБКА: {line.Trim()}", time = DateTime.Now.ToString("HH:mm:ss") });
                 }
+                BroadcastBypassState();
+            }
+        }
 
+        private async Task HandleSelectProfileAsync(JsonElement root)
+        {
+            var prof = root.GetProperty("profile").GetString() ?? "general.bat";
+            var prevChanged = !string.Equals(SettingsManager.Current.SelectedProfileName, prof, StringComparison.OrdinalIgnoreCase);
+            SettingsManager.Current.SelectedProfileName = prof;
+            SettingsManager.Save();
+            SendEvent("profileSelected", new { profile = prof });
+
+            if (prevChanged && BypassController.Current.Zapret.IsRunning)
+            {
+                SendEvent("log", new { message = $"🔄 Переключение конфига на {prof}...", time = DateTime.Now.ToString("HH:mm:ss"), isProgress = false });
+                await BypassController.Current.RestartServicesAsync(prof);
                 BroadcastBypassState();
             }
         }
@@ -5779,34 +5317,17 @@ namespace ZapretGUI.Core
             var udpRaw = root.GetProperty("udp").GetString() ?? "1024-65535";
             var restartNow = root.TryGetProperty("restartIfRunning", out var r) && r.GetBoolean();
 
-            if (!ServiceToolsManager.ValidatePortRange(tcpRaw, out string validTcp))
-            {
-                SendEvent("alert", new { title = "Ошибка портов TCP", message = "Указан некорректный диапазон портов TCP!\nПример правильного формата: 1024-65535 или 1024-1934,1936-65535", isError = true });
-                return;
-            }
-
-            if (!ServiceToolsManager.ValidatePortRange(udpRaw, out string validUdp))
-            {
-                SendEvent("alert", new { title = "Ошибка портов UDP", message = "Указан некорректный диапазон портов UDP!\nПример правильного формата: 1024-65535", isError = true });
-                return;
-            }
+            if (!ServiceToolsManager.ValidatePortRange(tcpRaw, out string validTcp)) { SendEvent("alert", new { title = "Ошибка портов TCP", message = "Указан некорректный диапазон портов TCP!", isError = true }); return; }
+            if (!ServiceToolsManager.ValidatePortRange(udpRaw, out string validUdp)) { SendEvent("alert", new { title = "Ошибка портов UDP", message = "Указан некорректный диапазон портов UDP!", isError = true }); return; }
 
             SettingsManager.Current.GameFilterMode = mode;
             SettingsManager.Current.GameFilterTcpRange = validTcp;
             SettingsManager.Current.GameFilterUdpRange = validUdp;
-
             ServiceToolsManager.SyncGameFilterFile();
             SettingsManager.Save();
 
             var statusText = ServiceToolsManager.GetGameFilterDisplayStatus();
-            SendEvent("gameFilterSaved", new
-            {
-                mode,
-                tcp = validTcp,
-                udp = validUdp,
-                statusText
-            });
-
+            SendEvent("gameFilterSaved", new { mode, tcp = validTcp, udp = validUdp, statusText });
             SendEvent("log", new { message = $"🎮 Игровой фильтр обновлен: {statusText}", time = DateTime.Now.ToString("HH:mm:ss") });
 
             if (restartNow && BypassController.Current.Zapret.IsRunning)
@@ -5821,13 +5342,7 @@ namespace ZapretGUI.Core
             var logText = root.GetProperty("text").GetString() ?? "";
             _mainWindow.InvokeOnUI(() =>
             {
-                using var saveFileDialog = new SaveFileDialog
-                {
-                    Filter = "Текстовые файлы (*.txt)|*.txt|Все файлы (*.*)|*.*",
-                    DefaultExt = ".txt",
-                    FileName = $"Zapret_Log_{DateTime.Now:yyyyMMdd_HHmmss}.txt"
-                };
-
+                using var saveFileDialog = new SaveFileDialog { Filter = "Текстовые файлы (*.txt)|*.txt|Все файлы (*.*)|*.*", DefaultExt = ".txt", FileName = $"Zapret_Log_{DateTime.Now:yyyyMMdd_HHmmss}.txt" };
                 if (saveFileDialog.ShowDialog() == DialogResult.OK)
                 {
                     File.WriteAllText(saveFileDialog.FileName, logText);
@@ -5838,13 +5353,30 @@ namespace ZapretGUI.Core
 
         private async Task HandleRunDiagnosticsAsync()
         {
-            var report = await DiagnosticsEngine.RunFullDiagnosticsAsync((prog, text) =>
-            {
-                SendEvent("diagProgress", new { progress = Math.Round(prog * 100), status = text });
-            });
-
+            var report = await DiagnosticsEngine.RunFullDiagnosticsAsync((prog, text) => SendEvent("diagProgress", new { progress = Math.Round(prog * 100), status = text }));
             AudioHelper.PlaySuccess();
             SendEvent("diagResult", report);
+        }
+
+        private async Task HandleQuickFixAddDomainAsync(JsonElement root)
+        {
+            var domToAdd = root.GetProperty("domain").GetString() ?? "";
+            try
+            {
+                _isInternalFileOp = true;
+                var (added, modId) = await _modManager.AddCustomDomainToBypassAsync(domToAdd);
+                await BroadcastModsAndProfilesAsync();
+                AudioHelper.PlaySuccess();
+
+                if (BypassController.Current.Zapret.IsRunning)
+                {
+                    await BypassController.Current.RestartServicesAsync(SettingsManager.Current.SelectedProfileName);
+                    BroadcastBypassState();
+                }
+                SendEvent("alert", new { title = "Домен добавлен в обход", message = $"Домен «{domToAdd}» добавлен в активный список «Мои сайты» и внедрен в list-general.txt!", isError = false });
+            }
+            catch (Exception ex) { SendEvent("alert", new { title = "Ошибка", message = ex.Message, isError = true }); }
+            finally { _isInternalFileOp = false; }
         }
 
         private void HandleSaveSettings(JsonElement s)
@@ -5854,8 +5386,7 @@ namespace ZapretGUI.Core
             if (s.TryGetProperty("autoStart", out var autoStart))
             {
                 bool wantAuto = autoStart.GetBoolean();
-                if (StartupHelper.IsAutoStartEnabled() != wantAuto)
-                    StartupHelper.SetAutoStart(wantAuto);
+                _ = StartupHelper.SetAutoStartAsync(wantAuto);
             }
 
             if (s.TryGetProperty("startMinimized", out var sm)) cur.StartMinimized = sm.GetBoolean();
@@ -5879,33 +5410,18 @@ namespace ZapretGUI.Core
             if (s.TryGetProperty("accentTheme", out var at))
             {
                 var themeStr = at.GetString() ?? "green";
-                if (cur.AccentTheme != themeStr)
-                {
-                    cur.AccentTheme = themeStr;
-                    themeChanged = true;
-                }
+                if (cur.AccentTheme != themeStr) { cur.AccentTheme = themeStr; themeChanged = true; }
             }
 
             if (s.TryGetProperty("compactMode", out var cm))
             {
                 bool newCompact = cm.GetBoolean();
-                if (cur.CompactMode != newCompact)
-                {
-                    cur.CompactMode = newCompact;
-                    _mainWindow.AnimateWindowSize(newCompact);
-                }
+                if (cur.CompactMode != newCompact) { cur.CompactMode = newCompact; _mainWindow.AnimateWindowSize(newCompact); }
             }
 
-            if (s.TryGetProperty("hardwareAcceleration", out var ha))
-            {
-                cur.HardwareAcceleration = ha.GetBoolean();
-            }
+            if (s.TryGetProperty("hardwareAcceleration", out var ha)) cur.HardwareAcceleration = ha.GetBoolean();
 
-            if (themeChanged)
-            {
-                UIHelper.ApplyThemeColors();
-                _mainWindow.RefreshAppIcon();
-            }
+            if (themeChanged) { UIHelper.ApplyThemeColors(); _mainWindow.RefreshAppIcon(); }
 
             if (s.TryGetProperty("pingUrl", out var pu))
             {
@@ -5913,14 +5429,9 @@ namespace ZapretGUI.Core
                 cur.PingUrl = string.IsNullOrWhiteSpace(urlStr) ? AppConstants.DefaultPingUrl : urlStr.Trim();
             }
 
-            if (s.TryGetProperty("statsUpdateInterval", out var sui))
-                cur.StatsUpdateInterval = Math.Max(1, sui.GetInt32());
-
-            if (s.TryGetProperty("autoRestartServices", out var ars))
-                cur.AutoRestartServices = ars.GetBoolean();
-
-            if (s.TryGetProperty("hostsSourceIndex", out var hsi))
-                cur.HostsSourceIndex = Math.Clamp(hsi.GetInt32(), 0, 3);
+            if (s.TryGetProperty("statsUpdateInterval", out var sui)) cur.StatsUpdateInterval = Math.Max(1, sui.GetInt32());
+            if (s.TryGetProperty("autoRestartServices", out var ars)) cur.AutoRestartServices = ars.GetBoolean();
+            if (s.TryGetProperty("hostsSourceIndex", out var hsi)) cur.HostsSourceIndex = Math.Clamp(hsi.GetInt32(), 0, 3);
 
             SettingsManager.Save();
         }
@@ -5929,25 +5440,11 @@ namespace ZapretGUI.Core
         {
             _mainWindow.InvokeOnUI(() =>
             {
-                using var sfd = new SaveFileDialog
-                {
-                    Filter = "Конфигурация Zapret (*.json)|*.json",
-                    Title = "Экспорт резервной копии настроек",
-                    FileName = $"ZapretForADHD_Config_{DateTime.Now:yyyyMMdd}.json"
-                };
-
+                using var sfd = new SaveFileDialog { Filter = "Конфигурация Zapret (*.json)|*.json", Title = "Экспорт резервной копии", FileName = $"ZapretForADHD_Config_{DateTime.Now:yyyyMMdd}.json" };
                 if (sfd.ShowDialog() == DialogResult.OK)
                 {
-                    try
-                    {
-                        var json = JsonSerializer.Serialize(SettingsManager.Current, new JsonSerializerOptions { WriteIndented = true });
-                        File.WriteAllText(sfd.FileName, json);
-                        SendEvent("alert", new { title = "Бэкап сохранен", message = "Ваша конфигурация успешно экспортирована в файл!", isError = false });
-                    }
-                    catch (Exception ex)
-                    {
-                        SendEvent("alert", new { title = "Ошибка экспорта", message = ex.Message, isError = true });
-                    }
+                    try { var json = JsonSerializer.Serialize(SettingsManager.Current, new JsonSerializerOptions { WriteIndented = true }); File.WriteAllText(sfd.FileName, json); SendEvent("alert", new { title = "Бэкап сохранен", message = "Ваша конфигурация успешно экспортирована!", isError = false }); }
+                    catch (Exception ex) { SendEvent("alert", new { title = "Ошибка", message = ex.Message, isError = true }); }
                 }
             });
         }
@@ -5957,13 +5454,8 @@ namespace ZapretGUI.Core
             string? selectedFile = null;
             _mainWindow.InvokeOnUI(() =>
             {
-                using var ofd = new OpenFileDialog
-                {
-                    Filter = "Конфигурация Zapret (*.json)|*.json",
-                    Title = "Импорт резервной копии настроек"
-                };
-                if (ofd.ShowDialog() == DialogResult.OK)
-                    selectedFile = ofd.FileName;
+                using var ofd = new OpenFileDialog { Filter = "Конфигурация Zapret (*.json)|*.json", Title = "Импорт резервной копии" };
+                if (ofd.ShowDialog() == DialogResult.OK) selectedFile = ofd.FileName;
             });
 
             if (string.IsNullOrEmpty(selectedFile)) return;
@@ -5972,28 +5464,18 @@ namespace ZapretGUI.Core
             {
                 var json = await File.ReadAllTextAsync(selectedFile);
                 var loaded = JsonSerializer.Deserialize<AppSettings>(json);
-                if (loaded == null)
-                    throw new Exception("Не удалось распознать структуру файла настроек.");
+                if (loaded == null) throw new Exception("Не удалось распознать структуру файла настроек.");
 
                 SettingsManager.Current = loaded;
                 SettingsManager.Save();
                 UIHelper.ApplyThemeColors();
 
-                _mainWindow.InvokeOnUI(() =>
-                {
-                    _mainWindow.Window.SetTopMost(SettingsManager.Current.AlwaysOnTop);
-                    _mainWindow.AnimateWindowSize(SettingsManager.Current.CompactMode);
-                    _mainWindow.RefreshAppIcon();
-                });
-
+                _mainWindow.InvokeOnUI(() => { _mainWindow.Window.SetTopMost(SettingsManager.Current.AlwaysOnTop); _mainWindow.AnimateWindowSize(SettingsManager.Current.CompactMode); _mainWindow.RefreshAppIcon(); });
                 await SendInitialStateAsync();
                 AudioHelper.PlaySuccess();
-                SendEvent("alert", new { title = "Настройки восстановлены", message = "Конфигурация успешно импортирована и применена!", isError = false });
+                SendEvent("alert", new { title = "Восстановлено", message = "Конфигурация успешно импортирована!", isError = false });
             }
-            catch (Exception ex)
-            {
-                SendEvent("alert", new { title = "Ошибка импорта", message = $"Не удалось загрузить файл настроек:\n{ex.Message}", isError = true });
-            }
+            catch (Exception ex) { SendEvent("alert", new { title = "Ошибка импорта", message = ex.Message, isError = true }); }
         }
 
         public void Dispose()
@@ -6006,9 +5488,7 @@ namespace ZapretGUI.Core
 
         private void BroadcastBypassState()
         {
-            _mainWindow.UpdateIndicators(
-                BypassController.Current.Zapret.IsRunning,
-                BypassController.Current.TgProxy.IsRunning);
+            _mainWindow.UpdateIndicators(BypassController.Current.Zapret.IsRunning, BypassController.Current.TgProxy.IsRunning);
         }
     }
 }
@@ -6023,18 +5503,26 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace ZapretGUI.Core
 {
-    public class ZapretManager : IBypassService
+    public partial class ZapretManager : IBypassService
     {
-        private static readonly Regex _winwsCmdRegex = new($@"{AppConstants.ZapretProcessName}(?:\.exe)?[""']?\s*(.*)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-        private static readonly Regex _standardBatCmdRegex = new(@"^(@?echo|chcp|cd|pushd|popd|set|title|cls|color|mode|goto|call|if|for|pause|timeout|:)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-        private static readonly Regex _tokenSplitRegex = new(@"[\""].+?[\""]|[^ ]+", RegexOptions.Compiled);
-        private static readonly Regex _fileParamRegex = new(@"^--(hostlist|hostlist-exclude|ipset|ipset-exclude|dpi-desync-fake-tls|dpi-desync-fake-quic|dpi-desync-fake-unknown-udp|dpi-desync-split-seqovl-pattern)=(.+)$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-        private static readonly Regex _unexpandedVarRegex = new(@"%[a-zA-Z0-9_]+%", RegexOptions.Compiled);
+        [GeneratedRegex($@"{AppConstants.ZapretProcessName}(?:\.exe)?[""']?\s*(.*)", RegexOptions.IgnoreCase)]
+        private static partial Regex WinwsCmdRegex();
+
+        [GeneratedRegex(@"^(@?echo|chcp|cd|pushd|popd|set|title|cls|color|mode|goto|call|if|for|pause|timeout|:)\b", RegexOptions.IgnoreCase)]
+        private static partial Regex StandardBatCmdRegex();
+
+        [GeneratedRegex(@"[\""].+?[\""]|[^ ]+")]
+        private static partial Regex TokenSplitRegex();
+
+        [GeneratedRegex(@"^--(hostlist|hostlist-exclude|ipset|ipset-exclude|dpi-desync-fake-tls|dpi-desync-fake-quic|dpi-desync-fake-unknown-udp|dpi-desync-split-seqovl-pattern)=(.+)$", RegexOptions.IgnoreCase)]
+        private static partial Regex FileParamRegex();
+
+        [GeneratedRegex(@"%[a-zA-Z0-9_]+%")]
+        private static partial Regex UnexpandedVarRegex();
 
         private readonly string _basePath;
         private Process? _process;
@@ -6075,7 +5563,7 @@ namespace ZapretGUI.Core
                 {
                     try
                     {
-                        var meta = JsonSerializer.Deserialize<ModMetaData>(File.ReadAllText(modJsonPath), new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                        var meta = System.Text.Json.JsonSerializer.Deserialize<ModMetaData>(File.ReadAllText(modJsonPath), new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
                         if (meta != null && !string.IsNullOrWhiteSpace(meta.Name))
                             return $"моде «{meta.Name}» ({profileName})";
                     }
@@ -6118,12 +5606,12 @@ namespace ZapretGUI.Core
                         winwsFound = true;
                         winwsStartLine = lineNum;
 
-                        var match = _winwsCmdRegex.Match(trimmed);
+                        var match = WinwsCmdRegex().Match(trimmed);
                         trimmed = match.Success ? match.Groups[1].Value.Trim() : "";
                     }
                     else
                     {
-                        if (!_standardBatCmdRegex.IsMatch(trimmed))
+                        if (!StandardBatCmdRegex().IsMatch(trimmed))
                             throw new Exception($"Синтаксическая ошибка в {sourceName} [Строка {lineNum}]:\nНеизвестная команда «{trimmed}».\nОжидался вызов {AppConstants.ZapretProcessName}.exe или стандартная инструкция Batch.");
                         continue;
                     }
@@ -6140,7 +5628,7 @@ namespace ZapretGUI.Core
 
                     if (!string.IsNullOrWhiteSpace(cleanLine))
                     {
-                        var tokens = _tokenSplitRegex.Matches(cleanLine)
+                        var tokens = TokenSplitRegex().Matches(cleanLine)
                                           .Select(m => m.Value.Trim())
                                           .ToList();
 
@@ -6154,7 +5642,7 @@ namespace ZapretGUI.Core
 
                             if (checkReferencedFiles && Directory.Exists(zapretBasePath))
                             {
-                                var fileMatch = _fileParamRegex.Match(token);
+                                var fileMatch = FileParamRegex().Match(token);
                                 if (fileMatch.Success)
                                 {
                                     var paramName = fileMatch.Groups[1].Value;
@@ -6203,7 +5691,7 @@ namespace ZapretGUI.Core
             if (string.IsNullOrEmpty(arguments))
                 throw new Exception($"Ошибка в {sourceName} [Строка {winwsStartLine}]:\nКоманда «{AppConstants.ZapretProcessName}» вызвана без параметров фильтрации.");
 
-            var unexpandedVar = _unexpandedVarRegex.Match(arguments);
+            var unexpandedVar = UnexpandedVarRegex().Match(arguments);
             if (unexpandedVar.Success)
                 throw new Exception($"Ошибка в {sourceName}:\nОбнаружена неизвестная переменная «{unexpandedVar.Value}», которая не поддерживается в прямом запуске Zapret.");
 
@@ -7798,7 +7286,6 @@ body.compact-mode #editor-modal {
     opacity: 0.14;
 }
 
-/* Адаптивная сцена и абсолютные слои (чтобы ничего не прыгало) */
 .znak-responsive-stage {
     position: relative;
     width: 100%;
@@ -7820,7 +7307,7 @@ body.compact-mode #editor-modal {
 
 .znak-lyrics-viewport {
     position: absolute;
-    bottom: 20%;
+    bottom: 18%;
     left: 0;
     right: 0;
     display: flex;
@@ -7992,35 +7479,35 @@ body.compact-mode #editor-modal {
     }
 }
 
-/* Специфичные виджет-анимации */
+/* Чат Мессенджера */
 .chat-bubble {
-    self-start;
-    max-w- [88%];
-    rounded-xl;
-    px-3;
-    py-1 .5;
-    text-xs;
-    text- [#E4E4E7];
+    display: none;
+    align-self: flex-start;
+    max-width: 88%;
+    border-radius: 0.75rem;
+    padding: 0.375rem 0.75rem;
+    font-size: 0.75rem;
+    color: #E4E4E7;
     background: #202024;
     border: 1px solid #2E2E34;
 }
 
     .chat-bubble.right {
-        self-align: end;
+        align-self: flex-end;
         text-align: right;
-        margin-left: auto;
         color: white;
         border: none;
     }
 
-.chat-reveal {
-    animation: chatPopUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-}
+    .chat-bubble.chat-reveal {
+        display: block;
+        animation: chatPopUp 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+    }
 
 @keyframes chatPopUp {
     0% {
         opacity: 0;
-        transform: translateY(10px);
+        transform: translateY(15px);
     }
 
     100% {
@@ -8029,8 +7516,10 @@ body.compact-mode #editor-modal {
     }
 }
 
+/* 3D Мультивселенная */
 .transform-style-3d {
     transform-style: preserve-3d;
+    perspective: 800px;
 }
 
 .para-plane {
@@ -8046,38 +7535,55 @@ body.compact-mode #editor-modal {
     font-weight: bold;
     color: var(--accent-light);
     opacity: 0;
+    box-shadow: 0 0 15px var(--accent-soft);
 }
 
 .plane-anim-run .para-p1 {
-    animation: planeFly 1.5s linear forwards;
+    animation: planeFly 2s linear infinite;
 }
 
 .plane-anim-run .para-p2 {
-    animation: planeFly 1.5s linear 0.4s forwards;
+    animation: planeFly 2s linear 0.66s infinite;
 }
 
 .plane-anim-run .para-p3 {
-    animation: planeFly 1.5s linear 0.8s forwards;
+    animation: planeFly 2s linear 1.33s infinite;
+}
+
+.plane-anim-locked .para-plane {
+    animation: none !important;
+    opacity: 0;
+}
+
+.plane-anim-locked .para-p3 {
+    opacity: 1 !important;
+    transform: translateZ(50px) rotateX(0deg) !important;
     border-color: #4ADE80;
     color: #4ADE80;
+    box-shadow: 0 0 30px rgba(74,222,128,0.4);
 }
 
 @keyframes planeFly {
     0% {
-        transform: translateZ(-600px) rotateX(20deg);
+        transform: translateZ(-400px) translateY(80px) rotateX(45deg);
         opacity: 0;
     }
 
-    30% {
+    20% {
+        opacity: 1;
+    }
+
+    80% {
         opacity: 1;
     }
 
     100% {
-        transform: translateZ(300px) rotateX(-10deg);
+        transform: translateZ(200px) translateY(-80px) rotateX(45deg);
         opacity: 0;
     }
 }
 
+/* Радар */
 .map-radar-sweep {
     background: conic-gradient(from 0deg at 50% 50%, transparent 270deg, var(--accent-light) 360deg);
     border-radius: 50%;
@@ -8086,12 +7592,33 @@ body.compact-mode #editor-modal {
     top: -50%;
     left: -50%;
     animation: radarSpin 2s linear infinite;
-    opacity: 0.3;
+    opacity: 0.45;
 }
 
 @keyframes radarSpin {
     100% {
         transform: rotate(360deg);
+    }
+}
+
+/* Кардиограмма */
+.ecg-line {
+    stroke-dasharray: 200;
+    stroke-dashoffset: 200;
+    animation: ecgDraw 1.5s linear infinite;
+}
+
+@keyframes ecgDraw {
+    0% {
+        stroke-dashoffset: 200;
+    }
+
+    50% {
+        stroke-dashoffset: 0;
+    }
+
+    100% {
+        stroke-dashoffset: -200;
     }
 }
 
@@ -9034,7 +8561,6 @@ function updateDiagStepPills(progressPercent, statusText) {
 }
 
 function runDiagnostics() {
-    sendCmd('playClick');
     const btn = document.getElementById('btn-run-diag');
     btn.disabled = true;
     btn.style.opacity = '0.5';
@@ -9348,7 +8874,6 @@ function formatCleanRecommendation(rawText) {
 }
 
 function diagQuickAction(act) {
-    sendCmd('playClick');
     const navBtns = document.querySelectorAll('.nav-btn');
 
     if (act === 'startBypass') {
@@ -9370,7 +8895,6 @@ function diagQuickAction(act) {
 }
 
 async function copyDiagnosticsReport() {
-    sendCmd('playClick');
     if (!lastDiagReport) return;
 
     const dcOk = (lastDiagReport.dcResults || []).filter(x => x.ok).length;
@@ -9465,95 +8989,156 @@ let znakRafId = null;
 let znakActiveLineIdx = -1;
 let znakActiveWordIdx = -1;
 let znakIsPlaying = false;
-let isRewinding = false; // Флаг финальной отмотки
+let isRewinding = false;
 
 let znakAudioCtx = null;
 let znakAnalyser = null;
 let znakFreqData = null;
 
-// Карта нейросети WhisperX
+// Вспомогательные функции безопасного обновления DOM
+function setText(id, txt) {
+    const el = document.getElementById(id);
+    if (el) el.innerText = txt;
+}
+
+function setHtml(id, html) {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = html;
+}
+
+// Карта нейросети WhisperX со всеми триггерами
 const ZNAK_TIMELINE = [
     {
         time: 8.89, endTime: 17.24, sub: "INTRO • TOXI$", widget: null,
         words: [
-            { word: "У-у-у-у,", time: 9.67 }, { word: "у-у-у,", time: 11.73 }, { word: "у-у-у", time: 13.14 }
+            { word: "У-у-у-у,", time: 9.67 },
+            { word: "у-у-у,", time: 11.73 },
+            { word: "у-у-у", time: 13.14 }
         ]
     },
     {
         time: 17.24, endTime: 21.55, sub: "КУПЛЕТ 1 • TOXI$", widget: "zui-stage-pass",
         words: [
-            { word: "Выхожу", time: 17.36, trigger: "stage_enter" }, { word: "на", time: 18.24 }, { word: "сцену,", time: 18.40 },
-            { word: "вижу", time: 19.67 }, { word: "своих", time: 20.13 }, { word: "фэнов", time: 20.71, trigger: "stage_fans" }
+            { word: "Выхожу", time: 17.36, trigger: "stage_enter" },
+            { word: "на", time: 18.24 },
+            { word: "сцену,", time: 18.40 },
+            { word: "вижу", time: 19.67 },
+            { word: "своих", time: 20.13 },
+            { word: "фэнов", time: 20.71, trigger: "stage_fans" }
         ]
     },
     {
         time: 21.55, endTime: 25.96, sub: "КУПЛЕТ 1 • TOXI$", widget: "zui-altgirl-chat",
         words: [
-            { word: "Неформалка", time: 21.79, trigger: "chat_m1" }, { word: "лезет,", time: 22.89 }, { word: "она", time: 23.51 },
-            { word: "думает", time: 24.00 }, { word: "я", time: 24.86 }, { word: "эмо", time: 25.16 }
+            { word: "Неформалка", time: 21.79, trigger: "chat_m1" },
+            { word: "лезет,", time: 22.89 },
+            { word: "она", time: 23.51 },
+            { word: "думает", time: 24.00 },
+            { word: "я", time: 24.86 },
+            { word: "эмо", time: 25.16, trigger: "chat_emo" }
         ]
     },
     {
         time: 25.96, endTime: 29.95, sub: "КУПЛЕТ 1 • TOXI$", widget: "zui-altgirl-chat",
         words: [
-            { word: "Не", time: 25.96 }, { word: "знаю,", time: 26.10 }, { word: "что", time: 26.62 }, { word: "ответить,", time: 27.10 },
-            { word: "точно", time: 27.82 }, { word: "знаю,", time: 28.31 }, { word: "что", time: 28.83 }, { word: "я", time: 29.21 },
+            { word: "Не", time: 25.96 },
+            { word: "знаю,", time: 26.10 },
+            { word: "что", time: 26.62 },
+            { word: "ответить,", time: 27.10 },
+            { word: "точно", time: 27.82 },
+            { word: "знаю,", time: 28.31 },
+            { word: "что", time: 28.83 },
+            { word: "я", time: 29.21 },
             { word: "лега", time: 29.47, trigger: "chat_m2" }
         ]
     },
     {
         time: 29.95, endTime: 34.22, sub: "КУПЛЕТ 1 • TOXI$", widget: "zui-altgirl-chat",
         words: [
-            { word: "Но", time: 30.09 }, { word: "я", time: 30.27 }, { word: "с", time: 30.45 }, { word: "ней", time: 30.51 },
-            { word: "не", time: 30.79 }, { word: "проведу", time: 31.07 }, { word: "эту", time: 32.17 }, { word: "ночь", time: 32.40, trigger: "chat_m3" }
+            { word: "Но", time: 30.09 },
+            { word: "я", time: 30.27 },
+            { word: "с", time: 30.45 },
+            { word: "ней", time: 30.51 },
+            { word: "не", time: 30.79 },
+            { word: "проведу", time: 31.07 },
+            { word: "эту", time: 32.17 },
+            { word: "ночь", time: 32.40, trigger: "chat_m3" }
         ]
     },
     {
         time: 34.22, endTime: 37.68, sub: "ПРИПЕВ • TOXI$", widget: "zui-parallel-search",
         words: [
-            { word: "Ведь", time: 34.24 }, { word: "я", time: 34.44 }, { word: "уверен,", time: 34.76 }, { word: "что", time: 35.67 },
-            { word: "где-то", time: 35.91 }, { word: "в", time: 36.51 }, { word: "параллели", time: 36.55, trigger: "para_flip" }
+            { word: "Ведь", time: 34.24, trigger: "para_start" },
+            { word: "я", time: 34.44 },
+            { word: "уверен,", time: 34.76 },
+            { word: "что", time: 35.67 },
+            { word: "где-то", time: 35.91 },
+            { word: "в", time: 36.51 },
+            { word: "параллели", time: 36.55, trigger: "para_lock" }
         ]
     },
     {
         time: 37.68, endTime: 42.07, sub: "ПРИПЕВ • TOXI$", widget: "zui-map-tracker",
         words: [
-            { word: "Найду", time: 37.90, trigger: "map_scan" }, { word: "тебя", time: 38.42 }, { word: "дуру", time: 39.22 },
-            { word: "и", time: 39.90 }, { word: "у", time: 40.15 }, { word: "нас", time: 40.33 }, { word: "будет", time: 40.61 },
+            { word: "Найду", time: 37.90, trigger: "map_scan" },
+            { word: "тебя", time: 38.42 },
+            { word: "дуру", time: 39.22 },
+            { word: "и", time: 39.90 },
+            { word: "у", time: 40.15 },
+            { word: "нас", time: 40.33 },
+            { word: "будет", time: 40.61 },
             { word: "LOVE", time: 41.45, trigger: "map_target" }
         ]
     },
     {
         time: 42.07, endTime: 46.41, sub: "ПРИПЕВ • TOXI$", widget: "zui-heart-ecg",
         words: [
-            { word: "Тобою", time: 42.25 }, { word: "болею,", time: 43.06, trigger: "ecg_sick" }, { word: "всем", time: 44.40 },
-            { word: "сердцем", time: 44.68, trigger: "ecg_max" }, { word: "болею", time: 45.28 }
+            { word: "Тобою", time: 42.25 },
+            { word: "болею,", time: 43.06, trigger: "ecg_sick" },
+            { word: "всем", time: 44.40 },
+            { word: "сердцем", time: 44.68, trigger: "ecg_max" },
+            { word: "болею", time: 45.28 }
         ]
     },
     {
         time: 46.41, endTime: 50.90, sub: "ПРИПЕВ • TOXI$", widget: "zui-marriage-modal",
         words: [
-            { word: "И", time: 46.73 }, { word: "я", time: 46.97 }, { word: "надеюсь,", time: 47.21 }, { word: "то", time: 47.95 },
-            { word: "что", time: 48.17 }, { word: "у", time: 48.60 }, { word: "нас", time: 48.84 }, { word: "будет", time: 49.08 },
-            { word: "с", time: 49.56 }, { word: "тобой", time: 49.64 }, { word: "брак", time: 50.18, trigger: "marry_stamp" }
+            { word: "И", time: 46.73 },
+            { word: "я", time: 46.97 },
+            { word: "надеюсь,", time: 47.21 },
+            { word: "то", time: 47.95 },
+            { word: "что", time: 48.17 },
+            { word: "у", time: 48.60 },
+            { word: "нас", time: 48.84 },
+            { word: "будет", time: 49.08 },
+            { word: "с", time: 49.56 },
+            { word: "тобой", time: 49.64 },
+            { word: "брак", time: 50.18, trigger: "marry_stamp" }
         ]
     },
     {
         time: 50.90, endTime: 54.20, sub: "SIGNAL 1", widget: "zui-kitty-sign",
         words: [
-            { word: "Киса,", time: 51.00 }, { word: "подай", time: 51.52 }, { word: "мне", time: 52.04 }, { word: "знак", time: 52.28, trigger: "sign_1" }
+            { word: "Киса,", time: 51.00 },
+            { word: "подай", time: 51.52 },
+            { word: "мне", time: 52.04 },
+            { word: "знак", time: 52.28, trigger: "sign_1" }
         ]
     },
     {
         time: 54.20, endTime: 59.50, sub: "SIGNAL 2 (NEON)", widget: "zui-neon-sign",
         words: [
-            { word: "А-а-а...", time: 54.30 }, { word: "У-у...", time: 57.10, trigger: "sign_2" }
+            { word: "А-а-а...", time: 54.30 },
+            { word: "У-у...", time: 57.10, trigger: "sign_2" }
         ]
     },
     {
-        time: 59.50, endTime: 64.50, sub: "SIGNAL 3 (OVERRIDE)", widget: "zui-warning-sign",
+        time: 59.50, endTime: 64.50, sub: "SIGNAL 3 (SECURED)", widget: "zui-warning-sign",
         words: [
-            { word: "Киса,", time: 59.70 }, { word: "подай", time: 60.26 }, { word: "мне", time: 60.76 }, { word: "знак", time: 61.01, trigger: "sign_3" }
+            { word: "Киса,", time: 59.70 },
+            { word: "подай", time: 60.26 },
+            { word: "мне", time: 60.76 },
+            { word: "знак", time: 61.01, trigger: "sign_3" }
         ]
     }
 ];
@@ -9593,6 +9178,61 @@ function closeZnakEasterEgg() {
     if (typeof setZappyMascotVisibility === 'function') setZappyMascotVisibility(true);
 }
 
+function resetAllWidgetStates() {
+    // Сцена 1: Stage Pass
+    setText('zui-stage-loc', 'Выход к микрофону...');
+    setText('zui-stage-fans', 'Ожидание');
+    setText('zui-stage-badge', 'BACKSTAGE');
+    const stageBadge = document.getElementById('zui-stage-badge');
+    if (stageBadge) stageBadge.className = 'px-2 py-0.5 rounded bg-[#1A1A1A] border border-[#333] text-[#AAAAAA] text-[9px] font-mono font-bold transition-all';
+
+    // Сцена 2: Мессенджер
+    document.querySelectorAll('.chat-bubble').forEach(e => e.classList.remove('chat-reveal'));
+    setHtml('zui-chat-status', '<span class="animate-pulse">печатает...</span>');
+    const chatRank = document.getElementById('zui-chat-rank');
+    if (chatRank) {
+        chatRank.className = 'px-2 py-0.5 rounded text-[9px] font-mono font-bold bg-[#1E1E1E] border border-[#333333] text-[#999999] transition-all';
+        chatRank.innerText = 'USER';
+    }
+
+    // Сцена 3: Параллели
+    const planes = document.getElementById('zui-3d-planes');
+    if (planes) {
+        planes.classList.remove('plane-anim-run', 'plane-anim-locked');
+        planes.classList.add('idle-float');
+    }
+    setText('zui-para-node', 'SCANNING...');
+
+    // Сцена 4: Радар
+    const mapSweep = document.getElementById('zui-map-sweep');
+    if (mapSweep) mapSweep.style.opacity = '0';
+    document.getElementById('zui-map-target')?.classList.remove('opacity-100');
+
+    // Сцена 5: ЭКГ
+    document.getElementById('zui-heart-panel')?.classList.remove('heart-overload');
+    const ecgLine = document.getElementById('zui-ecg-line');
+    if (ecgLine) ecgLine.style.stroke = 'var(--accent-light)';
+    setHtml('zui-ecg-bpm', '<span class="mdl-icon text-[10px] animate-pulse">&#xE00B;</span> 110 BPM');
+    setText('zui-ecg-status', 'Синдром: Ожидание');
+
+    // Сцена 6: Брак
+    document.getElementById('zui-marry-stamp')?.classList.remove('stamp-drop');
+
+    // Сцены 7-8: Знаки
+    const beacon = document.getElementById('zui-sign-beacon');
+    if (beacon) {
+        beacon.style.background = '';
+        beacon.style.boxShadow = '';
+    }
+    setText('zui-sign-title', 'ОЖИДАНИЕ СИГНАЛА...');
+
+    const neonText = document.getElementById('zui-neon-text');
+    if (neonText) {
+        neonText.style.color = '#222';
+        neonText.style.textShadow = 'none';
+    }
+}
+
 function resetZnakStageToInitial() {
     stopZnakPlayback();
     znakActiveLineIdx = -1;
@@ -9619,16 +9259,10 @@ function resetZnakStageToInitial() {
         void progFill.offsetWidth;
         progFill.style.transition = 'width 0.1s linear';
     }
-    document.getElementById('znak-time-code').innerText = '00:00';
+    setText('znak-time-code', '00:00');
 
-    // Сброс всех виджетов
     showZnakWidget(null);
-    document.querySelectorAll('.chat-bubble').forEach(e => e.classList.remove('chat-reveal'));
-    document.getElementById('zui-3d-planes')?.classList.remove('plane-anim-run');
-    document.getElementById('zui-map-sweep')?.classList.add('hidden');
-    document.getElementById('zui-map-target')?.classList.remove('opacity-100');
-    document.getElementById('zui-heart-panel')?.classList.remove('heart-overload');
-    document.getElementById('zui-marry-stamp')?.classList.remove('stamp-drop');
+    resetAllWidgetStates();
 }
 
 function toggleZnakPlay() {
@@ -9702,16 +9336,13 @@ function seekZnakAudio(e) {
 
     const audio = document.getElementById('znak-audio');
     if (audio && !isNaN(audio.duration)) {
-        audio.currentTime = ratio * Math.min(audio.duration, ZNAK_CLIP_END_SEC);
+        const effectiveDur = Math.min(audio.duration, ZNAK_CLIP_END_SEC);
+        audio.currentTime = ratio * effectiveDur;
     }
 
-    // Сброс мутаций виджетов при перемотке, чтобы они могли отыграть заново
     znakActiveLineIdx = -1;
     znakActiveWordIdx = -1;
-    document.querySelectorAll('.chat-bubble').forEach(e => e.classList.remove('chat-reveal'));
-    document.getElementById('zui-3d-planes')?.classList.remove('plane-anim-run');
-    document.getElementById('zui-map-target')?.classList.remove('opacity-100');
-    document.getElementById('zui-marry-stamp')?.classList.remove('stamp-drop');
+    resetAllWidgetStates();
 }
 
 function playEndingRewindSequence() {
@@ -9722,23 +9353,22 @@ function playEndingRewindSequence() {
 
     const audio = document.getElementById('znak-audio');
     if (audio) audio.pause();
-    document.getElementById('znak-play-icon').innerHTML = '&#xE768;';
+    setHtml('znak-play-icon', '&#xE768;');
 
-    // 1. Прячем сцену и возвращаем плеер в центр
-    document.getElementById('znak-motion-stage').style.opacity = '0';
+    const motionStage = document.getElementById('znak-motion-stage');
+    if (motionStage) motionStage.style.opacity = '0';
+
     const playerCard = document.getElementById('znak-player-card');
-    playerCard.classList.remove('znak-player-mini');
-    playerCard.classList.add('znak-player-center');
+    if (playerCard) {
+        playerCard.classList.remove('znak-player-mini');
+        playerCard.classList.add('znak-player-center');
+    }
 
-    // 2. Кинематографичная отмотка таймкода и прогресс-бара
     const fill = document.getElementById('znak-progress-fill');
-    const timeCode = document.getElementById('znak-time-code');
-
-    // Выключаем CSS-транзишн, чтобы плавно отматывать через JS
-    fill.style.transition = 'none';
+    if (fill) fill.style.transition = 'none';
 
     let dummyCur = ZNAK_CLIP_END_SEC;
-    const rewindSpeed = 1.2; // шагов в секунду
+    const rewindSpeed = 1.2;
 
     const rewindInterval = setInterval(() => {
         dummyCur -= rewindSpeed;
@@ -9746,15 +9376,15 @@ function playEndingRewindSequence() {
             dummyCur = 0;
             clearInterval(rewindInterval);
             isRewinding = false;
-            resetZnakStageToInitial(); // Полный сброс в конце
+            resetZnakStageToInitial();
         }
 
         const pct = (dummyCur / ZNAK_CLIP_END_SEC) * 100;
-        fill.style.width = `${pct}%`;
+        if (fill) fill.style.width = `${pct}%`;
 
         const mins = String(Math.floor(dummyCur / 60)).padStart(2, '0');
         const secs = String(Math.floor(dummyCur % 60)).padStart(2, '0');
-        timeCode.innerText = `${mins}:${secs}`;
+        setText('znak-time-code', `${mins}:${secs}`);
     }, 16);
 }
 
@@ -9765,63 +9395,64 @@ function startZnakSyncLoop() {
     function frame() {
         if (!znakIsPlaying || !audio || isRewinding) return;
 
-        const cur = audio.currentTime;
-        if (cur >= ZNAK_CLIP_END_SEC) {
-            playEndingRewindSequence();
-            return;
-        }
-
-        const pct = (cur / ZNAK_CLIP_END_SEC) * 100;
-        const progFill = document.getElementById('znak-progress-fill');
-        if (progFill) progFill.style.width = `${pct}%`;
-
-        const timeCode = document.getElementById('znak-time-code');
-        if (timeCode) {
-            const mins = String(Math.floor(cur / 60)).padStart(2, '0');
-            const secs = String(Math.floor(cur % 60)).padStart(2, '0');
-            timeCode.innerText = `${mins}:${secs}`;
-        }
-
-        updateAudioReactiveVisuals(cur);
-
-        let lineIdx = -1;
-        for (let i = 0; i < ZNAK_TIMELINE.length; i++) {
-            if (cur >= ZNAK_TIMELINE[i].time) lineIdx = i;
-            else break;
-        }
-
-        if (lineIdx !== -1) {
-            const cue = ZNAK_TIMELINE[lineIdx];
-
-            if (lineIdx !== znakActiveLineIdx) {
-                znakActiveLineIdx = lineIdx;
-                znakActiveWordIdx = -1;
-                renderZnakLineWords(cue);
-                showZnakWidget(cue.widget);
+        try {
+            const cur = audio.currentTime;
+            if (cur >= ZNAK_CLIP_END_SEC) {
+                playEndingRewindSequence();
+                return;
             }
 
-            let wordIdx = -1;
-            for (let w = 0; w < cue.words.length; w++) {
-                if (cur >= cue.words[w].time) wordIdx = w;
+            const pct = (cur / ZNAK_CLIP_END_SEC) * 100;
+            const progFill = document.getElementById('znak-progress-fill');
+            if (progFill) progFill.style.width = `${pct}%`;
+
+            const mins = String(Math.floor(cur / 60)).padStart(2, '0');
+            const secs = String(Math.floor(cur % 60)).padStart(2, '0');
+            setText('znak-time-code', `${mins}:${secs}`);
+
+            updateAudioReactiveVisuals(cur);
+
+            let lineIdx = -1;
+            for (let i = 0; i < ZNAK_TIMELINE.length; i++) {
+                if (cur >= ZNAK_TIMELINE[i].time) lineIdx = i;
                 else break;
             }
 
-            if (wordIdx !== -1 && wordIdx !== znakActiveWordIdx) {
-                znakActiveWordIdx = wordIdx;
-                highlightWordsUpTo(wordIdx);
+            if (lineIdx !== -1) {
+                const cue = ZNAK_TIMELINE[lineIdx];
 
-                const wordObj = cue.words[wordIdx];
-                if (wordObj && wordObj.trigger) {
-                    triggerKeywordWidgetMutation(wordObj.trigger);
+                if (lineIdx !== znakActiveLineIdx) {
+                    znakActiveLineIdx = lineIdx;
+                    znakActiveWordIdx = -1;
+                    renderZnakLineWords(cue);
+                    showZnakWidget(cue.widget);
+                }
+
+                let wordIdx = -1;
+                for (let w = 0; w < cue.words.length; w++) {
+                    if (cur >= cue.words[w].time) wordIdx = w;
+                    else break;
+                }
+
+                if (wordIdx !== -1 && wordIdx !== znakActiveWordIdx) {
+                    znakActiveWordIdx = wordIdx;
+                    highlightWordsUpTo(wordIdx);
+
+                    const wordObj = cue.words[wordIdx];
+                    if (wordObj && wordObj.trigger) {
+                        triggerKeywordWidgetMutation(wordObj.trigger);
+                    }
+                }
+            } else {
+                const subLyric = document.getElementById('znak-lyric-sub');
+                const mainLyric = document.getElementById('znak-lyric-main');
+                if (subLyric && subLyric.innerText !== 'INTRO • BEAT') {
+                    subLyric.innerText = 'INTRO • BEAT';
+                    if (mainLyric) mainLyric.innerHTML = '<span class="znak-word active">...</span>';
                 }
             }
-        } else {
-            const subLyric = document.getElementById('znak-lyric-sub');
-            const mainLyric = document.getElementById('znak-lyric-main');
-            if (subLyric && subLyric.innerText !== 'INTRO • BEAT') {
-                subLyric.innerText = 'INTRO • BEAT';
-                if (mainLyric) mainLyric.innerHTML = '<span class="znak-word active">...</span>';
-            }
+        } catch (err) {
+            console.error('Znak sync frame error:', err);
         }
 
         znakRafId = requestAnimationFrame(frame);
@@ -9831,9 +9462,8 @@ function startZnakSyncLoop() {
 }
 
 function renderZnakLineWords(cue) {
-    const subLyric = document.getElementById('znak-lyric-sub');
+    setText('znak-lyric-sub', cue.sub || '');
     const mainLyric = document.getElementById('znak-lyric-main');
-    if (subLyric) subLyric.innerText = cue.sub || '';
     if (!mainLyric) return;
 
     mainLyric.innerHTML = cue.words.map((w, idx) => {
@@ -9866,49 +9496,75 @@ function triggerKeywordWidgetMutation(triggerId) {
     }
 
     switch (triggerId) {
+        case 'stage_enter':
+            setText('zui-stage-loc', 'MAIN STAGE • ВЫХОД');
+            setText('zui-stage-fans', '1,200');
+            setText('zui-stage-badge', 'LIVE');
+            break;
+
         case 'stage_fans':
-            document.getElementById('zui-stage-loc').innerText = 'MAIN ARENA • SOLD OUT';
-            document.getElementById('zui-stage-fans').innerText = '9,999+ FANS';
-            document.getElementById('zui-stage-badge').className = 'px-2 py-0.5 rounded bg-[var(--accent-soft)] border border-[var(--accent-light)] text-brand text-[9px] font-mono font-bold';
+            setText('zui-stage-loc', 'MAIN ARENA • SOLD OUT');
+            setText('zui-stage-fans', '9,999+ FANS');
+            const b = document.getElementById('zui-stage-badge');
+            if (b) b.className = 'px-2 py-0.5 rounded bg-[var(--accent-soft)] border border-[var(--accent-light)] text-brand text-[9px] font-mono font-bold';
             break;
 
         case 'chat_m1':
             document.getElementById('zui-chat-m1')?.classList.add('chat-reveal');
-            document.getElementById('zui-chat-status').innerText = 'печатает...';
+            setHtml('zui-chat-status', '<span class="animate-pulse">печатает...</span>');
             break;
+
         case 'chat_emo':
-            document.getElementById('zui-chat-status').innerText = 'онлайн';
+            setText('zui-chat-status', 'онлайн');
             break;
+
+        case 'chat_m2':
         case 'chat_lega':
-            document.getElementById('zui-chat-rank').className = 'px-2 py-0.5 rounded text-[9px] font-mono font-bold text-brand border border-[var(--accent-light)] bg-[var(--accent-soft)]';
-            document.getElementById('zui-chat-rank').innerText = 'СТАТУС: ЛЕГА';
+            const rank = document.getElementById('zui-chat-rank');
+            if (rank) {
+                rank.className = 'px-2 py-0.5 rounded text-[9px] font-mono font-bold text-brand border border-[var(--accent-light)] bg-[var(--accent-soft)]';
+                rank.innerText = 'СТАТУС: ЛЕГА';
+            }
             document.getElementById('zui-chat-m2')?.classList.add('chat-reveal');
             break;
+
+        case 'chat_m3':
         case 'chat_reject':
-            document.getElementById('zui-chat-status').innerText = 'доступ ограничен';
+            setText('zui-chat-status', 'доступ ограничен');
             document.getElementById('zui-chat-m3')?.classList.add('chat-reveal');
             break;
 
-        case 'para_flip':
+        case 'para_start':
+            document.getElementById('zui-3d-planes')?.classList.remove('idle-float');
             document.getElementById('zui-3d-planes')?.classList.add('plane-anim-run');
             break;
 
-        case 'map_scan':
-            document.getElementById('zui-map-sweep')?.classList.remove('hidden');
+        case 'para_lock':
+            setText('zui-para-node', 'PARALLEL #777 FOUND');
+            document.getElementById('zui-3d-planes')?.classList.add('plane-anim-locked');
             break;
+
+        case 'map_scan':
+            const sweep = document.getElementById('zui-map-sweep');
+            if (sweep) sweep.style.opacity = '0.45';
+            break;
+
         case 'map_target':
             document.getElementById('zui-map-target')?.classList.add('opacity-100');
             break;
 
         case 'ecg_sick':
-            document.getElementById('zui-ecg-bpm').innerText = '145 BPM';
-            document.getElementById('zui-ecg-status').innerText = 'Диагноз: Тобою болею';
-            document.getElementById('zui-ecg-line').style.stroke = '#F59E0B';
+            setText('zui-ecg-bpm', '145 BPM');
+            setText('zui-ecg-status', 'Диагноз: Тобою болею');
+            const ecg1 = document.getElementById('zui-ecg-line');
+            if (ecg1) ecg1.style.stroke = '#F59E0B';
             break;
+
         case 'ecg_max':
-            document.getElementById('zui-ecg-bpm').innerText = '195 BPM • MAX';
-            document.getElementById('zui-ecg-status').innerText = 'КРИТ: ВСЕМ СЕРДЦЕМ';
-            document.getElementById('zui-ecg-line').style.stroke = '#EF4444';
+            setText('zui-ecg-bpm', '195 BPM • MAX');
+            setText('zui-ecg-status', 'КРИТ: ВСЕМ СЕРДЦЕМ');
+            const ecg2 = document.getElementById('zui-ecg-line');
+            if (ecg2) ecg2.style.stroke = '#EF4444';
             document.getElementById('zui-heart-panel')?.classList.add('heart-overload');
             break;
 
@@ -9917,17 +9573,25 @@ function triggerKeywordWidgetMutation(triggerId) {
             break;
 
         case 'sign_1':
-            document.getElementById('zui-sign-beacon').style.background = 'var(--accent-soft)';
-            document.getElementById('zui-sign-beacon').style.boxShadow = '0 0 25px var(--accent-glow)';
+            const beacon = document.getElementById('zui-sign-beacon');
+            if (beacon) {
+                beacon.style.background = 'var(--accent-soft)';
+                beacon.style.boxShadow = '0 0 25px var(--accent-glow)';
+            }
+            setText('zui-sign-title', 'СИГНАЛ ОТ ЗЭППИ ПОЛУЧЕН!');
             break;
+
         case 'sign_2':
-            document.getElementById('zui-neon-text').style.color = 'var(--accent-light)';
-            document.getElementById('zui-neon-text').style.textShadow = '0 0 40px var(--accent-glow), 0 0 80px var(--accent-soft)';
+            const neon = document.getElementById('zui-neon-text');
+            if (neon) {
+                neon.style.color = 'var(--accent-light)';
+                neon.style.textShadow = '0 0 40px var(--accent-glow), 0 0 80px var(--accent-soft)';
+            }
             break;
     }
 }
 
-function updateAudioReactiveVisuals(curSec) {
+function updateAudioReactiveVisuals() {
     let bassEnergy = 0;
     if (znakAnalyser && znakFreqData) {
         znakAnalyser.getByteFrequencyData(znakFreqData);
@@ -14936,7 +14600,7 @@ function animateZappy3D() {
 
             <!-- Виджет 2: Мессенджер (Появление сообщений) -->
             <div id="zui-altgirl-chat" class="znak-widget-card hidden">
-                <div class="znak-ui-panel flex flex-col gap-2.5 overflow-hidden">
+                <div class="znak-ui-panel flex flex-col gap-3 overflow-hidden">
                     <div class="flex items-center justify-between border-b border-[#2A2A2A] pb-2 z-10 bg-[var(--card-bg)]">
                         <div class="flex items-center gap-2.5">
                             <div class="w-7 h-7 rounded-lg flex items-center justify-center border border-[#363636] bg-[#1E1E1E]">
@@ -14944,21 +14608,21 @@ function animateZappy3D() {
                             </div>
                             <div>
                                 <div class="text-xs font-bold text-white">Неформалка</div>
-                                <div id="zui-chat-status" class="text-[9px] text-[#888888] font-mono">печатает...</div>
+                                <div id="zui-chat-status" class="text-[9px] text-[#888888] font-mono">ожидание...</div>
                             </div>
                         </div>
                         <span id="zui-chat-rank" class="px-2 py-0.5 rounded text-[9px] font-mono font-bold bg-[#1E1E1E] border border-[#333333] text-[#999999] transition-all">USER</span>
                     </div>
 
-                    <!-- Контейнер чата -->
-                    <div id="zui-chat-container" class="flex flex-col gap-2 transition-transform duration-300">
-                        <div id="zui-chat-m1" class="chat-bubble left opacity-0 translate-y-4">
+                    <!-- Контейнер чата (Без absolute, правильный Flex) -->
+                    <div id="zui-chat-container" class="flex flex-col gap-2 w-full">
+                        <div id="zui-chat-m1" class="chat-bubble left">
                             Какой грустный взгляд... ты эмо?
                         </div>
-                        <div id="zui-chat-m2" class="chat-bubble right opacity-0 translate-y-4" style="background: var(--accent-color);">
+                        <div id="zui-chat-m2" class="chat-bubble right" style="background: var(--accent-color);">
                             Точно знаю, что я лега.
                         </div>
-                        <div id="zui-chat-m3" class="chat-bubble right opacity-0 translate-y-4" style="background: var(--accent-color);">
+                        <div id="zui-chat-m3" class="chat-bubble right" style="background: var(--accent-color);">
                             Но эту ночь я проведу не с тобой.
                         </div>
                     </div>
@@ -14967,7 +14631,7 @@ function animateZappy3D() {
 
             <!-- Виджет 3: 3D Поиск параллелей -->
             <div id="zui-parallel-search" class="znak-widget-card hidden w-full max-w-[400px]">
-                <div class="znak-ui-panel overflow-hidden relative min-h-[160px] flex items-center justify-center" style="perspective: 800px;">
+                <div class="znak-ui-panel overflow-hidden relative min-h-[160px] flex items-center justify-center">
                     <div class="absolute top-3 left-4 right-4 flex items-center justify-between z-10">
                         <div class="flex items-center gap-2">
                             <span class="mdl-icon text-xs text-brand">&#xE701;</span>
@@ -14989,12 +14653,12 @@ function animateZappy3D() {
             <div id="zui-map-tracker" class="znak-widget-card hidden w-full max-w-[360px]">
                 <div class="znak-ui-panel relative overflow-hidden p-0 h-[180px] bg-[#0A0A0C]">
                     <!-- Сетка и сканирующий луч -->
-                    <div class="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.05)_1px,transparent_1px)] bg-[size:20px_20px]"></div>
-                    <div id="zui-map-sweep" class="absolute inset-0 map-radar-sweep hidden"></div>
+                    <div class="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.08)_1px,transparent_1px)] bg-[size:24px_24px]"></div>
+                    <div id="zui-map-sweep" class="absolute inset-0 map-radar-sweep"></div>
 
                     <!-- Прицел в центре -->
-                    <div class="absolute top-1/2 left-1/2 w-12 h-12 border border-brand/40 rounded-full -translate-x-1/2 -translate-y-1/2 flex items-center justify-center">
-                        <div class="w-1 h-1 bg-brand rounded-full"></div>
+                    <div class="absolute top-1/2 left-1/2 w-12 h-12 border border-[var(--accent-color)] rounded-full -translate-x-1/2 -translate-y-1/2 flex items-center justify-center">
+                        <div class="w-1.5 h-1.5 bg-[var(--accent-light)] rounded-full shadow-[0_0_10px_var(--accent-glow)]"></div>
                     </div>
 
                     <!-- Найденная цель -->
@@ -15014,8 +14678,9 @@ function animateZappy3D() {
                         <span class="flex items-center gap-1.5"><span class="mdl-icon text-xs text-brand">&#xE95E;</span> BIOMETRIC.SYS</span>
                         <span id="zui-ecg-bpm" class="font-bold text-brand">110 BPM</span>
                     </div>
-                    <svg class="w-full h-11 stroke-[var(--accent-light)] fill-none" viewBox="0 0 200 40" stroke-width="2.2">
-                        <polyline id="zui-ecg-line" points="0,20 45,20 55,8 65,34 75,4 85,36 95,18 110,20 200,20" class="transition-all" />
+                    <svg class="w-full h-11 stroke-[var(--accent-light)] fill-none overflow-hidden" viewBox="0 0 200 40" stroke-width="2.2">
+                        <!-- Бесконечно ползущая линия кардиограммы -->
+                        <polyline id="zui-ecg-line" class="ecg-line transition-colors" points="0,20 45,20 55,8 65,34 75,4 85,36 95,18 110,20 150,20 160,8 170,34 180,4 190,36 200,20" />
                     </svg>
                     <div id="zui-ecg-status" class="text-xs font-bold text-white mt-1">Синдром: Тобою болею</div>
                 </div>
@@ -15067,12 +14732,14 @@ function animateZappy3D() {
                 </div>
             </div>
 
-            <!-- Виджет 9: ЗНАК 3 (Системная перегрузка) -->
+            <!-- Виджет 9: ЗНАК 3 (Успешное соединение вместо ошибки) -->
             <div id="zui-warning-sign" class="znak-widget-card hidden">
-                <div class="w-[340px] rounded-xl bg-[#2A0808] border-2 border-[#EF4444] p-6 shadow-[0_0_60px_rgba(239,68,68,0.6)] text-center animate-pulse">
-                    <span class="mdl-icon text-5xl text-[#EF4444] mb-2">&#xEA39;</span>
-                    <div class="text-2xl font-black text-[#EF4444] tracking-widest uppercase">Сигнал принят</div>
-                    <div class="text-xs text-[#FCA5A5] mt-1 font-mono">CONNECTION TERMINATED</div>
+                <div class="w-[340px] rounded-xl bg-[var(--card-bg)] border-2 border-[var(--accent-light)] p-6 shadow-[0_0_60px_var(--accent-glow)] text-center animate-[pulse_2s_infinite]">
+                    <div class="w-16 h-16 mx-auto mb-3 rounded-full bg-[var(--accent-soft)] border border-[var(--accent-light)] flex items-center justify-center shadow-[0_0_20px_var(--accent-glow)]">
+                        <span class="mdl-icon text-4xl text-brand">&#xE73E;</span>
+                    </div>
+                    <div class="text-2xl font-black text-brand tracking-widest uppercase">CONNECTION SECURED</div>
+                    <div class="text-xs text-[#E4E4E7] mt-1 font-mono tracking-widest">СИГНАЛ ПРИНЯТ</div>
                 </div>
             </div>
 

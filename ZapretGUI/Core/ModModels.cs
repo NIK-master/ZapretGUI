@@ -1,12 +1,9 @@
-﻿using System.ComponentModel;
-
-namespace ZapretGUI.Core
+﻿namespace ZapretGUI.Core
 {
     public enum ModType
     {
         BatStrategy,
-        DomainList,
-        Guide
+        DomainList
     }
 
     public class ModMetaData
@@ -19,29 +16,11 @@ namespace ZapretGUI.Core
         public bool IsBatStrategy { get; set; } = false;
     }
 
-    public class UIModItem : INotifyPropertyChanged
+    public class UIModItem
     {
-        public event PropertyChangedEventHandler? PropertyChanged;
-
         public string Id { get; set; } = "";
         public ModType Type { get; set; }
         public ModMetaData Meta { get; set; } = new ModMetaData();
-
-        private bool _isActive;
-        public bool IsActive
-        {
-            get => _isActive;
-            set
-            {
-                if (_isActive != value)
-                {
-                    _isActive = value;
-                    OnPropertyChanged(nameof(IsActive));
-                }
-            }
-        }
-
-        protected void OnPropertyChanged(string propertyName) =>
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        public bool IsActive { get; set; }
     }
 }

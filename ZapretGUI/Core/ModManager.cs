@@ -10,9 +10,12 @@ using System.Threading.Tasks;
 
 namespace ZapretGUI.Core
 {
-    public class ModManager
+    public partial class ModManager
     {
-        private static readonly Regex _sanitizeIdRegex = new(@"[^a-z0-9_\-]", RegexOptions.Compiled);
+        // ИСПРАВЛЕНО: Генерация регулярного выражения на этапе компиляции (.NET 8)
+        [GeneratedRegex(@"[^a-z0-9_\-]")]
+        private static partial Regex SanitizeIdRegex();
+
         private static readonly JsonSerializerOptions _jsonOptions = new()
         {
             PropertyNameCaseInsensitive = true,
@@ -75,7 +78,7 @@ namespace ZapretGUI.Core
                 return "";
 
             var clean = raw.Trim().ToLowerInvariant().Replace(" ", "_");
-            clean = _sanitizeIdRegex.Replace(clean, "");
+            clean = SanitizeIdRegex().Replace(clean, "");
             return clean.Trim('_');
         }
 
@@ -142,7 +145,6 @@ namespace ZapretGUI.Core
                         var relativePath = Path.GetRelativePath(modRootPath, file);
                         var targetPath = Path.GetFullPath(Path.Combine(destPath, relativePath));
 
-                        // Защита от Zip-Slip
                         if (!targetPath.StartsWith(destRootWithSep, StringComparison.OrdinalIgnoreCase))
                             continue;
 

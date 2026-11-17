@@ -29,8 +29,11 @@ namespace ZapretGUI.Core
         public bool IsZip { get; set; }
     }
 
-    public static class UpdateManager
+    public static partial class UpdateManager
     {
+        [GeneratedRegex(@"^(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:\.(\d+))?")]
+        private static partial Regex VersionRegex();
+
         public const string CurrentVersion = AppConstants.AppVersion;
 
         private static readonly HttpClient _httpClient = new HttpClient();
@@ -66,7 +69,7 @@ namespace ZapretGUI.Core
         private static bool TryParseNormalizedVersion(string input, out Version? version)
         {
             version = null;
-            var match = Regex.Match(input, @"^(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:\.(\d+))?");
+            var match = VersionRegex().Match(input);
             if (!match.Success) return false;
 
             int major = int.Parse(match.Groups[1].Value);
