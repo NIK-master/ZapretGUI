@@ -1,3 +1,4 @@
 <Solution>
+  <Project Path="MyFirstZapretPlugin/MyFirstZapretPlugin.csproj" Id="f6c5f91b-e56e-420c-8668-f62e89d3b115" />
   <Project Path="ZapretGUI/ZapretGUI.csproj" />
 </Solution>
