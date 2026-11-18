@@ -170,18 +170,34 @@ namespace ZapretGUI
         public async Task LoadActivePluginsAsync()
         {
             var modManager = new ModManager();
-
-            // Собираем метаданные всех активных плагинов и библиотек
             var allPluginMods = new List<ModMetaData>();
 
-            // В реальном коде GetAvailableModsAsync нужно обновить под новые ModType
             var libs = await modManager.GetAvailableModsAsync(ModType.Library);
             var plugins = await modManager.GetAvailableModsAsync(ModType.Plugin);
+
+            // Автоматически добавляем найденные плагины в активные, если список еще пуст
+            bool settingsChanged = false;
+            foreach (var p in plugins)
+            {
+                if (!SettingsManager.Current.ActivePluginMods.Contains(p.Id))
+                {
+                    SettingsManager.Current.ActivePluginMods.Add(p.Id);
+                    settingsChanged = true;
+                }
+            }
+            foreach (var l in libs)
+            {
+                if (!SettingsManager.Current.ActiveLibraryMods.Contains(l.Id))
+                {
+                    SettingsManager.Current.ActiveLibraryMods.Add(l.Id);
+                    settingsChanged = true;
+                }
+            }
+            if (settingsChanged) SettingsManager.Save();
 
             allPluginMods.AddRange(libs.Where(m => SettingsManager.Current.ActiveLibraryMods.Contains(m.Id)).Select(m => m.Meta));
             allPluginMods.AddRange(plugins.Where(m => SettingsManager.Current.ActivePluginMods.Contains(m.Id)).Select(m => m.Meta));
 
-            // Отдаем в загрузчик
             PluginLoader.LoadPlugins(allPluginMods);
         }
         private double GetDpiScale()
@@ -235,24 +251,22 @@ namespace ZapretGUI
 
         public string BuildActiveWebUI(string baseWebRootDir)
         {
-            // Если активных тем нет — собираем прямо в базовой папке (мгновенный старт)
-            var activeThemes = SettingsManager.Current.ActiveThemeMods;
-            string targetRootDir = baseWebRootDir;
+            // Создаем гарантированно УНИКАЛЬНУЮ папку для каждой сессии, чтобы избежать любых блокировок файлов (File In Use)
+            string sessionId = Guid.NewGuid().ToString("N").Substring(0, 8);
+            string targetRootDir = Path.Combine(Path.GetTempPath(), $"ZapretGUI_UI_{AppConstants.AppVersion}_{sessionId}");
 
-            if (activeThemes != null && activeThemes.Count > 0)
+            try
             {
-                // Создаем оверлейную директорию для слияния стандартного UI и активных тем
-                targetRootDir = Path.Combine(Path.GetTempPath(), "ZapretGUI_MergedUI_" + AppConstants.AppVersion);
-                try
+                if (Directory.Exists(targetRootDir))
+                    Directory.Delete(targetRootDir, true);
+
+                // 1. Копируем оригинальный wwwroot в безопасную временную зону
+                CopyDirectoryRecursive(baseWebRootDir, targetRootDir);
+
+                // 2. Накатываем активные темы поверх базового интерфейса
+                var activeThemes = SettingsManager.Current.ActiveThemeMods;
+                if (activeThemes != null && activeThemes.Count > 0)
                 {
-                    if (Directory.Exists(targetRootDir))
-                        Directory.Delete(targetRootDir, true);
-                    Directory.CreateDirectory(targetRootDir);
-
-                    // 1. Копируем оригинальный wwwroot
-                    CopyDirectoryRecursive(baseWebRootDir, targetRootDir);
-
-                    // 2. Поверх накатываем файлы из активных тем по порядку приоритета
                     var themesBaseDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, "themes");
                     foreach (var themeId in activeThemes)
                     {
@@ -263,11 +277,11 @@ namespace ZapretGUI
                         }
                     }
                 }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine($"[Theme Overlay Error]: {ex.Message}");
-                    targetRootDir = baseWebRootDir;
-                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[WebUI Builder Error]: {ex.Message}");
+                targetRootDir = baseWebRootDir; // Фолбэк на оригинал при критической ошибке ФС
             }
 
             return BuildBundledHtmlIfNeeded(targetRootDir);
@@ -323,7 +337,7 @@ namespace ZapretGUI
             {
                 var html = File.ReadAllText(indexPath);
 
-                // Вставляем partials (если тема переопределила конкретный partial, подтянется именно он!)
+                // Вставляем partials (вкладки)
                 var partialsDir = Path.Combine(webRootDir, "partials");
                 if (Directory.Exists(partialsDir))
                 {
@@ -338,24 +352,25 @@ namespace ZapretGUI
                     }
                 }
 
-                // Если активная тема содержит файл theme.css в своем корне, но не меняла index.html — подключаем автоматически
+                // Инжектим файлы тем, если они есть
                 if (File.Exists(Path.Combine(webRootDir, "theme.css")) && !html.Contains("href=\"theme.css\""))
                 {
                     html = html.Replace("</head>", "\t<link rel=\"stylesheet\" href=\"theme.css\">\r\n</head>");
                 }
-
-                // Если активная тема содержит theme.js в своем корне — подключаем автоматически перед </body>
                 if (File.Exists(Path.Combine(webRootDir, "theme.js")) && !html.Contains("src=\"theme.js\""))
                 {
                     html = html.Replace("</body>", "\t<script src=\"theme.js\"></script>\r\n</body>");
                 }
 
-                var bundledPath = Path.Combine(webRootDir, "index.bundled.html");
+                // Генерируем уникальное имя файла для 100% защиты от конфликтов чтения/записи
+                var bundledPath = Path.Combine(webRootDir, $"index.bundled.{Guid.NewGuid():N}.html");
                 File.WriteAllText(bundledPath, html, System.Text.Encoding.UTF8);
+
                 return bundledPath;
             }
-            catch
+            catch (Exception ex)
             {
+                System.Diagnostics.Debug.WriteLine($"[HTML Bundler Error]: {ex.Message}");
                 return indexPath;
             }
         }

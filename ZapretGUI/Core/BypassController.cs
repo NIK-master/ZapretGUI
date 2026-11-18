@@ -18,6 +18,7 @@ namespace ZapretGUI.Core
         public bool IsRunning => Zapret.IsRunning || TgProxy.IsRunning;
 
         public event Action<string>? OnLog;
+        public event Action? OnStop;
 
         private BypassController()
         {
@@ -56,6 +57,7 @@ namespace ZapretGUI.Core
                 service.Stop();
             }
             OnLog?.Invoke("🛑 Все модули остановлены.");
+            OnStop?.Invoke();
         }
 
         public async Task RestartServicesAsync(string profileName)

@@ -206,9 +206,8 @@ namespace ZapretGUI
                 .SetResizable(false)
                 .SetTopMost(SettingsManager.Current.AlwaysOnTop)
                 .SetContextMenuEnabled(false)
-                .SetDevToolsEnabled(false);
+                .SetDevToolsEnabled(true);
 
-            Window.RegisterCustomSchemeHandler("zapret", CustomSchemeHandler);
 
             _webBridge = new WebBridge(this, _isFirstRun);
 
@@ -240,8 +239,6 @@ namespace ZapretGUI
                     HideToTray();
                 }
 
-                _ = LoadActivePluginsAsync();
-
                 _ = InitializeAppAsync();
             });
 
@@ -261,21 +258,37 @@ namespace ZapretGUI
             });
         }
 
-        private async Task LoadActivePluginsAsync()
+        public async Task LoadActivePluginsAsync()
         {
             var modManager = new ModManager();
-
-            // Собираем метаданные всех активных плагинов и библиотек
             var allPluginMods = new List<ModMetaData>();
 
-            // В реальном коде GetAvailableModsAsync нужно обновить под новые ModType
             var libs = await modManager.GetAvailableModsAsync(ModType.Library);
             var plugins = await modManager.GetAvailableModsAsync(ModType.Plugin);
+
+            // Автоматически добавляем найденные плагины в активные, если список еще пуст
+            bool settingsChanged = false;
+            foreach (var p in plugins)
+            {
+                if (!SettingsManager.Current.ActivePluginMods.Contains(p.Id))
+                {
+                    SettingsManager.Current.ActivePluginMods.Add(p.Id);
+                    settingsChanged = true;
+                }
+            }
+            foreach (var l in libs)
+            {
+                if (!SettingsManager.Current.ActiveLibraryMods.Contains(l.Id))
+                {
+                    SettingsManager.Current.ActiveLibraryMods.Add(l.Id);
+                    settingsChanged = true;
+                }
+            }
+            if (settingsChanged) SettingsManager.Save();
 
             allPluginMods.AddRange(libs.Where(m => SettingsManager.Current.ActiveLibraryMods.Contains(m.Id)).Select(m => m.Meta));
             allPluginMods.AddRange(plugins.Where(m => SettingsManager.Current.ActivePluginMods.Contains(m.Id)).Select(m => m.Meta));
 
-            // Отдаем в загрузчик
             PluginLoader.LoadPlugins(allPluginMods);
         }
         private double GetDpiScale()
@@ -319,40 +332,74 @@ namespace ZapretGUI
             else
                 _currentWebRoot = ExtractEmbeddedWebUI();
 
-            BuildBundledHtmlIfNeeded(_currentWebRoot);
+            // Собираем рабочий интерфейс с учетом всех активных модов-тем
+            string htmlPath = BuildActiveWebUI(_currentWebRoot);
 
-            Window.Load(new Uri("zapret://localhost/index.html"));
+            // Загружаем напрямую в Photino (как в оригинальной рабочей версии)
+            Window.Load(htmlPath);
             Window.WaitForClose();
         }
 
-        private Stream? CustomSchemeHandler(object sender, string scheme, string url, out string contentType)
+        public string BuildActiveWebUI(string baseWebRootDir)
         {
-            var uri = new Uri(url);
-            var localPath = uri.AbsolutePath.TrimStart('/').Replace('/', Path.DirectorySeparatorChar);
-            if (string.IsNullOrEmpty(localPath)) localPath = "index.html";
+            // Если активных тем нет — собираем прямо в базовой папке (мгновенный старт)
+            var activeThemes = SettingsManager.Current.ActiveThemeMods;
+            string targetRootDir = baseWebRootDir;
 
-            // 1. Поиск переопределенного файла в активных Темах (ModManager)
-            var modManager = new ModManager();
-            var themeOverridePath = modManager.GetThemeFileOverride(localPath);
-
-            if (themeOverridePath != null && File.Exists(themeOverridePath))
+            if (activeThemes != null && activeThemes.Count > 0)
             {
-                contentType = GetMimeType(localPath);
-                return File.OpenRead(themeOverridePath);
+                // Создаем оверлейную директорию для слияния стандартного UI и активных тем
+                targetRootDir = Path.Combine(Path.GetTempPath(), "ZapretGUI_MergedUI_" + AppConstants.AppVersion);
+                try
+                {
+                    if (Directory.Exists(targetRootDir))
+                        Directory.Delete(targetRootDir, true);
+                    Directory.CreateDirectory(targetRootDir);
+
+                    // 1. Копируем оригинальный wwwroot
+                    CopyDirectoryRecursive(baseWebRootDir, targetRootDir);
+
+                    // 2. Поверх накатываем файлы из активных тем по порядку приоритета
+                    var themesBaseDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, "themes");
+                    foreach (var themeId in activeThemes)
+                    {
+                        var themeDir = Path.Combine(themesBaseDir, themeId);
+                        if (Directory.Exists(themeDir))
+                        {
+                            CopyDirectoryRecursive(themeDir, targetRootDir);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[Theme Overlay Error]: {ex.Message}");
+                    targetRootDir = baseWebRootDir;
+                }
             }
 
-            // 2. Стандартный путь из оригинального wwwroot
-            var defaultPath = Path.Combine(_currentWebRoot, localPath);
-            contentType = GetMimeType(localPath);
+            return BuildBundledHtmlIfNeeded(targetRootDir);
+        }
 
-            if (File.Exists(defaultPath))
+        private static void CopyDirectoryRecursive(string sourceDir, string targetDir)
+        {
+            Directory.CreateDirectory(targetDir);
+
+            foreach (var file in Directory.GetFiles(sourceDir))
             {
-                return File.OpenRead(defaultPath);
+                var fileName = Path.GetFileName(file);
+                // Не копируем служебный манифест мода в корень wwwroot
+                if (fileName.Equals("mod.json", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                var destFile = Path.Combine(targetDir, fileName);
+                File.Copy(file, destFile, overwrite: true);
             }
 
-            // Заглушка, если файл не найден
-            contentType = "text/plain";
-            return null;
+            foreach (var subDir in Directory.GetDirectories(sourceDir))
+            {
+                var dirName = Path.GetFileName(subDir);
+                CopyDirectoryRecursive(subDir, Path.Combine(targetDir, dirName));
+            }
         }
 
         private string GetMimeType(string path)
@@ -382,9 +429,8 @@ namespace ZapretGUI
             try
             {
                 var html = File.ReadAllText(indexPath);
-                if (!html.Contains("<!-- @include "))
-                    return indexPath;
 
+                // Вставляем partials (если тема переопределила конкретный partial, подтянется именно он!)
                 var partialsDir = Path.Combine(webRootDir, "partials");
                 if (Directory.Exists(partialsDir))
                 {
@@ -397,6 +443,18 @@ namespace ZapretGUI
                             html = html.Replace(token, File.ReadAllText(file));
                         }
                     }
+                }
+
+                // Если активная тема содержит файл theme.css в своем корне, но не меняла index.html — подключаем автоматически
+                if (File.Exists(Path.Combine(webRootDir, "theme.css")) && !html.Contains("href=\"theme.css\""))
+                {
+                    html = html.Replace("</head>", "\t<link rel=\"stylesheet\" href=\"theme.css\">\r\n</head>");
+                }
+
+                // Если активная тема содержит theme.js в своем корне — подключаем автоматически перед </body>
+                if (File.Exists(Path.Combine(webRootDir, "theme.js")) && !html.Contains("src=\"theme.js\""))
+                {
+                    html = html.Replace("</body>", "\t<script src=\"theme.js\"></script>\r\n</body>");
                 }
 
                 var bundledPath = Path.Combine(webRootDir, "index.bundled.html");
@@ -1085,6 +1143,7 @@ namespace ZapretGUI.Core
         public bool IsRunning => Zapret.IsRunning || TgProxy.IsRunning;
 
         public event Action<string>? OnLog;
+        public event Action? OnStop;
 
         private BypassController()
         {
@@ -1123,6 +1182,7 @@ namespace ZapretGUI.Core
                 service.Stop();
             }
             OnLog?.Invoke("🛑 Все модули остановлены.");
+            OnStop?.Invoke();
         }
 
         public async Task RestartServicesAsync(string profileName)
@@ -5400,6 +5460,7 @@ namespace ZapretGUI.Core
 
             var pingMs = await BypassController.Current.CheckPingAsync();
             SendEvent("pingResult", new { ping = pingMs });
+            await _mainWindow.LoadActivePluginsAsync();
         }
 
         private async Task HandleToggleBypassAsync(JsonElement root)
@@ -6261,8 +6322,7 @@ namespace ZapretGUI.Core.Plugins
 
         public void HookBypassStop(Action onStop)
         {
-            // Здесь плагин может подписаться на глобальные события остановки
-            // Заглушка до реализации полноценной шины событий в BypassController
+            BypassController.Current.OnStop += onStop;
         }
 
         public AppSettings GetSettings() => SettingsManager.Current;
@@ -6275,7 +6335,9 @@ namespace ZapretGUI.Core.Plugins
 // ФАЙЛ: Core\Plugins\PluginLoaderContext.cs
 ////////////////////////////////////////////////////////////////////////////////
 
+using System;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.Loader;
 
@@ -6292,6 +6354,14 @@ namespace ZapretGUI.Core.Plugins
 
         protected override Assembly? Load(AssemblyName assemblyName)
         {
+            // 1. Если запрашивается сборка самого приложения или уже загруженная системная сборка —
+            // возвращаем её из основного контекста, чтобы интерфейсы (IZapretPlugin, IModAPI) совпадали по типам!
+            var existing = Default.Assemblies.FirstOrDefault(a =>
+                string.Equals(a.GetName().Name, assemblyName.Name, StringComparison.OrdinalIgnoreCase));
+            if (existing != null)
+                return existing;
+
+            // 2. Иначе ищем стороннюю зависимость рядом с DLL плагина
             var dllPath = Path.Combine(_pluginDirectory, $"{assemblyName.Name}.dll");
             if (File.Exists(dllPath))
                 return LoadFromAssemblyPath(dllPath);
@@ -6325,12 +6395,29 @@ namespace ZapretGUI.Core.Plugins
             _api = api;
         }
 
+        private void LogToUI(string message)
+        {
+            Debug.WriteLine(message);
+            _api.SendWebEvent("log", new
+            {
+                message,
+                time = DateTime.Now.ToString("HH:mm:ss"),
+                isProgress = false
+            });
+        }
+
         public void LoadPlugins(List<ModMetaData> activeMods)
         {
-            // 1. Сортируем моды по зависимостям
+            UnloadAll();
+
+            if (activeMods.Count == 0)
+            {
+                LogToUI("🧩 [ModLoader] Нет активных C# плагинов для загрузки.");
+                return;
+            }
+
             var sortedMods = SortModsByDependencies(activeMods);
 
-            // 2. Загружаем Библиотеки и Плагины в правильном порядке
             foreach (var mod in sortedMods)
             {
                 if (mod.Type == ModType.Plugin || mod.Type == ModType.Library)
@@ -6346,20 +6433,29 @@ namespace ZapretGUI.Core.Plugins
             {
                 string folderName = mod.Type == ModType.Library ? "libraries" : "plugins";
                 string modFolder = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, folderName, mod.UniqueId);
-                string dllPath = Path.Combine(modFolder, mod.EntryPoint);
+
+                // Если EntryPoint не указан в mod.json — берем первую попавшуюся .dll в папке мода
+                string entryDll = mod.EntryPoint;
+                if (string.IsNullOrWhiteSpace(entryDll) && Directory.Exists(modFolder))
+                {
+                    var firstDll = Directory.GetFiles(modFolder, "*.dll")
+                        .FirstOrDefault(f => !Path.GetFileName(f).Equals("ZapretGUI.dll", StringComparison.OrdinalIgnoreCase));
+                    if (firstDll != null)
+                        entryDll = Path.GetFileName(firstDll);
+                }
+
+                string dllPath = Path.Combine(modFolder, entryDll);
 
                 if (!File.Exists(dllPath))
                 {
-                    Debug.WriteLine($"[Mod Loader] Точка входа {dllPath} не найдена для {mod.UniqueId}");
+                    LogToUI($"❌ [ModLoader] DLL не найдена для мода «{mod.UniqueId}»: {dllPath}");
                     return;
                 }
 
-                // Создаем изолированный контекст и загружаем сборку
                 var context = new PluginLoaderContext(modFolder);
                 _loadContexts[mod.UniqueId] = context;
                 var assembly = context.LoadFromAssemblyPath(dllPath);
 
-                // Если это плагин (не библиотека), ищем реализацию IZapretPlugin
                 if (mod.Type == ModType.Plugin)
                 {
                     var pluginType = assembly.GetTypes().FirstOrDefault(t =>
@@ -6370,12 +6466,17 @@ namespace ZapretGUI.Core.Plugins
                         var pluginInstance = (IZapretPlugin)Activator.CreateInstance(pluginType)!;
                         pluginInstance.OnLoad(_api);
                         _activePlugins[mod.UniqueId] = pluginInstance;
+                        LogToUI($"✅ [ModLoader] Плагин «{mod.Name}» ({mod.UniqueId}) успешно загружен!");
+                    }
+                    else
+                    {
+                        LogToUI($"⚠ [ModLoader] В {entryDll} не найден класс, реализующий IZapretPlugin.");
                     }
                 }
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[Mod Loader] Ошибка загрузки {mod.UniqueId}: {ex.Message}");
+                LogToUI($"❌ [ModLoader] Ошибка загрузки «{mod.UniqueId}»: {ex.Message}");
             }
         }
 
@@ -6393,7 +6494,6 @@ namespace ZapretGUI.Core.Plugins
             }
             _loadContexts.Clear();
 
-            // Принудительно освобождаем память и выгружаем DLL-файлы
             GC.Collect();
             GC.WaitForPendingFinalizers();
         }
@@ -6407,13 +6507,11 @@ namespace ZapretGUI.Core.Plugins
             void Visit(ModMetaData mod)
             {
                 if (visited.Contains(mod.UniqueId)) return;
-
                 if (visiting.Contains(mod.UniqueId))
                     throw new Exception($"Обнаружена циклическая зависимость мода: {mod.UniqueId}");
 
                 visiting.Add(mod.UniqueId);
 
-                // Рекурсивно обходим все зависимости мода перед ним самим
                 foreach (var dep in mod.Dependencies)
                 {
                     var depMod = activeMods.FirstOrDefault(m => m.UniqueId == dep.ModId);
@@ -6426,7 +6524,6 @@ namespace ZapretGUI.Core.Plugins
             }
 
             foreach (var mod in activeMods) Visit(mod);
-
             return sorted;
         }
     }
@@ -11197,7 +11294,8 @@ function switchModsSubTab(subTab) {
     sendCmd('playClick');
     appState.modsSubTab = subTab;
 
-    ['bat', 'list', 'guide'].forEach(t => {
+    // Обновляем активные кнопки-переключатели
+    ['bat', 'list', 'theme', 'plugin', 'library', 'guide'].forEach(t => {
         const btn = document.getElementById('mod-tab-' + t);
         if (btn) btn.classList.toggle('active', t === subTab);
     });
@@ -11220,11 +11318,24 @@ function switchModsSubTab(subTab) {
         listsContainer.classList.remove('hidden');
         guideContainer.classList.add('hidden');
 
+        // Описание в зависимости от выбранной вкладки
         if (subTab === 'bat') {
             desc.innerText = 'Пользовательские скрипты обхода (.bat) для специфичных игр, провайдеров и нестандартных блокировок.';
-        } else {
+            actions.classList.remove('hidden');
+        } else if (subTab === 'list') {
             desc.innerText = 'Дополнительные списки доменов (list.txt), которые автоматически объединяются с основным списком обхода.';
+            actions.classList.remove('hidden');
+        } else if (subTab === 'theme') {
+            desc.innerText = 'Пользовательские темы оформления, меняющие внешний вид программы (CSS/HTML).';
+            actions.classList.add('hidden'); // Скрываем кнопку "Создать мод" для бинарников
+        } else if (subTab === 'plugin') {
+            desc.innerText = 'C# Плагины, расширяющие функционал программы и добавляющие новые инструменты.';
+            actions.classList.add('hidden');
+        } else if (subTab === 'library') {
+            desc.innerText = 'C# Библиотеки, предоставляющие общие функции для работы других плагинов.';
+            actions.classList.add('hidden');
         }
+
         renderModsView();
     }
     if (typeof updateModsSlidingPill === 'function') {
@@ -11233,10 +11344,14 @@ function switchModsSubTab(subTab) {
 }
 
 function updateModsCounters() {
-    const batTotal = appState.batMods.length;
-    const batActive = appState.batMods.filter(m => m.isActive).length;
-    const listTotal = appState.listMods.length;
-    const listActive = appState.listMods.filter(m => m.isActive).length;
+    const batTotal = appState.batMods?.length || 0;
+    const batActive = appState.batMods?.filter(m => m.isActive).length || 0;
+    const listTotal = appState.listMods?.length || 0;
+    const listActive = appState.listMods?.filter(m => m.isActive).length || 0;
+    // Новые счетчики
+    const themeTotal = appState.themeMods?.length || 0;
+    const pluginTotal = appState.pluginMods?.length || 0;
+    const libTotal = appState.libraryMods?.length || 0;
 
     const badgeBat = document.getElementById('badge-count-bat');
     const badgeList = document.getElementById('badge-count-list');
@@ -11245,9 +11360,11 @@ function updateModsCounters() {
     if (badgeBat) badgeBat.innerText = batTotal;
     if (badgeList) badgeList.innerText = listTotal;
 
-    const totalActive = batActive + listActive;
+    const totalActive = batActive + listActive + (appState.themeMods?.filter(m => m.isActive).length || 0) + (appState.pluginMods?.filter(m => m.isActive).length || 0);
+    const totalAll = batTotal + listTotal + themeTotal + pluginTotal + libTotal;
+
     if (summary) {
-        summary.innerText = `Активно: ${totalActive} из ${batTotal + listTotal}`;
+        summary.innerText = `Активно: ${totalActive} из ${totalAll}`;
         summary.className = totalActive > 0
             ? 'px-2.5 py-0.5 rounded-full bg-[#0F240F] border border-[#107C10] font-mono text-[11px] text-brand font-semibold'
             : 'px-2.5 py-0.5 rounded-full bg-[#181818] border border-[#2A2A2A] font-mono text-[11px] text-[#888888]';
@@ -11259,7 +11376,17 @@ function renderModsView() {
     if (appState.modsSubTab === 'guide') return;
 
     const isBat = appState.modsSubTab === 'bat';
-    const rawSource = isBat ? appState.batMods : appState.listMods;
+    const isList = appState.modsSubTab === 'list';
+    const isEditable = isBat || isList; // Темы и плагины нельзя редактировать через Code Studio
+
+    // Определяем источник данных
+    let rawSource = [];
+    if (isBat) rawSource = appState.batMods || [];
+    else if (isList) rawSource = appState.listMods || [];
+    else if (appState.modsSubTab === 'theme') rawSource = appState.themeMods || [];
+    else if (appState.modsSubTab === 'plugin') rawSource = appState.pluginMods || [];
+    else if (appState.modsSubTab === 'library') rawSource = appState.libraryMods || [];
+
     const query = (document.getElementById('mods-search-input')?.value || '').trim().toLowerCase();
 
     const source = rawSource.filter(m => {
@@ -11278,6 +11405,7 @@ function renderModsView() {
     const gridClass = useGrid ? 'grid grid-cols-2 gap-3' : 'flex flex-col gap-2.5';
     const activeListEl = document.getElementById('active-mods-list');
     const availListEl = document.getElementById('available-mods-list');
+
     activeListEl.className = gridClass;
     availListEl.className = gridClass;
 
@@ -11295,36 +11423,47 @@ function renderModsView() {
             emptyTitle.innerText = `По запросу «${query}» ничего не найдено`;
             emptySub.innerText = 'Попробуйте изменить поисковый запрос или очистить поле фильтра.';
         } else {
-            emptyTitle.innerText = isBat
-                ? 'У вас пока нет пользовательских .bat стратегий'
-                : 'У вас пока нет дополнительных списков доменов';
-            emptySub.innerText = 'Создайте собственную модификацию в встроенном редакторе кода или импортируйте готовый архив (.zip / .netfix-mod).';
+            emptyTitle.innerText = 'В этой категории пока нет модификаций';
+            emptySub.innerText = isEditable
+                ? 'Создайте собственную модификацию во встроенном редакторе кода или импортируйте архив (.zip / .netfix-mod).'
+                : 'Скомпилированные моды (плагины и темы) можно установить, просто перетащив архив в окно программы (Drag & Drop).';
         }
     } else {
         emptyState.classList.add('hidden');
     }
 
-    activeListEl.innerHTML = activeMods.map((m, idx) => buildModCardHtml(m, isBat, idx)).join('');
-    availListEl.innerHTML = availableMods.map((m, idx) => buildModCardHtml(m, isBat, idx + activeMods.length)).join('');
+    // Рендер карточек
+    activeListEl.innerHTML = activeMods.map((m, idx) => buildModCardHtml(m, isBat, isEditable, idx)).join('');
+    availListEl.innerHTML = availableMods.map((m, idx) => buildModCardHtml(m, isBat, isEditable, idx + activeMods.length)).join('');
 }
-
 function escapeStr(str) {
     return (str || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
 }
 
-function buildModCardHtml(mod, isBat, index = 0) {
+function buildModCardHtml(mod, isBat, isEditable, index = 0) {
     const safeName = escapeStr(mod.meta.name);
     const delayMs = Math.min(index * 40, 240);
-    const typeGlyph = isBat ? '&#xE756;' : '&#xE774;';
-    const fileBadge = isBat ? `mod_${mod.id}.bat` : `${mod.id}/list.txt`;
-    const isCurrentSelectedProf = isBat && mod.isActive && (appState.selectedProfile || '').toLowerCase() === fileBadge.toLowerCase();
+
+    // Иконки в зависимости от типа мода
+    let typeGlyph = '&#xE756;'; // Bat
+    if (mod.meta.type === 1) typeGlyph = '&#xE774;'; // List
+    else if (mod.meta.type === 2) typeGlyph = '&#xE790;'; // Theme
+    else if (mod.meta.type === 3) typeGlyph = '&#xE710;'; // Plugin
+    else if (mod.meta.type === 4) typeGlyph = '&#xE8AF;'; // Library
+
+    // Главный файл (для отображения)
+    let fileBadge = `${mod.id}/list.txt`;
+    if (mod.meta.type === 0) fileBadge = `mod_${mod.id}.bat`;
+    else if (mod.meta.entryPoint) fileBadge = mod.meta.entryPoint;
+
+    const isCurrentSelectedProf = mod.meta.type === 0 && mod.isActive && (appState.selectedProfile || '').toLowerCase() === fileBadge.toLowerCase();
     const statusText = mod.isActive ? (isCurrentSelectedProf ? 'Выбран ★' : 'Активен') : 'Отключен';
     const statusCls = mod.isActive ? 'text-brand font-semibold' : 'text-[#777777]';
     const iconBoxCls = mod.isActive
         ? 'bg-[#107C10]/20 border-[#107C10] text-brand'
         : 'bg-[#202020] border-[#2E2E2E] text-[#888888]';
 
-    const selectProfileBtn = isBat && mod.isActive
+    const selectProfileBtn = isCurrentSelectedProf || (mod.meta.type === 0 && mod.isActive)
         ? `<button onclick="selectProfile('${fileBadge}')" class="mod-action-pill ${isCurrentSelectedProf ? '!border-[#107C10] !text-brand' : ''}" title="Сделать текущим профилем запуска Zapret">
                <span class="mdl-icon text-[11px]">${isCurrentSelectedProf ? '&#xE73E;' : '&#xE768;'}</span>
                <span>${isCurrentSelectedProf ? 'Выбран' : 'Выбрать'}</span>
@@ -11366,10 +11505,11 @@ function buildModCardHtml(mod, isBat, index = 0) {
 
             <div class="flex items-center gap-1.5">
                 ${selectProfileBtn}
+                ${isEditable ? `
                 <button onclick="openModEditor('${mod.id}', ${isBat})" class="mod-action-pill" title="Открыть в Code Studio">
                     <span class="mdl-icon text-[11px]">&#xE70F;</span>
                     <span>Код</span>
-                </button>
+                </button>` : ''}
                 <button onclick="exportMod('${mod.id}', ${isBat}, '${safeName}')" class="mod-action-pill" title="Упаковать мод в .zip архив">
                     <span class="mdl-icon text-[11px]">&#xE78C;</span>
                     <span>Экспорт</span>
@@ -16428,7 +16568,12 @@ function animateZappy3D() {
 				<span class="mdl-icon text-xs">&#xE9CE;</span>
 				<span>Руководство</span>
 			</button>
+
+			<button id="mod-tab-theme" onclick="setModsTab('theme')" class="mods-seg-btn relative z-10">Темы</button>
+			<button id="mod-tab-plugin" onclick="setModsTab('plugin')" class="mods-seg-btn relative z-10">Плагины</button>
+			<button id="mod-tab-library" onclick="setModsTab('library')" class="mods-seg-btn relative z-10">Библиотеки</button>
 		</div>
+	</div>
 
 		<div id="mods-filter-controls" class="flex items-center gap-2 flex-1 min-w-[180px] justify-end">
 			<div class="relative flex items-center flex-1 max-w-[230px]">

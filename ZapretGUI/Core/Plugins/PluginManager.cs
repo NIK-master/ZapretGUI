@@ -18,12 +18,29 @@ namespace ZapretGUI.Core.Plugins
             _api = api;
         }
 
+        private void LogToUI(string message)
+        {
+            Debug.WriteLine(message);
+            _api.SendWebEvent("log", new
+            {
+                message,
+                time = DateTime.Now.ToString("HH:mm:ss"),
+                isProgress = false
+            });
+        }
+
         public void LoadPlugins(List<ModMetaData> activeMods)
         {
-            // 1. Сортируем моды по зависимостям
+            UnloadAll();
+
+            if (activeMods.Count == 0)
+            {
+                LogToUI("🧩 [ModLoader] Нет активных C# плагинов для загрузки.");
+                return;
+            }
+
             var sortedMods = SortModsByDependencies(activeMods);
 
-            // 2. Загружаем Библиотеки и Плагины в правильном порядке
             foreach (var mod in sortedMods)
             {
                 if (mod.Type == ModType.Plugin || mod.Type == ModType.Library)
@@ -39,20 +56,29 @@ namespace ZapretGUI.Core.Plugins
             {
                 string folderName = mod.Type == ModType.Library ? "libraries" : "plugins";
                 string modFolder = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, folderName, mod.UniqueId);
-                string dllPath = Path.Combine(modFolder, mod.EntryPoint);
+
+                // Если EntryPoint не указан в mod.json — берем первую попавшуюся .dll в папке мода
+                string entryDll = mod.EntryPoint;
+                if (string.IsNullOrWhiteSpace(entryDll) && Directory.Exists(modFolder))
+                {
+                    var firstDll = Directory.GetFiles(modFolder, "*.dll")
+                        .FirstOrDefault(f => !Path.GetFileName(f).Equals("ZapretGUI.dll", StringComparison.OrdinalIgnoreCase));
+                    if (firstDll != null)
+                        entryDll = Path.GetFileName(firstDll);
+                }
+
+                string dllPath = Path.Combine(modFolder, entryDll);
 
                 if (!File.Exists(dllPath))
                 {
-                    Debug.WriteLine($"[Mod Loader] Точка входа {dllPath} не найдена для {mod.UniqueId}");
+                    LogToUI($"❌ [ModLoader] DLL не найдена для мода «{mod.UniqueId}»: {dllPath}");
                     return;
                 }
 
-                // Создаем изолированный контекст и загружаем сборку
                 var context = new PluginLoaderContext(modFolder);
                 _loadContexts[mod.UniqueId] = context;
                 var assembly = context.LoadFromAssemblyPath(dllPath);
 
-                // Если это плагин (не библиотека), ищем реализацию IZapretPlugin
                 if (mod.Type == ModType.Plugin)
                 {
                     var pluginType = assembly.GetTypes().FirstOrDefault(t =>
@@ -63,12 +89,17 @@ namespace ZapretGUI.Core.Plugins
                         var pluginInstance = (IZapretPlugin)Activator.CreateInstance(pluginType)!;
                         pluginInstance.OnLoad(_api);
                         _activePlugins[mod.UniqueId] = pluginInstance;
+                        LogToUI($"✅ [ModLoader] Плагин «{mod.Name}» ({mod.UniqueId}) успешно загружен!");
+                    }
+                    else
+                    {
+                        LogToUI($"⚠ [ModLoader] В {entryDll} не найден класс, реализующий IZapretPlugin.");
                     }
                 }
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[Mod Loader] Ошибка загрузки {mod.UniqueId}: {ex.Message}");
+                LogToUI($"❌ [ModLoader] Ошибка загрузки «{mod.UniqueId}»: {ex.Message}");
             }
         }
 
@@ -86,7 +117,6 @@ namespace ZapretGUI.Core.Plugins
             }
             _loadContexts.Clear();
 
-            // Принудительно освобождаем память и выгружаем DLL-файлы
             GC.Collect();
             GC.WaitForPendingFinalizers();
         }
@@ -100,13 +130,11 @@ namespace ZapretGUI.Core.Plugins
             void Visit(ModMetaData mod)
             {
                 if (visited.Contains(mod.UniqueId)) return;
-
                 if (visiting.Contains(mod.UniqueId))
                     throw new Exception($"Обнаружена циклическая зависимость мода: {mod.UniqueId}");
 
                 visiting.Add(mod.UniqueId);
 
-                // Рекурсивно обходим все зависимости мода перед ним самим
                 foreach (var dep in mod.Dependencies)
                 {
                     var depMod = activeMods.FirstOrDefault(m => m.UniqueId == dep.ModId);
@@ -119,7 +147,6 @@ namespace ZapretGUI.Core.Plugins
             }
 
             foreach (var mod in activeMods) Visit(mod);
-
             return sorted;
         }
     }

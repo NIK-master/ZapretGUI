@@ -32,8 +32,7 @@ namespace ZapretGUI.Core.Plugins
 
         public void HookBypassStop(Action onStop)
         {
-            // Здесь плагин может подписаться на глобальные события остановки
-            // Заглушка до реализации полноценной шины событий в BypassController
+            BypassController.Current.OnStop += onStop;
         }
 
         public AppSettings GetSettings() => SettingsManager.Current;

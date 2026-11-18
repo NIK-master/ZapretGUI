@@ -136,7 +136,8 @@ function switchModsSubTab(subTab) {
     sendCmd('playClick');
     appState.modsSubTab = subTab;
 
-    ['bat', 'list', 'guide'].forEach(t => {
+    // Обновляем активные кнопки-переключатели
+    ['bat', 'list', 'theme', 'plugin', 'library', 'guide'].forEach(t => {
         const btn = document.getElementById('mod-tab-' + t);
         if (btn) btn.classList.toggle('active', t === subTab);
     });
@@ -159,11 +160,24 @@ function switchModsSubTab(subTab) {
         listsContainer.classList.remove('hidden');
         guideContainer.classList.add('hidden');
 
+        // Описание в зависимости от выбранной вкладки
         if (subTab === 'bat') {
             desc.innerText = 'Пользовательские скрипты обхода (.bat) для специфичных игр, провайдеров и нестандартных блокировок.';
-        } else {
+            actions.classList.remove('hidden');
+        } else if (subTab === 'list') {
             desc.innerText = 'Дополнительные списки доменов (list.txt), которые автоматически объединяются с основным списком обхода.';
+            actions.classList.remove('hidden');
+        } else if (subTab === 'theme') {
+            desc.innerText = 'Пользовательские темы оформления, меняющие внешний вид программы (CSS/HTML).';
+            actions.classList.add('hidden'); // Скрываем кнопку "Создать мод" для бинарников
+        } else if (subTab === 'plugin') {
+            desc.innerText = 'C# Плагины, расширяющие функционал программы и добавляющие новые инструменты.';
+            actions.classList.add('hidden');
+        } else if (subTab === 'library') {
+            desc.innerText = 'C# Библиотеки, предоставляющие общие функции для работы других плагинов.';
+            actions.classList.add('hidden');
         }
+
         renderModsView();
     }
     if (typeof updateModsSlidingPill === 'function') {
@@ -172,10 +186,14 @@ function switchModsSubTab(subTab) {
 }
 
 function updateModsCounters() {
-    const batTotal = appState.batMods.length;
-    const batActive = appState.batMods.filter(m => m.isActive).length;
-    const listTotal = appState.listMods.length;
-    const listActive = appState.listMods.filter(m => m.isActive).length;
+    const batTotal = appState.batMods?.length || 0;
+    const batActive = appState.batMods?.filter(m => m.isActive).length || 0;
+    const listTotal = appState.listMods?.length || 0;
+    const listActive = appState.listMods?.filter(m => m.isActive).length || 0;
+    // Новые счетчики
+    const themeTotal = appState.themeMods?.length || 0;
+    const pluginTotal = appState.pluginMods?.length || 0;
+    const libTotal = appState.libraryMods?.length || 0;
 
     const badgeBat = document.getElementById('badge-count-bat');
     const badgeList = document.getElementById('badge-count-list');
@@ -184,9 +202,11 @@ function updateModsCounters() {
     if (badgeBat) badgeBat.innerText = batTotal;
     if (badgeList) badgeList.innerText = listTotal;
 
-    const totalActive = batActive + listActive;
+    const totalActive = batActive + listActive + (appState.themeMods?.filter(m => m.isActive).length || 0) + (appState.pluginMods?.filter(m => m.isActive).length || 0);
+    const totalAll = batTotal + listTotal + themeTotal + pluginTotal + libTotal;
+
     if (summary) {
-        summary.innerText = `Активно: ${totalActive} из ${batTotal + listTotal}`;
+        summary.innerText = `Активно: ${totalActive} из ${totalAll}`;
         summary.className = totalActive > 0
             ? 'px-2.5 py-0.5 rounded-full bg-[#0F240F] border border-[#107C10] font-mono text-[11px] text-brand font-semibold'
             : 'px-2.5 py-0.5 rounded-full bg-[#181818] border border-[#2A2A2A] font-mono text-[11px] text-[#888888]';
@@ -198,7 +218,17 @@ function renderModsView() {
     if (appState.modsSubTab === 'guide') return;
 
     const isBat = appState.modsSubTab === 'bat';
-    const rawSource = isBat ? appState.batMods : appState.listMods;
+    const isList = appState.modsSubTab === 'list';
+    const isEditable = isBat || isList; // Темы и плагины нельзя редактировать через Code Studio
+
+    // Определяем источник данных
+    let rawSource = [];
+    if (isBat) rawSource = appState.batMods || [];
+    else if (isList) rawSource = appState.listMods || [];
+    else if (appState.modsSubTab === 'theme') rawSource = appState.themeMods || [];
+    else if (appState.modsSubTab === 'plugin') rawSource = appState.pluginMods || [];
+    else if (appState.modsSubTab === 'library') rawSource = appState.libraryMods || [];
+
     const query = (document.getElementById('mods-search-input')?.value || '').trim().toLowerCase();
 
     const source = rawSource.filter(m => {
@@ -217,6 +247,7 @@ function renderModsView() {
     const gridClass = useGrid ? 'grid grid-cols-2 gap-3' : 'flex flex-col gap-2.5';
     const activeListEl = document.getElementById('active-mods-list');
     const availListEl = document.getElementById('available-mods-list');
+
     activeListEl.className = gridClass;
     availListEl.className = gridClass;
 
@@ -234,36 +265,47 @@ function renderModsView() {
             emptyTitle.innerText = `По запросу «${query}» ничего не найдено`;
             emptySub.innerText = 'Попробуйте изменить поисковый запрос или очистить поле фильтра.';
         } else {
-            emptyTitle.innerText = isBat
-                ? 'У вас пока нет пользовательских .bat стратегий'
-                : 'У вас пока нет дополнительных списков доменов';
-            emptySub.innerText = 'Создайте собственную модификацию в встроенном редакторе кода или импортируйте готовый архив (.zip / .netfix-mod).';
+            emptyTitle.innerText = 'В этой категории пока нет модификаций';
+            emptySub.innerText = isEditable
+                ? 'Создайте собственную модификацию во встроенном редакторе кода или импортируйте архив (.zip / .netfix-mod).'
+                : 'Скомпилированные моды (плагины и темы) можно установить, просто перетащив архив в окно программы (Drag & Drop).';
         }
     } else {
         emptyState.classList.add('hidden');
     }
 
-    activeListEl.innerHTML = activeMods.map((m, idx) => buildModCardHtml(m, isBat, idx)).join('');
-    availListEl.innerHTML = availableMods.map((m, idx) => buildModCardHtml(m, isBat, idx + activeMods.length)).join('');
+    // Рендер карточек
+    activeListEl.innerHTML = activeMods.map((m, idx) => buildModCardHtml(m, isBat, isEditable, idx)).join('');
+    availListEl.innerHTML = availableMods.map((m, idx) => buildModCardHtml(m, isBat, isEditable, idx + activeMods.length)).join('');
 }
-
 function escapeStr(str) {
     return (str || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
 }
 
-function buildModCardHtml(mod, isBat, index = 0) {
+function buildModCardHtml(mod, isBat, isEditable, index = 0) {
     const safeName = escapeStr(mod.meta.name);
     const delayMs = Math.min(index * 40, 240);
-    const typeGlyph = isBat ? '&#xE756;' : '&#xE774;';
-    const fileBadge = isBat ? `mod_${mod.id}.bat` : `${mod.id}/list.txt`;
-    const isCurrentSelectedProf = isBat && mod.isActive && (appState.selectedProfile || '').toLowerCase() === fileBadge.toLowerCase();
+
+    // Иконки в зависимости от типа мода
+    let typeGlyph = '&#xE756;'; // Bat
+    if (mod.meta.type === 1) typeGlyph = '&#xE774;'; // List
+    else if (mod.meta.type === 2) typeGlyph = '&#xE790;'; // Theme
+    else if (mod.meta.type === 3) typeGlyph = '&#xE710;'; // Plugin
+    else if (mod.meta.type === 4) typeGlyph = '&#xE8AF;'; // Library
+
+    // Главный файл (для отображения)
+    let fileBadge = `${mod.id}/list.txt`;
+    if (mod.meta.type === 0) fileBadge = `mod_${mod.id}.bat`;
+    else if (mod.meta.entryPoint) fileBadge = mod.meta.entryPoint;
+
+    const isCurrentSelectedProf = mod.meta.type === 0 && mod.isActive && (appState.selectedProfile || '').toLowerCase() === fileBadge.toLowerCase();
     const statusText = mod.isActive ? (isCurrentSelectedProf ? 'Выбран ★' : 'Активен') : 'Отключен';
     const statusCls = mod.isActive ? 'text-brand font-semibold' : 'text-[#777777]';
     const iconBoxCls = mod.isActive
         ? 'bg-[#107C10]/20 border-[#107C10] text-brand'
         : 'bg-[#202020] border-[#2E2E2E] text-[#888888]';
 
-    const selectProfileBtn = isBat && mod.isActive
+    const selectProfileBtn = isCurrentSelectedProf || (mod.meta.type === 0 && mod.isActive)
         ? `<button onclick="selectProfile('${fileBadge}')" class="mod-action-pill ${isCurrentSelectedProf ? '!border-[#107C10] !text-brand' : ''}" title="Сделать текущим профилем запуска Zapret">
                <span class="mdl-icon text-[11px]">${isCurrentSelectedProf ? '&#xE73E;' : '&#xE768;'}</span>
                <span>${isCurrentSelectedProf ? 'Выбран' : 'Выбрать'}</span>
@@ -305,10 +347,11 @@ function buildModCardHtml(mod, isBat, index = 0) {
 
             <div class="flex items-center gap-1.5">
                 ${selectProfileBtn}
+                ${isEditable ? `
                 <button onclick="openModEditor('${mod.id}', ${isBat})" class="mod-action-pill" title="Открыть в Code Studio">
                     <span class="mdl-icon text-[11px]">&#xE70F;</span>
                     <span>Код</span>
-                </button>
+                </button>` : ''}
                 <button onclick="exportMod('${mod.id}', ${isBat}, '${safeName}')" class="mod-action-pill" title="Упаковать мод в .zip архив">
                     <span class="mdl-icon text-[11px]">&#xE78C;</span>
                     <span>Экспорт</span>
