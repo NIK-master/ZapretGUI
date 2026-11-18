@@ -844,6 +844,7 @@ namespace ZapretGUI.Core
 
             var pingMs = await BypassController.Current.CheckPingAsync();
             SendEvent("pingResult", new { ping = pingMs });
+            await _mainWindow.LoadActivePluginsAsync();
         }
 
         private async Task HandleToggleBypassAsync(JsonElement root)

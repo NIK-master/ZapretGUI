@@ -149,8 +149,6 @@ namespace ZapretGUI
                     HideToTray();
                 }
 
-                _ = LoadActivePluginsAsync();
-
                 _ = InitializeAppAsync();
             });
 
@@ -170,7 +168,7 @@ namespace ZapretGUI
             });
         }
 
-        private async Task LoadActivePluginsAsync()
+        public async Task LoadActivePluginsAsync()
         {
             var modManager = new ModManager();
 
@@ -228,40 +226,71 @@ namespace ZapretGUI
             else
                 _currentWebRoot = ExtractEmbeddedWebUI();
 
-            BuildBundledHtmlIfNeeded(_currentWebRoot);
+            // Получаем имя собранного файла (index.bundled.html)
+            string bundledFilePath = BuildBundledHtmlIfNeeded(_currentWebRoot);
+            string entryFileName = Path.GetFileName(bundledFilePath);
 
-            Window.Load("zapret://app/index.html");
+            // Загружаем именно склеенный файл со всеми partials
+            Window.Load(new Uri($"zapret://localhost/{entryFileName}"));
             Window.WaitForClose();
         }
 
-        private Stream? CustomSchemeHandler(string url, out string contentType)
+        private Stream? CustomSchemeHandler(object sender, string scheme, string url, out string contentType)
         {
-            var uri = new Uri(url);
-            var localPath = uri.AbsolutePath.TrimStart('/').Replace('/', Path.DirectorySeparatorChar);
-            if (string.IsNullOrEmpty(localPath)) localPath = "index.html";
-
-            // 1. Поиск переопределенного файла в активных Темах (ModManager)
-            var modManager = new ModManager();
-            var themeOverridePath = modManager.GetThemeFileOverride(localPath);
-
-            if (themeOverridePath != null && File.Exists(themeOverridePath))
+            try
             {
+                // Безопасно извлекаем путь без схемы и хоста
+                string cleanUrl = url;
+                int schemeIdx = cleanUrl.IndexOf("://", StringComparison.Ordinal);
+                if (schemeIdx >= 0)
+                {
+                    cleanUrl = cleanUrl.Substring(schemeIdx + 3);
+                    if (cleanUrl.StartsWith("localhost/", StringComparison.OrdinalIgnoreCase))
+                        cleanUrl = cleanUrl.Substring("localhost/".Length);
+                    else if (cleanUrl.StartsWith("app/", StringComparison.OrdinalIgnoreCase))
+                        cleanUrl = cleanUrl.Substring("app/".Length);
+                }
+
+                // Убираем query-параметры (?v=...) и декодируем URL
+                int queryIdx = cleanUrl.IndexOf('?');
+                if (queryIdx >= 0) cleanUrl = cleanUrl.Substring(0, queryIdx);
+
+                var localPath = Uri.UnescapeDataString(cleanUrl)
+                    .TrimStart('/')
+                    .Replace('/', Path.DirectorySeparatorChar);
+
+                if (string.IsNullOrEmpty(localPath))
+                    localPath = "index.bundled.html";
+
+                // 1. Если Тема переопределяет index.html, проверяем также при запросе index.bundled.html
+                var modManager = new ModManager();
+                var themeLookupPath = localPath.Equals("index.bundled.html", StringComparison.OrdinalIgnoreCase)
+                    ? "index.html"
+                    : localPath;
+
+                var themeOverridePath = modManager.GetThemeFileOverride(themeLookupPath);
+                if (themeOverridePath != null && File.Exists(themeOverridePath))
+                {
+                    contentType = GetMimeType(localPath);
+                    return new FileStream(themeOverridePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                }
+
+                // 2. Стандартный путь из оригинального wwwroot
+                var defaultPath = Path.Combine(_currentWebRoot, localPath);
                 contentType = GetMimeType(localPath);
-                return File.OpenRead(themeOverridePath);
+
+                if (File.Exists(defaultPath))
+                {
+                    return new FileStream(defaultPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                }
             }
-
-            // 2. Стандартный путь из оригинального wwwroot
-            var defaultPath = Path.Combine(_currentWebRoot, localPath);
-            contentType = GetMimeType(localPath);
-
-            if (File.Exists(defaultPath))
+            catch (Exception ex)
             {
-                return File.OpenRead(defaultPath);
+                System.Diagnostics.Debug.WriteLine($"[SchemeHandler Error] {url}: {ex.Message}");
             }
 
-            // Заглушка, если файл не найден
             contentType = "text/plain";
-            return null;
+            return Stream.Null;
         }
 
         private string GetMimeType(string path)
