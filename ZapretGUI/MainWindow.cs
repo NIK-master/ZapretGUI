@@ -115,9 +115,8 @@ namespace ZapretGUI
                 .SetResizable(false)
                 .SetTopMost(SettingsManager.Current.AlwaysOnTop)
                 .SetContextMenuEnabled(false)
-                .SetDevToolsEnabled(false);
+                .SetDevToolsEnabled(true);
 
-            Window.RegisterCustomSchemeHandler("zapret", CustomSchemeHandler);
 
             _webBridge = new WebBridge(this, _isFirstRun);
 
@@ -226,71 +225,74 @@ namespace ZapretGUI
             else
                 _currentWebRoot = ExtractEmbeddedWebUI();
 
-            // Получаем имя собранного файла (index.bundled.html)
-            string bundledFilePath = BuildBundledHtmlIfNeeded(_currentWebRoot);
-            string entryFileName = Path.GetFileName(bundledFilePath);
+            // Собираем рабочий интерфейс с учетом всех активных модов-тем
+            string htmlPath = BuildActiveWebUI(_currentWebRoot);
 
-            // Загружаем именно склеенный файл со всеми partials
-            Window.Load(new Uri($"zapret://localhost/{entryFileName}"));
+            // Загружаем напрямую в Photino (как в оригинальной рабочей версии)
+            Window.Load(htmlPath);
             Window.WaitForClose();
         }
 
-        private Stream? CustomSchemeHandler(object sender, string scheme, string url, out string contentType)
+        public string BuildActiveWebUI(string baseWebRootDir)
         {
-            try
+            // Если активных тем нет — собираем прямо в базовой папке (мгновенный старт)
+            var activeThemes = SettingsManager.Current.ActiveThemeMods;
+            string targetRootDir = baseWebRootDir;
+
+            if (activeThemes != null && activeThemes.Count > 0)
             {
-                // Безопасно извлекаем путь без схемы и хоста
-                string cleanUrl = url;
-                int schemeIdx = cleanUrl.IndexOf("://", StringComparison.Ordinal);
-                if (schemeIdx >= 0)
+                // Создаем оверлейную директорию для слияния стандартного UI и активных тем
+                targetRootDir = Path.Combine(Path.GetTempPath(), "ZapretGUI_MergedUI_" + AppConstants.AppVersion);
+                try
                 {
-                    cleanUrl = cleanUrl.Substring(schemeIdx + 3);
-                    if (cleanUrl.StartsWith("localhost/", StringComparison.OrdinalIgnoreCase))
-                        cleanUrl = cleanUrl.Substring("localhost/".Length);
-                    else if (cleanUrl.StartsWith("app/", StringComparison.OrdinalIgnoreCase))
-                        cleanUrl = cleanUrl.Substring("app/".Length);
+                    if (Directory.Exists(targetRootDir))
+                        Directory.Delete(targetRootDir, true);
+                    Directory.CreateDirectory(targetRootDir);
+
+                    // 1. Копируем оригинальный wwwroot
+                    CopyDirectoryRecursive(baseWebRootDir, targetRootDir);
+
+                    // 2. Поверх накатываем файлы из активных тем по порядку приоритета
+                    var themesBaseDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppConstants.ModsDirectory, "themes");
+                    foreach (var themeId in activeThemes)
+                    {
+                        var themeDir = Path.Combine(themesBaseDir, themeId);
+                        if (Directory.Exists(themeDir))
+                        {
+                            CopyDirectoryRecursive(themeDir, targetRootDir);
+                        }
+                    }
                 }
-
-                // Убираем query-параметры (?v=...) и декодируем URL
-                int queryIdx = cleanUrl.IndexOf('?');
-                if (queryIdx >= 0) cleanUrl = cleanUrl.Substring(0, queryIdx);
-
-                var localPath = Uri.UnescapeDataString(cleanUrl)
-                    .TrimStart('/')
-                    .Replace('/', Path.DirectorySeparatorChar);
-
-                if (string.IsNullOrEmpty(localPath))
-                    localPath = "index.bundled.html";
-
-                // 1. Если Тема переопределяет index.html, проверяем также при запросе index.bundled.html
-                var modManager = new ModManager();
-                var themeLookupPath = localPath.Equals("index.bundled.html", StringComparison.OrdinalIgnoreCase)
-                    ? "index.html"
-                    : localPath;
-
-                var themeOverridePath = modManager.GetThemeFileOverride(themeLookupPath);
-                if (themeOverridePath != null && File.Exists(themeOverridePath))
+                catch (Exception ex)
                 {
-                    contentType = GetMimeType(localPath);
-                    return new FileStream(themeOverridePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-                }
-
-                // 2. Стандартный путь из оригинального wwwroot
-                var defaultPath = Path.Combine(_currentWebRoot, localPath);
-                contentType = GetMimeType(localPath);
-
-                if (File.Exists(defaultPath))
-                {
-                    return new FileStream(defaultPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                    System.Diagnostics.Debug.WriteLine($"[Theme Overlay Error]: {ex.Message}");
+                    targetRootDir = baseWebRootDir;
                 }
             }
-            catch (Exception ex)
+
+            return BuildBundledHtmlIfNeeded(targetRootDir);
+        }
+
+        private static void CopyDirectoryRecursive(string sourceDir, string targetDir)
+        {
+            Directory.CreateDirectory(targetDir);
+
+            foreach (var file in Directory.GetFiles(sourceDir))
             {
-                System.Diagnostics.Debug.WriteLine($"[SchemeHandler Error] {url}: {ex.Message}");
+                var fileName = Path.GetFileName(file);
+                // Не копируем служебный манифест мода в корень wwwroot
+                if (fileName.Equals("mod.json", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                var destFile = Path.Combine(targetDir, fileName);
+                File.Copy(file, destFile, overwrite: true);
             }
 
-            contentType = "text/plain";
-            return Stream.Null;
+            foreach (var subDir in Directory.GetDirectories(sourceDir))
+            {
+                var dirName = Path.GetFileName(subDir);
+                CopyDirectoryRecursive(subDir, Path.Combine(targetDir, dirName));
+            }
         }
 
         private string GetMimeType(string path)
@@ -320,9 +322,8 @@ namespace ZapretGUI
             try
             {
                 var html = File.ReadAllText(indexPath);
-                if (!html.Contains("<!-- @include "))
-                    return indexPath;
 
+                // Вставляем partials (если тема переопределила конкретный partial, подтянется именно он!)
                 var partialsDir = Path.Combine(webRootDir, "partials");
                 if (Directory.Exists(partialsDir))
                 {
@@ -335,6 +336,18 @@ namespace ZapretGUI
                             html = html.Replace(token, File.ReadAllText(file));
                         }
                     }
+                }
+
+                // Если активная тема содержит файл theme.css в своем корне, но не меняла index.html — подключаем автоматически
+                if (File.Exists(Path.Combine(webRootDir, "theme.css")) && !html.Contains("href=\"theme.css\""))
+                {
+                    html = html.Replace("</head>", "\t<link rel=\"stylesheet\" href=\"theme.css\">\r\n</head>");
+                }
+
+                // Если активная тема содержит theme.js в своем корне — подключаем автоматически перед </body>
+                if (File.Exists(Path.Combine(webRootDir, "theme.js")) && !html.Contains("src=\"theme.js\""))
+                {
+                    html = html.Replace("</body>", "\t<script src=\"theme.js\"></script>\r\n</body>");
                 }
 
                 var bundledPath = Path.Combine(webRootDir, "index.bundled.html");
