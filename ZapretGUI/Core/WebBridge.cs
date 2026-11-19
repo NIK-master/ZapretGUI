@@ -512,7 +512,20 @@ namespace ZapretGUI.Core
         {
             var batMods = await _modManager.GetAvailableModsAsync(ModType.BatStrategy);
             var listMods = await _modManager.GetAvailableModsAsync(ModType.DomainList);
-            SendEvent("modsUpdated", new { batMods, listMods, profiles = BypassController.Current.Zapret.GetAvailableProfiles(), selectedProfile = SettingsManager.Current.SelectedProfileName });
+            var themeMods = await _modManager.GetAvailableModsAsync(ModType.Theme);
+            var pluginMods = await _modManager.GetAvailableModsAsync(ModType.Plugin);
+            var libraryMods = await _modManager.GetAvailableModsAsync(ModType.Library);
+
+            SendEvent("modsUpdated", new
+            {
+                batMods,
+                listMods,
+                themeMods,
+                pluginMods,
+                libraryMods,
+                profiles = BypassController.Current.Zapret.GetAvailableProfiles(),
+                selectedProfile = SettingsManager.Current.SelectedProfileName
+            });
         }
 
         private async Task HandleCreateModAsync(JsonElement root)
@@ -826,6 +839,9 @@ namespace ZapretGUI.Core
             var profiles = BypassController.Current.Zapret.GetAvailableProfiles();
             var batMods = await _modManager.GetAvailableModsAsync(ModType.BatStrategy);
             var listMods = await _modManager.GetAvailableModsAsync(ModType.DomainList);
+            var themeMods = await _modManager.GetAvailableModsAsync(ModType.Theme);
+            var pluginMods = await _modManager.GetAvailableModsAsync(ModType.Plugin);
+            var libraryMods = await _modManager.GetAvailableModsAsync(ModType.Library);
 
             SendEvent("initData", new
             {
@@ -838,6 +854,9 @@ namespace ZapretGUI.Core
                 profiles,
                 batMods,
                 listMods,
+                themeMods,
+                pluginMods,
+                libraryMods,
                 gameFilterStatus = ServiceToolsManager.GetGameFilterDisplayStatus(),
                 routingStatus = GetRoutingStatusObj()
             });

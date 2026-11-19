@@ -14,6 +14,9 @@ let appState = {
     modsSubTab: 'bat',
     batMods: [],
     listMods: [],
+    themeMods: [],
+    pluginMods: [],
+    libraryMods: [],
     editingMod: { id: '', isBat: true, wordWrap: true, fontSize: 13 },
     settings: {
         focusMode: false,
@@ -64,6 +67,9 @@ function handleBackendEvent(type, data) {
 
             appState.batMods = data.batMods || [];
             appState.listMods = data.listMods || [];
+            appState.themeMods = data.themeMods || [];
+            appState.pluginMods = data.pluginMods || [];
+            appState.libraryMods = data.libraryMods || [];
 
             initConfigsList(data.profiles || ['general.bat']);
             if (typeof renderModsView === 'function') renderModsView();
@@ -122,6 +128,9 @@ function handleBackendEvent(type, data) {
         case 'modsUpdated':
             appState.batMods = data.batMods || [];
             appState.listMods = data.listMods || [];
+            appState.themeMods = data.themeMods || [];
+            appState.pluginMods = data.pluginMods || [];
+            appState.libraryMods = data.libraryMods || [];
             if (data.selectedProfile) {
                 appState.selectedProfile = data.selectedProfile;
             }

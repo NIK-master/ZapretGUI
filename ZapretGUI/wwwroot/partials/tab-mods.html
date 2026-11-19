@@ -50,17 +50,26 @@
 				<span id="badge-count-list" class="px-1.5 py-0.2 rounded bg-[#121212] text-[10px] font-mono text-[#888888]">0</span>
 			</button>
 
-			<button id="mod-tab-guide" onclick="switchModsSubTab('guide')" class="mods-seg-btn relative z-10">
-				<span class="mdl-icon text-xs">&#xE9CE;</span>
-				<span>Руководство</span>
+			<button id="mod-tab-theme" onclick="switchModsSubTab('theme')" class="mods-seg-btn relative z-10">
+				<span class="mdl-icon text-xs">&#xE790;</span>
+				<span>Темы</span>
 			</button>
 
-			<button id="mod-tab-theme" onclick="setModsTab('theme')" class="mods-seg-btn relative z-10 shrink-0">Темы (UI)</button>
-			<button id="mod-tab-plugin" onclick="setModsTab('plugin')" class="mods-seg-btn relative z-10 shrink-0">Плагины (C#)</button>
-			<button id="mod-tab-library" onclick="setModsTab('library')" class="mods-seg-btn relative z-10 shrink-0">Библиотеки</button>
+			<button id="mod-tab-plugin" onclick="switchModsSubTab('plugin')" class="mods-seg-btn relative z-10">
+				<span class="mdl-icon text-xs">&#xE710;</span>
+				<span>Плагины</span>
+			</button>
+
+			<button id="mod-tab-library" onclick="switchModsSubTab('library')" class="mods-seg-btn relative z-10">
+				<span class="mdl-icon text-xs">&#xE8AF;</span>
+				<span>Библиотеки</span>
+			</button>
+
+			<button id="mod-tab-guide" onclick="switchModsSubTab('guide')" class="mods-seg-btn relative z-10">
+				<span class="mdl-icon text-xs">&#xE9CE;</span>
+				<span>Гайд</span>
+			</button>
 		</div>
-	</div>
-	</div>
 
 		<div id="mods-filter-controls" class="flex items-center gap-2 flex-1 min-w-[180px] justify-end">
 			<div class="relative flex items-center flex-1 max-w-[230px]">
